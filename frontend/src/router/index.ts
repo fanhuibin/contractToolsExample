@@ -31,6 +31,12 @@ const routes: RouteRecordRaw[] = [
         name: 'OnlyOffice',
         component: () => import('@/views/onlyoffice/OnlyOfficeDemo.vue'),
         meta: { title: 'OnlyOffice演示' }
+      },
+      {
+        path: '/contract-extract',
+        name: 'ContractExtract',
+        component: () => import('@/views/contracts/ContractExtract.vue'),
+        meta: { title: '合同信息提取' }
       }
     ]
   }

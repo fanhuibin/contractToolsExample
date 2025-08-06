@@ -1,139 +1,179 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
-         http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.18</version>
-        <relativePath/>
-    </parent>
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>2.7.18</version>
+		<relativePath />
+	</parent>
 
-    <groupId>com.zhaoxinms</groupId>
-    <artifactId>contract-tools</artifactId>
-    <version>1.0.0</version>
-    <name>contract-tools</name>
-    <description>肇新合同工具集</description>
+	<groupId>com.zhaoxinms</groupId>
+	<artifactId>contract-tools</artifactId>
+	<version>1.0.0</version>
+	<name>contract-tools</name>
+	<description>肇新合同工具集</description>
 
-    <properties>
-        <java.version>11</java.version>
-        <jwt.version>0.11.5</jwt.version>
-        <okhttp.version>4.10.0</okhttp.version>
-        <pdfbox.version>2.0.29</pdfbox.version>
-        <hutool.version>5.8.25</hutool.version>
-    </properties>
+	<properties>
+		<java.version>11</java.version>
+		<jwt.version>0.11.5</jwt.version>
+		<okhttp.version>4.10.0</okhttp.version>
+		<pdfbox.version>2.0.29</pdfbox.version>
+		<hutool.version>5.8.25</hutool.version>
+	</properties>
 
-    <dependencies>
-        <!-- Spring Boot Starter Web -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
+	<dependencies>
+	
+		<dependency>
+		    <groupId>com.alibaba</groupId>
+		    <artifactId>dashscope-sdk-java</artifactId>
+		    <version>2.21.1</version>
+		    <exclusions>
+		        <exclusion>
+		            <groupId>org.slf4j</groupId>
+		            <artifactId>slf4j-simple</artifactId>
+		        </exclusion>
+		    </exclusions>
+		</dependency>
+		<dependency>
+		    <groupId>com.openai</groupId>
+		    <artifactId>openai-java</artifactId>
+		    <version>0.32.0</version>
+		    <exclusions>
+		        <exclusion>
+		            <groupId>org.slf4j</groupId>
+		            <artifactId>slf4j-simple</artifactId>
+		        </exclusion>
+		    </exclusions>
+		</dependency>
+		
+		<!-- Kotlin Runtime for OpenAI Java SDK -->
+		<dependency>
+		    <groupId>org.jetbrains.kotlin</groupId>
+		    <artifactId>kotlin-stdlib</artifactId>
+		    <version>1.9.10</version>
+		</dependency>
+		<dependency>
+		    <groupId>org.jetbrains.kotlin</groupId>
+		    <artifactId>kotlin-stdlib-common</artifactId>
+		    <version>1.9.10</version>
+		</dependency>
+		<!-- Spring Boot Starter Web -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
 
-        <!-- JWT -->
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-            <version>${jwt.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>${jwt.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>${jwt.version}</version>
-            <scope>runtime</scope>
-        </dependency>
-        
-        <!-- iText PDF -->
-        <dependency>
-            <groupId>com.itextpdf</groupId>
-            <artifactId>itextpdf</artifactId>
-            <version>5.5.13.3</version>
-        </dependency>
-        <dependency>
-            <groupId>com.itextpdf</groupId>
-            <artifactId>itext-asian</artifactId>
-            <version>5.2.0</version>
-        </dependency>
+		<!-- JWT -->
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+			<version>${jwt.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<version>${jwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<version>${jwt.version}</version>
+			<scope>runtime</scope>
+		</dependency>
 
-        <!-- Spring Boot Starter Validation -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
+		<!-- iText PDF -->
+		<dependency>
+			<groupId>com.itextpdf</groupId>
+			<artifactId>itextpdf</artifactId>
+			<version>5.5.13.3</version>
+		</dependency>
+		<dependency>
+			<groupId>com.itextpdf</groupId>
+			<artifactId>itext-asian</artifactId>
+			<version>5.2.0</version>
+		</dependency>
 
-        <!-- Spring Boot Starter Test -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
+		<!-- Spring Boot Starter Validation -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
 
-        <!-- Lombok -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-        
-        <dependency>
+		<!-- Spring Boot Starter Test -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+		<!-- Lombok -->
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+		<dependency>
 			<groupId>com.googlecode.json-simple</groupId>
 			<artifactId>json-simple</artifactId>
 			<version>1.1</version>
 		</dependency>
-		
-        <!-- OkHttp - HTTP客户端 -->
-        <dependency>
-            <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>${okhttp.version}</version>
-        </dependency>
-        
-        <!-- Apache PDFBox - PDF处理 -->
-        <dependency>
-            <groupId>org.apache.pdfbox</groupId>
-            <artifactId>pdfbox</artifactId>
-            <version>${pdfbox.version}</version>
-        </dependency>
-        
-        <!-- Hutool工具包 -->
-        <dependency>
-            <groupId>cn.hutool</groupId>
-            <artifactId>hutool-all</artifactId>
-            <version>${hutool.version}</version>
-        </dependency>
-        
-        <!-- Spring Boot Configuration Processor -->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-configuration-processor</artifactId>
-            <optional>true</optional>
-        </dependency>
 
-    </dependencies>
+		<!-- OkHttp - HTTP客户端 -->
+		<dependency>
+			<groupId>com.squareup.okhttp3</groupId>
+			<artifactId>okhttp</artifactId>
+			<version>${okhttp.version}</version>
+		</dependency>
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <excludes>
-                        <exclude>
-                            <groupId>org.projectlombok</groupId>
-                            <artifactId>lombok</artifactId>
-                        </exclude>
-                    </excludes>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
+		<!-- Apache PDFBox - PDF处理 -->
+		<dependency>
+			<groupId>org.apache.pdfbox</groupId>
+			<artifactId>pdfbox</artifactId>
+			<version>${pdfbox.version}</version>
+		</dependency>
+
+		<!-- Hutool工具包 -->
+		<dependency>
+			<groupId>cn.hutool</groupId>
+			<artifactId>hutool-all</artifactId>
+			<version>${hutool.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>org.slf4j</groupId>
+					<artifactId>slf4j-simple</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+
+		<!-- Spring Boot Configuration Processor -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-configuration-processor</artifactId>
+			<optional>true</optional>
+		</dependency>
+
+	</dependencies>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+		</plugins>
+	</build>
 </project> 

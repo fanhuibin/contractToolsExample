@@ -30,6 +30,10 @@
         <el-icon><Plus /></el-icon>
         新增合同
       </el-button>
+      <el-button type="success" @click="handleExtract">
+        <el-icon><Document /></el-icon>
+        合同信息提取
+      </el-button>
       <el-button @click="handleTest">
         <el-icon><Connection /></el-icon>
         测试接口
@@ -175,7 +179,8 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Refresh, Plus, Connection } from '@element-plus/icons-vue'
+import { Search, Refresh, Plus, Connection, Document } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
 import {
   getContractPage,
   createContract,
@@ -200,6 +205,9 @@ const pagination = reactive({
 // 表格数据
 const tableData = ref<Contract[]>([])
 const loading = ref(false)
+
+// 路由
+const router = useRouter()
 
 // 对话框相关
 const dialogVisible = ref(false)
@@ -288,6 +296,11 @@ const handleDelete = async (row: Contract) => {
   } catch (error) {
     console.error('删除失败:', error)
   }
+}
+
+// 跳转到合同信息提取页面
+const handleExtract = () => {
+  router.push('/contract-extract')
 }
 
 // 测试接口

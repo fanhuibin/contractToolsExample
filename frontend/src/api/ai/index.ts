@@ -77,6 +77,7 @@ export const aiChat = {
 
 /**
  * PDF抽取相关API
+ * @deprecated 请使用 aiContract 替代
  */
 export const aiPdf = {
   /**
@@ -104,7 +105,41 @@ export const aiPdf = {
   }
 };
 
+/**
+ * 合同信息提取相关API
+ */
+export const aiContract = {
+  /**
+   * 提取合同信息
+   * @param file 合同文件（支持PDF、Word、Excel、图片等）
+   * @param prompt 可选的提取提示
+   * @returns 响应结果
+   */
+  extractInfo(file: File, prompt?: string) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (prompt) {
+      formData.append('prompt', prompt);
+    }
+    return request.post('/ai/contract/extract', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+
+  /**
+   * 获取提取任务状态
+   * @param taskId 任务ID
+   * @returns 任务状态
+   */
+  getTaskStatus(taskId: string) {
+    return request.get(`/ai/contract/status/${taskId}`);
+  }
+};
+
 export default {
   aiChat,
-  aiPdf
+  aiPdf,
+  aiContract
 };

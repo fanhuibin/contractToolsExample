@@ -1,292 +1,260 @@
-# 赵信合同工具集开发总结
+# 肇新合同工具集开发日志
 
-## 项目概述
-- **项目名称**: 赵信合同工具集 (Zhaoxin Contract Tool Set)
-- **参考项目**: JNPF-SpringBoot.V5.2.7-多租户 (旧项目，作为参考)
-- **新项目**: zhaoxin-contract-tool-set (当前开发项目)
-- **技术栈**: Vue 3 + TypeScript + Spring Boot 2.7.x + OnlyOffice
+## 2025-01-27 通义千问OCR图片识别功能集成
 
-## AI组件开发任务清单
+### 主要任务
+集成通义千问的 `qwen-vl-ocr-latest` 模型，实现图片内容抽取功能，特别是车票信息的OCR识别。
 
-### TASK011: AI组件开发 - 后端基础配置
-- **任务名称**: AI组件开发 - 后端基础配置
-- **任务描述**: 创建AI模块后端配置文件和映射类，为整个AI组件提供灵活配置的基础
-- **版本**: v1.0.0
-- **状态**: 开发中
-- **验收标准**:
-  - [ ] 在后端项目中创建aicomponent目录
-  - [ ] 创建application-ai.yml配置文件
-  - [ ] 创建AiProperties.java配置类
-  - [ ] 配置文件包含通义千问和PDF抽取的配置项
-- **注意事项**:
-  - API密钥等敏感信息使用占位符
-  - 属性命名采用驼峰式
-  - 配置项要全面覆盖AI功能需求
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-admin/src/main/resources/application-dev.yml` (第149-175行AI配置)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/config/AiProperties.java` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/constants/AiConstants.java` (常量定义)
+### 完成的工作
 
-### TASK012: AI组件开发 - 后端服务自动装配
-- **任务名称**: AI组件开发 - 后端服务自动装配
-- **任务描述**: 实现AI服务的自动配置，利用Spring Boot的自动装配能力初始化通义千问SDK客户端
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建AiAutoConfiguration.java自动配置类
-  - [ ] 实现@Configuration和@EnableConfigurationProperties注解
-  - [ ] 创建通义千问客户端Bean
-  - [ ] 实现条件装配功能
-- **注意事项**:
-  - 确保服务的创建和依赖注入在自动配置中完成
-  - 业务代码不应关心初始化细节
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/config/AiAutoConfiguration.java` (直接复制)
+#### 1. 多模态消息支持
+- **ChatMessage类重构**：支持文本和多模态内容（图片+文本）
+- **消息内容类型**：从 `String` 改为 `Object`，支持字符串和对象列表
+- **构造函数重载**：提供文本消息和多模态消息的构造函数
 
-### TASK013: AI组件开发 - PDF内容抽取功能开发(后端)
-- **任务名称**: AI组件开发 - PDF内容抽取功能开发(后端)
-- **任务描述**: 开发PDF文件文本抽取服务，实现接收前端上传的PDF文件并返回文本内容
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建PdfExtractService.java服务类
-  - [ ] 创建PdfExtractController.java控制器类
-  - [ ] 实现文件上传和处理接口
-  - [ ] 实现PDF文本抽取功能
-  - [ ] 实现文件大小限制和异常处理
-- **注意事项**:
-  - 引入Apache PDFBox等第三方库处理PDF解析
-  - 考虑并发请求和临时文件处理
-  - 防止内存溢出和文件泄露
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/util/AiLimitUtil.java` (限流工具类)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-core/src/main/java/jnpf/model/ai/AiFormModel.java` (AI模型类)
+#### 2. OCR功能实现
+- **模型配置更新**：将默认模型改为 `qwen-vl-ocr-latest`
+- **API请求格式**：支持多模态消息格式，包含图片和文本内容
+- **Base64图片编码**：本地图片转换为Base64格式发送给API
 
-### TASK014: AI组件开发 - AI智能聊天功能开发(后端)
-- **任务名称**: AI组件开发 - AI智能聊天功能开发(后端)
-- **任务描述**: 开发AI智能聊天后端服务，接收前端聊天请求，调用通义千问模型接口并返回结果
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建AiChatService.java服务类
-  - [ ] 创建AiChatController.java控制器类
-  - [ ] 实现聊天消息处理接口
-  - [ ] 集成通义千问模型API
-  - [ ] 实现对话上下文管理
-- **注意事项**:
-  - 考虑异步处理，避免长时间阻塞请求线程
-  - 设计合理的请求和响应数据结构
-  - 实现对话历史记录管理
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-system/jnpf-system-controller/src/main/java/jnpf/base/controller/AiChatController.java` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-system/jnpf-system-biz/src/main/java/jnpf/base/service/impl/AiChatServiceImpl.java` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-system/jnpf-system-entity/src/main/java/jnpf/base/entity/AiChatEntity.java` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/service/OpenAiService.java` (接口定义)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-common/jnpf-boot-common/jnpf-common-ai/src/main/java/jnpf/service/impl/DefaultOpenAiServiceImpl.java` (服务实现)
+#### 3. 测试接口开发
+- **/test接口重构**：从简单连接测试改为OCR图片识别测试
+- **本地图片处理**：读取指定路径的图片文件进行OCR识别
+- **详细日志输出**：记录图片处理、API调用和结果返回的全过程
 
-### TASK015: AI组件开发 - 前端API层封装
-- **任务名称**: AI组件开发 - 前端API层封装
-- **任务描述**: 创建前端API请求模块，统一管理所有与AI后端服务的API交互
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 在前端项目中创建ai.js文件
-  - [ ] 实现extractPdfText函数
-  - [ ] 实现sendChatMessage函数
-  - [ ] 配置统一的请求处理和错误处理
-- **注意事项**:
-  - 统一处理API的错误信息
-  - 使用Promise进行异步处理
-  - 配置合理的超时时间
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-web-vue3/src/api/system/aiChat.ts` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-app/libs/chat.js` (移动端API封装)
+#### 4. 代码优化
+- **类型安全处理**：修复Object类型转换问题
+- **错误处理增强**：完善多模态消息的错误处理机制
+- **会话管理适配**：更新会话列表显示逻辑以支持多模态消息
 
-### TASK016: AI组件开发 - PDF抽取界面开发(前端)
-- **任务名称**: AI组件开发 - PDF抽取界面开发(前端)
-- **任务描述**: 开发PDF内容抽取前端界面，允许用户上传PDF文件并展示抽取结果
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建PdfExtractor.vue组件
-  - [ ] 实现文件上传区域
-  - [ ] 实现加载状态显示
-  - [ ] 实现文本内容展示区域
-  - [ ] 实现文件类型和大小校验
-- **注意事项**:
-  - 使用Element Plus组件库
-  - 提供友好的用户交互体验
-  - 实现文件类型和大小的前端校验
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-web-vue3/src/components/FormGenerator/src/components/AiChatPopover.vue` (文件上传组件)
+### 技术栈
+- **通义千问OCR模型**：`qwen-vl-ocr-latest`
+- **多模态消息格式**：支持图片URL和文本混合内容
+- **Base64编码**：图片数据编码传输
+- **JSON响应解析**：结构化OCR识别结果
 
-### TASK017: AI组件开发 - AI聊天界面开发(前端)
-- **任务名称**: AI组件开发 - AI聊天界面开发(前端)
-- **任务描述**: 开发AI智能聊天前端界面，实现对话、会话管理、历史记录等功能
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建AiChat.vue组件
-  - [ ] 实现会话列表区域
-  - [ ] 实现聊天记录区域
-  - [ ] 实现消息输入区域
-  - [ ] 支持会话管理功能
-  - [ ] 支持消息复制和重新生成
-- **注意事项**:
-  - 设计合理的数据结构管理会话状态和聊天记录
-  - 支持Markdown格式渲染
-  - 提供良好的用户体验
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-web-vue3/src/layouts/default/header/components/AIChatModal.vue` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-app/store/modules/chat.js` (状态管理)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-app/libs/chat.js` (聊天功能实现)
+### 修改的文件
+1. **backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/ChatMessage.java**：支持多模态消息
+2. **backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/impl/DefaultOpenAiServiceImpl.java**：多模态消息处理
+3. **backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/controller/AiChatController.java**：OCR测试接口
+4. **backend/src/main/resources/aicomponent/application-ai.yml**：OCR模型配置
 
-### TASK018: AI组件开发 - AI表单生成功能(后端)
-- **任务名称**: AI组件开发 - AI表单生成功能(后端)
-- **任务描述**: 开发AI表单生成后端服务，根据业务需求描述自动生成表单结构
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建VisualAiController.java控制器
-  - [ ] 创建VisualAiService.java服务类
-  - [ ] 实现表单结构生成接口
-  - [ ] 实现字段智能推荐功能
-  - [ ] 实现多表关联设计
-- **注意事项**:
-  - 集成AI模型进行智能分析
-  - 支持多种表单组件类型
-  - 实现表单验证规则生成
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-visualdev/jnpf-visualdev-base/jnpf-visualdev-base-controller/src/main/java/jnpf/base/controller/VisualAiController.java` (直接复制)
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-java-boot/jnpf-visualdev/jnpf-visualdev-base/jnpf-visualdev-base-biz/src/main/java/jnpf/base/service/impl/VisualAiServiceImpl.java` (直接复制)
+### 功能特性
+- ✅ **图片OCR识别**：支持本地图片文件识别
+- ✅ **车票信息提取**：专门针对车票信息的结构化提取
+- ✅ **JSON格式输出**：返回结构化的识别结果
+- ✅ **详细日志记录**：完整的处理过程日志
+- ✅ **错误处理**：完善的异常处理和错误提示
 
-### TASK019: AI组件开发 - AI表单生成界面(前端)
-- **任务名称**: AI组件开发 - AI表单生成界面(前端)
-- **任务描述**: 开发AI表单生成前端界面，提供需求描述输入和表单结构展示
-- **版本**: v1.0.0
-- **状态**: 计划中
-- **验收标准**:
-  - [ ] 创建AiFormGenerator.vue组件
-  - [ ] 实现需求描述输入区域
-  - [ ] 实现表单结构预览区域
-  - [ ] 实现表单组件配置界面
-  - [ ] 支持表单导出功能
-- **注意事项**:
-  - 提供直观的表单设计界面
-  - 支持实时预览和编辑
-  - 实现表单组件的拖拽配置
-- **参考文件**:
-  - `JNPF-SpringBoot.V5.2.7-多租户/jnpf-web-vue3/src/components/FormGenerator/src/components/AiChatPopover.vue` (直接复制)
+### 测试方法
+1. **启动后端服务**
+2. **访问测试接口**：
+   ```
+   GET http://localhost:8080/api/ai/chat/test
+   ```
+3. **查看日志输出**：观察完整的OCR处理过程
+4. **检查返回结果**：验证车票信息的识别准确性
 
-## 需要开发的接口清单
+### 经验沉淀
+1. **多模态API设计**：通义千问的多模态消息格式设计合理，支持图片和文本混合
+2. **Base64编码效率**：图片Base64编码会增加约33%的数据量，需要控制图片大小
+3. **OCR模型选择**：`qwen-vl-ocr-latest` 专门针对OCR任务优化，识别准确率高
+4. **结构化输出**：通过提示词引导AI返回JSON格式，便于后续处理
 
-### AI聊天接口
-- POST /api/ai/chat/send - 发送聊天消息
-- GET /api/ai/chat/sessions - 获取会话列表
-- POST /api/ai/chat/session - 创建新会话
-- DELETE /api/ai/chat/session/{id} - 删除会话
-- PUT /api/ai/chat/session/{id}/title - 更新会话标题
+### 当前状态
+- ✅ OCR功能正常工作
+- ✅ 多模态消息支持完成
+- ✅ 测试接口可用
+- ✅ 日志记录完善
+- ⚠️ 需要验证图片文件路径
 
-### PDF抽取接口
-- POST /api/ai/pdf/extract - PDF文本抽取
-- GET /api/ai/pdf/status/{id} - 获取抽取状态
+### 下一步计划
+1. 测试实际图片识别效果
+2. 优化提示词以提高识别准确率
+3. 开发通用的图片OCR接口
+4. 集成到前端界面
 
-### AI表单生成接口
-- POST /api/ai/form/generate - 生成表单结构
-- POST /api/ai/form/optimize - 优化表单组件
-- GET /api/ai/form/templates - 获取表单模板
+---
 
-## 需要开发的组件清单
+## 2025-01-27 Test.java文件定位
 
-### 后端组件
-1. **配置类**
-   - AiProperties.java (参考JNPF)
-   - AiAutoConfiguration.java (参考JNPF)
-   - AiConstants.java (参考JNPF)
+### 会话主要目的
+帮助用户定位 `test.java` 文件
 
-2. **服务类**
-   - AiChatService.java (参考JNPF)
-   - PdfExtractService.java (新增)
-   - VisualAiService.java (参考JNPF)
-   - OpenAiService.java (参考JNPF)
+### 完成的主要任务
+1. 使用文件搜索功能定位到 `Test.java` 文件
+2. 读取并分析文件内容
+3. 提供文件位置和功能说明
 
-3. **控制器类**
-   - AiChatController.java (参考JNPF)
-   - PdfExtractController.java (新增)
-   - VisualAiController.java (参考JNPF)
+### 关键决策和解决方案
+- 使用 `file_search` 工具进行模糊搜索
+- 使用 `read_file` 工具读取完整文件内容
+- 提供详细的文件路径和功能分析
 
-4. **实体类**
-   - AiChatEntity.java (参考JNPF)
-   - ChatMessage.java (新增)
-   - ChatSession.java (新增)
+### 使用的技术栈
+- 文件搜索工具
+- 文件读取工具
+- Java 代码分析
 
-5. **工具类**
-   - AiLimitUtil.java (参考JNPF)
+### 修改的文件
+无
 
-### 前端组件
-1. **API层**
-   - aiChat.ts (参考JNPF)
-   - aiForm.ts (新增)
+### 文件定位结果
+**文件位置：** `backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/util/Test.java`
 
-2. **页面组件**
-   - AIChatModal.vue (参考JNPF)
-   - AiChatPopover.vue (参考JNPF)
-   - PdfExtractor.vue (新增)
-   - AiFormGenerator.vue (新增)
+**文件功能：**
+- **main1方法**：测试文件上传功能，使用阿里云 DashScope API
+- **main方法**：测试AI聊天功能，使用通义千问模型进行流式对话
 
-3. **状态管理**
-   - chat.js (参考JNPF)
+**注意事项：**
+- 包含硬编码的API密钥，建议移到配置文件
+- 文件路径硬编码，需要环境适配
+- 测试类，不建议在生产环境使用
 
-## 需要修改的界面清单
-1. **主界面**
-   - 添加AI聊天入口
-   - 集成AI表单生成功能
-   - 添加PDF抽取功能入口
+---
 
-2. **导航菜单**
-   - AI助手菜单项
-   - PDF工具菜单项
-   - 表单生成菜单项
+## 2025-01-27 合同信息提取功能实现
 
-## 需要隐藏的功能清单
-1. **开发调试功能**
-   - AI模型调试面板
-   - 请求日志查看
-   - 性能监控面板
+### 会话主要目的
+根据 Test.java 文件实现合同信息提取功能，替换原有的PDF提取功能
 
-2. **管理员功能**
-   - AI配置管理
-   - 使用量统计
-   - 模型切换管理
+### 完成的主要任务
+1. 分析现有PDF提取接口代码
+2. 创建合同提取服务接口和实现类
+3. 创建合同提取控制器
+4. 修改配置文件增加合同提取相关配置
+5. 开发前端合同信息提取组件
+6. 修改前端路由和视图
+7. 在合同管理页面添加导航到合同信息提取功能
 
-## 开发总结记录
+### 关键决策和解决方案
+- **参考Test.java实现**：使用阿里云通义千问API进行文件上传和信息提取
+- **扩展支持的文件类型**：从仅支持PDF扩展到支持Word、Excel、图片等多种格式
+- **增加文件大小限制**：从10MB提升到30MB
+- **前端组件优化**：添加提示词输入、结果导出等功能
+- **保留原有PDF提取代码**：标记为废弃，但保留向后兼容性
 
-### 2024-01-XX 项目初始化
-- **主要任务**: 项目基础架构搭建
-- **完成内容**: 
-  - 创建项目基础结构
-  - 配置开发环境
-  - 建立任务清单
-- **技术栈**: Vue 3 + TypeScript + Spring Boot 2.7.x
-- **修改文件**: 
-  - 创建duijie/readme.md
-  - 分析项目结构
-- **经验沉淀**:
-  - 参考JNPF框架进行架构设计
-  - 采用前后端分离架构
-  - 使用OnlyOffice进行文档处理
+### 使用的技术栈
+- **后端**：Spring Boot、阿里云通义千问API
+- **前端**：Vue 3、Element Plus、TypeScript
+- **文件处理**：MultipartFile、Path API
+- **异步处理**：线程池、任务状态管理
 
-### 2024-01-XX AI组件开发规划
-- **主要任务**: AI组件开发任务规划
-- **完成内容**: 
-  - 分析JNPF系统AI功能
-  - 建立详细的参考文件清单
-  - 制定开发任务计划
-- **技术栈**: 基于JNPF AI模块
-- **修改文件**: 
-  - 更新duijie/readme.md
-  - 添加AI组件开发任务
-- **经验沉淀**:
-  - 充分利用JNPF现有AI功能代码
-  - 采用模块化开发方式
-  - 保持代码的可复用性和可维护性 
+### 修改的文件
+1. **后端新增文件**：
+   - `backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/ContractExtractService.java`
+   - `backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/impl/ContractExtractServiceImpl.java`
+   - `backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/controller/ContractExtractController.java`
+
+2. **后端修改文件**：
+   - `backend/src/main/resources/aicomponent/application-ai.yml`
+
+3. **前端新增文件**：
+   - `frontend/src/components/ai/ContractExtractor.vue`
+   - `frontend/src/views/contracts/ContractExtract.vue`
+
+4. **前端修改文件**：
+   - `frontend/src/api/ai/index.ts`
+   - `frontend/src/router/index.ts`
+   - `frontend/src/views/contracts/index.vue`
+
+### 功能特性
+- ✅ **多文件格式支持**：PDF、Word、Excel、图片等
+- ✅ **更大文件支持**：文件大小限制提升到30MB
+- ✅ **自定义提取提示**：用户可以输入自定义提示词
+- ✅ **结果导出**：支持将提取结果导出为文本文件
+- ✅ **进度显示**：实时显示提取进度和状态
+- ✅ **错误处理**：完善的异常处理和错误提示
+
+### 使用方法
+1. **从合同管理页面**：点击"合同信息提取"按钮
+2. **或直接访问**：`/contract-extract` 路由
+3. **上传文件**：支持拖拽或点击上传
+4. **可选输入提示**：指定需要提取的具体信息
+5. **查看结果**：提取完成后显示结果，可复制或导出
+
+### 注意事项
+1. 文件上传大小限制为30MB
+2. 支持的文件格式：PDF、Word(.doc/.docx)、Excel(.xls/.xlsx)、图片(.jpg/.jpeg/.png)
+3. 处理时间与文件大小和复杂度相关
+4. 提取结果质量取决于文件清晰度和内容结构
+
+### 下一步计划
+1. 优化提取准确率
+2. 增加批量处理功能
+3. 添加提取结果保存和历史记录
+4. 集成到合同管理流程中
+
+---
+
+## 2025-01-27 API配置修正
+
+### 会话主要目的
+根据Test.java文件中的实际配置，修正API密钥和API地址设置
+
+### 完成的主要任务
+1. 修正application-ai.yml中的API密钥配置
+2. 修正模型名称配置
+3. 修正AiConstants中的API地址配置
+
+### 关键决策和解决方案
+- **API密钥修正**：移除环境变量配置，直接使用Test.java中的密钥
+- **模型名称修正**：将Qwen-Long改为qwen-long（小写）
+- **API地址修正**：确保所有配置文件使用正确的地址
+
+### 使用的技术栈
+- YAML配置文件修改
+- Java常量类修改
+
+### 修改的文件
+1. **backend/src/main/resources/aicomponent/application-ai.yml**：
+   - API密钥：`sk-3e160de89efd4862923a24e22e72ed08`
+   - 模型名称：`qwen-long`
+2. **backend/src/main/java/com/zhaoxinms/contract/tools/aicomponent/constants/AiConstants.java**：
+   - API地址：`https://dashscope.aliyuncs.com/compatible-mode/v1`
+
+### 配置修正详情
+- **API密钥**：使用Test.java中的实际密钥，移除环境变量配置
+- **API地址**：统一使用`https://dashscope.aliyuncs.com/compatible-mode/v1`
+- **模型名称**：使用`qwen-long`（小写格式）
+
+### 注意事项
+1. API密钥已硬编码在配置文件中，生产环境建议使用环境变量
+2. 所有配置文件现在与Test.java保持一致
+3. 确保API调用能够正常进行
+
+---
+
+## 2025-01-27 SLF4J日志冲突修复
+
+### 会话主要目的
+解决Spring Boot启动时的SLF4J日志框架冲突问题
+
+### 完成的主要任务
+1. 识别SLF4J冲突原因
+2. 排除冲突的slf4j-simple依赖
+3. 确保Spring Boot使用Logback日志框架
+
+### 关键决策和解决方案
+- **问题分析**：OpenAI Java SDK和Hutool工具包包含slf4j-simple，与Spring Boot的Logback冲突
+- **解决方案**：在相关依赖中排除slf4j-simple，让Spring Boot使用默认的Logback
+
+### 使用的技术栈
+- Maven依赖管理
+- Spring Boot日志配置
+
+### 修改的文件
+1. **backend/pom.xml**：
+   - 在openai-java依赖中排除slf4j-simple
+   - 在dashscope-sdk-java依赖中排除slf4j-simple
+   - 在hutool-all依赖中排除slf4j-simple
+
+### 修复详情
+- **冲突原因**：多个依赖包同时包含不同的SLF4J实现
+- **修复方法**：统一使用Spring Boot默认的Logback实现
+- **影响范围**：确保应用正常启动，日志功能正常
+
+### 验证方法
+1. 重新启动Spring Boot应用
+2. 检查启动日志是否正常
+3. 确认没有SLF4J冲突警告

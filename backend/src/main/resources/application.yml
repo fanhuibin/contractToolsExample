@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: contract-tools
+  config:
+    import:
+      - classpath:aicomponent/application-ai.yml
 
 logging:
   level:

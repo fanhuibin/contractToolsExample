@@ -1,7 +1,7 @@
 package com.zhaoxinms.contract.tools.aicomponent.controller;
 
 import com.zhaoxinms.contract.tools.aicomponent.config.AiProperties;
-import com.zhaoxinms.contract.tools.aicomponent.service.OpenAiService;
+import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractService;
 import com.zhaoxinms.contract.tools.aicomponent.util.AiLimitUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,24 +9,26 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * PDF抽取控制器
+ * 合同信息提取控制器
  *
  * @author zhaoxinms
  */
 @Slf4j
 @RestController
-@RequestMapping("/ai/pdf")
-public class PdfExtractController {
+@RequestMapping("/ai/contract")
+public class ContractExtractController {
 
     @Autowired
-    private OpenAiService openAiService;
+    private ContractExtractService contractExtractService;
     
     @Autowired
     private AiProperties aiProperties;
@@ -37,15 +39,24 @@ public class PdfExtractController {
     // 存储抽取任务状态
     private final Map<String, Map<String, Object>> extractTasks = new ConcurrentHashMap<>();
 
+    // 支持的文件类型
+    private final String[] SUPPORTED_EXTENSIONS = {
+        ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".jpg", ".jpeg", ".png"
+    };
+
     /**
-     * 从PDF文件中抽取文本
+     * 从文件中提取合同信息
      *
-     * @param file 上传的PDF文件
+     * @param file 上传的文件
+     * @param prompt 可选的提取提示
      * @return 抽取结果
      */
     @PostMapping("/extract")
-    public ResponseEntity<Map<String, Object>> extractText(@RequestParam("file") MultipartFile file) {
-        log.info("收到PDF抽取请求，文件名: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
+    public ResponseEntity<Map<String, Object>> extractInfo(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "prompt", required = false) String prompt) {
+        
+        log.info("收到合同信息提取请求，文件名: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
         
         // 检查限流
         if (!aiLimitUtil.tryAcquire("system")) {
@@ -53,20 +64,22 @@ public class PdfExtractController {
         }
         
         try {
-            // 检查文件类型
+            // 检查文件
             if (file.isEmpty()) {
                 return ResponseEntity.ok(createResponse(false, "请选择文件", null));
             }
             
+            // 检查文件类型
             String fileName = file.getOriginalFilename();
-            if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
-                return ResponseEntity.ok(createResponse(false, "只支持PDF文件格式", null));
+            if (fileName == null || !isSupportedFileType(fileName)) {
+                return ResponseEntity.ok(createResponse(false, "不支持的文件格式，支持的格式有：PDF、Word、Excel、图片", null));
             }
             
-            // 检查文件大小
-            if (file.getSize() > aiProperties.getPdf().getMaxFileSize()) {
+            // 检查文件大小 - 增加到30MB
+            long maxFileSize = 30 * 1024 * 1024; // 30MB
+            if (file.getSize() > maxFileSize) {
                 return ResponseEntity.ok(createResponse(false, 
-                        "文件大小超过限制：" + aiProperties.getPdf().getMaxFileSize() / 1024 / 1024 + "MB", null));
+                        "文件大小超过限制：" + (maxFileSize / 1024 / 1024) + "MB", null));
             }
             
             // 创建任务ID
@@ -80,18 +93,30 @@ public class PdfExtractController {
             taskStatus.put("startTime", System.currentTimeMillis());
             extractTasks.put(taskId, taskStatus);
             
-            // 异步处理PDF抽取
+            // 异步处理文件提取
             new Thread(() -> {
                 try {
-                    // 抽取文本
-                    String extractedText = openAiService.extractTextFromPdf(file.getBytes());
+                    // 保存文件到临时目录
+                    Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "contract-extract");
+                    if (!Files.exists(tempDir)) {
+                        Files.createDirectories(tempDir);
+                    }
+                    
+                    Path tempFile = tempDir.resolve(fileName);
+                    Files.write(tempFile, file.getBytes());
+                    
+                    // 提取信息
+                    String extractedInfo = contractExtractService.processFile(tempFile, prompt);
+                    
+                    // 删除临时文件
+                    Files.deleteIfExists(tempFile);
                     
                     // 更新任务状态
                     taskStatus.put("status", "completed");
-                    taskStatus.put("result", extractedText);
+                    taskStatus.put("result", extractedInfo);
                     taskStatus.put("endTime", System.currentTimeMillis());
-                } catch (IOException e) {
-                    log.error("PDF抽取失败", e);
+                } catch (Exception e) {
+                    log.error("合同信息提取失败", e);
                     taskStatus.put("status", "failed");
                     taskStatus.put("error", e.getMessage());
                     taskStatus.put("endTime", System.currentTimeMillis());
@@ -99,12 +124,12 @@ public class PdfExtractController {
             }).start();
             
             // 返回任务ID
-            Map<String, Object> result = createResponse(true, "PDF抽取任务已提交", null);
+            Map<String, Object> result = createResponse(true, "合同信息提取任务已提交", null);
             result.put("taskId", taskId);
             
             return ResponseEntity.ok(result);
         } catch (Exception e) {
-            log.error("处理PDF抽取请求时发生错误", e);
+            log.error("处理合同信息提取请求时发生错误", e);
             return ResponseEntity.ok(createResponse(false, "服务器错误: " + e.getMessage(), null));
         }
     }
@@ -136,6 +161,22 @@ public class PdfExtractController {
         }
         
         return ResponseEntity.ok(result);
+    }
+    
+    /**
+     * 检查文件类型是否支持
+     * 
+     * @param fileName 文件名
+     * @return 是否支持
+     */
+    private boolean isSupportedFileType(String fileName) {
+        String lowerFileName = fileName.toLowerCase();
+        for (String ext : SUPPORTED_EXTENSIONS) {
+            if (lowerFileName.endsWith(ext)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**

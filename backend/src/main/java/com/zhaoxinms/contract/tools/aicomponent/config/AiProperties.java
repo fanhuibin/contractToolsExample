@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * AI 配置
+ * AI配置属性
  *
  * @author zhaoxinms
  */
@@ -32,6 +32,11 @@ public class AiProperties {
      * openai key
      */
     private List<String> apiKey;
+
+    /**
+     * 默认模型
+     */
+    private String model = "qwen-turbo";
 
     /**
      * 超时时间
@@ -64,26 +69,29 @@ public class AiProperties {
     private PdfConfig pdf = new PdfConfig();
 
     /**
-     * 代理配置
+     * 聊天配置
      */
-    private Proxy proxy = new Proxy();
+    private ChatConfig chat = new ChatConfig();
 
     /**
-     * 对话配置
+     * 代理配置
      */
-    private ChatOption chat = new ChatOption();
+    private ProxyConfig proxy = new ProxyConfig();
 
+    /**
+     * PDF配置
+     */
     @Data
     public static class PdfConfig {
         /**
-         * 是否启用
+         * 是否启用PDF抽取功能
          */
         private boolean enabled = true;
 
         /**
          * 最大文件大小(字节)
          */
-        private long maxFileSize = 10 * 1024 * 1024; // 10MB
+        private Long maxFileSize = 10485760L; // 10MB
 
         /**
          * 临时文件存储路径
@@ -98,73 +106,78 @@ public class AiProperties {
         /**
          * 抽取超时时间(毫秒)
          */
-        private int extractTimeout = 60000;
+        private Long extractTimeout = 60000L;
 
         /**
          * 最大页数限制
          */
-        private int maxPages = 500;
+        private Integer maxPages = 500;
     }
 
+    /**
+     * 聊天配置
+     */
     @Data
-    public static class ChatOption {
-
+    public static class ChatConfig {
         /**
-         * @see AiConstants.Model
+         * 模型名称
          */
-        private String mode = AiConstants.Model.QWEN_25_3;
+        private String mode = "qwen-turbo";
 
         /**
-         * 设置seed参数会使文本生成过程更具有确定性，通常用于使模型每次运行的结果一致。
-         * 在每次模型调用时传入相同的seed值（由您指定），并保持其他参数不变，模型将很可能返回相同的结果。
+         * 随机种子
          */
         private Integer seed = 1234;
 
         /**
-         * 允许模型生成的最大Token数。
+         * 最大令牌数
          */
         private Integer maxTokens = 1500;
 
         /**
-         * 核采样的概率阈值，用于控制模型生成文本的多样性。
-         * top_p越高，生成的文本更多样。反之，生成的文本更确定。
-         * 由于temperature与top_p均可以控制生成文本的多样性，因此建议您只设置其中一个值。
+         * 核采样概率阈值
          */
         private Double topP = 0.8;
 
         /**
-         * 采样温度，用于控制模型生成文本的多样性。
-         * temperature越高，生成的文本更多样，反之，生成的文本更确定。
-         * 由于temperature与top_p均可以控制生成文本的多样性，因此建议您只设置其中一个值。
+         * 温度参数(0.0-1.0)
          */
         private Double temperature = 0.85;
 
+        /**
+         * 是否启用搜索
+         */
         private boolean enableSearch = true;
-
     }
 
+    /**
+     * 代理配置
+     */
     @Data
-    public static class Proxy {
+    public static class ProxyConfig {
         /**
-         * HTTP, SOCKS
+         * 代理类型
          */
-        private java.net.Proxy.Type type = java.net.Proxy.Type.HTTP;
+        private String type = "HTTP";
+
         /**
-         * 代理域名
+         * 代理主机
          */
         private String host;
+
         /**
          * 代理端口
          */
         private Integer port;
+
         /**
          * 代理用户名
          */
         private String username;
+
         /**
          * 代理密码
          */
         private String password;
     }
-
 }
