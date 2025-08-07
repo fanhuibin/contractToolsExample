@@ -15,22 +15,34 @@
 
 package com.zhaoxinms.contract.tools.onlyoffice.configurations;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import lombok.Getter;
 import lombok.Setter;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 @Component
 @Scope("prototype")
 @Getter
 @Setter
 public class Logo { // the image file at the top left corner of the Editor header
-    @Value("${onlyoffice.logo}")
-    private String image; // the path to the image file used to show in common work mode
-    @Value("${onlyoffice.logoEmbedded}")
-    private String imageEmbedded; // the path to the image file used to show in the embedded mode
-    @Value("${onlyoffice.logoUrl}")
-    private String url; // the absolute URL which will be used when someone clicks the logo image
+    @Autowired
+    private ZxcmConfig zxcmConfig;
+    
+    // the path to the image file used to show in common work mode
+    public String getImage() {
+        return zxcmConfig.getOnlyOffice().getLogo().getLogo();
+    }
+    
+    // the path to the image file used to show in the embedded mode
+    public String getImageEmbedded() {
+        return zxcmConfig.getOnlyOffice().getLogo().getLogoEmbedded();
+    }
+    
+    // the absolute URL which will be used when someone clicks the logo image
+    public String getUrl() {
+        return zxcmConfig.getOnlyOffice().getLogo().getLogoUrl();
+    }
 }

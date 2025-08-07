@@ -13,21 +13,9 @@
         text-color="#bfcbd9"
         active-text-color="#409EFF"
       >
-        <el-menu-item index="/contracts">
-          <el-icon><Document /></el-icon>
-          <span>合同管理</span>
-        </el-menu-item>
-        <el-menu-item index="/templates">
-          <el-icon><Files /></el-icon>
-          <span>模板管理</span>
-        </el-menu-item>
-        <el-menu-item index="/documents">
-          <el-icon><Folder /></el-icon>
-          <span>文档管理</span>
-        </el-menu-item>
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
-          <span>OnlyOffice演示</span>
+          <span>OnlyOffice预览</span>
         </el-menu-item>
       </el-menu>
     </el-aside>

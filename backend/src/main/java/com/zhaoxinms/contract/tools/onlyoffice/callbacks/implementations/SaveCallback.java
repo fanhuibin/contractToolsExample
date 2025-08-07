@@ -23,13 +23,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
+import com.zhaoxinms.contract.tools.common.exception.OnlyOfficeCallbackException;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.onlyoffice.callbacks.Callback;
 import com.zhaoxinms.contract.tools.onlyoffice.callbacks.Status;
 import com.zhaoxinms.contract.tools.onlyoffice.dto.Track;
 
 import lombok.extern.slf4j.Slf4j;
-
+ 
 @Slf4j
 @Component
 public class SaveCallback implements Callback {
@@ -38,31 +39,63 @@ public class SaveCallback implements Callback {
     private FileInfoService fileInfoService;
 
     @Override
-    public int handle(Track body, String fileId, String contractId) { // handle the callback when the saving request is performed
+    public int handle(Track body, String fileId) { // handle the callback when the saving request is performed
         int result = 0;
         try {
+            // 参数校验
+            if (body == null) {
+                log.error("回调参数为空");
+                return 1;
+            }
+            
+            if (fileId == null || fileId.trim().isEmpty()) {
+                log.error("文件ID为空");
+                return 1;
+            }
+            
             String downloadUri = body.getUrl();
             String changesUri = body.getChangesurl();
             String key = body.getKey();
-
+            
+            if (downloadUri == null || downloadUri.trim().isEmpty()) {
+                log.error("下载URL为空，文件ID: {}", fileId);
+                return 1;
+            }
+ 
             // 获取文件信息
-            FileInfo fileInfo = fileInfoService.getById(Long.valueOf(fileId));
+            FileInfo fileInfo = fileInfoService.getById(fileId);
             if (fileInfo == null) {
                 log.error("文件数据不存在，文件ID: {}", fileId);
-                throw new RuntimeException("文件数据不存在!");
+                return 1;
+            }
+
+            // 验证OnlyOffice key
+            if (key != null && !key.equals(fileInfo.getOnlyofficeKey())) {
+                log.warn("OnlyOffice key不匹配，文件ID: {}, 期望: {}, 实际: {}", 
+                        fileId, fileInfo.getOnlyofficeKey(), key);
             }
 
             // 下载文件并更新内容
             URL uri = new URL(downloadUri);
             java.net.HttpURLConnection connection = (java.net.HttpURLConnection)uri.openConnection();
+            connection.setConnectTimeout(30000); // 30秒连接超时
+            connection.setReadTimeout(300000);   // 5分钟读取超时
+            
+            // 检查HTTP响应状态
+            int responseCode = connection.getResponseCode();
+            if (responseCode != 200) {
+                log.error("下载文件失败，HTTP状态码: {}, URL: {}, 文件ID: {}", responseCode, downloadUri, fileId);
+                return 1;
+            }
+            
             InputStream stream = connection.getInputStream();
             
             try {
                 // 使用FileInfoService更新文件内容
-                boolean success = fileInfoService.updateFileContent(Long.valueOf(fileId), stream);
+                boolean success = fileInfoService.saveFile(fileId, stream);
                 
                 if (success) {
-                    log.info("文件保存成功，文件ID: {}", fileId);
+                    log.info("文件保存成功，文件ID: {}, 下载URL: {}", fileId, downloadUri);
                 } else {
                     log.error("文件保存失败，文件ID: {}", fileId);
                     result = 1;
@@ -70,11 +103,24 @@ public class SaveCallback implements Callback {
                 
             } finally {
                 stream.close();
+                connection.disconnect();
             }
 
-        } catch (Exception ex) {
-            log.error("保存回调处理失败: {}", ex.getMessage(), ex);
+        } catch (IllegalArgumentException e) {
+            log.error("参数错误: {}, 文件ID: {}", e.getMessage(), fileId);
             result = 1;
+            // 抛出业务异常供外部处理
+            throw new OnlyOfficeCallbackException(fileId, "SAVE", "参数错误: " + e.getMessage(), e);
+        } catch (IOException e) {
+            log.error("IO异常: {}, 文件ID: {}", e.getMessage(), fileId, e);
+            result = 1;
+            // 抛出业务异常供外部处理
+            throw new OnlyOfficeCallbackException(fileId, "SAVE", "IO异常: " + e.getMessage(), e);
+        } catch (Exception ex) {
+            log.error("保存回调处理失败: {}, 文件ID: {}", ex.getMessage(), fileId, ex);
+            result = 1;
+            // 抛出业务异常供外部处理
+            throw new OnlyOfficeCallbackException(fileId, "SAVE", "保存回调处理失败: " + ex.getMessage(), ex);
         }
 
         return result;

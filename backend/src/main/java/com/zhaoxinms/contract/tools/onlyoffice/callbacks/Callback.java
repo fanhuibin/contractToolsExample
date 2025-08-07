@@ -21,7 +21,7 @@ import com.zhaoxinms.contract.tools.onlyoffice.dto.Track;
 
 // specify the callback handler functions
 public interface Callback {
-    int handle(Track body, String fileId, String contractId); // handle the callback
+    int handle(Track body, String fileId); // handle the callback
 
     int getStatus(); // get document status
 

@@ -61,17 +61,33 @@
             </el-form-item>
           </el-col>
           
-          <el-col :span="6">
-            <el-form-item label="审阅权限:">
-              <el-switch
-                v-model="canReview"
-                active-text="可审阅"
-                inactive-text="不可审阅"
-                :disabled="!canEdit"
-                @change="handlePermissionChange"
-              />
-            </el-form-item>
-          </el-col>
+                     <el-col :span="6">
+             <el-form-item label="审阅权限:">
+               <el-switch
+                 v-model="canReview"
+                 active-text="可审阅"
+                 inactive-text="不可审阅"
+                 :disabled="!canEdit"
+                 @change="handlePermissionChange"
+               />
+             </el-form-item>
+           </el-col>
+           
+           <el-col :span="6">
+             <el-form-item label="更新文档密钥:">
+               <el-tooltip 
+                 content="OnlyOffice有缓存机制，有时需要使用新的密钥来防止缓存问题。开启后会重新生成文档的唯一标识符。"
+                 placement="top"
+               >
+                 <el-switch
+                   v-model="updateOnlyofficeKey"
+                   active-text="更新"
+                   inactive-text="不更新"
+                   @change="handleKeyUpdateChange"
+                 />
+               </el-tooltip>
+             </el-form-item>
+           </el-col>
           
           <el-col :span="4">
             <el-button 
@@ -85,48 +101,57 @@
           </el-col>
         </el-row>
 
-        <!-- 文件上传区域 -->
-        <el-divider content-position="left">或上传新文件</el-divider>
-        <el-upload
-          class="upload-demo"
-          drag
-          :action="uploadUrl"
-          :headers="uploadHeaders"
-          :on-success="handleUploadSuccess"
-          :on-error="handleUploadError"
-          :before-upload="beforeUpload"
-          accept=".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf"
-        >
-          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-          <div class="el-upload__text">
-            将文件拖到此处，或<em>点击上传</em>
-          </div>
-          <template #tip>
-            <div class="el-upload__tip">
-              支持 doc/docx/xls/xlsx/ppt/pptx/pdf 格式文件，且不超过100MB
-            </div>
-          </template>
-        </el-upload>
+
       </div>
+      
+             <!-- 功能说明 -->
+       <div style="margin-top: 20px; display: flex; align-items: center; gap: 8px;">
+         <span style="color: #666; font-size: 14px;">文档密钥说明</span>
+                   <el-tooltip 
+            placement="top"
+            :show-after="200"
+            :hide-after="0"
+            popper-class="custom-tooltip"
+          >
+            <template #content>
+              <div style="max-width: 300px; line-height: 1.6;">
+                <div style="font-weight: bold; margin-bottom: 8px;">OnlyOffice 文档密钥（onlyofficeKey）的作用：</div>
+                <ul style="margin: 8px 0; padding-left: 16px;">
+                  <li>作为文档的唯一标识符，用于区分不同的文档版本</li>
+                  <li>OnlyOffice 服务器会根据这个密钥进行缓存管理</li>
+                  <li>当文档内容更新但密钥相同时，可能会遇到缓存问题</li>
+                  <li>开启"更新文档密钥"后，每次加载都会生成新的密钥，确保获取最新内容</li>
+                </ul>
+                <div style="margin-top: 8px; color: #e6a23c;">
+                  <strong>使用场景：</strong>当文档内容已更新但编辑器仍显示旧内容时，建议开启此选项。
+                </div>
+              </div>
+            </template>
+           <el-icon style="color: #409eff; cursor: pointer; font-size: 16px;">
+             <QuestionFilled />
+           </el-icon>
+         </el-tooltip>
+       </div>
     </el-card>
 
     <!-- 编辑器区域 -->
     <el-card v-if="showEditor" class="editor-card">
-      <OnlyOfficeEditor
-        ref="editorRef"
-        :file-id="selectedFileId"
-        :can-edit="canEdit"
-        :can-review="canReview"
-        :height="editorHeight"
-        :show-toolbar="true"
-        :show-status="true"
-        watermark-text="演示文档"
-        @ready="handleEditorReady"
-        @documentStateChange="handleDocumentStateChange"
-        @error="handleEditorError"
-        @save="handleEditorSave"
-        @warning="handleEditorWarning"
-      />
+             <OnlyOfficeEditor
+         ref="editorRef"
+         :file-id="selectedFileId"
+         :can-edit="canEdit"
+         :can-review="canReview"
+         :height="editorHeight"
+         :show-toolbar="true"
+         :show-status="true"
+         watermark-text="演示文档"
+         :update-onlyoffice-key="updateOnlyofficeKey"
+         @ready="handleEditorReady"
+         @documentStateChange="handleDocumentStateChange"
+         @error="handleEditorError"
+         @save="handleEditorSave"
+         @warning="handleEditorWarning"
+       />
     </el-card>
 
     <!-- 状态信息 -->
@@ -134,29 +159,34 @@
       <template #header>
         <span>状态信息</span>
       </template>
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="文件ID">{{ selectedFileId }}</el-descriptions-item>
-        <el-descriptions-item label="编辑模式">
-          <el-tag :type="canEdit ? 'success' : 'info'">
-            {{ canEdit ? '编辑' : '只读' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="审阅权限">
-          <el-tag :type="canReview ? 'warning' : 'info'">
-            {{ canReview ? '可审阅' : '不可审阅' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="编辑器状态">
-          <el-tag :type="editorReady ? 'success' : 'danger'">
-            {{ editorReady ? '已就绪' : '未就绪' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="文档状态" :span="2">
-          <el-tag v-if="documentState" :type="getDocumentStateType(documentState)">
-            {{ getDocumentStateText(documentState) }}
-          </el-tag>
-        </el-descriptions-item>
-      </el-descriptions>
+             <el-descriptions :column="2" border>
+         <el-descriptions-item label="文件ID">{{ selectedFileId }}</el-descriptions-item>
+         <el-descriptions-item label="编辑模式">
+           <el-tag :type="canEdit ? 'success' : 'info'">
+             {{ canEdit ? '编辑' : '只读' }}
+           </el-tag>
+         </el-descriptions-item>
+         <el-descriptions-item label="审阅权限">
+           <el-tag :type="canReview ? 'warning' : 'info'">
+             {{ canReview ? '可审阅' : '不可审阅' }}
+           </el-tag>
+         </el-descriptions-item>
+         <el-descriptions-item label="密钥更新">
+           <el-tag :type="updateOnlyofficeKey ? 'warning' : 'info'">
+             {{ updateOnlyofficeKey ? '已开启' : '未开启' }}
+           </el-tag>
+         </el-descriptions-item>
+         <el-descriptions-item label="编辑器状态">
+           <el-tag :type="editorReady ? 'success' : 'danger'">
+             {{ editorReady ? '已就绪' : '未就绪' }}
+           </el-tag>
+         </el-descriptions-item>
+         <el-descriptions-item label="文档状态" :span="2">
+           <el-tag v-if="documentState" :type="getDocumentStateType(documentState)">
+             {{ getDocumentStateText(documentState) }}
+           </el-tag>
+         </el-descriptions-item>
+       </el-descriptions>
     </el-card>
 
     <!-- 操作日志 -->
@@ -183,17 +213,19 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Refresh, UploadFilled } from '@element-plus/icons-vue'
+import { Connection, Refresh, UploadFilled, QuestionFilled } from '@element-plus/icons-vue'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import { healthCheck } from '@/api/onlyoffice'
 import { getToken } from '@/utils/auth'
+import axios from 'axios'
 
 // 响应式数据
 const selectedFileId = ref('')
 const canEdit = ref(true)
 const canReview = ref(false)
+const updateOnlyofficeKey = ref(false)
 const showEditor = ref(false)
 const loading = ref(false)
 const healthChecking = ref(false)
@@ -203,23 +235,27 @@ const logs = ref([])
 const editorRef = ref(null)
 
 // 演示文件数据
-const demoFiles = ref([
-  { id: '1', name: '示例文档.docx', type: 'Word文档' },
-  { id: '2', name: '数据表格.xlsx', type: 'Excel表格' },
-  { id: '3', name: '演示文稿.pptx', type: 'PowerPoint演示文稿' },
-  { id: '4', name: '技术文档.pdf', type: 'PDF文档' }
-])
+const demoFiles = ref([])
 
 // 计算属性
-const editorHeight = computed(() => 'calc(100vh - 500px)')
-const uploadUrl = computed(() => `${process.env.VUE_APP_BASE_API}/file/upload`)
-const uploadHeaders = computed(() => ({
-  'Authorization': 'Bearer ' + getToken()
-}))
+const editorHeight = computed(() => 'calc(100vh - 300px)')
 
 // 生命周期
-onMounted(() => {
+onMounted(async () => {
   addLog('info', '页面已加载，请选择文件开始演示')
+  // 动态获取文件列表
+  try {
+    const response = await axios.get('/api/file/list')
+    if (response.data.code === 200) {
+      demoFiles.value = response.data.data.map(file => ({
+        id: file.id,
+        name: file.originalName,
+        type: getFileTypeText('.' + file.fileExtension)
+      }))
+    }
+  } catch (error) {
+    ElMessage.error('获取文件列表失败')
+  }
 })
 
 // 方法定义
@@ -237,20 +273,50 @@ const handlePermissionChange = () => {
   addLog('info', `权限设置: 编辑=${canEdit.value}, 审阅=${canReview.value}`)
 }
 
-const loadEditor = () => {
+const handleKeyUpdateChange = () => {
+  addLog('info', `文档密钥更新设置: ${updateOnlyofficeKey.value ? '开启' : '关闭'}`)
+}
+
+const loadEditor = async () => {
   if (!selectedFileId.value) {
     ElMessage.warning('请先选择文件')
     return
   }
   
   loading.value = true
-  showEditor.value = true
+  editorReady.value = false  // 重置编辑器状态
   addLog('info', '开始加载编辑器...')
   
-  // 模拟加载延迟
-  setTimeout(() => {
+  try {
+    // 如果编辑器已存在，先销毁
+    if (editorRef.value) {
+      editorRef.value.destroyEditor?.()
+    }
+    
+    // 立即显示编辑器容器，让用户看到界面
+    showEditor.value = true
+    
+    // 等待DOM更新
+    await nextTick()
+    
+
+    
+    // 立即开始初始化编辑器
+    if (editorRef.value) {
+      editorRef.value.initEditor().catch(error => {
+        ElMessage.error('加载编辑器失败: ' + error.message)
+        addLog('error', `加载编辑器失败: ${error.message}`)
+        showEditor.value = false
+        loading.value = false
+      })
+    }
+    
+  } catch (error) {
+    ElMessage.error('加载编辑器失败: ' + error.message)
+    addLog('error', `加载编辑器失败: ${error.message}`)
+    showEditor.value = false
     loading.value = false
-  }, 1000)
+  }
 }
 
 const checkHealth = async () => {
@@ -273,9 +339,12 @@ const refreshPage = () => {
 
 // 编辑器事件处理
 const handleEditorReady = () => {
-  editorReady.value = true
-  addLog('success', '编辑器已就绪')
-  ElMessage.success('文档编辑器加载完成')
+  if (!editorReady.value) {  // 只在首次ready时提示
+    editorReady.value = true
+    loading.value = false  // 确保加载状态被正确设置
+    addLog('success', '编辑器已就绪')
+    ElMessage.success('文档编辑器加载完成')
+  }
 }
 
 const handleDocumentStateChange = (event) => {
@@ -284,6 +353,7 @@ const handleDocumentStateChange = (event) => {
 }
 
 const handleEditorError = (error) => {
+  loading.value = false  // 确保在错误时也结束加载状态
   addLog('error', `编辑器错误: ${error.message || error.data}`)
 }
 
@@ -295,43 +365,8 @@ const handleEditorWarning = (event) => {
   addLog('warning', `编辑器警告: ${event.data}`)
 }
 
-// 文件上传处理
-const beforeUpload = (file) => {
-  const isValidType = ['application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/pdf'].includes(file.type)
-  
-  if (!isValidType) {
-    ElMessage.error('请上传支持的文件格式')
-    return false
-  }
-  
-  const isLt100M = file.size / 1024 / 1024 < 100
-  if (!isLt100M) {
-    ElMessage.error('文件大小不能超过 100MB')
-    return false
-  }
-  
-  addLog('info', `开始上传文件: ${file.name}`)
-  return true
-}
 
-const handleUploadSuccess = (response, file) => {
-  ElMessage.success('文件上传成功')
-  addLog('success', `文件上传成功: ${file.name}`)
-  
-  // 添加到文件列表
-  const newFile = {
-    id: response.data.id,
-    name: response.data.originalName,
-    type: getFileTypeText(response.data.fileExtension)
-  }
-  demoFiles.value.push(newFile)
-  selectedFileId.value = newFile.id
-}
 
-const handleUploadError = (error, file) => {
-  ElMessage.error('文件上传失败')
-  addLog('error', `文件上传失败: ${file.name} - ${error.message}`)
-}
 
 // 工具方法
 const getDocumentStateType = (state) => {
@@ -472,5 +507,18 @@ const clearLogs = () => {
 
 :deep(.el-upload-dragger) {
   width: 100%;
+}
+
+/* 自定义tooltip样式 */
+:deep(.custom-tooltip) {
+  max-width: 350px !important;
+  word-wrap: break-word !important;
+  white-space: normal !important;
+}
+
+:deep(.custom-tooltip .el-tooltip__content) {
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  line-height: 1.6 !important;
 }
 </style>

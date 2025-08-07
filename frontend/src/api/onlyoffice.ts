@@ -10,11 +10,13 @@ import request from '@/utils/request'
  * @param params.fileId 文件ID
  * @param params.canEdit 是否可编辑
  * @param params.canReview 是否可审阅
+ * @param params.updateOnlyofficeKey 是否更新OnlyOffice密钥
  */
 export function getEditorConfig(params: {
   fileId: string | number
   canEdit?: boolean
   canReview?: boolean
+  updateOnlyofficeKey?: boolean
 }) {
   return request({
     url: '/onlyoffice/editor/config',

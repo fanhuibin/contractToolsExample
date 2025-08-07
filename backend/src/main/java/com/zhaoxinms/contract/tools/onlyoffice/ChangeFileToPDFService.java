@@ -4,14 +4,16 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.onlyoffice.util.service.DefaultServiceConverter;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -21,40 +23,68 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 public class ChangeFileToPDFService {
-    @Value("${onlyoffice.domain}")
-    private String onlyofficeDomain;
-    @Value("${onlyoffice.port}")
-    private String onlyofficePort;
-    @Value("${onlyoffice.callback.url}")
-    private String onlyofficeCallbackUrl;
+    @Autowired
+    private ZxcmConfig zxcmConfig;
     @Autowired
     private DefaultServiceConverter covertService;
     @Autowired
     private FileInfoService fileInfoService;
     
-    /**
+    /** 
      * 将文件转换为PDF
-     * @param fileInfo 文件信息
-     * @param destFile 目标文件路径
+     * @param fileUrl 文件URL
+     * @param destPdfPath 目标PDF文件完整路径
      * @return 转换后的文件路径
      */
-    public String covertToPdf(FileInfo fileInfo, String destFile) {
-        // TODO: 实现文件转换逻辑
-        // 这里需要根据实际的OnlyOffice服务来实现
-        return destFile;
+    public String covertToPdf(String fileUrl, String destPdfPath) {
+        try {
+            // 获取文件扩展名
+            String fileExtension = getFileExtension(fileUrl);
+            
+            // 调用OnlyOffice转换服务
+            String convertedUrl = covertService.getConvertedUri(
+                fileUrl,
+                fileExtension, 
+                "pdf", 
+                "", 
+                "", 
+                false, 
+                "zh-CN"
+            );
+            
+            if (convertedUrl != null && !convertedUrl.isEmpty()) {
+                // 下载转换后的文件
+                downloadFile(convertedUrl, destPdfPath);
+                log.info("文件转换成功，源文件URL: {}, 目标文件: {}", fileUrl, destPdfPath);
+                return destPdfPath;
+            } else {
+                log.error("文件转换失败，转换URL为空，源文件URL: {}", fileUrl);
+                return null;
+            }
+            
+        } catch (Exception e) {
+            log.error("文件转换异常，源文件URL: {}, 错误: {}", fileUrl, e.getMessage(), e);
+            return null;
+        }
     }
-
+    
     /**
-     * 将文件转换为PDF
+     * 将文件转换为PDF（使用FileInfo对象）
      * @param fileInfo 文件信息
      * @return 转换后的文件路径
      */
     public String covertToPdf(FileInfo fileInfo) {
+        // 构建文件下载URL，添加时间戳解决缓存问题
+        String fileUrl = zxcmConfig.getOnlyOffice().getCallback().getUrl() + "/download/" + fileInfo.getId() 
+            + "?fileId=" + fileInfo.getId() 
+            + "&t=" + System.currentTimeMillis();
+        
         // 生成目标文件路径
         String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String destFile = "./uploads/" + datePath + "/" + UUID.randomUUID().toString().replace("-", "") + ".pdf";
+        String destPdfPath = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
+            + UUID.randomUUID().toString().replace("-", "") + ".pdf";
         
-        return covertToPdf(fileInfo, destFile);
+        return covertToPdf(fileUrl, destPdfPath);
     }
     
     /**
@@ -63,46 +93,105 @@ public class ChangeFileToPDFService {
      * @return 转换后的文件路径
      */
     public String covertDocToDocx(FileInfo fileInfo) {
-        // TODO: 实现DOC到DOCX的转换逻辑
-        String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String destFile = "./uploads/" + datePath + "/" + UUID.randomUUID().toString().replace("-", "") + ".docx";
+        try {
+            // 构建文件下载URL，添加时间戳解决缓存问题
+            String downloadUrl = zxcmConfig.getOnlyOffice().getCallback().getUrl() + "/download/" + fileInfo.getId() 
+                + "?fileId=" + fileInfo.getId() 
+                + "&t=" + System.currentTimeMillis();
+            
+            // 调用OnlyOffice转换服务
+            String convertedUrl = covertService.getConvertedUri(
+                downloadUrl,
+                "doc", 
+                "docx", 
+                "", 
+                "", 
+                false, 
+                "zh-CN"
+            );
+            
+            if (convertedUrl != null && !convertedUrl.isEmpty()) {
+                // 生成目标文件路径
+                String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+                String destFile = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
+                    + UUID.randomUUID().toString().replace("-", "") + ".docx";
+                
+                // 下载转换后的文件
+                downloadFile(convertedUrl, destFile);
+                log.info("DOC转DOCX成功，源文件: {}, 目标文件: {}", fileInfo.getOriginalName(), destFile);
+                return destFile;
+            } else {
+                log.error("DOC转DOCX失败，转换URL为空，源文件: {}", fileInfo.getOriginalName());
+                return null;
+            }
+            
+        } catch (Exception e) {
+            log.error("DOC转DOCX异常，源文件: {}, 错误: {}", fileInfo.getOriginalName(), e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    /**
+     * 下载文件
+     * @param url 文件URL
+     * @param destFile 目标文件路径
+     */
+    private void downloadFile(String url, String destFile) throws IOException {
+        try {
+            // 确保目标目录存在
+            File destFileObj = new File(destFile);
+            if (!destFileObj.getParentFile().exists()) {
+                destFileObj.getParentFile().mkdirs();
+            }
+            
+            // 使用HttpURLConnection下载文件
+            java.net.URL fileUrl = new java.net.URL(url);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) fileUrl.openConnection();
+            connection.setRequestMethod("GET");
+            connection.setConnectTimeout(30000);
+            connection.setReadTimeout(30000);
+            
+            try (java.io.InputStream inputStream = connection.getInputStream();
+                 java.io.FileOutputStream outputStream = new java.io.FileOutputStream(destFile)) {
+                
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, bytesRead);
+                }
+            }
+            
+            log.info("文件下载成功: {} -> {}", url, destFile);
+            
+        } catch (Exception e) {
+            log.error("文件下载失败: {} -> {}, 错误: {}", url, destFile, e.getMessage(), e);
+            throw new IOException("文件下载失败: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 获取文件扩展名
+     * @param fileUrl 文件URL或文件名
+     * @return 文件扩展名（不包含点）
+     */
+    private String getFileExtension(String fileUrl) {
+        if (fileUrl == null) {
+            return "";
+        }
         
-        return destFile;
-    }
-
-    /**
-     * 临时文件转换
-     * @param file 临时文件
-     * @return 转换后的文件路径
-     */
-    public String covertToPdf(File file) throws IOException {
-        // TODO: 实现临时文件转换逻辑
-        String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String destFile = "./uploads/" + datePath + "/" + UUID.randomUUID().toString().replace("-", "") + ".pdf";
+        // 如果是URL，先提取文件名部分
+        String fileName = fileUrl;
+        if (fileUrl.contains("/")) {
+            fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
+            // 移除查询参数
+            if (fileName.contains("?")) {
+                fileName = fileName.substring(0, fileName.indexOf("?"));
+            }
+        }
         
-        return destFile;
-    }
-
-    /**
-     * 添加水印（简化版本）
-     * @param srcPdfPath 源PDF路径
-     * @param tarPdfPath 目标PDF路径
-     */
-    public void addWaterMark(String srcPdfPath, String tarPdfPath) throws IOException {
-        // TODO: 实现水印添加逻辑
-        // 这里需要添加iText PDF库的依赖
-        // log.info("添加水印: {} -> {}", srcPdfPath, tarPdfPath); // Original code had this line commented out
-    }
-
-    /**
-     * 添加水印（带内容）
-     * @param srcPdfPath 源PDF路径
-     * @param tarPdfPath 目标PDF路径
-     * @param waterMarkContent 水印内容
-     */
-    public void addWaterMark(String srcPdfPath, String tarPdfPath, String waterMarkContent)
-        throws IOException {
-        // TODO: 实现带内容的水印添加逻辑
-        // log.info("添加水印: {} -> {}, 内容: {}", srcPdfPath, tarPdfPath, waterMarkContent); // Original code had this line commented out
+        if (fileName.lastIndexOf(".") == -1) {
+            return "";
+        }
+        return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
     }
 }

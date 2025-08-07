@@ -1,4 +1,4 @@
-package com.zhaoxinms.contract.tools.onlyoffice.controller;
+package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.onlyoffice.filemodel.OnlyofficeFileModel;
 import com.zhaoxinms.contract.tools.onlyoffice.filemodel.User;
@@ -6,13 +6,12 @@ import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.FileConfigur
 import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.wrappers.DefaultFileWrapper;
 import com.zhaoxinms.contract.tools.onlyoffice.enums.Action;
 import com.zhaoxinms.contract.tools.onlyoffice.enums.Type;
-
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -21,15 +20,14 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
-import java.util.List;
 
 /**
  * OnlyOffice文档编辑器控制器
- * 提供文档预览和编辑功能
+ * SDK项目中的OnlyOffice控制器，与Frontend配合调用OnlyOffice
  */
 @Validated
 @RestController
-@RequestMapping("/onlyoffice")
+@RequestMapping("/api/onlyoffice")
 public class OnlyOfficeController {
 
     @Autowired
@@ -38,17 +36,8 @@ public class OnlyOfficeController {
     @Autowired
     private FileConfigurer<DefaultFileWrapper> fileConfigurer;
 
-    @Value("${onlyoffice.domain}")
-    private String onlyofficeDomain;
-    
-    @Value("${onlyoffice.port}")
-    private String onlyofficePort;
-    
-    @Value("${onlyoffice.callback.url}")
-    private String onlyofficeCallbackUrl;
-    
-    @Value("${onlyoffice.plugins}")
-    private List<String> onlyofficePlugins;
+    @Autowired
+    private ZxcmConfig zxcmConfig;
 
     /**
      * 获取文档编辑器配置
@@ -56,6 +45,10 @@ public class OnlyOfficeController {
      * @param fileId 文件ID
      * @param canEdit 是否可编辑
      * @param canReview 是否可审阅
+     * @param updateOnlyofficeKey 是否更新OnlyOffice密钥
+     * @param templateId 模板ID（可选）
+     * @param sessionId 会话ID（可选）
+     * @param callbackUrl 回调地址（可选）
      * @return 文档编辑器配置
      */
     @RequestMapping(value = "/editor/config", method = RequestMethod.GET)
@@ -63,18 +56,22 @@ public class OnlyOfficeController {
     public Result<OnlyofficeFileModel> getEditorConfig(
             @RequestParam("fileId") String fileId,
             @RequestParam(value = "canEdit", defaultValue = "false") Boolean canEdit,
-            @RequestParam(value = "canReview", defaultValue = "false") Boolean canReview) throws IOException {
+            @RequestParam(value = "canReview", defaultValue = "false") Boolean canReview,
+            @RequestParam(value = "updateOnlyofficeKey", defaultValue = "false") Boolean updateOnlyofficeKey,
+            @RequestParam(value = "templateId", required = false) String templateId,
+            @RequestParam(value = "sessionId", required = false) String sessionId,
+            @RequestParam(value = "callbackUrl", required = false) String callbackUrl) throws IOException {
         
         // 获取文件信息
-        FileInfo fileInfo = fileInfoService.getById(Long.valueOf(fileId));
+        FileInfo fileInfo = fileInfoService.getById(fileId);
         if (fileInfo == null) {
             return Result.error("文件不存在");
         }
 
-        // 生成OnlyOffice key（如果不存在）
+        // 生成OnlyOffice key（如果不存在或需要更新）
         String key = fileInfo.getOnlyofficeKey();
-        if (key == null || key.isEmpty()) {
-            fileInfo = fileInfoService.generateOnlyofficeKey(Long.valueOf(fileId));
+        if (key == null || key.isEmpty() || updateOnlyofficeKey) {
+            fileInfo = fileInfoService.generateOnlyofficeKey(fileId);
             key = fileInfo.getOnlyofficeKey();
         }
 
@@ -91,13 +88,16 @@ public class OnlyOfficeController {
                 .key(key)
                 .canEdit(canEdit)
                 .canReview(canReview && canEdit) // 只有可编辑时才能审阅
-                .callbackUrl(onlyofficeCallbackUrl + "/save?fileId=" + fileId)
-                .url(onlyofficeCallbackUrl + "/download/" + fileId)
+                .callbackUrl(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/save?fileId=" + fileId + 
+                           (templateId != null ? "&templateId=" + templateId : "") +
+                           (sessionId != null ? "&sessionId=" + sessionId : "") +
+                           (callbackUrl != null ? "&callbackUrl=" + callbackUrl : ""))
+                .url(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/download/" + fileId)
                 .type(Type.desktop)
                 .lang("zh-CN")
                 .action(canEdit ? Action.edit : Action.view)
                 .user(user)
-                .pluginsData(onlyofficePlugins)
+                .pluginsData(java.util.Arrays.asList(zxcmConfig.getOnlyOffice().getPlugins()))
                 .build()
         );
 
@@ -113,9 +113,21 @@ public class OnlyOfficeController {
     @ResponseBody
     public Result<ServerInfo> getServerInfo() {
         ServerInfo serverInfo = new ServerInfo();
-        serverInfo.setDomain(onlyofficeDomain);
-        serverInfo.setPort(onlyofficePort);
-        serverInfo.setFullUrl(onlyofficeDomain + ":" + onlyofficePort);
+        String domain = zxcmConfig.getOnlyOffice().getDomain();
+        String port = zxcmConfig.getOnlyOffice().getPort();
+        
+        // 如果domain已经包含协议，直接使用
+        if (domain.startsWith("http://") || domain.startsWith("https://")) {
+            serverInfo.setDomain(domain);
+            serverInfo.setPort(port);
+            serverInfo.setFullUrl(domain + ":" + port);
+        } else {
+            // 否则添加协议
+            serverInfo.setDomain("http://" + domain);
+            serverInfo.setPort(port);
+            serverInfo.setFullUrl("http://" + domain + ":" + port);
+        }
+        
         return Result.success(serverInfo);
     }
 
@@ -152,4 +164,4 @@ public class OnlyOfficeController {
             this.fullUrl = fullUrl;
         }
     }
-}
+} 

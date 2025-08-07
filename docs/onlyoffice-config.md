@@ -131,7 +131,7 @@ OnlyOffice 支持两种保存回调：
 1. 接收 OnlyOffice 服务器的保存请求
 2. 根据文件ID获取文件信息
 3. 从 OnlyOffice 服务器下载最新版本的文件
-4. 使用 `FileInfoService.updateFileContent()` 更新文件内容
+4. 使用 `FileInfoService.saveFile()` 保存文件内容
 5. 更新文件信息（修改时间等）
 6. 记录操作日志
 
@@ -140,7 +140,7 @@ OnlyOffice 支持两种保存回调：
 回调处理使用本系统的文件管理功能：
 
 1. **文件信息管理**：通过 `FileInfoService` 获取和管理文件信息
-2. **文件内容更新**：使用 `FileInfoService.updateFileContent()` 方法更新文件内容
+2. **文件内容更新**：使用 `FileInfoService.saveFile()` 方法保存文件内容
 3. **统一存储路径**：文件保存在配置的 `file.upload.root-path` 目录下
 4. **自动更新元数据**：文件更新后自动更新修改时间和操作人信息
 
@@ -148,7 +148,7 @@ OnlyOffice 支持两种保存回调：
 
 ```java
 // 更新文件内容
-boolean updateFileContent(Long fileId, InputStream inputStream) throws IOException;
+boolean saveFile(Long fileId, InputStream inputStream) throws IOException;
 
 // 获取文件信息
 FileInfo getById(Long fileId);

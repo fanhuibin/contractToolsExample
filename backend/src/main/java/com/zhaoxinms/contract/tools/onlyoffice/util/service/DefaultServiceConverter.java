@@ -43,18 +43,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.onlyoffice.dto.Convert;
 import com.zhaoxinms.contract.tools.onlyoffice.util.JwtManager;
 import com.zhaoxinms.contract.tools.onlyoffice.util.file.FileUtility;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import lombok.SneakyThrows;
 
 // TODO: Refactoring
 @Component
 public class DefaultServiceConverter implements ServiceConverter {
-    @Value("${onlyoffice.domain}")
-    private String onlyofficeDomain;
-    @Value("${onlyoffice.port}")
-    private String onlyofficePort;
-    @Value("${onlyoffice.callback.url}")
-    private String onlyofficeCallbackUrl;
+    @Autowired
+    private ZxcmConfig zxcmConfig;
     private int convertTimeout = 120000;
 
     @Autowired
@@ -77,7 +74,7 @@ public class DefaultServiceConverter implements ServiceConverter {
         byte[] bodyByte = bodyString.getBytes(StandardCharsets.UTF_8); // convert body string into bytes
         try {
             // set the request parameters
-            url = new URL(onlyofficeDomain + ":" + onlyofficePort + "/ConvertService.ashx");
+            url = new URL(zxcmConfig.getOnlyOffice().getDomain() + ":" + zxcmConfig.getOnlyOffice().getPort() + "/ConvertService.ashx");
             connection = (java.net.HttpURLConnection)url.openConnection();
             connection.setRequestMethod("POST");
             connection.setDoOutput(true);

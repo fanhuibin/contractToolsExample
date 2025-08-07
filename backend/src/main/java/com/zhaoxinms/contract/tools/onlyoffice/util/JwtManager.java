@@ -17,7 +17,10 @@ package com.zhaoxinms.contract.tools.onlyoffice.util;
 
 import java.util.Map;
 
+import io.fusionauth.jwt.domain.JWT;
 import org.json.simple.JSONObject;
+
+import java.util.Map;
 
 // specify the jwt manager functions
 public interface JwtManager {
@@ -25,7 +28,7 @@ public interface JwtManager {
 
     String createToken(Map<String, Object> payloadClaims); // create document token
 
-    Map<String, Object> readToken(String token); // read document token
+    JWT readToken(String token); // read document token
 
     JSONObject parseBody(String payload, String header); // parse the body
 }

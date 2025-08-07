@@ -1,42 +1,28 @@
 <template>
   <div class="onlyoffice-editor">
-    <!-- 加载状态 -->
-    <el-loading 
-      v-loading="loading" 
-      :text="loadingText"
-      element-loading-background="rgba(255, 255, 255, 0.9)"
-      class="loading-container"
-    >
-      <!-- 编辑器容器 -->
-      <div
-        id="onlyoffice-editor-container"
-        :style="containerStyle"
-        class="editor-container"
+    <!-- 加载状态覆盖层 -->
+    <div v-if="loading" class="loading-overlay">
+      <el-loading 
+        :text="loadingText"
+        :background="'rgba(255, 255, 255, 0.8)'"
+        element-loading-spinner="el-icon-loading"
+        element-loading-text="正在加载编辑器..."
       />
-    </el-loading>
+    </div>
+
+    <!-- 编辑器容器 -->
+    <div id="onlyoffice-editor-container" :style="containerStyle" class="editor-container" />
 
     <!-- 工具栏 -->
     <div v-if="showToolbar" class="toolbar">
       <el-space>
-        <el-button 
-          v-if="canEdit" 
-          type="primary" 
-          icon="DocumentAdd"
-          @click="forceSave"
-        >
+        <el-button v-if="canEdit" type="primary" icon="DocumentAdd" @click="forceSave">
           强制保存
         </el-button>
-        <el-button 
-          v-if="!isEditMode" 
-          icon="View"
-          @click="addWatermark"
-        >
+        <el-button v-if="!isEditMode" icon="View" @click="addWatermark">
           添加水印
         </el-button>
-        <el-button 
-          icon="Refresh"
-          @click="refreshEditor"
-        >
+        <el-button icon="Refresh" @click="refreshEditor">
           刷新
         </el-button>
       </el-space>
@@ -91,13 +77,17 @@ const props = defineProps({
   watermarkText: {
     type: String,
     default: '机密文档'
+  },
+  updateOnlyofficeKey: {
+    type: Boolean,
+    default: false
   }
 })
 
 // Emits定义
 const emit = defineEmits([
   'ready',
-  'documentStateChange', 
+  'documentStateChange',
   'error',
   'save',
   'warning'
@@ -140,36 +130,42 @@ onUnmounted(() => {
 // 方法定义
 const initEditor = async () => {
   try {
+    // 重置状态
+    loading.value = true
+    editorReady.value = false
     loadingText.value = '获取服务器信息...'
-    // 获取OnlyOffice服务器信息
-    const serverResponse = await getServerInfo()
+    
+
+    
+    // 并行获取服务器信息和文档配置，提高加载速度
+    const [serverResponse, configResponse] = await Promise.all([
+      getServerInfo(),
+      getEditorConfig({
+        fileId: props.fileId,
+        canEdit: props.canEdit,
+        canReview: props.canReview,
+        updateOnlyofficeKey: props.updateOnlyofficeKey
+      })
+    ])
+    
     serverInfo.value = serverResponse.data
-    
-    loadingText.value = '获取文档配置...'
-    // 获取文档编辑器配置
-    const configResponse = await getEditorConfig({
-      fileId: props.fileId,
-      canEdit: props.canEdit,
-      canReview: props.canReview
-    })
-    
     const editorConfig = configResponse.data
-    
+
     // 保存文件信息
     Object.assign(fileInfo, {
       originalName: editorConfig.document.title,
       fileType: editorConfig.document.fileType,
       size: editorConfig.document.info?.size || 0
     })
-    
+
     loadingText.value = '加载OnlyOffice脚本...'
     // 加载OnlyOffice API脚本
     await loadOnlyOfficeScript()
-    
+
     loadingText.value = '初始化编辑器...'
     // 初始化编辑器
     await initOnlyOfficeEditor(editorConfig)
-    
+
   } catch (error) {
     console.error('初始化编辑器失败:', error)
     ElMessage.error('加载文档编辑器失败: ' + error.message)
@@ -178,27 +174,46 @@ const initEditor = async () => {
   }
 }
 
+
+
 const loadOnlyOfficeScript = () => {
   return new Promise((resolve, reject) => {
     // 检查是否已经加载
     if (window.DocsAPI) {
+      onlyofficeLoaded.value = true
       resolve()
       return
     }
-    
+
+    // 检查是否正在加载
+    if (document.querySelector('script[src*="api.js"]')) {
+      // 如果脚本正在加载，等待加载完成
+      const checkLoaded = () => {
+        if (window.DocsAPI) {
+          onlyofficeLoaded.value = true
+          resolve()
+        } else {
+          setTimeout(checkLoaded, 100)
+        }
+      }
+      checkLoaded()
+      return
+    }
+
     const script = document.createElement('script')
     script.type = 'text/javascript'
     script.src = `${serverInfo.value.fullUrl}/web-apps/apps/api/documents/api.js`
-    
+    script.async = true // 异步加载
+
     script.onload = () => {
       onlyofficeLoaded.value = true
       resolve()
     }
-    
+
     script.onerror = () => {
       reject(new Error('无法加载OnlyOffice API脚本'))
     }
-    
+
     document.head.appendChild(script)
   })
 }
@@ -206,20 +221,44 @@ const loadOnlyOfficeScript = () => {
 const initOnlyOfficeEditor = (config) => {
   return new Promise((resolve, reject) => {
     try {
-      // 清空容器
+      // 清空容器并立即创建编辑器容器
       const container = document.getElementById('onlyoffice-editor-container')
       container.innerHTML = '<div id="onlyoffice-editor" style="height: 100%; width: 100%;"></div>'
-      
+
+      // 设置超时机制，防止编辑器加载时间过长
+      const timeout = setTimeout(() => {
+        if (!editorReady.value) {
+          console.warn('编辑器加载超时，强制结束加载状态')
+          loading.value = false
+          editorReady.value = true
+          emit('ready')
+          resolve()
+        }
+      }, 30000) // 30秒超时
+
       // 添加事件处理
       const editorConfig = {
         ...config,
         events: {
           onAppReady: () => {
             console.log('OnlyOffice应用已准备就绪')
-            loading.value = false
-            editorReady.value = true
-            emit('ready')
-            resolve()
+            clearTimeout(timeout) // 清除超时
+            if (!editorReady.value) {  // 只在首次ready时触发
+              loading.value = false
+              editorReady.value = true
+              emit('ready')
+              resolve()
+            }
+          },
+          onDocumentReady: () => {
+            console.log('OnlyOffice文档已准备就绪')
+            clearTimeout(timeout) // 清除超时
+            if (!editorReady.value) {
+              loading.value = false
+              editorReady.value = true
+              emit('ready')
+              resolve()
+            }
           },
           onDocumentStateChange: (event) => {
             console.log('文档状态改变:', event)
@@ -227,6 +266,7 @@ const initOnlyOfficeEditor = (config) => {
           },
           onError: (event) => {
             console.error('OnlyOffice错误:', event)
+            clearTimeout(timeout) // 清除超时
             ElMessage.error('文档编辑器错误: ' + event.data)
             emit('error', event)
             reject(new Error(event.data))
@@ -242,10 +282,10 @@ const initOnlyOfficeEditor = (config) => {
           }
         }
       }
-      
-      // 创建编辑器实例
+
+      // 立即创建编辑器实例，不等待
       docEditor.value = new window.DocsAPI.DocEditor('onlyoffice-editor', editorConfig)
-      
+
     } catch (error) {
       reject(error)
     }
@@ -256,7 +296,7 @@ const handleMessage = (event) => {
   // 处理来自编辑器的消息
   try {
     const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-    
+
     switch (data.action) {
       case 'loaded':
         console.log('编辑器插件已加载')
@@ -278,7 +318,7 @@ const forceSave = () => {
     ElMessage.warning('编辑器未准备就绪')
     return
   }
-  
+
   try {
     docEditor.value.processSaveResult(true)
     ElMessage.success('保存命令已发送')
@@ -293,13 +333,13 @@ const addWatermark = () => {
     ElMessage.warning('编辑器未准备就绪')
     return
   }
-  
+
   try {
     const watermarkData = {
       action: 'addWatermark',
       text: props.watermarkText
     }
-    
+
     // 向编辑器发送水印命令
     window.frames['onlyoffice-editor']?.postMessage(JSON.stringify(watermarkData), '*')
     ElMessage.success('水印已添加')
@@ -314,16 +354,18 @@ const refreshEditor = async () => {
     await ElMessageBox.confirm('刷新会丢失未保存的更改，确定要继续吗？', '确认刷新', {
       type: 'warning'
     })
-    
+
     loading.value = true
+    editorReady.value = false
     loadingText.value = '正在刷新...'
-    
+
     // 重新初始化编辑器
     await initEditor()
   } catch (error) {
     if (error !== 'cancel') {
       console.error('刷新编辑器失败:', error)
       ElMessage.error('刷新失败: ' + error.message)
+      loading.value = false
     }
   }
 }
@@ -333,6 +375,15 @@ defineExpose({
   forceSave,
   addWatermark,
   refreshEditor,
+  initEditor,
+  destroyEditor: () => {
+    if (docEditor.value) {
+      docEditor.value.destroyEditor()
+      docEditor.value = null
+      editorReady.value = false
+      loading.value = false
+    }
+  },
   getFileInfo: () => fileInfo,
   isReady: () => editorReady.value
 })
@@ -346,15 +397,23 @@ defineExpose({
   height: 100%;
 }
 
-.loading-container {
-  flex: 1;
-  min-height: 400px;
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .editor-container {
   border: 1px solid #e4e7ed;
   border-radius: 4px;
   overflow: hidden;
+  position: relative;
 }
 
 .toolbar {

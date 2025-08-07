@@ -1,0 +1,54 @@
+server:
+  port: 8080
+  tomcat:
+    uri-encoding: UTF-8
+
+spring:
+  application:
+    name: contract-template-sdk
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+
+# 肇新合同工具集配置（zxcm前缀）
+zxcm:
+  onlyoffice:
+    domain: http://43.143.173.96
+    port: 8082
+    secret: zxcm
+    callback:
+      url: http://proxy.zhaoxinms.com:9103/api/onlyoffice/callback
+    plugins:
+      - http://43.143.173.96:8082/plugin/html/config.json
+      - http://43.143.173.96:8082/plugin/comment/config.json
+    logo:
+      logo: ""
+      logoEmbedded: ""
+      logoUrl: ""
+    permissions:
+      view:
+        print: true
+      edit:
+        print: true
+        download: true
+        comment: true
+        chat: true
+        review: true
+        fillForms: true
+        modifyContentControl: true
+        modifyFilter: true
+  file:
+    upload:
+      root-path: ./uploads
+  server:
+    port: 8081
+    servlet:
+      context-path: ""
+
+# 日志配置
+logging:
+  level:
+    com.zhaoxinms.contract.template.sdk: DEBUG
+    com.zhaoxinms.contract.tools: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" 

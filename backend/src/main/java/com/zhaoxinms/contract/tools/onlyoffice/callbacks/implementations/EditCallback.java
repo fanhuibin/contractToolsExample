@@ -22,10 +22,10 @@ import com.zhaoxinms.contract.tools.onlyoffice.callbacks.Status;
 import com.zhaoxinms.contract.tools.onlyoffice.dto.Action; 
 import com.zhaoxinms.contract.tools.onlyoffice.dto.Track;
 
-@Component
+@Component  
 public class EditCallback implements Callback {
     @Override
-    public int handle(Track body, String fileId, String contractId) { // handle the callback when the document is being
+    public int handle(Track body, String fileId) { // handle the callback when the document is being
                                                                       // edited
         int result = 0;
         Action action = body.getActions().get(0); // get the user ID who is editing the document

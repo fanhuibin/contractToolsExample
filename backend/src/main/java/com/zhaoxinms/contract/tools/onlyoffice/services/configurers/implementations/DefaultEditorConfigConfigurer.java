@@ -18,7 +18,6 @@ package com.zhaoxinms.contract.tools.onlyoffice.services.configurers.implementat
 import java.util.HashMap;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +33,7 @@ import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.EditorConfig
 import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.wrappers.DefaultCustomizationWrapper;
 import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.wrappers.DefaultFileWrapper;
 import com.zhaoxinms.contract.tools.onlyoffice.util.file.FileUtility;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import lombok.SneakyThrows;
 
@@ -52,8 +52,9 @@ public class DefaultEditorConfigConfigurer implements EditorConfigConfigurer<Def
 
     @Autowired
     private FileUtility fileUtility;
-    @Value("${onlyoffice.callback.url}")
-    private String onlyofficeCallbackUrl;
+    
+    @Autowired
+    private ZxcmConfig zxcmConfig;
 
     @SneakyThrows
     public void configure(EditorConfig config, DefaultFileWrapper wrapper) { // define the editorConfig configurer

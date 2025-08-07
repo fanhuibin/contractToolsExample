@@ -20,7 +20,6 @@ import java.util.Map;
 
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +33,7 @@ import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.wrappers.Def
 import com.zhaoxinms.contract.tools.onlyoffice.services.configurers.wrappers.DefaultFileWrapper;
 import com.zhaoxinms.contract.tools.onlyoffice.util.JwtManager;
 import com.zhaoxinms.contract.tools.onlyoffice.util.file.FileUtility;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 @Service
 @Primary
@@ -53,33 +53,8 @@ public class DefaultFileConfigurer implements FileConfigurer<DefaultFileWrapper>
     @Autowired
     private DefaultEditorConfigConfigurer defaultEditorConfigConfigurer;
 
-    // OnlyOffice权限配置
-    @Value("${onlyoffice.permissions.view.print:true}")
-    private boolean viewPrintEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.print:true}")
-    private boolean editPrintEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.download:true}")
-    private boolean editDownloadEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.comment:true}")
-    private boolean editCommentEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.chat:true}")
-    private boolean editChatEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.review:true}")
-    private boolean editReviewEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.fillForms:true}")
-    private boolean editFillFormsEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.modifyContentControl:true}")
-    private boolean editModifyContentControlEnabled;
-    
-    @Value("${onlyoffice.permissions.edit.modifyFilter:true}")
-    private boolean editModifyFilterEnabled;
+    @Autowired
+    private ZxcmConfig zxcmConfig;
 
     public void configure(OnlyofficeFileModel fileModel, DefaultFileWrapper wrapper) { // define the file configurer
         if (fileModel != null) { // check if the file model is specified
@@ -95,15 +70,15 @@ public class DefaultFileConfigurer implements FileConfigurer<DefaultFileWrapper>
 
             // 判断是否是编辑状态
             if (wrapper.getCanEdit()) {
-                userPermissions.setChat(editChatEnabled);
-                userPermissions.setComment(editCommentEnabled);
-                userPermissions.setDownload(editDownloadEnabled);
-                userPermissions.setModifyContentControl(editModifyContentControlEnabled);
-                userPermissions.setModifyFilter(editModifyFilterEnabled);
-                userPermissions.setPrint(editPrintEnabled);
+                userPermissions.setChat(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isChat());
+                userPermissions.setComment(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isComment());
+                userPermissions.setDownload(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isDownload());
+                userPermissions.setModifyContentControl(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isModifyContentControl());
+                userPermissions.setModifyFilter(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isModifyFilter());
+                userPermissions.setPrint(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isPrint());
                 userPermissions.setEdit(true);
-                userPermissions.setFillForms(editFillFormsEnabled);
-                userPermissions.setReview(editReviewEnabled);
+                userPermissions.setFillForms(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isFillForms());
+                userPermissions.setReview(zxcmConfig.getOnlyOffice().getPermissions().getEdit().isReview());
 
             } else {
                 userPermissions.setChat(false);
@@ -111,7 +86,7 @@ public class DefaultFileConfigurer implements FileConfigurer<DefaultFileWrapper>
                 userPermissions.setDownload(true);
                 userPermissions.setModifyContentControl(false);
                 userPermissions.setModifyFilter(false);
-                userPermissions.setPrint(viewPrintEnabled);
+                userPermissions.setPrint(zxcmConfig.getOnlyOffice().getPermissions().getView().isPrint());
                 userPermissions.setEdit(false);
                 userPermissions.setFillForms(true);
                 userPermissions.setReview(false);
@@ -134,7 +109,9 @@ public class DefaultFileConfigurer implements FileConfigurer<DefaultFileWrapper>
             map.put("document", fileModel.getDocument());
             map.put("editorConfig", fileModel.getEditorConfig());
 
-            fileModel.setToken(jwtManager.createToken(map)); // create a token and set it to the file model
+            if (jwtManager.tokenEnabled()) {
+                fileModel.setToken(jwtManager.createToken(map));
+            }
         }
     }
 

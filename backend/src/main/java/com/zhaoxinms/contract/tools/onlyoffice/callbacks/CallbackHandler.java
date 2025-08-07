@@ -60,7 +60,7 @@ public class CallbackHandler {
         logger.info("Default callback handlers registered");
     }
 
-    public int handle(Track body, String fileName, String contractId) { // handle a callback
+    public int handle(Track body, String fileId) { // handle a callback
         // 确保回调处理器已初始化
         if (callbackHandlers.isEmpty()) {
             initializeDefaultCallbacks();
@@ -72,7 +72,7 @@ public class CallbackHandler {
             return 0;
         }
 
-        int result = callback.handle(body, fileName, contractId);
+        int result = callback.handle(body, fileId);
         return result;
     }
 }

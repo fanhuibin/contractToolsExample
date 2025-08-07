@@ -1,4 +1,4 @@
-# 赵信合同工具集 (Zhaoxin Contract Tool Set)
+# 肇新合同工具集 (Zhaoxin Contract Tool Set)
 
 ## 项目简介
 这是一个集成了OnlyOffice、模板设计、文档合成、合同比对等功能的合同管理工具集。
