@@ -1,0 +1,106 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: contract-tools
+  config:
+    import:
+      - classpath:aicomponent/application-ai.yml
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+      enabled: true
+  
+  # 数据库配置
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    dynamic:
+      primary: master
+      datasource:
+        master:
+          driverClassName: com.mysql.cj.jdbc.Driver
+          url: jdbc:mysql://localhost:3306/contract_tools?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
+          username: root
+          password: root
+      druid:
+        initialSize: 5
+        minIdle: 10
+        maxActive: 200
+        maxWait: 60000
+        timeBetweenEvictionRunsMillis: 60000
+        minEvictableIdleTimeMillis: 300000
+        maxEvictableIdleTimeMillis: 900000
+        validationQuery: SELECT 1 FROM DUAL
+        testWhileIdle: true
+        testOnBorrow: true
+        testOnReturn: false
+        filters: stat
+        webStatFilter:
+          enabled: true
+        statViewServlet:
+          enabled: true
+          url-pattern: /druid/*
+          login-username: admin
+          login-password: admin
+  
+  # JPA配置
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+  
+  # Flyway配置（可选，用于数据库迁移）
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+logging:
+  level:
+    com.zhaoxinms.contract.tools: debug
+    org.springframework.web: debug
+
+# 文件上传配置
+file:
+  upload:
+    root-path: ./uploads
+    max-size: 104857600  # 100MB
+  storage:
+    metadata-file: file_metadata.json  # 文件元数据存储文件
+
+# OnlyOffice配置
+onlyoffice:
+  domain: localhost
+  port: 80
+  callback:
+    url: http://localhost:8080/api/onlyoffice/callback
+  secret: your-secret-key-here
+  plugins: []  # 插件列表，可以为空数组
+  # Logo配置
+  logo: ""
+  logoEmbedded: ""
+  logoUrl: ""
+  # 权限配置
+  permissions:
+    view:
+      print: true  # 是否允许查看模式下打印
+    edit:
+      print: true  # 是否允许编辑模式下打印
+      download: true  # 是否允许下载
+      comment: true  # 是否允许评论
+      chat: true  # 是否允许聊天
+      review: true  # 是否允许审阅
+      fillForms: true  # 是否允许填写表单
+      modifyContentControl: true  # 是否允许修改内容控件
+      modifyFilter: true  # 是否允许修改过滤器 

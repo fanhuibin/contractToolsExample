@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/ai/pdf")
+@RequestMapping("/ai/pdf")
 public class PdfExtractController {
 
     @Autowired
@@ -30,6 +30,9 @@ public class PdfExtractController {
     
     @Autowired
     private AiProperties aiProperties;
+    
+    @Autowired
+    private AiLimitUtil aiLimitUtil;
     
     // 存储抽取任务状态
     private final Map<String, Map<String, Object>> extractTasks = new ConcurrentHashMap<>();
@@ -45,7 +48,7 @@ public class PdfExtractController {
         log.info("收到PDF抽取请求，文件名: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
         
         // 检查限流
-        if (!AiLimitUtil.tryAcquire("system")) {
+        if (!aiLimitUtil.tryAcquire("system")) {
             return ResponseEntity.ok(createResponse(false, "请求过于频繁，请稍后再试", null));
         }
         

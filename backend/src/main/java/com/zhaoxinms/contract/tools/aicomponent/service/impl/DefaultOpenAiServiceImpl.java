@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
- * AI服务默认实现
+ * AI服务默认实现 - 使用OkHttp手动调用API
  *
  * @author zhaoxinms
  */
@@ -28,12 +28,14 @@ public class DefaultOpenAiServiceImpl implements OpenAiService {
 
     private final OkHttpClient okHttpClient;
     private final AiProperties aiProperties;
+    private final AiLimitUtil aiLimitUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
 
-    public DefaultOpenAiServiceImpl(OkHttpClient okHttpClient, AiProperties aiProperties) {
+    public DefaultOpenAiServiceImpl(OkHttpClient okHttpClient, AiProperties aiProperties, AiLimitUtil aiLimitUtil) {
         this.okHttpClient = okHttpClient;
         this.aiProperties = aiProperties;
+        this.aiLimitUtil = aiLimitUtil;
     }
 
     @Override
@@ -49,74 +51,78 @@ public class DefaultOpenAiServiceImpl implements OpenAiService {
             return "请输入内容";
         }
 
-        if (!AiLimitUtil.tryAcquire("system")) {
+        if (!aiLimitUtil.tryAcquire("system")) {
             return "请求过于频繁，请稍后再试";
         }
 
         try {
-            // 构建请求体
             Map<String, Object> requestMap = new HashMap<>();
+            List<Map<String, Object>> formattedMessages = new ArrayList<>();
             
-            // 设置模型参数
-            Map<String, Object> modelParams = new HashMap<>();
-            modelParams.put("model", aiProperties.getChat().getMode());
-            
-            // 转换消息格式
-            List<Map<String, String>> formattedMessages = new ArrayList<>();
             for (ChatMessage message : messages) {
-                Map<String, String> msgMap = new HashMap<>();
+                Map<String, Object> msgMap = new HashMap<>();
                 msgMap.put("role", message.getRole());
-                msgMap.put("content", message.getContent());
+                
+                // 处理多模态内容
+                if (message.getContent() instanceof String) {
+                    // 文本消息
+                    msgMap.put("content", message.getContent());
+                } else if (message.getContent() instanceof List) {
+                    // 多模态消息（图片+文本）
+                    msgMap.put("content", message.getContent());
+                } else {
+                    // 其他类型，转换为字符串
+                    msgMap.put("content", String.valueOf(message.getContent()));
+                }
+                
                 formattedMessages.add(msgMap);
             }
-            
-            modelParams.put("messages", formattedMessages);
-            modelParams.put("max_tokens", aiProperties.getChat().getMaxTokens());
-            modelParams.put("temperature", aiProperties.getChat().getTemperature());
-            modelParams.put("seed", aiProperties.getChat().getSeed());
-            modelParams.put("top_p", aiProperties.getChat().getTopP());
-            
-            requestMap.put("model", modelParams);
-            
+
+            requestMap.put("model", aiProperties.getChat().getMode());
+            requestMap.put("messages", formattedMessages);
+            requestMap.put("max_tokens", aiProperties.getChat().getMaxTokens());
+            requestMap.put("temperature", aiProperties.getChat().getTemperature());
+            requestMap.put("top_p", aiProperties.getChat().getTopP());
+
             String jsonBody = objectMapper.writeValueAsString(requestMap);
             log.debug("Sending request to AI API: {}", jsonBody);
 
-            // 获取API密钥
             List<String> apiKeys = aiProperties.getApiKey();
             if (CollectionUtils.isEmpty(apiKeys)) {
                 return "API密钥未配置";
             }
-            
-            // 随机选择一个API密钥
             String apiKey = apiKeys.get(new Random().nextInt(apiKeys.size()));
 
-            // 构建请求
             Request request = new Request.Builder()
-                    .url(aiProperties.getApiHost())
+                    .url(aiProperties.getApiHost() + "/chat/completions")
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + apiKey)
                     .post(RequestBody.create(jsonBody, JSON))
                     .build();
 
-            // 发送请求
             try (Response response = okHttpClient.newCall(request).execute()) {
                 String responseBody = response.body().string();
-                log.debug("Received response from AI API: {}", responseBody);
-                
+                log.debug("AI API response: {}", responseBody);
+
                 if (!response.isSuccessful()) {
-                    log.error("API call failed with code: {}, response: {}", response.code(), responseBody);
-                    return "API调用失败，错误码: " + response.code();
+                    return "API调用失败，状态码: " + response.code() + ", 响应: " + responseBody;
                 }
-                
-                // 解析响应
-                JsonNode rootNode = objectMapper.readTree(responseBody);
-                JsonNode outputNode = rootNode.path("output");
-                String content = outputNode.path("text").asText();
-                
-                return content;
+
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                if (jsonNode.has("choices") && jsonNode.get("choices").isArray() && jsonNode.get("choices").size() > 0) {
+                    JsonNode choice = jsonNode.get("choices").get(0);
+                    if (choice.has("message") && choice.get("message").has("content")) {
+                        String content = choice.get("message").get("content").asText();
+                        if (content != null && !content.trim().isEmpty()) {
+                            return content;
+                        }
+                    }
+                }
+
+                return "AI返回结果为空";
             }
         } catch (Exception e) {
-            log.error("Error in AI completion", e);
+            log.error("调用AI API时发生错误: {}", e.getMessage(), e);
             return "AI服务异常: " + e.getMessage();
         }
     }
