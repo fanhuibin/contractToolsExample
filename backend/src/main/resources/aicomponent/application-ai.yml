@@ -1,0 +1,63 @@
+# AI组件配置文件
+# 所有AI相关配置集中管理
+
+jnpf:
+  ai:
+    # 是否启用AI功能
+    enabled: true
+    # API服务器地址
+    api-host: https://dashscope.aliyuncs.com/compatible-mode/
+    # API密钥，请替换为实际的API密钥
+    api-key: 
+      - ${TONGYI_API_KEY:your_api_key_here}
+    # 请求超时时间(秒)
+    timeout: 30
+    # 用户请求限制
+    user-limit-count: 1
+    user-limit-time: 3s
+    # 全局请求限制
+    total-limit-count: 500
+    total-limit-time: 1m
+    
+    # 聊天配置
+    chat:
+      # 模型名称: qwen-max, qwen-turbo, qwen2.5-72b-instruct, qwen2.5-3b-instruct
+      mode: qwen2.5-3b-instruct
+      # 随机种子
+      seed: 1234
+      # 最大令牌数
+      max-tokens: 1500
+      # 核采样概率阈值
+      top-p: 0.8
+      # 温度参数(0.0-1.0)
+      temperature: 0.85
+      # 是否启用搜索
+      enable-search: true
+    
+    # PDF抽取配置
+    pdf:
+      # 是否启用PDF抽取功能
+      enabled: true
+      # 最大文件大小(字节)
+      max-file-size: 10485760 # 10MB
+      # 临时文件存储路径
+      temp-dir: ${java.io.tmpdir}/pdf-extract
+      # 是否保留临时文件
+      keep-temp-files: false
+      # 抽取超时时间(毫秒)
+      extract-timeout: 60000
+      # 最大页数限制
+      max-pages: 500
+    
+    # 代理配置
+    proxy:
+      # 代理类型: HTTP, SOCKS
+      type: HTTP
+      # 代理主机
+      host: 
+      # 代理端口
+      port: 
+      # 代理用户名
+      username: 
+      # 代理密码
+      password: 

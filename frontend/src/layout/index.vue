@@ -1,5 +1,16 @@
 <template>
   <el-container class="layout-container">
+    <!-- AI组件 -->
+    <AiChat v-model="showAiChat" />
+    <el-dialog
+      v-model="showPdfExtractor"
+      title="PDF文本抽取"
+      width="70%"
+      destroy-on-close
+    >
+      <PdfExtractor />
+    </el-dialog>
+    
     <!-- 侧边栏 -->
     <el-aside width="200px" class="aside">
       <div class="logo">
@@ -31,6 +42,24 @@
           </el-breadcrumb>
         </div>
         <div class="header-right">
+          <el-button 
+            type="primary" 
+            class="ai-button" 
+            @click="showAiChat = true"
+          >
+            <el-icon><ChatDotRound /></el-icon>
+            AI助手
+          </el-button>
+          
+          <el-button 
+            type="success" 
+            class="ai-button" 
+            @click="showPdfExtractor = true"
+          >
+            <el-icon><Document /></el-icon>
+            PDF抽取
+          </el-button>
+          
           <el-dropdown>
             <span class="user-info">
               管理员 <el-icon><ArrowDown /></el-icon>
@@ -54,11 +83,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Document, Files, Folder, Monitor, ArrowDown } from '@element-plus/icons-vue'
+import { Document, Files, Folder, Monitor, ArrowDown, ChatDotRound } from '@element-plus/icons-vue'
+import AiChat from '@/components/ai/AiChat.vue'
+import PdfExtractor from '@/components/ai/PdfExtractor.vue'
 
 const route = useRoute()
+
+// AI组件状态
+const showAiChat = ref(false)
+const showPdfExtractor = ref(false)
 
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
@@ -112,6 +147,12 @@ const currentTitle = computed(() => {
 }
 
 .header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-button {
   display: flex;
   align-items: center;
 }
