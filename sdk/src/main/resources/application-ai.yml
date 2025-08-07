@@ -1,7 +1,7 @@
 # AI组件配置文件
 # 所有AI相关配置集中管理
 
-jnpf:
+zxcm:
   ai:
     # 是否启用AI功能
     enabled: true

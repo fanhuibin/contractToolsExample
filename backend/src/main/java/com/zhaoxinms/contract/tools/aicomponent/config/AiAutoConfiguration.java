@@ -12,7 +12,6 @@ import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -41,12 +40,6 @@ public class AiAutoConfiguration {
     @Configuration(proxyBeanMethods = false)
     @ConditionalOnProperty(prefix = AiConstants.CONFIGURATION_PREFIX, name = "enabled", havingValue = "true")
     public static class AiEnabledConfiguration {
-
-        @Bean
-        @ConfigurationProperties(prefix = AiConstants.CONFIGURATION_PREFIX)
-        public AiProperties getAiProperties() {
-            return new AiProperties();
-        }
 
         @Bean
         public OpenAiService getDefaultOpenAiService(@Qualifier(AiConstants.DEFAULT_HTTP_CLIENT_BEAN_NAME) OkHttpClient okHttpClient, AiProperties aiProperties) {

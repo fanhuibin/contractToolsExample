@@ -1,4 +1,4 @@
-package com.zhaoxinms.contract.tools.aicomponent.controller;
+package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.aicomponent.config.AiProperties;
 import com.zhaoxinms.contract.tools.aicomponent.service.OpenAiService;

@@ -9,7 +9,7 @@ public class AiConstants {
 
     public static final String OPENAI_HOST = "https://dashscope.aliyuncs.com/compatible-mode/";
 
-    public static final String CONFIGURATION_PREFIX = "jnpf.ai";
+    public static final String CONFIGURATION_PREFIX = "zxcm.ai";
 
     public static final String DEFAULT_HTTP_CLIENT_BEAN_NAME = "defaultOpenAiHttpClient";
 
