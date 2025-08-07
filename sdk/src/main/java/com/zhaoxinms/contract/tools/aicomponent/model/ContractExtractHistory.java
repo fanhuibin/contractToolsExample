@@ -1,8 +1,9 @@
 package com.zhaoxinms.contract.tools.aicomponent.model;
 
-import lombok.Data;
-import javax.persistence.*;
 import java.time.LocalDateTime;
+import javax.persistence.*;
+
+import lombok.Data;
 
 @Data
 @Entity
@@ -14,10 +15,10 @@ public class ContractExtractHistory {
     private Long id;
 
     @Column(nullable = false)
-    private String fileName;
+    private String fileName; 
 
     @Lob
-    @Column(nullable = false, columnDefinition = "LONGTEXT")
+    @Column(nullable = false)
     private String extractedContent;
 
     @Column(nullable = false)

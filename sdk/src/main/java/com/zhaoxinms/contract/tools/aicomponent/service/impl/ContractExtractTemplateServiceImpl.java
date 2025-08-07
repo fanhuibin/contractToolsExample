@@ -7,6 +7,7 @@ import com.zhaoxinms.contract.tools.aicomponent.repository.ContractExtractTempla
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +27,7 @@ import java.util.stream.Collectors;
  */
 @Slf4j
 @Service
+@Primary
 public class ContractExtractTemplateServiceImpl implements ContractExtractTemplateService {
     
     @Autowired

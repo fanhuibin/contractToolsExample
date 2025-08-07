@@ -211,7 +211,16 @@ export const aiContract = {
 
 // 导出履约任务相关API
 export const aiFulfillment = {
-  ...fulfillment
+  getFulfillmentTemplates: fulfillment.getFulfillmentTemplates,
+  getFulfillmentTemplatesByType: fulfillment.getFulfillmentTemplatesByType,
+  createFulfillmentTemplate: fulfillment.createFulfillmentTemplate,
+  updateFulfillmentTemplate: fulfillment.updateFulfillmentTemplate,
+  deleteFulfillmentTemplate: fulfillment.deleteFulfillmentTemplate,
+  copyFulfillmentTemplate: fulfillment.copyFulfillmentTemplate,
+  getFulfillmentContractTypes: fulfillment.getFulfillmentContractTypes,
+  getFulfillmentHistory: fulfillment.getFulfillmentHistory,
+  extractFulfillmentTask: fulfillment.extractFulfillmentTask,
+  saveFulfillmentConfig: fulfillment.saveFulfillmentConfig
 };
 
 export default {

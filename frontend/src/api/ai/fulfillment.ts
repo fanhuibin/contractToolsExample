@@ -31,7 +31,7 @@ export interface ApiResponse<T> {
 export function getFulfillmentTemplates(userId?: string): Promise<ApiResponse<FulfillmentTemplate[]>> {
   const params = userId ? `?userId=${userId}` : '';
   return request({
-    url: `/api/fulfillment/template/list${params}`,
+    url: `/fulfillment/template/list${params}`,
     method: 'get'
   });
 }
@@ -39,14 +39,14 @@ export function getFulfillmentTemplates(userId?: string): Promise<ApiResponse<Fu
 export function getFulfillmentTemplatesByType(contractType: string, userId?: string): Promise<ApiResponse<FulfillmentTemplate[]>> {
   const params = userId ? `?userId=${userId}` : '';
   return request({
-    url: `/api/fulfillment/template/type/${contractType}${params}`,
+    url: `/fulfillment/template/type/${contractType}${params}`,
     method: 'get'
   });
 }
 
 export function createFulfillmentTemplate(template: FulfillmentTemplate): Promise<ApiResponse<FulfillmentTemplate>> {
   return request({
-    url: '/api/fulfillment/template/create',
+    url: '/fulfillment/template/create',
     method: 'post',
     data: template
   });
@@ -54,7 +54,7 @@ export function createFulfillmentTemplate(template: FulfillmentTemplate): Promis
 
 export function updateFulfillmentTemplate(id: number, template: FulfillmentTemplate): Promise<ApiResponse<FulfillmentTemplate>> {
   return request({
-    url: `/api/fulfillment/template/${id}`,
+    url: `/fulfillment/template/${id}`,
     method: 'put',
     data: template
   });
@@ -62,21 +62,21 @@ export function updateFulfillmentTemplate(id: number, template: FulfillmentTempl
 
 export function deleteFulfillmentTemplate(id: number): Promise<ApiResponse<boolean>> {
   return request({
-    url: `/api/fulfillment/template/${id}`,
+    url: `/fulfillment/template/${id}`,
     method: 'delete'
   });
 }
 
 export function copyFulfillmentTemplate(id: number, newName: string, userId: string): Promise<ApiResponse<FulfillmentTemplate>> {
   return request({
-    url: `/api/fulfillment/template/${id}/copy?newName=${encodeURIComponent(newName)}&userId=${userId}`,
+    url: `/fulfillment/template/${id}/copy?newName=${encodeURIComponent(newName)}&userId=${userId}`,
     method: 'post'
   });
 }
 
 export function getFulfillmentContractTypes(): Promise<ApiResponse<Record<string, string>>> {
   return request({
-    url: '/api/fulfillment/template/contract-types',
+    url: '/fulfillment/template/contract-types',
     method: 'get'
   });
 }
@@ -84,14 +84,14 @@ export function getFulfillmentContractTypes(): Promise<ApiResponse<Record<string
 export function getFulfillmentHistory(userId?: string): Promise<ApiResponse<any[]>> {
   const params = userId ? `?userId=${userId}` : '';
   return request({
-    url: `/api/fulfillment/history/list${params}`,
+    url: `/fulfillment/history/list${params}`,
     method: 'get'
   });
 }
 
 export function extractFulfillmentTask(formData: FormData): Promise<ApiResponse<FulfillmentTask[]>> {
   return request({
-    url: '/api/fulfillment/extract',
+    url: '/fulfillment/extract',
     method: 'post',
     data: formData,
     headers: { 'Content-Type': 'multipart/form-data' }
@@ -100,14 +100,14 @@ export function extractFulfillmentTask(formData: FormData): Promise<ApiResponse<
 
 export function getFulfillmentConfig(): Promise<ApiResponse<any>> {
   return request({
-    url: '/api/fulfillment/config',
+    url: '/fulfillment/config',
     method: 'get'
   });
 }
 
 export function saveFulfillmentConfig(data: any): Promise<ApiResponse<any>> {
   return request({
-    url: '/api/fulfillment/config',
+    url: '/fulfillment/config',
     method: 'post',
     data
   });

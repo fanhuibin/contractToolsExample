@@ -3,6 +3,7 @@ package com.zhaoxinms.contract.template.sdk.example;
 import com.zhaoxinms.contract.tools.api.dto.FieldResponse;
 import com.zhaoxinms.contract.tools.api.service.TemplateService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class TemplateDesignExample implements CommandLineRunner {
 
     @Autowired
+    @Qualifier("templateServiceImpl")
     private TemplateService templateService;
 
     @Override

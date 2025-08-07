@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @RestController
-@RequestMapping("/ai/pdf")
+@RequestMapping("/api/ai/pdf")
 public class PdfExtractController {
 
     @Autowired

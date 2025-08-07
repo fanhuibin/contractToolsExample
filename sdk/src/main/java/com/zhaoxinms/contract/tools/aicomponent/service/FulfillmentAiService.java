@@ -1,25 +1,27 @@
 package com.zhaoxinms.contract.tools.aicomponent.service;
 
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
-import com.alibaba.dashscope.aigc.generation.Generation;
-import com.alibaba.dashscope.aigc.generation.GenerationParam;
-import com.alibaba.dashscope.aigc.generation.GenerationResult;
-import com.alibaba.dashscope.common.Message;
-import com.alibaba.dashscope.common.Role;
-import com.zhaoxinms.contract.tools.aicomponent.model.FulfillmentExtractResult;
-import com.zhaoxinms.contract.tools.aicomponent.model.FulfillmentTemplate;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.alibaba.dashscope.aigc.generation.Generation;
+import com.alibaba.dashscope.aigc.generation.GenerationParam;
+import com.alibaba.dashscope.aigc.generation.GenerationResult;
+import com.alibaba.dashscope.common.Message;
+import com.zhaoxinms.contract.tools.aicomponent.model.FulfillmentExtractResult;
+import com.zhaoxinms.contract.tools.aicomponent.model.FulfillmentTemplate;
+
+import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 履约任务AI识别服务
@@ -29,10 +31,10 @@ import java.util.stream.Collectors;
 @Slf4j
 public class FulfillmentAiService {
 
-    @Value("${ai.fulfillment.prompt.template}")
     private String promptTemplate;
 
     @Autowired
+    @Qualifier("fulfillmentTemplateServiceImpl")
     private FulfillmentTemplateService templateService;
 
     /**
@@ -147,11 +149,11 @@ public class FulfillmentAiService {
             // 构建消息
             List<Message> messages = new ArrayList<>();
             messages.add(Message.builder()
-                .role(Role.SYSTEM)
+                .role("system")
                 .content("你是一个专业的合同履约任务智能识别助手。")
                 .build());
             messages.add(Message.builder()
-                .role(Role.USER)
+                .role("user")
                 .content(prompt)
                 .build());
 
@@ -160,8 +162,7 @@ public class FulfillmentAiService {
                 .model("qwen-long")
                 .messages(messages)
                 .resultFormat(GenerationParam.ResultFormat.MESSAGE)
-                .topP(0.8)
-                .temperature(0.7)
+                .temperature(0.7f)
                 .build();
 
             // 调用模型

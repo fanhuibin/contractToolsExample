@@ -5,9 +5,10 @@ import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.zhaoxinms.contract.tools.aicomponent.model.FulfillmentTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.FulfillmentTemplateService;
 import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiOperation; 
 import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,6 +24,7 @@ import java.util.List;
 public class FulfillmentTemplateController {
 
     @Autowired
+    @Qualifier("fulfillmentTemplateServiceImpl")
     private FulfillmentTemplateService templateService;
 
     @GetMapping("/list")

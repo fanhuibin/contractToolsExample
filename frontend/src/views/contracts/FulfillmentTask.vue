@@ -198,7 +198,7 @@ const error = ref('');
 const result = ref<any[]>([]);
 const historyDialogVisible = ref(false);
 const historyDetailDialogVisible = ref(false);
-const historyList = ref([]);
+const historyList = ref<any[]>([]);
 const selectedHistoryResult = ref<any[]>([]);
 const customEditVisible = ref(false);
 const customTemplate = ref({
@@ -223,9 +223,9 @@ onMounted(async () => {
 
 async function loadInitialData() {
   const [typesRes, templatesRes, historyRes] = await Promise.all([
-    ai.getFulfillmentContractTypes(),
-    ai.getFulfillmentTemplates(),
-    ai.getFulfillmentHistory()
+    ai.aiFulfillment.getFulfillmentContractTypes(),
+    ai.aiFulfillment.getFulfillmentTemplates(),
+    ai.aiFulfillment.getFulfillmentHistory()
   ]);
   contractTypes.value = typesRes.data || {};
   templates.value = templatesRes.data || [];
@@ -294,7 +294,7 @@ function copyTemplateForEditing(template: any) {
 
 async function saveCustomTemplate() {
   try {
-    const res = await ai.createFulfillmentTemplate(customTemplate.value);
+    const res = await ai.aiFulfillment.createFulfillmentTemplate(customTemplate.value);
     if (res.success) {
       ElMessage.success('模板保存成功');
       customEditVisible.value = false;
@@ -319,7 +319,7 @@ async function extractTask() {
     formData.append('file', selectedFile.value!);
     formData.append('templateId', selectedTemplateId.value?.toString() || 'custom');  // 修复null
 
-    const res = await ai.extractFulfillmentTask(formData);
+    const res = await ai.aiFulfillment.extractFulfillmentTask(formData);
     if (res.success) {
       result.value = res.tasks || [];
       extractingProgress.value = 100;

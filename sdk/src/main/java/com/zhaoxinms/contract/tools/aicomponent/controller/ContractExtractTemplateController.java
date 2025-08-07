@@ -4,6 +4,7 @@ import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -19,10 +20,11 @@ import java.util.Map;
  */
 @Slf4j
 @RestController
-@RequestMapping("/ai/contract/template")
+@RequestMapping("/api/ai/contract/template")
 public class ContractExtractTemplateController {
 
     @Autowired
+    @Qualifier("contractExtractTemplateServiceImpl")
     private ContractExtractTemplateService templateService;
 
     /**

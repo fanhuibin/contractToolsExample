@@ -8,6 +8,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -24,13 +26,22 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Slf4j
 @RestController 
-@RequestMapping("/ai/contract")
-@AllArgsConstructor
+@RequestMapping("/api/ai/contract")
 public class ContractExtractController {
 
     private final ContractExtractService contractExtractService;
     private final AiLimitUtil aiLimitUtil;
     private final ContractExtractHistoryService contractExtractHistoryService;
+
+    @Autowired
+    public ContractExtractController(
+            @Qualifier("contractExtractServiceImpl") ContractExtractService contractExtractService,
+            AiLimitUtil aiLimitUtil,
+            @Qualifier("contractExtractHistoryServiceImpl") ContractExtractHistoryService contractExtractHistoryService) {
+        this.contractExtractService = contractExtractService;
+        this.aiLimitUtil = aiLimitUtil;
+        this.contractExtractHistoryService = contractExtractHistoryService;
+    }
 
     // 存储抽取任务状态
     private final Map<String, Map<String, Object>> extractTasks = new ConcurrentHashMap<>();
@@ -85,7 +96,9 @@ public class ContractExtractController {
             
             // 异步处理文件提取
             String finalFileName = fileName;
+            byte[] fileBytes = file.getBytes(); // 先读取文件内容，避免文件流冲突
             new Thread(() -> {
+                Path tempFile = null;
                 try {
                     // 保存文件到临时目录
                     Path tempDir = Paths.get(System.getProperty("java.io.tmpdir"), "contract-extract");
@@ -93,14 +106,11 @@ public class ContractExtractController {
                         Files.createDirectories(tempDir);
                     }
                     
-                    Path tempFile = tempDir.resolve(finalFileName);
-                    Files.write(tempFile, file.getBytes());
+                    tempFile = tempDir.resolve(finalFileName);
+                    Files.write(tempFile, fileBytes);
                     
                     // 提取信息
                     String extractedInfo = contractExtractService.processFile(tempFile, prompt, templateId);
-                    
-                    // 删除临时文件
-                    Files.deleteIfExists(tempFile);
                     
                     // 更新任务状态
                     taskStatus.put("status", "completed");
@@ -118,6 +128,15 @@ public class ContractExtractController {
                     taskStatus.put("status", "failed");
                     taskStatus.put("error", e.getMessage());
                     taskStatus.put("endTime", System.currentTimeMillis());
+                } finally {
+                    // 确保临时文件被删除
+                    if (tempFile != null) {
+                        try {
+                            Files.deleteIfExists(tempFile);
+                        } catch (Exception e) {
+                            log.warn("删除临时文件失败: {}", tempFile, e);
+                        }
+                    }
                 }
             }).start();
             

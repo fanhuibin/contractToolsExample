@@ -24,6 +24,10 @@
           <el-icon><Document /></el-icon>
           <span>合同履约任务</span>
         </el-menu-item>
+         <el-menu-item index="/contract-extract">
+          <el-icon><Document /></el-icon>
+          <span>合同抽取</span>
+        </el-menu-item>
         <el-menu-item index="/templates">
           <el-icon><Files /></el-icon>
           <span>模板管理</span>
