@@ -1,4 +1,5 @@
 import axios from 'axios';
+import * as fulfillment from './fulfillment';
 
 // 创建axios实例
 const request = axios.create({
@@ -72,36 +73,6 @@ export const aiChat = {
    */
   deleteSession(sessionId: string) {
     return request.delete(`/ai/chat/session/${sessionId}`);
-  }
-};
-
-/**
- * PDF抽取相关API
- * @deprecated 请使用 aiContract 替代
- */
-export const aiPdf = {
-  /**
-   * 抽取PDF文本
-   * @param file PDF文件
-   * @returns 响应结果
-   */
-  extractText(file: File) {
-    const formData = new FormData();
-    formData.append('file', file);
-    return request.post('/ai/pdf/extract', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-  },
-
-  /**
-   * 获取抽取任务状态
-   * @param taskId 任务ID
-   * @returns 任务状态
-   */
-  getTaskStatus(taskId: string) {
-    return request.get(`/ai/pdf/status/${taskId}`);
   }
 };
 
@@ -238,7 +209,13 @@ export const aiContract = {
   }
 };
 
+// 导出履约任务相关API
+export const aiFulfillment = {
+  ...fulfillment
+};
+
 export default {
   aiChat,
-  aiContract
+  aiContract,
+  aiFulfillment
 };
