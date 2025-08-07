@@ -23,6 +23,16 @@ public interface ContractExtractService {
      * @return 提取的文本内容
      */
     String extractInfo(String fileId, String prompt);
+    
+    /**
+     * 使用指定模板提取文件信息
+     * 
+     * @param fileId 文件ID
+     * @param prompt 提示词（可选）
+     * @param templateId 模板ID（可选）
+     * @return 提取的信息
+     */
+    String extractInfo(String fileId, String prompt, Long templateId);
 
     /**
      * 一站式处理：上传文件并提取信息
@@ -31,4 +41,14 @@ public interface ContractExtractService {
      * @return 提取的文本内容
      */
     String processFile(Path filePath, String prompt);
+    
+    /**
+     * 一站式处理：使用指定模板上传文件并提取信息
+     * 
+     * @param filePath 文件路径
+     * @param prompt 提示词（可选）
+     * @param templateId 模板ID（可选）
+     * @return 提取的信息
+     */
+    String processFile(Path filePath, String prompt, Long templateId);
 }

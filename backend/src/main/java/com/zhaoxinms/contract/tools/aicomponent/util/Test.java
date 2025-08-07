@@ -12,7 +12,6 @@ import com.openai.models.FileObject;
 import com.openai.models.FilePurpose;
  
 public class Test {
-	
 	public static void main1(String args[]) {
 		// 创建客户端，使用环境变量中的API密钥
         OpenAIClient client = OpenAIOkHttpClient.builder()

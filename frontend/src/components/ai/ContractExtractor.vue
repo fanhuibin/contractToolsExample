@@ -1,253 +1,345 @@
 <template>
   <div class="contract-extractor">
-    <el-card class="contract-extractor-card">
-      <template #header>
-        <div class="card-header">
-          <h3>合同信息提取</h3>
-          <span class="subtitle">上传合同文件，可自定义提取字段</span>
-        </div>
-      </template>
-
-      <!-- 文件上传区域 -->
-      <el-upload
-        class="upload-area"
-        drag
-        action="#"
-        :auto-upload="false"
-        :show-file-list="false"
-        :on-change="handleFileChange"
-        accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">
-          拖拽文件到此处，或 <em>点击上传</em>
-        </div>
-        <template #tip>
-          <div class="el-upload__tip">
-            支持PDF、Word、Excel、图片等格式，大小不超过30MB
-          </div>
-        </template>
-      </el-upload>
-      
-      <!-- 文件和提取操作 -->
-      <div v-if="selectedFile" class="file-info-actions">
-        <div class="file-info">
-          <el-icon><Document /></el-icon>
-          <span>{{ selectedFile.name }} ({{ formatFileSize(selectedFile.size) }})</span>
-        </div>
-        <el-button type="primary" @click="uploadFile" :loading="uploading" :disabled="!canStartExtraction">
-          <el-icon style="margin-right: 5px;"><CaretRight /></el-icon>
-          开始提取
-        </el-button>
-      </div>
-
-      <!-- 动态提取字段区域 -->
-      <div v-if="showPromptInput" class="dynamic-prompts">
-        <h4>自定义提取字段</h4>
-        <div v-for="(item, index) in extractionFields" :key="index" class="prompt-item">
-          <el-input
-            v-model="item.value"
-            placeholder="请输入要提取的字段名称"
-            clearable
-          ></el-input>
-          <el-button 
-            type="danger" 
-            :icon="Delete" 
-            @click="removeField(index)" 
-            circle 
-            :disabled="extractionFields.length <= 1"
-          />
-        </div>
-        <el-button type="primary" :icon="Plus" @click="addField" plain>添加字段</el-button>
-        
-        <div class="recommended-tags">
-          <span>推荐字段：</span>
-          <el-tag 
-            v-for="tag in recommendedTags" 
-            :key="tag" 
-            @click="addTagAsField(tag)"
-            class="tag-item"
-          >
-            {{ tag }}
-          </el-tag>
-        </div>
-      </div>
-
-      <!-- 提取状态 -->
-      <div v-if="extracting" class="extracting-status">
-        <el-progress 
-          :percentage="extractingProgress" 
-          :status="extractingStatus"
-          :stroke-width="10"
-        ></el-progress>
-        <div class="status-text">{{ statusText }}</div>
-      </div>
-      
-      <!-- 提取结果 -->
-      <div v-if="extractedText" class="result-area">
-        <div class="result-header">
-          <h4>提取结果</h4>
-          <div class="result-actions">
-            <el-button type="primary" size="small" @click="copyText">
-              复制文本
-            </el-button>
-            <el-button type="success" size="small" @click="exportText">
-              导出结果
-            </el-button>
-          </div>
-        </div>
-        <el-input
-          v-model="extractedText"
-          type="textarea"
-          :rows="12"
-          readonly
-          resize="none"
-          class="result-text"
-        ></el-input>
-      </div>
-      
-      <!-- 错误信息 -->
-      <div v-if="error" class="error-message">
-        <el-alert
-          :title="error"
-          type="error"
-          :closable="false"
-          show-icon
-        ></el-alert>
-      </div>
-    </el-card>
+    <el-row :gutter="20">
+      <!-- Main Content -->
+      <el-col :span="16">
+        <el-card class="main-content-card">
+          <template #header>
+            <div class="card-header">
+  <div class="card-header-left">
+    <h3>合同信息提取</h3>
+    <span class="subtitle">请先从右侧选择提取模板，然后上传合同文件</span>
   </div>
+  <el-button type="primary" link @click="showHistoryDialog">提取记录</el-button>
+</div>
 </template>
+
+<!-- File Upload Area -->
+<el-upload
+  class="upload-area"
+  drag
+  action="#"
+  :auto-upload="false"
+  :show-file-list="false"
+  :on-change="handleFileChange"
+  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+>
+  <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+  <div class="el-upload__text">
+    拖拽文件到此处，或 <em>点击上传</em>
+  </div>
+</el-upload>
+
+<div v-if="selectedFile" class="file-info-actions">
+  <div class="file-info">
+    <el-icon><Document /></el-icon>
+    <span>{{ selectedFile.name }} ({{ formatFileSize(selectedFile.size) }})</span>
+  </div>
+  <el-button type="primary" @click="uploadFile" :loading="uploading" :disabled="!canStartExtraction">
+    <el-icon style="margin-right: 5px;"><CaretRight /></el-icon>
+    开始提取
+  </el-button>
+</div>
+
+<!-- Fields Display Area -->
+<div v-if="selectedTemplateId" class="fields-display-area">
+  <el-divider content-position="left">提取字段</el-divider>
+  
+  <!-- Pre-defined template fields -->
+  <div v-if="selectedTemplateId !== 'custom' && selectedTemplateFields.length > 0">
+    <el-tag v-for="field in selectedTemplateFields" :key="field" class="field-tag" size="large">
+      {{ field }}
+    </el-tag>
+  </div>
+  
+  <!-- Custom template fields editor -->
+  <div v-if="selectedTemplateId === 'custom'" class="dynamic-prompts">
+    <div v-for="(item, index) in extractionFields" :key="index" class="prompt-item">
+      <el-input v-model="item.value" placeholder="请输入要提取的字段名称" clearable />
+      <el-button type="danger" :icon="Delete" @click="removeField(index)" circle :disabled="extractionFields.length <= 1" />
+    </div>
+    <el-button type="primary" :icon="Plus" @click="addField" plain>添加字段</el-button>
+    
+    <!-- Save as Template -->
+    <div class="save-as-template" v-if="extractionFields.length > 0 && extractionFields[0].value">
+      <el-divider content-position="left">另存为模板</el-divider>
+      <div class="save-template-form">
+        <el-input v-model="newTemplateName" placeholder="输入新模板名称" style="width: 200px; margin-right: 10px;" />
+        <el-select v-model="newTemplateType" placeholder="选择合同类型" style="width: 150px; margin-right: 10px;">
+          <el-option v-for="(label, value) in contractTypes" :key="value" :label="label" :value="value" />
+        </el-select>
+        <el-button type="success" :disabled="!canSaveTemplate" @click="saveAsTemplate">保存模板</el-button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Extraction Status -->
+<div v-if="extracting" class="extracting-status">
+  <el-progress :percentage="extractingProgress" :status="extractingStatus" :stroke-width="10" />
+  <div class="status-text">{{ statusText }}</div>
+</div>
+
+<!-- Extraction Result -->
+<div v-if="extractedText" class="result-area">
+  <div class="result-header">
+    <h4>提取结果</h4>
+    <div class="result-actions">
+      <el-button type="primary" size="small" @click="copyText">复制JSON</el-button>
+      <el-button type="success" size="small" @click="exportText">导出TXT</el-button>
+    </div>
+  </div>
+  <pre class="result-text">{{ formattedJsonResult }}</pre>
+</div>
+
+<!-- Error Message -->
+<div v-if="error" class="error-message">
+  <el-alert :title="error" type="error" :closable="false" show-icon />
+</div>
+</el-card>
+</el-col>
+
+<!-- Right Sidebar for Template Selection -->
+<el-col :span="8">
+<el-card class="template-selector-card">
+  <template #header>
+    <h4>选择提取模板</h4>
+  </template>
+  <el-radio-group v-model="selectedTemplateId" class="template-radio-group">
+    <el-collapse v-model="activeCollapse" accordion>
+      <el-collapse-item v-for="(label, type) in contractTypes" :key="type" :title="label" :name="type">
+        <div v-if="getTemplatesByType(type).length > 0">
+          <div v-for="template in getTemplatesByType(type)" :key="template.id" class="template-item-wrapper">
+            <el-radio 
+              :label="template.id"
+              class="template-radio-item"
+            >
+              {{ template.name }}
+              <el-tag v-if="template.isDefault" size="small" type="success" effect="dark" class="template-tag">默认</el-tag>
+              <el-tag v-if="template.type === 'system'" size="small" class="template-tag">系统</el-tag>
+            </el-radio>
+            <el-button 
+              type="primary" 
+              link 
+              size="small" 
+              @click.stop="copyTemplateForEditing(template)" 
+              class="copy-button"
+            >
+              复制并编辑
+            </el-button>
+          </div>
+        </div>
+        <div v-else class="no-template-tip">暂无该类型模板</div>
+      </el-collapse-item>
+    </el-collapse>
+  </el-radio-group>
+  <el-divider />
+  <el-radio v-model="selectedTemplateId" label="custom" class="template-radio-item custom-radio">
+    自定义提取字段
+  </el-radio>
+</el-card>
+</el-col>
+</el-row>
+
+<!-- History Dialog -->
+<el-dialog v-model="historyDialogVisible" title="提取历史记录" width="60%">
+<el-table :data="historyList" style="width: 100%" height="400">
+  <el-table-column prop="fileName" label="文件名" />
+  <el-table-column prop="extractTime" label="提取时间" width="200">
+    <template #default="{ row }">
+      {{ new Date(row.extractTime).toLocaleString() }}
+    </template>
+  </el-table-column>
+  <el-table-column label="操作" width="120">
+    <template #default="{ row }">
+      <el-button type="primary" link @click="viewHistoryDetail(row)">查看详情</el-button>
+    </template>
+  </el-table-column>
+</el-table>
+</el-dialog>
+
+<!-- History Detail Dialog -->
+<el-dialog v-model="historyDetailDialogVisible" title="历史记录详情" width="50%">
+<pre class="result-text">{{ formattedHistoryDetail }}</pre>
+<template #footer>
+  <el-button @click="historyDetailDialogVisible = false">关闭</el-button>
+</template>
+</el-dialog>
+</div>
+</template>
+
 <script lang="ts" setup>
-import { ref, computed } from 'vue';
-import { 
-  UploadFilled, 
-  Delete, 
-  Plus, 
-  Document,
-  CaretRight
-} from '@element-plus/icons-vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { UploadFilled, Delete, Plus, Document, CaretRight } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { aiContract } from '@/api/ai';
-// 文件相关
+
+// --- Reactive State ---
+// File handling
 const selectedFile = ref<File | null>(null);
 const uploading = ref(false);
 const extracting = ref(false);
 const extractingProgress = ref(0);
-const extractingStatus = ref('');
+const extractingStatus = ref < '' | 'success' | 'warning' | 'exception' > ('');
 const statusText = ref('');
 const extractedText = ref('');
 const error = ref('');
 const taskId = ref('');
 const statusCheckInterval = ref<number | null>(null);
-const showPromptInput = ref(false);
-// 动态提取字段
-const extractionFields = ref([{ value: '合同名称' }]);
-const recommendedTags = ref([
-  '合同双方信息（甲方、乙方）',
-  '合同金额',
-  '签订日期',
-  '合同期限',
-  '付款方式',
-  '其他关键条款'
-]);
+
+// Template handling
+const contractTypes = ref<Record<string, string>>({});
+const templates = ref<any[]>([]);
+const selectedTemplateId = ref<number | 'custom' | null>(null);
+const activeCollapse = ref<string>('common');
+const selectedTemplateFields = ref<string[]>([]);
+
+// Custom fields & new template
+const extractionFields = ref([{ value: '' }]);
+const newTemplateName = ref('');
+const newTemplateType = ref('');
+const userId = ref('default-user'); // Should be fetched from user session in a real app
+
+// History
+const historyDialogVisible = ref(false);
+const historyDetailDialogVisible = ref(false);
+const historyList = ref([]);
+const selectedHistoryDetail = ref('');
+
+// --- Computed Properties ---
 const canStartExtraction = computed(() => {
-  return extractionFields.value.every(field => field.value.trim() !== '') && !uploading.value;
-});
-const addField = () => {
-  extractionFields.value.push({ value: '' });
-};
-const removeField = (index: number) => {
-  if (extractionFields.value.length > 1) {
-    extractionFields.value.splice(index, 1);
+  if (!selectedFile.value || uploading.value) return false;
+  if (selectedTemplateId.value === 'custom') {
+    return extractionFields.value.every(field => field.value.trim() !== '');
   }
+  return selectedTemplateId.value !== null;
+});
+
+const canSaveTemplate = computed(() =>
+  newTemplateName.value.trim() !== '' &&
+  newTemplateType.value !== '' &&
+  extractionFields.value.length > 0 &&
+  extractionFields.value.every(field => field.value.trim() !== '')
+);
+
+const formattedJsonResult = computed(() => {
+  try {
+    const jsonObj = JSON.parse(extractedText.value);
+    return JSON.stringify(jsonObj, null, 2);
+  } catch (e) {
+    return extractedText.value;
+  }
+});
+
+const formattedHistoryDetail = computed(() => {
+  try {
+    const jsonObj = JSON.parse(selectedHistoryDetail.value);
+    return JSON.stringify(jsonObj, null, 2);
+  } catch (e) {
+    return selectedHistoryDetail.value;
+  }
+});
+
+// --- Functions ---
+const getTemplatesByType = (type: string) => {
+  return templates.value.filter(t => t.contractType === type);
 };
-const addTagAsField = (tag: string) => {
-  // 避免添加重复字段
-  if (!extractionFields.value.some(field => field.value === tag)) {
-    // 如果第一个字段是默认的空字段，则直接替换
-    if (extractionFields.value.length === 1 && extractionFields.value[0].value === '') {
-      extractionFields.value[0].value = tag;
-    } else {
-      extractionFields.value.push({ value: tag });
+
+const loadInitialData = async () => {
+  try {
+    const [typesResponse, templatesResponse] = await Promise.all([
+      aiContract.getContractTypes(),
+      aiContract.getTemplates(userId.value)
+    ]);
+
+    if ((typesResponse as any).success) {
+      contractTypes.value = (typesResponse as any).data;
     }
+    if ((templatesResponse as any).success) {
+      templates.value = (templatesResponse as any).data;
+    }
+    
+    // Set default selection
+    const defaultTemplate = templates.value.find(t => t.contractType === 'common' && t.isDefault);
+    if (defaultTemplate) {
+      selectedTemplateId.value = defaultTemplate.id;
+      activeCollapse.value = 'common';
+    }
+
+  } catch (err) {
+    ElMessage.error('加载模板数据失败');
+    console.error(err);
   }
 };
-// 组合最终的提取提示
-const finalExtractPrompt = computed(() => {
-  const fields = extractionFields.value
-    .map(field => field.value.trim())
-    .filter(value => value);
-  if (fields.length === 0) return '';
-  return `请提取以下信息：${fields.join('、')}`;
-});
-// 文件选择处理
+
+// History methods
+const showHistoryDialog = async () => {
+  try {
+    const response = await aiContract.getHistory(userId.value);
+    if ((response as any).success) {
+      historyList.value = (response as any).data;
+      historyDialogVisible.value = true;
+    } else {
+      ElMessage.error((response as any).message || '获取历史记录失败');
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '获取历史记录出错');
+  }
+};
+
+const viewHistoryDetail = (historyItem: any) => {
+  selectedHistoryDetail.value = historyItem.extractedContent;
+  historyDetailDialogVisible.value = true;
+};
+
+
+// File handling methods
 const handleFileChange = (file: any) => {
-  // 检查文件类型
-  const supportedTypes = [
-    'application/pdf', 
-    'application/msword', 
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'image/jpeg',
-    'image/png'
-  ];
-  
-  const fileName = file.name.toLowerCase();
-  const fileExt = fileName.substring(fileName.lastIndexOf('.'));
-  const supportedExts = ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.jpg', '.jpeg', '.png'];
-  
-  if (!supportedExts.some(ext => fileExt === ext)) {
-    ElMessage.error('不支持的文件格式');
+  const isLt100M = file.size / 1024 / 1024 < 100;
+  if (!isLt100M) {
+    ElMessage.error('文件大小不能超过100MB');
     return false;
   }
-  
-  // 检查文件大小
-  const isLt30M = file.size / 1024 / 1024 < 30;
-  if (!isLt30M) {
-    ElMessage.error('文件大小不能超过30MB');
-    return false;
-  }
-  
   selectedFile.value = file.raw;
   error.value = '';
   extractedText.value = '';
-  showPromptInput.value = true;
   return false;
 };
-// 上传文件
+
 const uploadFile = async () => {
   if (!selectedFile.value) {
     ElMessage.error('请先选择文件');
     return;
   }
-  
   if (!canStartExtraction.value) {
-    ElMessage.error('请确保所有提取字段都已填写');
+    ElMessage.error('请选择一个模板或填写自定义字段');
     return;
   }
+
+  uploading.value = true;
+  error.value = '';
+  extractedText.value = '';
+  extracting.value = true;
+  extractingProgress.value = 10;
+  extractingStatus.value = '';
+  statusText.value = '正在上传文件...';
+
   try {
-    uploading.value = true;
-    error.value = '';
-    extractedText.value = '';
-    extracting.value = true;
-    extractingProgress.value = 10;
-    extractingStatus.value = '';
-    statusText.value = '正在上传文件...';
+    const prompt = selectedTemplateId.value === 'custom'
+      ? `请提取以下信息：${extractionFields.value.map(f => f.value).join('、')}`
+      : undefined;
     
-    // 上传文件
-    const response = await aiContract.extractInfo(selectedFile.value, finalExtractPrompt.value);
-    
-    if (response.success) {
-      taskId.value = response.taskId;
+    const templateId = typeof selectedTemplateId.value === 'number' ? selectedTemplateId.value : undefined;
+
+    const response = await aiContract.extractInfo(selectedFile.value, prompt, templateId);
+
+    if ((response as any).success) {
+      taskId.value = (response as any).taskId;
       statusText.value = '正在处理文件...';
       extractingProgress.value = 30;
-      
-      // 开始轮询任务状态
       startStatusCheck();
     } else {
-      error.value = response.message || '上传失败';
+      error.value = (response as any).message || '上传失败';
       extracting.value = false;
       extractingStatus.value = 'exception';
     }
@@ -259,24 +351,15 @@ const uploadFile = async () => {
     uploading.value = false;
   }
 };
-// 开始轮询任务状态
+
 const startStatusCheck = () => {
-  if (statusCheckInterval.value) {
-    clearInterval(statusCheckInterval.value);
-  }
-  
+  if (statusCheckInterval.value) clearInterval(statusCheckInterval.value);
   statusCheckInterval.value = window.setInterval(async () => {
+    if (!taskId.value) return clearStatusCheck();
     try {
-      if (!taskId.value) {
-        clearStatusCheck();
-        return;
-      }
-      
       const response = await aiContract.getTaskStatus(taskId.value);
-      
-      if (response.success && response.task) {
-        const task = response.task;
-        
+      if ((response as any).success && (response as any).task) {
+        const task = (response as any).task;
         if (task.status === 'processing') {
           extractingProgress.value = Math.min(70, extractingProgress.value + 5);
           statusText.value = '正在提取信息...';
@@ -293,9 +376,7 @@ const startStatusCheck = () => {
           clearStatusCheck();
         }
       } else {
-        error.value = response.message || '获取任务状态失败';
-        extractingStatus.value = 'exception';
-        clearStatusCheck();
+        throw new Error((response as any).message || '获取任务状态失败');
       }
     } catch (err: any) {
       error.value = err.message || '检查任务状态时发生错误';
@@ -304,73 +385,128 @@ const startStatusCheck = () => {
     }
   }, 2000);
 };
-// 清除状态检查
+
 const clearStatusCheck = () => {
   if (statusCheckInterval.value) {
     clearInterval(statusCheckInterval.value);
     statusCheckInterval.value = null;
   }
 };
-// 复制文本
+
 const copyText = () => {
-  if (!extractedText.value) {
-    return;
-  }
-  
-  navigator.clipboard.writeText(extractedText.value)
-    .then(() => {
-      ElMessage.success('文本已复制到剪贴板');
-    })
-    .catch(() => {
-      ElMessage.error('复制失败，请手动复制');
-    });
+  if (!extractedText.value) return;
+  navigator.clipboard.writeText(formattedJsonResult.value)
+    .then(() => ElMessage.success('结果已复制到剪贴板'))
+    .catch(() => ElMessage.error('复制失败'));
 };
-// 导出文本
+
 const exportText = () => {
-  if (!extractedText.value || !selectedFile.value) {
-    return;
-  }
-  
+  if (!extractedText.value || !selectedFile.value) return;
   const fileName = selectedFile.value.name.split('.')[0];
   const blob = new Blob([extractedText.value], { type: 'text/plain;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.download = `${fileName}_提取结果.txt`;
-  document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
   URL.revokeObjectURL(url);
-  ElMessage.success('导出成功');
 };
-// 格式化文件大小
+
 const formatFileSize = (size: number) => {
-  if (size < 1024) {
-    return size + ' B';
-  } else if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(2) + ' KB';
-  } else {
-    return (size / (1024 * 1024)).toFixed(2) + ' MB';
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+};
+
+// Custom field methods
+const addField = () => {
+  extractionFields.value.push({ value: '' });
+};
+
+const removeField = (index: number) => {
+  if (extractionFields.value.length > 1) {
+    extractionFields.value.splice(index, 1);
   }
 };
+
+const copyTemplateForEditing = (template: any) => {
+  // Switch to custom mode
+  selectedTemplateId.value = 'custom';
+  
+  // Load fields into the editor
+  try {
+    const fields = JSON.parse(template.fields);
+    extractionFields.value = fields.map((field: string) => ({ value: field }));
+  } catch (e) {
+    ElMessage.error('模板字段解析失败');
+    extractionFields.value = [{ value: '' }];
+  }
+  
+  // Pre-fill the save-as form
+  newTemplateName.value = `${template.name} - 副本`;
+  newTemplateType.value = template.contractType;
+
+  ElMessage.success(`“${template.name}”已加载到编辑区`);
+};
+
+const saveAsTemplate = async () => {
+  if (!canSaveTemplate.value) return;
+  try {
+    const fields = extractionFields.value.map(field => field.value.trim());
+    const template = {
+      name: newTemplateName.value,
+      contractType: newTemplateType.value,
+      fields: JSON.stringify(fields),
+      type: 'user',
+      creatorId: userId.value,
+      isDefault: false,
+      description: `用户自定义模板`
+    };
+    const response = await aiContract.createTemplate(template);
+    if ((response as any).success) {
+      ElMessage.success('模板保存成功');
+      newTemplateName.value = '';
+      loadInitialData(); // Refresh templates
+    } else {
+      ElMessage.error((response as any).message || '保存模板失败');
+    }
+  } catch (err: any) {
+    ElMessage.error(err.message || '保存模板出错');
+  }
+};
+
+// --- Lifecycle & Watchers ---
+onMounted(loadInitialData);
+
+watch(selectedTemplateId, (newId) => {
+  if (typeof newId === 'number') {
+    const template = templates.value.find(t => t.id === newId);
+    if (template) {
+      selectedTemplateFields.value = JSON.parse(template.fields);
+    }
+  } else {
+    selectedTemplateFields.value = [];
+    if (extractionFields.value.length === 0 || (extractionFields.value.length === 1 && !extractionFields.value[0].value)) {
+      extractionFields.value = [{ value: '' }];
+    }
+  }
+});
 </script>
 
 <style scoped>
 .contract-extractor {
-  width: 100%;
-  max-width: 800px;
-  margin: 0 auto;
+  padding: 20px;
 }
-.contract-extractor-card {
-  margin-bottom: 20px;
+.main-content-card, .template-selector-card {
+  height: 100%;
 }
 .card-header {
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
+  align-items: center;
 }
-.card-header h3 {
+.card-header-left h3 {
   margin: 0;
-  font-size: 18px;
 }
 .subtitle {
   font-size: 14px;
@@ -378,7 +514,7 @@ const formatFileSize = (size: number) => {
   margin-top: 5px;
 }
 .upload-area {
-  margin: 20px 0;
+  margin-bottom: 20px;
 }
 .file-info-actions {
   display: flex;
@@ -395,14 +531,14 @@ const formatFileSize = (size: number) => {
   gap: 8px;
   color: #606266;
 }
-.dynamic-prompts {
+.fields-display-area {
   margin-top: 20px;
-  padding: 15px;
-  border: 1px solid #e4e7ed;
-  border-radius: 4px;
 }
-.dynamic-prompts h4 {
-  margin: 0 0 15px 0;
+.field-tag {
+  margin: 4px;
+}
+.dynamic-prompts {
+  margin-top: 10px;
 }
 .prompt-item {
   display: flex;
@@ -410,30 +546,21 @@ const formatFileSize = (size: number) => {
   gap: 10px;
   margin-bottom: 10px;
 }
-.recommended-tags {
-  margin-top: 15px;
+.save-as-template {
+  margin-top: 20px;
+}
+.save-template-form {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  margin-top: 10px;
 }
-.tag-item {
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.tag-item:hover {
-  opacity: 0.8;
-}
-.extracting-status {
-  margin: 20px 0;
+.extracting-status, .result-area, .error-message {
+  margin-top: 20px;
 }
 .status-text {
   margin-top: 10px;
   text-align: center;
   color: #606266;
-}
-.result-area {
-  margin-top: 20px;
 }
 .result-header {
   display: flex;
@@ -441,19 +568,55 @@ const formatFileSize = (size: number) => {
   align-items: center;
   margin-bottom: 10px;
 }
-.result-header h4 {
-  margin: 0;
-  font-size: 16px;
-}
-.result-actions {
-  display: flex;
-  gap: 10px;
-}
 .result-text {
-  margin-top: 10px;
+  background-color: #f5f5f5;
+  padding: 15px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
   font-family: monospace;
 }
-.error-message {
-  margin-top: 20px;
+.template-radio-group {
+  display: flex;
+  flex-direction: column;
+}
+.template-radio-item {
+  display: flex;
+  height: 32px;
+  align-items: center;
+}
+.template-radio-item {
+  flex-grow: 1;
+}
+
+.template-item-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.copy-button {
+  margin-left: 10px;
+  flex-shrink: 0;
+}
+
+.template-tag {
+  margin-left: 8px;
+}
+.custom-radio {
+  margin-top: 10px;
+}
+.no-template-tip {
+  color: #909399;
+  font-size: 14px;
+  padding: 10px;
+}
+:deep(.el-collapse-item__header) {
+  font-size: 16px;
+  font-weight: 500;
+}
+:deep(.el-collapse-item__content) {
+  padding-bottom: 0;
 }
 </style>

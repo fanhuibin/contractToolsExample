@@ -113,13 +113,17 @@ export const aiContract = {
    * 提取合同信息
    * @param file 合同文件（支持PDF、Word、Excel、图片等）
    * @param prompt 可选的提取提示
+   * @param templateId 可选的模板ID
    * @returns 响应结果
    */
-  extractInfo(file: File, prompt?: string) {
+  extractInfo(file: File, prompt?: string, templateId?: number) {
     const formData = new FormData();
     formData.append('file', file);
     if (prompt) {
       formData.append('prompt', prompt);
+    }
+    if (templateId) {
+      formData.append('templateId', templateId.toString());
     }
     return request.post('/ai/contract/extract', formData, {
       headers: {
@@ -135,11 +139,106 @@ export const aiContract = {
    */
   getTaskStatus(taskId: string) {
     return request.get(`/ai/contract/status/${taskId}`);
+  },
+  
+  /**
+   * 获取所有合同提取模板
+   * @param userId 可选的用户ID
+   * @returns 模板列表
+   */
+  getTemplates(userId?: string) {
+    const params = userId ? `?userId=${userId}` : '';
+    return request.get(`/ai/contract/template/list${params}`);
+  },
+  
+  /**
+   * 根据合同类型获取模板
+   * @param contractType 合同类型
+   * @param userId 可选的用户ID
+   * @returns 模板列表
+   */
+  getTemplatesByType(contractType: string, userId?: string) {
+    const params = userId ? `?userId=${userId}` : '';
+    return request.get(`/ai/contract/template/type/${contractType}${params}`);
+  },
+  
+  /**
+   * 获取所有合同类型
+   * @returns 合同类型列表
+   */
+  getContractTypes() {
+    return request.get('/ai/contract/template/contract-types');
+  },
+  
+  /**
+   * 获取指定合同类型的默认模板
+   * @param contractType 合同类型
+   * @returns 默认模板
+   */
+  getDefaultTemplate(contractType: string) {
+    return request.get(`/ai/contract/template/default/${contractType}`);
+  },
+  
+  /**
+   * 创建新模板
+   * @param template 模板信息
+   * @returns 创建的模板
+   */
+  createTemplate(template: any) {
+    return request.post('/ai/contract/template/create', template);
+  },
+  
+  /**
+   * 更新模板
+   * @param id 模板ID
+   * @param template 模板信息
+   * @returns 更新后的模板
+   */
+  updateTemplate(id: number, template: any) {
+    return request.put(`/ai/contract/template/${id}`, template);
+  },
+  
+  /**
+   * 删除模板
+   * @param id 模板ID
+   * @returns 操作结果
+   */
+  deleteTemplate(id: number) {
+    return request.delete(`/ai/contract/template/${id}`);
+  },
+  
+  /**
+   * 复制模板
+   * @param id 源模板ID
+   * @param newName 新模板名称
+   * @param userId 用户ID
+   * @returns 复制的新模板
+   */
+  copyTemplate(id: number, newName: string, userId: string) {
+    return request.post(`/ai/contract/template/${id}/copy?newName=${encodeURIComponent(newName)}&userId=${userId}`);
+  },
+  
+  /**
+   * 设置默认模板
+   * @param id 模板ID
+   * @param contractType 合同类型
+   * @returns 设置为默认的模板
+   */
+  setDefaultTemplate(id: number, contractType: string) {
+    return request.post(`/ai/contract/template/${id}/set-default?contractType=${contractType}`);
+  },
+
+  /**
+   * 获取提取历史记录
+   * @param userId 用户ID
+   * @returns 历史记录列表
+   */
+  getHistory(userId: string) {
+    return request.get(`/ai/contract/history/list?userId=${userId}`);
   }
 };
 
 export default {
   aiChat,
-  aiPdf,
   aiContract
 };

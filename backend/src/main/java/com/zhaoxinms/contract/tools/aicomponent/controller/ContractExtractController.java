@@ -1,10 +1,10 @@
 package com.zhaoxinms.contract.tools.aicomponent.controller;
 
-import com.zhaoxinms.contract.tools.aicomponent.config.AiProperties;
+import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractHistoryService;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractService;
 import com.zhaoxinms.contract.tools.aicomponent.util.AiLimitUtil;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,17 +25,13 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 @RestController
 @RequestMapping("/ai/contract")
+@AllArgsConstructor
 public class ContractExtractController {
 
-    @Autowired
-    private ContractExtractService contractExtractService;
-    
-    @Autowired
-    private AiProperties aiProperties;
-    
-    @Autowired
-    private AiLimitUtil aiLimitUtil;
-    
+    private final ContractExtractService contractExtractService;
+    private final AiLimitUtil aiLimitUtil;
+    private final ContractExtractHistoryService contractExtractHistoryService;
+
     // 存储抽取任务状态
     private final Map<String, Map<String, Object>> extractTasks = new ConcurrentHashMap<>();
 
@@ -54,7 +50,8 @@ public class ContractExtractController {
     @PostMapping("/extract")
     public ResponseEntity<Map<String, Object>> extractInfo(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "prompt", required = false) String prompt) {
+            @RequestParam(value = "prompt", required = false) String prompt,
+            @RequestParam(value = "templateId", required = false) Long templateId) {
         
         log.info("收到合同信息提取请求，文件名: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
         
@@ -75,13 +72,6 @@ public class ContractExtractController {
                 return ResponseEntity.ok(createResponse(false, "不支持的文件格式，支持的格式有：PDF、Word、Excel、图片", null));
             }
             
-            // 检查文件大小 - 增加到30MB
-            long maxFileSize = 30 * 1024 * 1024; // 30MB
-            if (file.getSize() > maxFileSize) {
-                return ResponseEntity.ok(createResponse(false, 
-                        "文件大小超过限制：" + (maxFileSize / 1024 / 1024) + "MB", null));
-            }
-            
             // 创建任务ID
             String taskId = UUID.randomUUID().toString();
             
@@ -94,6 +84,7 @@ public class ContractExtractController {
             extractTasks.put(taskId, taskStatus);
             
             // 异步处理文件提取
+            String finalFileName = fileName;
             new Thread(() -> {
                 try {
                     // 保存文件到临时目录
@@ -102,11 +93,11 @@ public class ContractExtractController {
                         Files.createDirectories(tempDir);
                     }
                     
-                    Path tempFile = tempDir.resolve(fileName);
+                    Path tempFile = tempDir.resolve(finalFileName);
                     Files.write(tempFile, file.getBytes());
                     
                     // 提取信息
-                    String extractedInfo = contractExtractService.processFile(tempFile, prompt);
+                    String extractedInfo = contractExtractService.processFile(tempFile, prompt, templateId);
                     
                     // 删除临时文件
                     Files.deleteIfExists(tempFile);
@@ -115,6 +106,13 @@ public class ContractExtractController {
                     taskStatus.put("status", "completed");
                     taskStatus.put("result", extractedInfo);
                     taskStatus.put("endTime", System.currentTimeMillis());
+
+                    // 保存历史记录
+                    // TODO: 获取真实用户ID
+                    String userId = "default-user"; 
+                    contractExtractHistoryService.saveHistory(finalFileName, extractedInfo, userId);
+                    log.info("提取记录已保存，文件名: {}", finalFileName);
+
                 } catch (Exception e) {
                     log.error("合同信息提取失败", e);
                     taskStatus.put("status", "failed");
