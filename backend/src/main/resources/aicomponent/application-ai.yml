@@ -15,8 +15,8 @@ jnpf:
     # 请求超时时间(秒)
     timeout: 30
     # 用户请求限制
-    user-limit-count: 1
-    user-limit-time: 3s
+    user-limit-count: 3
+    user-limit-time: 10s
     # 全局请求限制
     total-limit-count: 500
     total-limit-time: 1m
