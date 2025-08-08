@@ -55,6 +55,8 @@ zxcm:
     contract:
       # 是否启用合同提取功能
       enabled: true
+      # 是否在SDK中强制执行规则库（normalize+validate）
+      enforce-rules: true
       # 最大文件大小(字节)
       max-file-size: 31457280 # 30MB
       # 临时文件存储路径

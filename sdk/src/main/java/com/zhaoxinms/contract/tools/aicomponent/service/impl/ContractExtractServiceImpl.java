@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.aicomponent.config.AiProperties;
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractService;
+import com.zhaoxinms.contract.tools.aicomponent.service.RuleLoaderService;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
@@ -24,6 +25,7 @@ import org.springframework.util.StringUtils;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 
@@ -45,6 +47,13 @@ public class ContractExtractServiceImpl implements ContractExtractService {
     
     @Autowired
     private ObjectMapper objectMapper;
+
+    // RuleLoaderService will be used in next step to load prompt rules; suppress unused for now
+    @Autowired
+    @SuppressWarnings("unused")
+    private RuleLoaderService ruleLoaderService;
+
+    // RuleEngineService removed: now AI does the normalization/compute via prompt
     
     private OpenAIClient createClient() {
         // 从配置中随机选择一个API密钥
@@ -153,7 +162,57 @@ public class ContractExtractServiceImpl implements ContractExtractService {
         String fileId = uploadFile(filePath);
         
         // 提取信息
-        return extractInfo(fileId, prompt, templateId);
+        String raw = extractInfo(fileId, prompt, templateId);
+        try {
+            // parse model output to map
+            String jsonCandidate = sanitizeModelJson(raw);
+            Map<String, Object> resultMap = objectMapper.readValue(jsonCandidate, new TypeReference<Map<String, Object>>(){});
+
+            // load template to get contractType
+            // keep contractType resolution for potential prompt customization
+            @SuppressWarnings("unused")
+            String contractType = null;
+            if (templateId != null) {
+                Optional<ContractExtractTemplate> templateOpt = templateService.getTemplateById(templateId);
+                if (templateOpt.isPresent()) {
+                    contractType = templateOpt.get().getContractType();
+                }
+            }
+
+            // No local rule processing; return sanitized JSON from model
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(resultMap);
+        } catch (Exception ex) {
+            log.warn("Failed to normalize/validate extracted result, fallback to raw", ex);
+        }
+        return raw;
+    }
+
+    /**
+     * Models sometimes wrap JSON in fenced code blocks like ```json ... ```.
+     * This method extracts the inner JSON text if found; otherwise returns the original string.
+     */
+    private String sanitizeModelJson(String raw) {
+        if (raw == null) { return null; }
+        String s = raw.trim();
+        int start = s.indexOf("```");
+        if (start >= 0) {
+            int end = s.indexOf("```", start + 3);
+            if (end > start) {
+                String inside = s.substring(start + 3, end);
+                // remove optional language hint like 'json' at the beginning
+                inside = inside.replaceFirst("^\\s*[a-zA-Z]+\\s*", "");
+                return inside.trim();
+            }
+            // remove leading fence if only one found
+            s = s.substring(start + 3).trim();
+            s = s.replaceFirst("^json\\s*", "");
+            return s;
+        }
+        // Also handle the case where language hint appears without fences (rare)
+        if (s.startsWith("json\n") || s.startsWith("json\r\n")) {
+            return s.substring(5).trim();
+        }
+        return s;
     }
     
     /**
@@ -164,16 +223,14 @@ public class ContractExtractServiceImpl implements ContractExtractService {
      * @return 最终提示词
      */
     private String buildPrompt(String prompt, Long templateId) {
-        // 如果没有提供模板ID和提示词，使用默认提示
-        if (templateId == null && (prompt == null || prompt.trim().isEmpty())) {
-            return "请提取这份文件中的关键信息，包括合同名称、合同双方、合同金额、签订日期、合同期限等。请以JSON格式返回结果。";
-        }
-        
-        // 如果提供了提示词但没有模板ID，直接使用提示词
+        // 如果没有提供模板ID，沿用传入提示词或默认提示
         if (templateId == null) {
+            if (prompt == null || prompt.trim().isEmpty()) {
+                return "请提取这份文件中的关键信息，包括合同名称、合同双方、合同金额、签订日期、合同期限等。请以JSON格式返回结果。";
+            }
             return prompt + " 请以JSON格式返回结果。";
         }
-        
+
         try {
             // 获取模板
             Optional<ContractExtractTemplate> templateOpt = templateService.getTemplateById(templateId);
@@ -187,24 +244,82 @@ public class ContractExtractServiceImpl implements ContractExtractService {
             ContractExtractTemplate template = templateOpt.get();
             
             // 解析模板字段
-            List<String> fields = objectMapper.readValue(template.getFields(), new TypeReference<List<String>>() {});
-            
-            // 构建提示词
+            List<String> dbFields = objectMapper.readValue(template.getFields(), new TypeReference<List<String>>() {});
+
+            // 加载合同比例的 prompt 规则
+            String contractType = template.getContractType();
             StringBuilder promptBuilder = new StringBuilder();
-            promptBuilder.append("请从文档中提取以下信息：");
-            
-            for (String field : fields) {
-                promptBuilder.append("\n- ").append(field);
+
+            var rulesOpt = ruleLoaderService.loadRules(contractType);
+            if (rulesOpt.isPresent() && rulesOpt.get().getPrompt() != null) {
+                var ps = rulesOpt.get().getPrompt();
+
+                // 全局约束
+                if (ps.getGlobal() != null && !ps.getGlobal().isEmpty()) {
+                    for (String line : ps.getGlobal()) {
+                        promptBuilder.append(line).append("\n");
+                    }
+                }
+
+                // 合并字段清单（DB 字段 + prompt.fields 的键）
+                java.util.LinkedHashSet<String> finalFields = new java.util.LinkedHashSet<>(dbFields);
+                if (ps.getFields() != null && !ps.getFields().isEmpty()) {
+                    finalFields.addAll(ps.getFields().keySet());
+                }
+
+                promptBuilder.append("请从文档中提取以下信息（仅输出这些键）：");
+                for (String f : finalFields) {
+                    promptBuilder.append("\n- ").append(f);
+                }
+
+                // 字段级规则
+                if (ps.getFields() != null && !ps.getFields().isEmpty()) {
+                    promptBuilder.append("\n\n字段规则：");
+                    for (var entry : ps.getFields().entrySet()) {
+                        String fname = entry.getKey();
+                        List<String> rules = entry.getValue();
+                        if (rules == null || rules.isEmpty()) continue;
+                        promptBuilder.append("\n- ").append(fname).append("：");
+                        for (String r : rules) {
+                            promptBuilder.append("\n  • ").append(r);
+                        }
+                    }
+                }
+
+                // 负面约束
+                if (ps.getNegative() != null && !ps.getNegative().isEmpty()) {
+                    promptBuilder.append("\n\n禁止项：");
+                    for (String line : ps.getNegative()) {
+                        promptBuilder.append("\n- ").append(line);
+                    }
+                }
+
+                // 输出格式
+                if (ps.getFormat() != null && !ps.getFormat().isEmpty()) {
+                    promptBuilder.append("\n\n输出格式要求：");
+                    for (String line : ps.getFormat()) {
+                        promptBuilder.append("\n- ").append(line);
+                    }
+                }
+
+                // 用户额外提示
+                if (StringUtils.hasText(prompt)) {
+                    promptBuilder.append("\n\n用户额外要求：").append(prompt);
+                }
+                return promptBuilder.toString();
             }
-            
-            promptBuilder.append("\n\n请以JSON格式返回结果，确保每个字段都有对应的键值对。如果无法提取某个字段的信息，请将其值设为null。");
-            
-            // 如果用户提供了额外的提示，添加到最后
+
+            // 若无 prompt 配置，退化为旧逻辑
+            StringBuilder fallback = new StringBuilder();
+            fallback.append("请从文档中提取以下信息：");
+            for (String field : dbFields) {
+                fallback.append("\n- ").append(field);
+            }
+            fallback.append("\n\n请以JSON格式返回结果，确保每个字段都有对应的键值对。如果无法提取某个字段的信息，请将其值设为null。");
             if (StringUtils.hasText(prompt)) {
-                promptBuilder.append("\n\n用户额外要求：").append(prompt);
+                fallback.append("\n\n用户额外要求：").append(prompt);
             }
-            
-            return promptBuilder.toString();
+            return fallback.toString();
         } catch (JsonProcessingException e) {
             log.error("解析模板字段失败", e);
             return prompt != null && !prompt.trim().isEmpty() ? 

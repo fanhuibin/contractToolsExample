@@ -4,7 +4,7 @@
   "defaults": {"type": "string", "required": false, "normalize": ["trim"]},
   "fields": {
     "合同编号": {"type": "string", "normalize": ["trim"]},
-    "合同名称": {"type": "string", "required": true, "normalize": ["trim", {"regexReplace": ["(合同|合同书)$", ""]}], "denyContains": ["合同", "合同书"], "maxLength": 100, "promptHints": ["返回纯名称，不包含‘合同/合同书’字样"]},
+    "合同名称": {"type": "string", "required": true, "normalize": ["trim", {"regexReplace": ["(合同|合同书)$", ""]}], "maxLength": 100, "promptHints": ["返回纯名称，不包含‘合同/合同书’字样"]},
     "甲方名称": {"type": "string", "normalize": ["trim"], "maxLength": 200},
     "乙方名称": {"type": "string", "normalize": ["trim"], "maxLength": 200},
     "甲方联系地址": {"type": "string", "normalize": ["trim"]},
