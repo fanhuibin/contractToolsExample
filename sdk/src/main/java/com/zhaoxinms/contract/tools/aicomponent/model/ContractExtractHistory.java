@@ -1,27 +1,23 @@
 package com.zhaoxinms.contract.tools.aicomponent.model;
 
-import java.time.LocalDateTime;
-import javax.persistence.*;
-
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 @Data
-@Entity
-@Table(name = "contract_extract_history")
+@TableName("contract_extract_history")
 public class ContractExtractHistory {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false)
-    private String fileName; 
+    private String fileName;
 
-    @Lob
-    @Column(nullable = false)
     private String extractedContent;
 
-    @Column(nullable = false)
     private LocalDateTime extractTime;
 
     private String userId;

@@ -36,4 +36,9 @@ public class ClauseField {
      * 条款类型名称
      */
     private String typeName;
+
+    /**
+     * 测试值（用于前端调试预览）
+     */
+    private String sampleValue;
 } 

@@ -1,6 +1,7 @@
 package com.zhaoxinms.contract.tools.aicomponent.controller;
 
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractHistoryService;
+import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractService;
 import com.zhaoxinms.contract.tools.aicomponent.util.AiLimitUtil;
 import lombok.AllArgsConstructor;
@@ -59,7 +60,7 @@ public class ContractExtractController {
      * @return 抽取结果
      */
     @PostMapping("/extract")
-    public ResponseEntity<Map<String, Object>> extractInfo(
+    public Result<Map<String, Object>> extractInfo(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "prompt", required = false) String prompt,
             @RequestParam(value = "templateId", required = false) Long templateId) {
@@ -68,19 +69,19 @@ public class ContractExtractController {
         
         // 检查限流
         if (!aiLimitUtil.tryAcquire("system")) {
-            return ResponseEntity.ok(createResponse(false, "请求过于频繁，请稍后再试", null));
+            return Result.error("请求过于频繁，请稍后再试");
         }
         
         try {
             // 检查文件
             if (file.isEmpty()) {
-                return ResponseEntity.ok(createResponse(false, "请选择文件", null));
+                return Result.error("请选择文件");
             }
             
             // 检查文件类型
             String fileName = file.getOriginalFilename();
             if (fileName == null || !isSupportedFileType(fileName)) {
-                return ResponseEntity.ok(createResponse(false, "不支持的文件格式，支持的格式有：PDF、Word、Excel、图片", null));
+                return Result.error("不支持的文件格式，支持的格式有：PDF、Word、Excel、图片");
             }
             
             // 创建任务ID
@@ -141,13 +142,12 @@ public class ContractExtractController {
             }).start();
             
             // 返回任务ID
-            Map<String, Object> result = createResponse(true, "合同信息提取任务已提交", null);
+            Map<String, Object> result = new HashMap<>();
             result.put("taskId", taskId);
-            
-            return ResponseEntity.ok(result);
+            return Result.success("合同信息提取任务已提交", result);
         } catch (Exception e) {
             log.error("处理合同信息提取请求时发生错误", e);
-            return ResponseEntity.ok(createResponse(false, "服务器错误: " + e.getMessage(), null));
+            return Result.error("服务器错误: " + e.getMessage());
         }
     }
     
@@ -158,15 +158,15 @@ public class ContractExtractController {
      * @return 任务状态
      */
     @GetMapping("/status/{taskId}")
-    public ResponseEntity<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
+    public Result<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
         if (!extractTasks.containsKey(taskId)) {
-            return ResponseEntity.ok(createResponse(false, "任务不存在", null));
+            return Result.error("任务不存在");
         }
         
         Map<String, Object> taskStatus = extractTasks.get(taskId);
-        Map<String, Object> result = createResponse(true, "成功", null);
+        Map<String, Object> result = new HashMap<>();
         result.put("task", taskStatus);
-        
+
         // 如果任务已完成或失败，并且已经过了一段时间，则从缓存中移除
         String status = (String) taskStatus.get("status");
         if (("completed".equals(status) || "failed".equals(status)) && 
@@ -176,8 +176,8 @@ public class ContractExtractController {
                 extractTasks.remove(taskId);
             }
         }
-        
-        return ResponseEntity.ok(result);
+
+        return Result.success("成功", result);
     }
     
     /**
@@ -204,13 +204,5 @@ public class ContractExtractController {
      * @param data 数据
      * @return 响应对象
      */
-    private Map<String, Object> createResponse(boolean success, String message, Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("message", message);
-        if (data != null) {
-            response.put("data", data);
-        }
-        return response;
-    }
+    // 统一结果返回，删除自定义的createResponse
 }

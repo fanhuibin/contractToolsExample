@@ -2,14 +2,12 @@ package com.zhaoxinms.contract.tools.aicomponent.controller;
 
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
+import com.zhaoxinms.contract.tools.common.Result;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -21,11 +19,10 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/ai/contract/template")
+@RequiredArgsConstructor
 public class ContractExtractTemplateController {
 
-    @Autowired
-    @Qualifier("contractExtractTemplateServiceImpl")
-    private ContractExtractTemplateService templateService;
+    private final ContractExtractTemplateService templateService;
 
     /**
      * 获取所有模板
@@ -34,7 +31,7 @@ public class ContractExtractTemplateController {
      * @return 模板列表
      */
     @GetMapping("/list")
-    public ResponseEntity<Map<String, Object>> getAllTemplates(
+    public Result<List<ContractExtractTemplate>> getAllTemplates(
             @RequestParam(value = "userId", required = false) String userId) {
         
         log.info("获取所有模板，用户ID: {}", userId);
@@ -50,10 +47,10 @@ public class ContractExtractTemplateController {
                 templates = templateService.getSystemTemplates();
             }
             
-            return ResponseEntity.ok(createResponse(true, "获取模板列表成功", templates));
+            return Result.success("获取模板列表成功", templates);
         } catch (Exception e) {
             log.error("获取模板列表失败", e);
-            return ResponseEntity.ok(createResponse(false, "获取模板列表失败: " + e.getMessage(), null));
+            return Result.error("获取模板列表失败: " + e.getMessage());
         }
     }
     
@@ -65,7 +62,7 @@ public class ContractExtractTemplateController {
      * @return 模板列表
      */
     @GetMapping("/type/{contractType}")
-    public ResponseEntity<Map<String, Object>> getTemplatesByContractType(
+    public Result<List<ContractExtractTemplate>> getTemplatesByContractType(
             @PathVariable String contractType,
             @RequestParam(value = "userId", required = false) String userId) {
         
@@ -82,10 +79,10 @@ public class ContractExtractTemplateController {
                 templates = templateService.getTemplatesByContractType(contractType);
             }
             
-            return ResponseEntity.ok(createResponse(true, "获取模板列表成功", templates));
+            return Result.success("获取模板列表成功", templates);
         } catch (Exception e) {
             log.error("获取模板列表失败", e);
-            return ResponseEntity.ok(createResponse(false, "获取模板列表失败: " + e.getMessage(), null));
+            return Result.error("获取模板列表失败: " + e.getMessage());
         }
     }
     
@@ -95,13 +92,13 @@ public class ContractExtractTemplateController {
      * @return 合同类型列表
      */
     @GetMapping("/contract-types")
-    public ResponseEntity<Map<String, Object>> getAllContractTypes() {
+    public Result<Map<String, String>> getAllContractTypes() {
         try {
             Map<String, String> contractTypes = templateService.getAllContractTypes();
-            return ResponseEntity.ok(createResponse(true, "获取合同类型列表成功", contractTypes));
+            return Result.success("获取合同类型列表成功", contractTypes);
         } catch (Exception e) {
             log.error("获取合同类型列表失败", e);
-            return ResponseEntity.ok(createResponse(false, "获取合同类型列表失败: " + e.getMessage(), null));
+            return Result.error("获取合同类型列表失败: " + e.getMessage());
         }
     }
     
@@ -112,14 +109,14 @@ public class ContractExtractTemplateController {
      * @return 模板详情
      */
     @GetMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> getTemplateById(@PathVariable Long id) {
+    public Result<ContractExtractTemplate> getTemplateById(@PathVariable Long id) {
         try {
             return templateService.getTemplateById(id)
-                    .map(template -> ResponseEntity.ok(createResponse(true, "获取模板成功", template)))
-                    .orElse(ResponseEntity.ok(createResponse(false, "模板不存在", null)));
+                    .map(template -> Result.success("获取模板成功", template))
+                    .orElse(Result.error("模板不存在"));
         } catch (Exception e) {
             log.error("获取模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "获取模板失败: " + e.getMessage(), null));
+            return Result.error("获取模板失败: " + e.getMessage());
         }
     }
     
@@ -130,7 +127,7 @@ public class ContractExtractTemplateController {
      * @return 创建的模板
      */
     @PostMapping("/create")
-    public ResponseEntity<Map<String, Object>> createTemplate(@RequestBody ContractExtractTemplate template) {
+    public Result<ContractExtractTemplate> createTemplate(@RequestBody ContractExtractTemplate template) {
         try {
             // 设置创建时间和更新时间
             template.setCreateTime(LocalDateTime.now());
@@ -141,11 +138,10 @@ public class ContractExtractTemplateController {
             
             // 创建模板
             ContractExtractTemplate createdTemplate = templateService.createTemplate(template);
-            
-            return ResponseEntity.ok(createResponse(true, "创建模板成功", createdTemplate));
+            return Result.success("创建模板成功", createdTemplate);
         } catch (Exception e) {
             log.error("创建模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "创建模板失败: " + e.getMessage(), null));
+            return Result.error("创建模板失败: " + e.getMessage());
         }
     }
     
@@ -157,7 +153,7 @@ public class ContractExtractTemplateController {
      * @return 更新后的模板
      */
     @PutMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> updateTemplate(
+    public Result<ContractExtractTemplate> updateTemplate(
             @PathVariable Long id,
             @RequestBody ContractExtractTemplate template) {
         try {
@@ -170,13 +166,12 @@ public class ContractExtractTemplateController {
             
             // 更新模板
             ContractExtractTemplate updatedTemplate = templateService.updateTemplate(id, template);
-            
-            return ResponseEntity.ok(createResponse(true, "更新模板成功", updatedTemplate));
+            return Result.success("更新模板成功", updatedTemplate);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.ok(createResponse(false, e.getMessage(), null));
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("更新模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "更新模板失败: " + e.getMessage(), null));
+            return Result.error("更新模板失败: " + e.getMessage());
         }
     }
     
@@ -187,15 +182,15 @@ public class ContractExtractTemplateController {
      * @return 操作结果
      */
     @DeleteMapping("/{id}")
-    public ResponseEntity<Map<String, Object>> deleteTemplate(@PathVariable Long id) {
+    public Result<Void> deleteTemplate(@PathVariable Long id) {
         try {
             templateService.deleteTemplate(id);
-            return ResponseEntity.ok(createResponse(true, "删除模板成功", null));
+            return Result.success("删除模板成功", null);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.ok(createResponse(false, e.getMessage(), null));
+            return Result.error(e.getMessage());
         } catch (Exception e) {
             log.error("删除模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "删除模板失败: " + e.getMessage(), null));
+            return Result.error("删除模板失败: " + e.getMessage());
         }
     }
     
@@ -208,16 +203,16 @@ public class ContractExtractTemplateController {
      * @return 复制的新模板
      */
     @PostMapping("/{id}/copy")
-    public ResponseEntity<Map<String, Object>> copyTemplate(
+    public Result<ContractExtractTemplate> copyTemplate(
             @PathVariable Long id,
             @RequestParam String newName,
             @RequestParam String userId) {
         try {
             ContractExtractTemplate copiedTemplate = templateService.copyTemplate(id, newName, userId);
-            return ResponseEntity.ok(createResponse(true, "复制模板成功", copiedTemplate));
+            return Result.success("复制模板成功", copiedTemplate);
         } catch (Exception e) {
             log.error("复制模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "复制模板失败: " + e.getMessage(), null));
+            return Result.error("复制模板失败: " + e.getMessage());
         }
     }
     
@@ -229,15 +224,15 @@ public class ContractExtractTemplateController {
      * @return 设置为默认的模板
      */
     @PostMapping("/{id}/set-default")
-    public ResponseEntity<Map<String, Object>> setDefaultTemplate(
+    public Result<ContractExtractTemplate> setDefaultTemplate(
             @PathVariable Long id,
             @RequestParam String contractType) {
         try {
             ContractExtractTemplate defaultTemplate = templateService.setDefaultTemplate(id, contractType);
-            return ResponseEntity.ok(createResponse(true, "设置默认模板成功", defaultTemplate));
+            return Result.success("设置默认模板成功", defaultTemplate);
         } catch (Exception e) {
             log.error("设置默认模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "设置默认模板失败: " + e.getMessage(), null));
+            return Result.error("设置默认模板失败: " + e.getMessage());
         }
     }
     
@@ -248,32 +243,14 @@ public class ContractExtractTemplateController {
      * @return 默认模板
      */
     @GetMapping("/default/{contractType}")
-    public ResponseEntity<Map<String, Object>> getDefaultTemplate(@PathVariable String contractType) {
+    public Result<ContractExtractTemplate> getDefaultTemplate(@PathVariable String contractType) {
         try {
             return templateService.getDefaultTemplate(contractType)
-                    .map(template -> ResponseEntity.ok(createResponse(true, "获取默认模板成功", template)))
-                    .orElse(ResponseEntity.ok(createResponse(false, "未找到默认模板", null)));
+                    .map(template -> Result.success("获取默认模板成功", template))
+                    .orElse(Result.error("未找到默认模板"));
         } catch (Exception e) {
             log.error("获取默认模板失败", e);
-            return ResponseEntity.ok(createResponse(false, "获取默认模板失败: " + e.getMessage(), null));
+            return Result.error("获取默认模板失败: " + e.getMessage());
         }
-    }
-    
-    /**
-     * 创建响应对象
-     *
-     * @param success 是否成功
-     * @param message 消息
-     * @param data 数据
-     * @return 响应对象
-     */
-    private Map<String, Object> createResponse(boolean success, String message, Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("message", message);
-        if (data != null) {
-            response.put("data", data);
-        }
-        return response;
     }
 }

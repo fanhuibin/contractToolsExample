@@ -9,6 +9,12 @@ const routes: RouteRecordRaw[] = [
     redirect: '/onlyoffice',
     children: [
       {
+        path: '/template-design',
+        name: 'TemplateDesign',
+        component: () => import('@/views/templates/TemplateDesign.vue'),
+        meta: { title: '模板在线设计', fullscreen: true }
+      },
+      {
         path: '/onlyoffice',
         name: 'OnlyOffice',
         component: () => import('@/views/onlyoffice/OnlyOfficeDemo.vue'),

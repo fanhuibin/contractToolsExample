@@ -3,8 +3,8 @@ package com.zhaoxinms.contract.template.sdk.controller;
 import com.zhaoxinms.contract.tools.api.dto.FieldResponse;
 import com.zhaoxinms.contract.tools.api.dto.TemplateDesignRequest;
 import com.zhaoxinms.contract.tools.api.dto.TemplateDesignResponse;
-import com.zhaoxinms.contract.tools.api.service.TemplateDesignService;
 import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.service.TemplateDesignService;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import io.swagger.annotations.Api;
@@ -21,8 +21,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.validation.Valid;
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
+import com.zhaoxinms.contract.template.sdk.entity.TemplateDesignRecord;
+import com.zhaoxinms.contract.template.sdk.service.TemplateDesignRecordService;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
@@ -44,6 +44,9 @@ public class TemplateDesignController {
     @Value("${zxcm.file.upload.root-path:./uploads}")
     private String uploadRootPath;
 
+    @Autowired(required = false)
+    private TemplateDesignRecordService designRecordService;
+
     @GetMapping("/fields")
     @ApiOperation("获取字段信息")
     public Result<FieldResponse> getFields() {
@@ -53,6 +56,29 @@ public class TemplateDesignController {
         } catch (Exception e) {
             return Result.error("获取字段信息失败：" + e.getMessage());
         }
+    }
+
+    @PostMapping("/design/save")
+    @ApiOperation("保存模板设计元素")
+    public Result<TemplateDesignRecord> saveDesign(@RequestBody TemplateDesignRecord body) {
+        if (designRecordService == null) {
+            return Result.error("保存失败：设计记录服务不可用");
+        }
+        TemplateDesignRecord saved = designRecordService.save(body.getId(), body.getTemplateId(), body.getFileId(), body.getElementsJson());
+        return Result.success(saved);
+    }
+
+    @GetMapping("/design/{id}")
+    @ApiOperation("获取模板设计明细")
+    public Result<TemplateDesignRecord> getDesignDetail(@PathVariable("id") String id) {
+        if (designRecordService == null) {
+            return Result.error("查询失败：设计记录服务不可用");
+        }
+        TemplateDesignRecord record = designRecordService.getById(id);
+        if (record == null) {
+            return Result.error("未找到设计记录");
+        }
+        return Result.success(record);
     }
 
     @GetMapping("/file/download/{fileId}")

@@ -32,11 +32,12 @@ public class TemplateDesignServiceImpl implements TemplateDesignService {
             return templateService.getFields();
         }
         
-        // 否则返回默认的空响应
+        // 否则返回默认的空响应（含印章列表）
         FieldResponse response = new FieldResponse();
         response.setBaseFields(new ArrayList<>());
         response.setCounterpartyFields(new ArrayList<>());
         response.setClauseFields(new ArrayList<>());
+        response.setSealFields(new ArrayList<>());
         return response;
     }
 
@@ -57,9 +58,10 @@ public class TemplateDesignServiceImpl implements TemplateDesignService {
             response.setSessionId(sessionId);
             
             // 构建编辑页面URL
-            String editUrl = request.getBackendUrl() + "/onlyoffice?templateId=" + 
-                           request.getTemplateId() + "&sessionId=" + sessionId + 
-                           "&callbackUrl=" + request.getCallbackUrl();
+            String editUrl = request.getBackendUrl() + 
+                    "/template-design?id=" + request.getTemplateId() +
+                    "&sessionId=" + sessionId +
+                    "&callbackUrl=" + request.getCallbackUrl();
             
             response.setEditUrl(editUrl);
             response.setStatus("SUCCESS");

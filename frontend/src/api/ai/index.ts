@@ -1,39 +1,6 @@
-import axios from 'axios';
+import baseRequest from '@/utils/request'
+
 import * as fulfillment from './fulfillment';
-
-// 创建axios实例
-const request = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
-
-// 请求拦截器
-request.interceptors.request.use(
-  config => {
-    // 从localStorage获取token
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-    return config;
-  },
-  error => {
-    return Promise.reject(error);
-  }
-);
-
-// 响应拦截器
-request.interceptors.response.use(
-  response => {
-    return response.data;
-  },
-  error => {
-    return Promise.reject(error);
-  }
-);
 
 /**
  * AI聊天相关API
@@ -51,7 +18,7 @@ export const aiChat = {
     if (sessionId) {
       params.append('sessionId', sessionId);
     }
-    return request.post('/ai/chat/send', params, {
+    return baseRequest.post('/ai/chat/send', params, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded'
       }
@@ -63,7 +30,7 @@ export const aiChat = {
    * @returns 会话列表
    */
   getSessions() {
-    return request.get('/ai/chat/sessions');
+    return baseRequest.get('/ai/chat/sessions');
   },
 
   /**
@@ -72,7 +39,7 @@ export const aiChat = {
    * @returns 响应结果
    */
   deleteSession(sessionId: string) {
-    return request.delete(`/ai/chat/session/${sessionId}`);
+    return baseRequest.delete(`/ai/chat/session/${sessionId}`);
   }
 };
 
@@ -96,7 +63,7 @@ export const aiContract = {
     if (templateId) {
       formData.append('templateId', templateId.toString());
     }
-    return request.post('/ai/contract/extract', formData, {
+    return baseRequest.post('/ai/contract/extract', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -109,7 +76,7 @@ export const aiContract = {
    * @returns 任务状态
    */
   getTaskStatus(taskId: string) {
-    return request.get(`/ai/contract/status/${taskId}`);
+    return baseRequest.get(`/ai/contract/status/${taskId}`);
   },
   
   /**
@@ -119,7 +86,7 @@ export const aiContract = {
    */
   getTemplates(userId?: string) {
     const params = userId ? `?userId=${userId}` : '';
-    return request.get(`/ai/contract/template/list${params}`);
+    return baseRequest.get(`/ai/contract/template/list${params}`);
   },
   
   /**
@@ -130,7 +97,7 @@ export const aiContract = {
    */
   getTemplatesByType(contractType: string, userId?: string) {
     const params = userId ? `?userId=${userId}` : '';
-    return request.get(`/ai/contract/template/type/${contractType}${params}`);
+    return baseRequest.get(`/ai/contract/template/type/${contractType}${params}`);
   },
   
   /**
@@ -138,7 +105,7 @@ export const aiContract = {
    * @returns 合同类型列表
    */
   getContractTypes() {
-    return request.get('/ai/contract/template/contract-types');
+    return baseRequest.get('/ai/contract/template/contract-types');
   },
   
   /**
@@ -147,7 +114,7 @@ export const aiContract = {
    * @returns 默认模板
    */
   getDefaultTemplate(contractType: string) {
-    return request.get(`/ai/contract/template/default/${contractType}`);
+    return baseRequest.get(`/ai/contract/template/default/${contractType}`);
   },
   
   /**
@@ -156,7 +123,7 @@ export const aiContract = {
    * @returns 创建的模板
    */
   createTemplate(template: any) {
-    return request.post('/ai/contract/template/create', template);
+    return baseRequest.post('/ai/contract/template/create', template);
   },
   
   /**
@@ -166,7 +133,7 @@ export const aiContract = {
    * @returns 更新后的模板
    */
   updateTemplate(id: number, template: any) {
-    return request.put(`/ai/contract/template/${id}`, template);
+    return baseRequest.put(`/ai/contract/template/${id}`, template);
   },
   
   /**
@@ -175,7 +142,7 @@ export const aiContract = {
    * @returns 操作结果
    */
   deleteTemplate(id: number) {
-    return request.delete(`/ai/contract/template/${id}`);
+    return baseRequest.delete(`/ai/contract/template/${id}`);
   },
   
   /**
@@ -186,7 +153,7 @@ export const aiContract = {
    * @returns 复制的新模板
    */
   copyTemplate(id: number, newName: string, userId: string) {
-    return request.post(`/ai/contract/template/${id}/copy?newName=${encodeURIComponent(newName)}&userId=${userId}`);
+    return baseRequest.post(`/ai/contract/template/${id}/copy?newName=${encodeURIComponent(newName)}&userId=${userId}`);
   },
   
   /**
@@ -196,7 +163,7 @@ export const aiContract = {
    * @returns 设置为默认的模板
    */
   setDefaultTemplate(id: number, contractType: string) {
-    return request.post(`/ai/contract/template/${id}/set-default?contractType=${contractType}`);
+    return baseRequest.post(`/ai/contract/template/${id}/set-default?contractType=${contractType}`);
   },
 
   /**
@@ -205,7 +172,7 @@ export const aiContract = {
    * @returns 历史记录列表
    */
   getHistory(userId: string) {
-    return request.get(`/ai/contract/history/list?userId=${userId}`);
+    return baseRequest.get(`/ai/contract/history/list?userId=${userId}`);
   }
 };
 

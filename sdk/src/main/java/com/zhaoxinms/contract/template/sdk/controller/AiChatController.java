@@ -6,7 +6,7 @@ import com.zhaoxinms.contract.tools.aicomponent.util.AiLimitUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.ResponseEntity;
+import com.zhaoxinms.contract.tools.common.Result;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -39,13 +39,13 @@ public class AiChatController {
      * @return AI回复
      */
     @PostMapping("/send")
-    public ResponseEntity<Map<String, Object>> sendMessage(@RequestParam String message, 
+    public Result<Map<String, Object>> sendMessage(@RequestParam String message, 
                                                         @RequestParam(required = false) String sessionId) {
         log.info("收到聊天请求，会话ID: {}, 消息: {}", sessionId, message);
         
         // 检查限流
         if (!aiLimitUtil.tryAcquire("system")) {
-            return ResponseEntity.ok(createResponse(false, "请求过于频繁，请稍后再试", null));
+            return Result.error("请求过于频繁，请稍后再试");
         }
         
         try {
@@ -66,8 +66,8 @@ public class AiChatController {
             String reply = openAiService.completion(messages);
             
             // 检查AI服务是否返回错误信息
-            if (reply.startsWith("API调用失败") || reply.startsWith("AI服务异常") || reply.startsWith("请求过于频繁")) {
-                return ResponseEntity.ok(createResponse(false, reply, null));
+            if (reply != null && (reply.startsWith("API调用失败") || reply.startsWith("AI服务异常") || reply.startsWith("请求过于频繁"))) {
+                return Result.error(reply);
             }
             
             // 添加AI回复到会话历史
@@ -86,13 +86,13 @@ public class AiChatController {
                 sessionMessages.put(sessionId, recentMessages);
             }
             
-            Map<String, Object> result = createResponse(true, "成功", reply);
+            Map<String, Object> result = new HashMap<>();
+            result.put("reply", reply);
             result.put("sessionId", sessionId);
-            
-            return ResponseEntity.ok(result);
+            return Result.success("成功", result);
         } catch (Exception e) {
             log.error("处理聊天请求时发生错误", e);
-            return ResponseEntity.ok(createResponse(false, "服务器错误: " + e.getMessage(), null));
+            return Result.error("服务器错误: " + e.getMessage());
         }
     }
     /**
@@ -101,7 +101,7 @@ public class AiChatController {
      * @return 会话列表
      */
     @GetMapping("/sessions")
-    public ResponseEntity<Map<String, Object>> getSessions() {
+    public Result<List<Map<String, Object>>> getSessions() {
         List<Map<String, Object>> sessions = new ArrayList<>();
         
         for (Map.Entry<String, List<ChatMessage>> entry : sessionMessages.entrySet()) {
@@ -132,10 +132,7 @@ public class AiChatController {
             sessions.add(session);
         }
         
-        Map<String, Object> result = createResponse(true, "成功", null);
-        result.put("sessions", sessions);
-        
-        return ResponseEntity.ok(result);
+        return Result.success("成功", sessions);
     }
     
     /**
@@ -145,12 +142,12 @@ public class AiChatController {
      * @return 操作结果
      */
     @DeleteMapping("/session/{sessionId}")
-    public ResponseEntity<Map<String, Object>> deleteSession(@PathVariable String sessionId) {
+    public Result<Void> deleteSession(@PathVariable String sessionId) {
         if (sessionMessages.containsKey(sessionId)) {
             sessionMessages.remove(sessionId);
-            return ResponseEntity.ok(createResponse(true, "会话已删除", null));
+            return Result.success("会话已删除", null);
         } else {
-            return ResponseEntity.ok(createResponse(false, "会话不存在", null));
+            return Result.error("会话不存在");
         }
     }
     
@@ -160,7 +157,7 @@ public class AiChatController {
      * @return OCR识别结果
      */
     @GetMapping("/test")
-    public ResponseEntity<Map<String, Object>> testImageOcr() {
+    public Result<String> testImageOcr() {
         log.info("开始测试图片OCR识别功能");
         
         try {
@@ -170,7 +167,7 @@ public class AiChatController {
             // 检查文件是否存在
             java.io.File imageFile = new java.io.File(imagePath);
             if (!imageFile.exists()) {
-                return ResponseEntity.ok(createResponse(false, "图片文件不存在: " + imagePath, null));
+                return Result.error("图片文件不存在: " + imagePath);
             }
             
             log.info("图片文件存在，大小: {} bytes", imageFile.length());
@@ -213,13 +210,13 @@ public class AiChatController {
             log.info("OCR API调用完成，返回结果长度: {}", reply != null ? reply.length() : 0);
             
             if (reply.startsWith("API调用失败") || reply.startsWith("AI服务异常") || reply.startsWith("请求过于频繁")) {
-                return ResponseEntity.ok(createResponse(false, "OCR识别失败: " + reply, null));
+                return Result.error("OCR识别失败: " + reply);
             } else {
-                return ResponseEntity.ok(createResponse(true, "OCR识别成功", reply));
+                return Result.success("OCR识别成功", reply);
             }
         } catch (Exception e) {
             log.error("测试OCR识别时发生错误", e);
-            return ResponseEntity.ok(createResponse(false, "OCR识别测试失败: " + e.getMessage(), null));
+            return Result.error("OCR识别测试失败: " + e.getMessage());
         }
     }
     
@@ -231,13 +228,5 @@ public class AiChatController {
      * @param data 数据
      * @return 响应对象
      */
-    private Map<String, Object> createResponse(boolean success, String message, Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("message", message);
-        if (data != null) {
-            response.put("data", data);
-        }
-        return response;
-    }
+    // 统一返回格式，删除旧的 createResponse
 }

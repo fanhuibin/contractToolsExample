@@ -1,24 +1,20 @@
 package com.zhaoxinms.contract.tools.aicomponent.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhaoxinms.contract.tools.aicomponent.mapper.ContractExtractTemplateMapper;
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
-import com.zhaoxinms.contract.tools.aicomponent.repository.ContractExtractTemplateRepository;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
-import org.springframework.data.domain.Example;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * 合同提取信息模板服务实现类
@@ -28,13 +24,11 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @Primary
+@RequiredArgsConstructor
 public class ContractExtractTemplateServiceImpl implements ContractExtractTemplateService {
-    
-    @Autowired
-    private ContractExtractTemplateRepository templateRepository;
-    
-    @Autowired
-    private ObjectMapper objectMapper;
+
+    private final ContractExtractTemplateMapper templateMapper;
+    private final ObjectMapper objectMapper;
     
     /**
      * 合同类型映射
@@ -54,27 +48,30 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
     
     @Override
     public List<ContractExtractTemplate> getAllTemplates() {
-        return templateRepository.findAll();
+        return templateMapper.selectList(null);
     }
     
     @Override
     public Optional<ContractExtractTemplate> getTemplateById(Long id) {
-        return templateRepository.findById(id);
+        return Optional.ofNullable(templateMapper.selectById(id));
     }
     
     @Override
     public List<ContractExtractTemplate> getTemplatesByContractType(String contractType) {
-        return templateRepository.findByContractType(contractType);
+        return templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getContractType, contractType));
     }
     
     @Override
     public List<ContractExtractTemplate> getSystemTemplates() {
-        return templateRepository.findByType("system");
+        return templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getType, "system"));
     }
     
     @Override
     public List<ContractExtractTemplate> getUserTemplates(String userId) {
-        return templateRepository.findByCreatorId(userId);
+        return templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getCreatorId, userId));
     }
     
     @Override
@@ -85,103 +82,121 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         
         // 如果是设置为默认模板，需要取消同类型的其他默认模板
         if (Boolean.TRUE.equals(template.getIsDefault())) {
-            templateRepository.findByContractTypeAndIsDefaultTrue(template.getContractType())
-                    .ifPresent(oldDefault -> {
-                        oldDefault.setIsDefault(false);
-                        templateRepository.save(oldDefault);
-                    });
+            ContractExtractTemplate oldDefault = templateMapper.selectOne(new LambdaQueryWrapper<ContractExtractTemplate>()
+                    .eq(ContractExtractTemplate::getContractType, template.getContractType())
+                    .eq(ContractExtractTemplate::getIsDefault, true));
+            if (oldDefault != null) {
+                oldDefault.setIsDefault(false);
+                templateMapper.updateById(oldDefault);
+            }
         }
-        
-        return templateRepository.save(template);
+        templateMapper.insert(template);
+        return template;
     }
     
     @Override
     @Transactional
     public ContractExtractTemplate updateTemplate(Long id, ContractExtractTemplate template) {
-        return templateRepository.findById(id)
-                .map(existingTemplate -> {
-                    existingTemplate.setName(template.getName());
-                    existingTemplate.setContractType(template.getContractType());
-                    existingTemplate.setFields(template.getFields());
-                    existingTemplate.setDescription(template.getDescription());
-                    existingTemplate.setUpdateTime(LocalDateTime.now());
-                    
-                    // 如果要设置为默认模板，需要取消同类型的其他默认模板
-                    if (Boolean.TRUE.equals(template.getIsDefault()) && !Boolean.TRUE.equals(existingTemplate.getIsDefault())) {
-                        templateRepository.findByContractTypeAndIsDefaultTrue(template.getContractType())
-                                .ifPresent(oldDefault -> {
-                                    oldDefault.setIsDefault(false);
-                                    templateRepository.save(oldDefault);
-                                });
-                        existingTemplate.setIsDefault(true);
-                    }
-                    
-                    return templateRepository.save(existingTemplate);
-                })
-                .orElseThrow(() -> new IllegalArgumentException("Template not found with id: " + id));
+        ContractExtractTemplate existingTemplate = templateMapper.selectById(id);
+        if (existingTemplate == null) {
+            throw new IllegalArgumentException("Template not found with id: " + id);
+        }
+        existingTemplate.setName(template.getName());
+        existingTemplate.setContractType(template.getContractType());
+        existingTemplate.setFields(template.getFields());
+        existingTemplate.setDescription(template.getDescription());
+        existingTemplate.setUpdateTime(LocalDateTime.now());
+
+        if (Boolean.TRUE.equals(template.getIsDefault()) && !Boolean.TRUE.equals(existingTemplate.getIsDefault())) {
+            ContractExtractTemplate oldDefault = templateMapper.selectOne(new LambdaQueryWrapper<ContractExtractTemplate>()
+                    .eq(ContractExtractTemplate::getContractType, template.getContractType())
+                    .eq(ContractExtractTemplate::getIsDefault, true));
+            if (oldDefault != null) {
+                oldDefault.setIsDefault(false);
+                templateMapper.updateById(oldDefault);
+            }
+            existingTemplate.setIsDefault(true);
+        }
+        templateMapper.updateById(existingTemplate);
+        return existingTemplate;
     }
     
     @Override
     @Transactional
     public void deleteTemplate(Long id) {
         // 系统模板不允许删除
-        templateRepository.findById(id).ifPresent(template -> {
+        ContractExtractTemplate template = templateMapper.selectById(id);
+        if (template != null) {
             if ("system".equals(template.getType())) {
                 throw new IllegalArgumentException("System templates cannot be deleted");
             }
-            templateRepository.deleteById(id);
-        });
+            templateMapper.deleteById(id);
+        }
     }
     
     @Override
     @Transactional
     public ContractExtractTemplate copyTemplate(Long id, String newName, String userId) {
-        return templateRepository.findById(id)
-                .map(template -> {
-                    ContractExtractTemplate newTemplate = new ContractExtractTemplate();
-                    newTemplate.setName(newName);
-                    newTemplate.setContractType(template.getContractType());
-                    newTemplate.setFields(template.getFields());
-                    newTemplate.setType("user");
-                    newTemplate.setCreatorId(userId);
-                    newTemplate.setCreateTime(LocalDateTime.now());
-                    newTemplate.setUpdateTime(LocalDateTime.now());
-                    newTemplate.setIsDefault(false);
-                    newTemplate.setDescription(template.getDescription() + " (复制)");
-                    
-                    return templateRepository.save(newTemplate);
-                })
-                .orElseThrow(() -> new IllegalArgumentException("Template not found with id: " + id));
+        ContractExtractTemplate templateDb = templateMapper.selectById(id);
+        if (templateDb == null) {
+            throw new IllegalArgumentException("Template not found with id: " + id);
+        }
+        ContractExtractTemplate newTemplate = new ContractExtractTemplate();
+        newTemplate.setName(newName);
+        newTemplate.setContractType(templateDb.getContractType());
+        newTemplate.setFields(templateDb.getFields());
+        newTemplate.setType("user");
+        newTemplate.setCreatorId(userId);
+        newTemplate.setCreateTime(LocalDateTime.now());
+        newTemplate.setUpdateTime(LocalDateTime.now());
+        newTemplate.setIsDefault(false);
+        newTemplate.setDescription(templateDb.getDescription() + " (复制)");
+        templateMapper.insert(newTemplate);
+        return newTemplate;
     }
     
     @Override
     @Transactional
     public ContractExtractTemplate setDefaultTemplate(Long id, String contractType) {
         // 先取消当前默认模板
-        templateRepository.findByContractTypeAndIsDefaultTrue(contractType)
-                .ifPresent(oldDefault -> {
-                    oldDefault.setIsDefault(false);
-                    templateRepository.save(oldDefault);
-                });
+        ContractExtractTemplate oldDefault = templateMapper.selectOne(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getContractType, contractType)
+                .eq(ContractExtractTemplate::getIsDefault, true));
+        if (oldDefault != null) {
+            oldDefault.setIsDefault(false);
+            templateMapper.updateById(oldDefault);
+        }
         
         // 设置新的默认模板
-        return templateRepository.findById(id)
-                .map(template -> {
-                    template.setIsDefault(true);
-                    template.setUpdateTime(LocalDateTime.now());
-                    return templateRepository.save(template);
-                })
-                .orElseThrow(() -> new IllegalArgumentException("Template not found with id: " + id));
+        ContractExtractTemplate template2 = templateMapper.selectById(id);
+        if (template2 == null) {
+            throw new IllegalArgumentException("Template not found with id: " + id);
+        }
+        template2.setIsDefault(true);
+        template2.setUpdateTime(LocalDateTime.now());
+        templateMapper.updateById(template2);
+        return template2;
     }
     
     @Override
     public Optional<ContractExtractTemplate> getDefaultTemplate(String contractType) {
-        return templateRepository.findByContractTypeAndIsDefaultTrue(contractType);
+        ContractExtractTemplate tpl = templateMapper.selectOne(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getContractType, contractType)
+                .eq(ContractExtractTemplate::getIsDefault, true));
+        return Optional.ofNullable(tpl);
     }
     
     @Override
     public List<ContractExtractTemplate> findAllSystemAndUserTemplates(String userId) {
-        return templateRepository.findAllSystemAndUserTemplates(userId);
+        List<ContractExtractTemplate> system = templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getType, "system"));
+        List<ContractExtractTemplate> user = templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getType, "user")
+                .eq(ContractExtractTemplate::getCreatorId, userId));
+        List<ContractExtractTemplate> result = new ArrayList<>();
+        result.addAll(system);
+        result.addAll(user);
+        return result;
     }
     
     @Override
@@ -189,11 +204,15 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         List<ContractExtractTemplate> result = new ArrayList<>();
         
         // 添加系统模板
-        result.addAll(templateRepository.findByContractTypeAndType(contractType, "system"));
+        result.addAll(templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getContractType, contractType)
+                .eq(ContractExtractTemplate::getType, "system")));
         
         // 添加用户模板
         if (userId != null && !userId.isEmpty()) {
-            result.addAll(templateRepository.findByContractTypeAndCreatorId(contractType, userId));
+            result.addAll(templateMapper.selectList(new LambdaQueryWrapper<ContractExtractTemplate>()
+                    .eq(ContractExtractTemplate::getContractType, contractType)
+                    .eq(ContractExtractTemplate::getCreatorId, userId)));
         }
         
         return result;
@@ -206,7 +225,8 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         log.info("Initializing system contract extract templates...");
         
         // 检查是否已经初始化
-        if (!templateRepository.findByType("system").isEmpty()) {
+        if (templateMapper.selectCount(new LambdaQueryWrapper<ContractExtractTemplate>()
+                .eq(ContractExtractTemplate::getType, "system")) > 0) {
             log.info("System templates already initialized");
             return;
         }
@@ -373,7 +393,7 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
                 .description(description)
                 .build();
         
-        templateRepository.save(template);
+        templateMapper.insert(template);
     }
 
     /**

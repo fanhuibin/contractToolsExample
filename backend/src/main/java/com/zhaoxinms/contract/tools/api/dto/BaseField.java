@@ -26,4 +26,9 @@ public class BaseField {
      * 是否富文本（支持表格）
      */
     private Boolean isRichText;
+
+    /**
+     * 测试值（用于前端调试预览）
+     */
+    private String sampleValue;
 } 
