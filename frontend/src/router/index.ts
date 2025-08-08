@@ -27,6 +27,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '合同信息提取' }
       },
       {
+        path: '/rule-settings',
+        name: 'RuleSettings',
+        component: () => import('@/views/contracts/RuleSettings.vue'),
+        meta: { title: '提取规则设置' }
+      },
+      {
         path: '/fulfillment',
         name: 'FulfillmentTask',
         component: () => import('@/views/contracts/FulfillmentTask.vue'),

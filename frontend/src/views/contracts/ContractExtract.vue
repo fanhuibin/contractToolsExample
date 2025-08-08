@@ -6,6 +6,9 @@
           <div class="page-header">
             <h2>合同信息提取</h2>
             <p>上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。</p>
+            <div class="actions">
+              <el-button type="primary" @click="$router.push('/rule-settings')">提取规则设置</el-button>
+            </div>
           </div>
         </el-card>
       </el-col>
