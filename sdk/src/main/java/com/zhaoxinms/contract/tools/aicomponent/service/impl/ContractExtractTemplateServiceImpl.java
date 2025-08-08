@@ -42,7 +42,6 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
     private static final Map<String, String> CONTRACT_TYPES = new LinkedHashMap<>();
     
     static {
-        CONTRACT_TYPES.put("common", "通用合同");
         CONTRACT_TYPES.put("lease", "租赁合同");
         CONTRACT_TYPES.put("purchase", "购销合同");
         CONTRACT_TYPES.put("labor", "劳动合同");
@@ -213,25 +212,19 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         }
         
         try {
-            // 通用合同模板
-            createSystemTemplate(
-                    "通用合同模板",
-                    "common",
-                    Arrays.asList(
-                            "合同编号", "合同名称", "甲方名称", "乙方名称",
-                            "甲方联系地址", "乙方联系地址", "甲方联系人及电话", "乙方联系人及电话",
-                            "合同签署日期", "合同有效期", "合同起始时间", "合同终止时间",
-                            "签署人信息", "违约责任条款", "争议解决方式", "适用法律"
-                    ),
-                    "适用于大多数合同类型的通用字段",
-                    true
+            // 通用字段集合，不再单独生成“通用合同模板”，而是合并进其他类型
+            List<String> genericFields = Arrays.asList(
+                    "合同编号", "合同名称", "甲方名称", "乙方名称",
+                    "甲方联系地址", "乙方联系地址", "甲方联系人及电话", "乙方联系人及电话",
+                    "合同签署日期", "合同有效期", "合同起始时间", "合同终止时间",
+                    "签署人信息", "违约责任条款", "争议解决方式", "适用法律"
             );
-            
+
             // 租赁合同模板
             createSystemTemplate(
                     "租赁合同模板",
                     "lease",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "承租方", "出租方", "甲方联系地址", "乙方联系人地址",
                             "甲方联系人电话", "乙方联系人电话", "租赁地址", "租赁面积",
                             "合同编号", "甲方签署日期", "乙方签署日期", "合同有效期",
@@ -240,7 +233,7 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
                             "履约保证金", "付款方式", "支付周期", "支付节点",
                             "甲方违约金", "乙方违约金", "甲方违约金（大写)", "乙方违约金（大写)",
                             "甲方签署人", "乙方签署人"
-                    ),
+                    )),
                     "适用于各类租赁合同",
                     true
             );
@@ -249,7 +242,7 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "购销合同模板",
                     "purchase",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "甲方公司名称", "乙方公司名称", "甲方通信地址", "乙方通信地址",
                             "合同名称", "合同编号", "合同总金额小写", "币种",
                             "合同总金额大写", "付款节点", "付款比例", "付款金额（小写）",
@@ -265,7 +258,7 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
                             "甲方业务联系人", "乙方业务联系人", "甲方业务联系人电话", "甲方业务联系人邮箱",
                             "乙方业务联系人电话", "乙方业务联系人邮箱", "甲方签署日期", "乙方签署日期",
                             "甲方法人或代表人是否签字", "乙方法人或代表人是否签字"
-                    ),
+                    )),
                     "适用于各类购销合同",
                     true
             );
@@ -274,13 +267,13 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "劳动合同模板",
                     "labor",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "员工姓名", "身份证号", "职位名称", "工作地点",
                             "合同期限类型", "合同起止日期", "试用期期限", "试用期工资",
                             "转正后工资", "工资构成明细", "工资支付时间", "工作时间安排",
                             "休息休假制度", "社会保险缴纳", "福利待遇", "保密条款",
                             "竞业限制条款", "培训服务期", "解除合同条件"
-                    ),
+                    )),
                     "适用于劳动合同",
                     true
             );
@@ -289,13 +282,13 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "建筑合同模板",
                     "construction",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "工程名称", "工程地点", "工程内容", "工程范围",
                             "承包方式", "合同价款", "付款进度安排", "工程期限",
                             "开工日期", "竣工日期", "质量标准", "工程变更条款",
                             "工程验收标准", "质保金比例", "质保期限", "安全责任条款",
                             "工程进度报告要求", "材料供应方式", "违约责任"
-                    ),
+                    )),
                     "适用于建筑工程承包合同",
                     true
             );
@@ -304,12 +297,12 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "技术合同模板",
                     "technical",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "技术项目名称", "技术内容", "技术指标", "技术成果形式",
                             "技术开发方式", "研究开发经费", "经费支付方式", "技术资料交付",
                             "技术指导要求", "验收标准", "知识产权归属", "技术保密条款",
                             "后续改进技术归属", "技术风险责任", "违约金计算方式", "技术培训条款"
-                    ),
+                    )),
                     "适用于技术开发、技术转让等技术合同",
                     true
             );
@@ -318,12 +311,12 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "知识产权合同模板",
                     "intellectual",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "知识产权类型", "知识产权名称", "注册/登记号", "许可/转让范围",
                             "地域限制", "使用期限", "许可/转让费用", "支付方式",
                             "权利保证条款", "侵权责任", "改进技术归属", "再许可权限",
                             "合同备案要求", "权利维持义务", "合同终止条件"
-                    ),
+                    )),
                     "适用于知识产权许可、转让合同",
                     true
             );
@@ -332,12 +325,12 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             createSystemTemplate(
                     "运营服务合同模板",
                     "operation",
-                    Arrays.asList(
+                    mergeUnique(genericFields, Arrays.asList(
                             "服务内容描述", "服务标准", "服务期限", "服务地点",
                             "服务人员要求", "服务时间", "服务费用", "费用支付周期",
                             "绩效考核标准", "数据保密条款", "服务报告要求", "突发事件处理",
                             "服务变更流程", "服务终止条件", "过渡期安排"
-                    ),
+                    )),
                     "适用于运营服务类合同",
                     true
             );
@@ -381,5 +374,15 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
                 .build();
         
         templateRepository.save(template);
+    }
+
+    /**
+     * 合并两个字段列表，按插入顺序去重
+     */
+    private List<String> mergeUnique(List<String> base, List<String> extra) {
+        LinkedHashSet<String> set = new LinkedHashSet<>();
+        set.addAll(base);
+        set.addAll(extra);
+        return new ArrayList<>(set);
     }
 }

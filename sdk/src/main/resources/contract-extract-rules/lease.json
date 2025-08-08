@@ -1,0 +1,38 @@
+{
+  "version": "1.0",
+  "contractType": "lease",
+  "defaults": {"type": "string", "required": false, "normalize": ["trim"]},
+  "fields": {
+    "承租方": {"type": "string"},
+    "出租方": {"type": "string"},
+    "甲方联系地址": {"type": "string"},
+    "乙方联系人地址": {"type": "string"},
+    "甲方联系人电话": {"type": "string", "normalize": ["trim", {"regexKeep": "[0-9\\-\\+\\(\\) ]+"}]},
+    "乙方联系人电话": {"type": "string", "normalize": ["trim", {"regexKeep": "[0-9\\-\\+\\(\\) ]+"}]},
+    "租赁地址": {"type": "string"},
+    "租赁面积": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "合同编号": {"type": "string"},
+    "甲方签署日期": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "乙方签署日期": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "合同有效期": {"type": "string"},
+    "合同起始时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁期限": {"type": "string"},
+    "租赁起始时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁终止时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁费用": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "租赁费用大写": {"type": "string"},
+    "每期金额": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "每期金额（大写)": {"type": "string"},
+    "履约保证金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "付款方式": {"type": "string"},
+    "支付周期": {"type": "string"},
+    "支付节点": {"type": "string"},
+    "甲方违约金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "乙方违约金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "甲方违约金（大写)": {"type": "string"},
+    "乙方违约金（大写)": {"type": "string"},
+    "甲方签署人": {"type": "string"},
+    "乙方签署人": {"type": "string"}
+  }
+}
+

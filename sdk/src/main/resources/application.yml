@@ -12,6 +12,11 @@ spring:
   config:
     import:
       - classpath:application-ai.yml
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+      enabled: true
   
   # 数据库配置
   datasource:
