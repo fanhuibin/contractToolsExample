@@ -59,12 +59,6 @@ spring:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
   
-  # Flyway配置（可选，用于数据库迁移）
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
-    validate-on-migrate: true
 
 logging:
   level:

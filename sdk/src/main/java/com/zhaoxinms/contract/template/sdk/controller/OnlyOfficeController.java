@@ -62,9 +62,33 @@ public class OnlyOfficeController {
             @RequestParam(value = "sessionId", required = false) String sessionId,
             @RequestParam(value = "callbackUrl", required = false) String callbackUrl) throws IOException {
         
-        // 获取文件信息
+        // 获取文件信息（支持内存自动注册的 templateDesign）
         FileInfo fileInfo = fileInfoService.getById(fileId);
         if (fileInfo == null) {
+            if ("templateDesign".equals(fileId)) {
+                // 构造一个临时配置，下载接口中会做兜底
+                String key = "demo_key_" + System.currentTimeMillis();
+                User user = new User();
+                user.setName("Anonymous");
+                user.setId("0");
+                OnlyofficeFileModel tempModel = fileConfigurer.getFileModel(
+                    DefaultFileWrapper.builder()
+                        .fileId(fileId)
+                        .fileName("templateDesign.docx")
+                        .key(key)
+                        .canEdit(canEdit)
+                        .canReview(canReview && canEdit)
+                        .callbackUrl(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/save?fileId=" + fileId)
+                        .url(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/download/" + fileId)
+                        .type(Type.desktop)
+                        .lang("zh-CN")
+                        .action(canEdit ? Action.edit : Action.view)
+                        .user(user)
+                        .pluginsData(java.util.Arrays.asList(zxcmConfig.getOnlyOffice().getPlugins()))
+                        .build()
+                );
+                return Result.success(tempModel);
+            }
             return Result.error("文件不存在");
         }
 

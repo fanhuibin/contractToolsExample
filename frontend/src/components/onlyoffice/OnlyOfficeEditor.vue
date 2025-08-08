@@ -97,6 +97,7 @@ const emit = defineEmits([
 const loading = ref(true)
 const loadingText = ref('正在加载编辑器...')
 const onlyofficeLoaded = ref(false)
+const pluginLoaded = ref(false)
 const editorReady = ref(false)
 const docEditor = ref(null)
 const serverInfo = ref(null)
@@ -260,6 +261,11 @@ const initOnlyOfficeEditor = (config) => {
               resolve()
             }
           },
+          onPluginsReady: () => {
+            console.log('OnlyOffice插件已准备就绪')
+            pluginLoaded.value = true
+            emit('pluginLoaded')
+          },
           onDocumentStateChange: (event) => {
             console.log('文档状态改变:', event)
             emit('documentStateChange', event)
@@ -293,23 +299,76 @@ const initOnlyOfficeEditor = (config) => {
 }
 
 const handleMessage = (event) => {
-  // 处理来自编辑器的消息
   try {
-    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
-
-    switch (data.action) {
-      case 'loaded':
-        console.log('编辑器插件已加载')
-        break
-      case 'ready':
-        console.log('编辑器已就绪')
-        break
-      default:
-        console.log('收到编辑器消息:', data)
+    if (event?.data === 'loaded') {
+      pluginLoaded.value = true
+      emit('pluginLoaded')
+      return
     }
+    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data
+    if (data && data.action === 'loaded') {
+      pluginLoaded.value = true
+      emit('pluginLoaded')
+      return
+    }
+    if (data && data.action === 'ready') {
+      console.log('编辑器已就绪')
+      return
+    }
+    console.log('收到编辑器消息:', data)
   } catch (error) {
-    console.warn('处理编辑器消息失败:', error)
+    // 非JSON数据忽略
   }
+}
+
+// 等待插件加载
+const waitForPlugin = () => {
+  if (pluginLoaded.value) return Promise.resolve()
+  return new Promise((resolve) => {
+    const start = Date.now()
+    const timer = setInterval(() => {
+      if (pluginLoaded.value || Date.now() - start > 12000) {
+        clearInterval(timer)
+        resolve(undefined)
+      }
+    }, 150)
+  })
+}
+
+// 获取插件窗口
+const getPluginWindow = () => {
+  // 首选OnlyOffice默认命名的frameEditor
+  try {
+    const framesObj = window.frames || {}
+    const host = framesObj['frameEditor'] || null
+    if (host && host.frames && host.frames[0]) return host.frames[0]
+  } catch {}
+
+  let target = (window.frames && (window.frames)['onlyoffice-editor']) || null
+  if (!target) {
+    const container = document.getElementById('onlyoffice-editor') || document.getElementById('onlyoffice-editor-container')
+    const iframe = container?.querySelector('iframe')
+    target = iframe?.contentWindow || null
+  }
+  try {
+    if (target && target.frames && target.frames[0]) return target.frames[0]
+  } catch {}
+  return target || null
+}
+
+const postToPlugin = async (payload) => {
+  await waitForPlugin()
+  const win = getPluginWindow()
+  if (!win) throw new Error('编辑器插件窗口未就绪')
+  win.postMessage(JSON.stringify(payload), '*')
+}
+
+// 便捷封装给上层调用
+const createContentControl = async (Id, Tag, Alias, ReadOnly = false) => {
+  await postToPlugin({ action: 'createContentControl', Id, Tag, Alias, ReadOnly })
+}
+const createBlockContentControl = async (Id, Tag, Alias, Rich = true, ReadOnly = true) => {
+  await postToPlugin({ action: 'createBlockContentControl', Id, Tag, Alias, Rich, ReadOnly })
 }
 
 // 工具方法
@@ -376,6 +435,9 @@ defineExpose({
   addWatermark,
   refreshEditor,
   initEditor,
+  postToPlugin,
+  createContentControl,
+  createBlockContentControl,
   destroyEditor: () => {
     if (docEditor.value) {
       docEditor.value.destroyEditor()

@@ -21,25 +21,22 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
 
     @Override
     public TemplateDesignRecord save(String id, String templateId, String fileId, String elementsJson) {
-        TemplateDesignRecord record = new TemplateDesignRecord();
-        if (id == null || id.isEmpty()) {
-            record.setId(UUID.randomUUID().toString());
+        TemplateDesignRecord record = id == null || id.isEmpty() ? null : mapper.selectById(id);
+        if (record == null) {
+            record = new TemplateDesignRecord();
+            record.setId(id == null || id.isEmpty() ? UUID.randomUUID().toString() : id);
             record.setCreatedAt(LocalDateTime.now());
-            record.setUpdatedAt(LocalDateTime.now());
-            record.setTemplateId(templateId);
-            record.setFileId(fileId);
-            record.setElementsJson(elementsJson);
-            mapper.insert(record);
-            return record;
-        } else {
-            record.setId(id);
-            record.setTemplateId(templateId);
-            record.setFileId(fileId);
-            record.setElementsJson(elementsJson);
-            record.setUpdatedAt(LocalDateTime.now());
-            mapper.updateById(record);
-            return mapper.selectById(id);
         }
+        record.setUpdatedAt(LocalDateTime.now());
+        record.setTemplateId(templateId);
+        record.setFileId(fileId);
+        record.setElementsJson(elementsJson);
+        if (mapper.selectById(record.getId()) == null) {
+            mapper.insert(record);
+        } else {
+            mapper.updateById(record);
+        }
+        return mapper.selectById(record.getId());
     }
 
     @Override
