@@ -247,18 +247,14 @@ const getTemplatesByType = (type: string) => {
 
 const loadInitialData = async () => {
   try {
-    const [typesResponse, templatesResponse] = await Promise.all([
+    const [typesResult, templatesResult] = await Promise.all([
       aiContract.getContractTypes(),
       aiContract.getTemplates(userId.value)
     ]);
 
-    if ((typesResponse as any).success) {
-      contractTypes.value = (typesResponse as any).data;
-    }
-    if ((templatesResponse as any).success) {
-      templates.value = (templatesResponse as any).data;
-    }
-    
+    contractTypes.value = (typesResult as any)?.data || {};
+    templates.value = (templatesResult as any)?.data || [];
+
     // Set default selection
     const defaultTemplate = templates.value.find(t => t.contractType === 'common' && t.isDefault);
     if (defaultTemplate) {
@@ -275,13 +271,9 @@ const loadInitialData = async () => {
 // History methods
 const showHistoryDialog = async () => {
   try {
-    const response = await aiContract.getHistory(userId.value);
-    if ((response as any).success) {
-      historyList.value = (response as any).data;
-      historyDialogVisible.value = true;
-    } else {
-      ElMessage.error((response as any).message || '获取历史记录失败');
-    }
+    const result = await aiContract.getHistory(userId.value);
+    historyList.value = (result as any)?.data || [];
+    historyDialogVisible.value = true;
   } catch (err: any) {
     ElMessage.error(err.message || '获取历史记录出错');
   }
@@ -331,15 +323,15 @@ const uploadFile = async () => {
     
     const templateId = typeof selectedTemplateId.value === 'number' ? selectedTemplateId.value : undefined;
 
-    const response = await aiContract.extractInfo(selectedFile.value, prompt, templateId);
+    const resp: any = await aiContract.extractInfo(selectedFile.value, prompt, templateId);
 
-    if ((response as any).success) {
-      taskId.value = (response as any).taskId;
+    if (resp?.data?.taskId) {
+      taskId.value = resp.data.taskId;
       statusText.value = '正在处理文件...';
       extractingProgress.value = 30;
       startStatusCheck();
     } else {
-      error.value = (response as any).message || '上传失败';
+      error.value = resp?.message || '上传失败';
       extracting.value = false;
       extractingStatus.value = 'exception';
     }
@@ -357,26 +349,23 @@ const startStatusCheck = () => {
   statusCheckInterval.value = window.setInterval(async () => {
     if (!taskId.value) return clearStatusCheck();
     try {
-      const response = await aiContract.getTaskStatus(taskId.value);
-      if ((response as any).success && (response as any).task) {
-        const task = (response as any).task;
-        if (task.status === 'processing') {
-          extractingProgress.value = Math.min(70, extractingProgress.value + 5);
-          statusText.value = '正在提取信息...';
-        } else if (task.status === 'completed') {
-          extractingProgress.value = 100;
-          extractingStatus.value = 'success';
-          statusText.value = '提取完成';
-          extractedText.value = task.result;
-          clearStatusCheck();
-        } else if (task.status === 'failed') {
-          extractingStatus.value = 'exception';
-          statusText.value = '提取失败';
-          error.value = task.error || '处理失败';
-          clearStatusCheck();
-        }
-      } else {
-        throw new Error((response as any).message || '获取任务状态失败');
+      const resp: any = await aiContract.getTaskStatus(taskId.value);
+      const task = resp?.data?.task;
+      if (!task) throw new Error('获取任务状态失败');
+      if (task.status === 'processing') {
+        extractingProgress.value = Math.min(70, extractingProgress.value + 5);
+        statusText.value = '正在提取信息...';
+      } else if (task.status === 'completed') {
+        extractingProgress.value = 100;
+        extractingStatus.value = 'success';
+        statusText.value = '提取完成';
+        extractedText.value = task.result;
+        clearStatusCheck();
+      } else if (task.status === 'failed') {
+        extractingStatus.value = 'exception';
+        statusText.value = '提取失败';
+        error.value = task.error || '处理失败';
+        clearStatusCheck();
       }
     } catch (err: any) {
       error.value = err.message || '检查任务状态时发生错误';
@@ -462,14 +451,10 @@ const saveAsTemplate = async () => {
       isDefault: false,
       description: `用户自定义模板`
     };
-    const response = await aiContract.createTemplate(template);
-    if ((response as any).success) {
-      ElMessage.success('模板保存成功');
-      newTemplateName.value = '';
-      loadInitialData(); // Refresh templates
-    } else {
-      ElMessage.error((response as any).message || '保存模板失败');
-    }
+    await aiContract.createTemplate(template);
+    ElMessage.success('模板保存成功');
+    newTemplateName.value = '';
+    loadInitialData(); // Refresh templates
   } catch (err: any) {
     ElMessage.error(err.message || '保存模板出错');
   }

@@ -5,7 +5,7 @@ import com.zhaoxinms.contract.tools.aicomponent.service.OpenAiService;
 import com.zhaoxinms.contract.tools.aicomponent.util.AiLimitUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
+import com.zhaoxinms.contract.tools.common.Result;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -44,29 +44,28 @@ public class PdfExtractController {
      * @return 抽取结果
      */
     @PostMapping("/extract")
-    public ResponseEntity<Map<String, Object>> extractText(@RequestParam("file") MultipartFile file) {
+    public Result<Map<String, Object>> extractText(@RequestParam("file") MultipartFile file) {
         log.info("收到PDF抽取请求，文件名: {}, 大小: {}", file.getOriginalFilename(), file.getSize());
         
         // 检查限流
         if (!aiLimitUtil.tryAcquire("system")) {
-            return ResponseEntity.ok(createResponse(false, "请求过于频繁，请稍后再试", null));
+            return Result.error("请求过于频繁，请稍后再试");
         }
         
         try {
             // 检查文件类型
             if (file.isEmpty()) {
-                return ResponseEntity.ok(createResponse(false, "请选择文件", null));
+                return Result.error("请选择文件");
             }
             
             String fileName = file.getOriginalFilename();
             if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
-                return ResponseEntity.ok(createResponse(false, "只支持PDF文件格式", null));
+                return Result.error("只支持PDF文件格式");
             }
             
             // 检查文件大小
             if (file.getSize() > aiProperties.getPdf().getMaxFileSize()) {
-                return ResponseEntity.ok(createResponse(false, 
-                        "文件大小超过限制：" + aiProperties.getPdf().getMaxFileSize() / 1024 / 1024 + "MB", null));
+                return Result.error("文件大小超过限制：" + aiProperties.getPdf().getMaxFileSize() / 1024 / 1024 + "MB");
             }
             
             // 创建任务ID
@@ -99,13 +98,12 @@ public class PdfExtractController {
             }).start();
             
             // 返回任务ID
-            Map<String, Object> result = createResponse(true, "PDF抽取任务已提交", null);
+            Map<String, Object> result = new HashMap<>();
             result.put("taskId", taskId);
-            
-            return ResponseEntity.ok(result);
+            return Result.success("PDF抽取任务已提交", result);
         } catch (Exception e) {
             log.error("处理PDF抽取请求时发生错误", e);
-            return ResponseEntity.ok(createResponse(false, "服务器错误: " + e.getMessage(), null));
+            return Result.error("服务器错误: " + e.getMessage());
         }
     }
     
@@ -116,13 +114,13 @@ public class PdfExtractController {
      * @return 任务状态
      */
     @GetMapping("/status/{taskId}")
-    public ResponseEntity<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
+    public Result<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
         if (!extractTasks.containsKey(taskId)) {
-            return ResponseEntity.ok(createResponse(false, "任务不存在", null));
+            return Result.error("任务不存在");
         }
         
         Map<String, Object> taskStatus = extractTasks.get(taskId);
-        Map<String, Object> result = createResponse(true, "成功", null);
+        Map<String, Object> result = new HashMap<>();
         result.put("task", taskStatus);
         
         // 如果任务已完成或失败，并且已经过了一段时间，则从缓存中移除
@@ -135,7 +133,7 @@ public class PdfExtractController {
             }
         }
         
-        return ResponseEntity.ok(result);
+        return Result.success("成功", result);
     }
     
     /**
@@ -146,13 +144,5 @@ public class PdfExtractController {
      * @param data 数据
      * @return 响应对象
      */
-    private Map<String, Object> createResponse(boolean success, String message, Object data) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", success);
-        response.put("message", message);
-        if (data != null) {
-            response.put("data", data);
-        }
-        return response;
-    }
+    // 统一返回格式，删除自定义的 createResponse
 }

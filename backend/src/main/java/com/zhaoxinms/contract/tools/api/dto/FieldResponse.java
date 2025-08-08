@@ -22,4 +22,9 @@ public class FieldResponse {
      * 条款字段列表
      */
     private List<ClauseField> clauseFields;
+
+    /**
+     * 印章字段列表
+     */
+    private List<SealField> sealFields;
 } 

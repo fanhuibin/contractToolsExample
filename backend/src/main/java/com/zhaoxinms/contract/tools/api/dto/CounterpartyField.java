@@ -26,4 +26,9 @@ public class CounterpartyField {
      * 第几个相对方
      */
     private Integer counterpartyIndex;
+
+    /**
+     * 测试值（用于前端调试预览）
+     */
+    private String sampleValue;
 } 

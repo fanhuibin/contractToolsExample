@@ -4,7 +4,7 @@
     <AiChat v-model="showAiChat" />
     
     <!-- 侧边栏 -->
-    <el-aside width="200px" class="aside">
+    <el-aside width="200px" class="aside" v-if="!route.meta?.fullscreen">
       <div class="logo">
         <h2>合同工具集</h2>
       </div>
@@ -16,10 +16,6 @@
         text-color="#bfcbd9"
         active-text-color="#409EFF"
       >
-        <el-menu-item index="/contracts">
-          <el-icon><Document /></el-icon>
-          <span>合同管理</span>
-        </el-menu-item>
         <el-menu-item index="/fulfillment">
           <el-icon><Document /></el-icon>
           <span>合同履约任务</span>
@@ -27,14 +23,6 @@
          <el-menu-item index="/contract-extract">
           <el-icon><Document /></el-icon>
           <span>合同抽取</span>
-        </el-menu-item>
-        <el-menu-item index="/templates">
-          <el-icon><Files /></el-icon>
-          <span>模板管理</span>
-        </el-menu-item>
-        <el-menu-item index="/documents">
-          <el-icon><Folder /></el-icon>
-          <span>文档管理</span>
         </el-menu-item>
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
@@ -44,9 +32,9 @@
     </el-aside>
 
     <!-- 主内容区 -->
-    <el-container>
+    <el-container :class="{ 'no-padding': route.meta?.fullscreen }">
       <!-- 头部 -->
-      <el-header class="header">
+      <el-header class="header" v-if="!route.meta?.fullscreen">
         <div class="header-left">
           <el-breadcrumb separator="/">
             <el-breadcrumb-item>首页</el-breadcrumb-item>
@@ -80,7 +68,7 @@
       </el-header>
 
       <!-- 内容区 -->
-      <el-main class="main">
+      <el-main class="main" :class="{ fullscreen: route.meta?.fullscreen }">
         <router-view />
       </el-main>
     </el-container>
@@ -170,5 +158,13 @@ const currentTitle = computed(() => {
 .main {
   background-color: #f0f2f5;
   padding: 20px;
+}
+
+.main.fullscreen {
+  padding: 0;
+}
+
+.no-padding {
+  padding: 0;
 }
 </style> 

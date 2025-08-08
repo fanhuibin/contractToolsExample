@@ -9,7 +9,7 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.http.ResponseEntity;
+import com.zhaoxinms.contract.tools.common.Result;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,7 +29,7 @@ public class FulfillmentTemplateController {
 
     @GetMapping("/list")
     @ApiOperation("获取模板列表")
-    public ResponseEntity<?> listTemplates(
+    public Result<List<FulfillmentTemplate>> listTemplates(
         @ApiParam("合同类型") @RequestParam(required = false) String contractType,
         @ApiParam("用户ID") @RequestParam(required = false) String userId
     ) {
@@ -42,85 +42,85 @@ public class FulfillmentTemplateController {
                     .eq(StrUtil.isNotBlank(userId), FulfillmentTemplate::getUserId, userId)
             );
         }
-        return ResponseEntity.ok(templates);
+        return Result.success(templates);
     }
 
     @GetMapping("/type/{contractType}")
     @ApiOperation("根据合同类型获取模板")
-    public ResponseEntity<?> listTemplatesByType(
+    public Result<List<FulfillmentTemplate>> listTemplatesByType(
         @PathVariable String contractType,
         @ApiParam("用户ID") @RequestParam(required = false) String userId
     ) {
         List<FulfillmentTemplate> templates = templateService.listTemplatesByType(contractType, userId);
-        return ResponseEntity.ok(templates);
+        return Result.success(templates);
     }
 
     @GetMapping("/default/{contractType}")
     @ApiOperation("获取指定合同类型的默认模板")
-    public ResponseEntity<?> getDefaultTemplate(
+    public Result<FulfillmentTemplate> getDefaultTemplate(
         @PathVariable String contractType,
         @ApiParam("用户ID") @RequestParam(required = false) String userId
     ) {
         FulfillmentTemplate template = templateService.getDefaultTemplate(contractType, userId);
-        return ResponseEntity.ok(template);
+        return Result.success(template);
     }
 
     @PostMapping("/create")
     @ApiOperation("创建新模板")
-    public ResponseEntity<?> createTemplate(
+    public Result<FulfillmentTemplate> createTemplate(
         @RequestBody FulfillmentTemplate template
     ) {
         FulfillmentTemplate createdTemplate = templateService.createTemplate(template);
-        return ResponseEntity.ok(createdTemplate);
+        return Result.success(createdTemplate);
     }
 
     @PutMapping("/{id}")
     @ApiOperation("更新模板")
-    public ResponseEntity<?> updateTemplate(
+    public Result<FulfillmentTemplate> updateTemplate(
         @PathVariable Long id,
         @RequestBody FulfillmentTemplate template
     ) {
         template.setId(id);
         FulfillmentTemplate updatedTemplate = templateService.updateTemplate(template);
-        return ResponseEntity.ok(updatedTemplate);
+        return Result.success(updatedTemplate);
     }
 
     @DeleteMapping("/{id}")
     @ApiOperation("删除模板")
-    public ResponseEntity<?> deleteTemplate(
+    public Result<Boolean> deleteTemplate(
         @PathVariable Long id
     ) {
         boolean deleted = templateService.removeById(id);
-        return ResponseEntity.ok(deleted);
+        return deleted ? Result.success(true) : Result.error("删除失败");
     }
 
     @PostMapping("/{id}/copy")
     @ApiOperation("复制模板")
-    public ResponseEntity<?> copyTemplate(
+    public Result<FulfillmentTemplate> copyTemplate(
         @PathVariable Long id,
         @RequestParam String newName,
         @RequestParam String userId
     ) {
         FulfillmentTemplate copiedTemplate = templateService.copyTemplate(id, newName, userId);
-        return ResponseEntity.ok(copiedTemplate);
+        return Result.success(copiedTemplate);
     }
 
     @PostMapping("/{id}/set-default")
     @ApiOperation("设置默认模板")
-    public ResponseEntity<?> setDefaultTemplate(
+    public Result<FulfillmentTemplate> setDefaultTemplate(
         @PathVariable Long id,
         @RequestParam String contractType
     ) {
         FulfillmentTemplate defaultTemplate = templateService.setDefaultTemplate(id, contractType);
-        return ResponseEntity.ok(defaultTemplate);
+        return Result.success(defaultTemplate);
     }
 
     @GetMapping("/contract-types")
     @ApiOperation("获取所有合同类型")
-    public ResponseEntity<?> getContractTypes() {
+    public Result<String[]> getContractTypes() {
         // 这里可以从数据库或配置文件读取合同类型
         // 暂时硬编码，后续可以改为从配置或数据库读取
-        return ResponseEntity.ok(new String[]{
+        return Result.success(new String[]{
             "开票履约", "付款履约", "收款履约", 
             "到期提醒", "事件触发"
         });
