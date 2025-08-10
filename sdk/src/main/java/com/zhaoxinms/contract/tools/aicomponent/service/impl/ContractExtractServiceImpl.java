@@ -7,6 +7,7 @@ import com.zhaoxinms.contract.tools.aicomponent.config.AiProperties;
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractService;
 import com.zhaoxinms.contract.tools.aicomponent.service.RuleLoaderService;
+import com.zhaoxinms.contract.tools.aicomponent.service.RuleStoreService;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
 import com.openai.client.OpenAIClient;
 import com.openai.client.okhttp.OpenAIOkHttpClient;
@@ -52,6 +53,9 @@ public class ContractExtractServiceImpl implements ContractExtractService {
     @Autowired
     @SuppressWarnings("unused")
     private RuleLoaderService ruleLoaderService;
+
+    @Autowired
+    private RuleStoreService ruleStoreService;
 
     // RuleEngineService removed: now AI does the normalization/compute via prompt
     
@@ -168,8 +172,7 @@ public class ContractExtractServiceImpl implements ContractExtractService {
             String jsonCandidate = sanitizeModelJson(raw);
             Map<String, Object> resultMap = objectMapper.readValue(jsonCandidate, new TypeReference<Map<String, Object>>(){});
 
-            // load template to get contractType
-            // keep contractType resolution for potential prompt customization
+            // Keep template/contract type resolution if needed for downstream processing
             @SuppressWarnings("unused")
             String contractType = null;
             if (templateId != null) {
@@ -246,13 +249,14 @@ public class ContractExtractServiceImpl implements ContractExtractService {
             // 解析模板字段
             List<String> dbFields = objectMapper.readValue(template.getFields(), new TypeReference<List<String>>() {});
 
-            // 加载合同比例的 prompt 规则
-            String contractType = template.getContractType();
+            // 新逻辑：优先按模板ID加载规则
+            String contractType = template.getContractType(); // reserved for future use
+            log.debug("Building prompt by templateId={}, contractType={}", templateId, contractType);
             StringBuilder promptBuilder = new StringBuilder();
 
-            var rulesOpt = ruleLoaderService.loadRules(contractType);
-            if (rulesOpt.isPresent() && rulesOpt.get().getPrompt() != null) {
-                var ps = rulesOpt.get().getPrompt();
+            var rulesOpt = ruleStoreService.readRuleByTemplateId(templateId);
+            if (rulesOpt.isPresent() && rulesOpt.get().has("prompt")) {
+                var ps = objectMapper.convertValue(rulesOpt.get().get("prompt"), com.zhaoxinms.contract.tools.aicomponent.rules.PromptSpec.class);
 
                 // 全局约束
                 if (ps.getGlobal() != null && !ps.getGlobal().isEmpty()) {

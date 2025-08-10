@@ -122,6 +122,15 @@
               type="primary" 
               link 
               size="small" 
+              @click.stop="goRuleSettings(template.id)" 
+              class="copy-button"
+            >
+              编辑该模板规则
+            </el-button>
+            <el-button 
+              type="primary" 
+              link 
+              size="small" 
               @click.stop="copyTemplateForEditing(template)" 
               class="copy-button"
             >
@@ -173,6 +182,8 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { UploadFilled, Delete, Plus, Document, CaretRight } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 import { aiContract } from '@/api/ai';
+import { useRouter } from 'vue-router'
+const router = useRouter()
 
 // --- Reactive State ---
 // File handling
@@ -267,6 +278,18 @@ const loadInitialData = async () => {
     console.error(err);
   }
 };
+function goRuleSettings(id: number) {
+  router.push(`/rule-settings?templateId=${id}`)
+}
+
+// 供父组件调用：根据当前选择跳转到规则页
+function openRuleSettingsForSelectedTemplate() {
+  if (typeof selectedTemplateId.value === 'number') {
+    router.push(`/rule-settings?templateId=${selectedTemplateId.value}`)
+  }
+}
+
+defineExpose({ openRuleSettingsForSelectedTemplate })
 
 // History methods
 const showHistoryDialog = async () => {

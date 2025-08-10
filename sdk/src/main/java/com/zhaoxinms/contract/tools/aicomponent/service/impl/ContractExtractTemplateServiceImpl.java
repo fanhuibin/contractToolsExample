@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.aicomponent.mapper.ContractExtractTemplateMapper;
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractTemplate;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractTemplateService;
+import com.zhaoxinms.contract.tools.aicomponent.service.RuleStoreService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
@@ -29,6 +30,7 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
 
     private final ContractExtractTemplateMapper templateMapper;
     private final ObjectMapper objectMapper;
+    private final RuleStoreService ruleStoreService;
     
     /**
      * 合同类型映射
@@ -91,6 +93,13 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             }
         }
         templateMapper.insert(template);
+        // 初始化规则（仅补新增）
+        try {
+            List<String> fieldList = parseFields(template.getFields());
+            ruleStoreService.upsertFieldsByTemplateId(template.getId(), fieldList, template.getName(), template.getContractType());
+        } catch (Exception ex) {
+            log.warn("init rules for template failed: {}", template.getId(), ex);
+        }
         return template;
     }
     
@@ -118,6 +127,13 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
             existingTemplate.setIsDefault(true);
         }
         templateMapper.updateById(existingTemplate);
+        // 同步新增字段到规则（仅补，不删）
+        try {
+            List<String> fieldList = parseFields(existingTemplate.getFields());
+            ruleStoreService.upsertFieldsByTemplateId(existingTemplate.getId(), fieldList, existingTemplate.getName(), existingTemplate.getContractType());
+        } catch (Exception ex) {
+            log.warn("upsert rules for template failed: {}", existingTemplate.getId(), ex);
+        }
         return existingTemplate;
     }
     
@@ -152,6 +168,17 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         newTemplate.setIsDefault(false);
         newTemplate.setDescription(templateDb.getDescription() + " (复制)");
         templateMapper.insert(newTemplate);
+        // 复制源模板规则并补齐新增字段
+        try {
+            var srcRule = ruleStoreService.readRuleByTemplateId(id).orElse(null);
+            if (srcRule != null) {
+                ruleStoreService.saveRuleByTemplateId(newTemplate.getId(), srcRule, newTemplate.getName(), newTemplate.getContractType());
+            }
+            List<String> fieldList = parseFields(newTemplate.getFields());
+            ruleStoreService.upsertFieldsByTemplateId(newTemplate.getId(), fieldList, newTemplate.getName(), newTemplate.getContractType());
+        } catch (Exception ex) {
+            log.warn("copy rules for template failed: {}", newTemplate.getId(), ex);
+        }
         return newTemplate;
     }
     
@@ -394,6 +421,12 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
                 .build();
         
         templateMapper.insert(template);
+        // 初始化系统模板的规则：以字段生成默认规则
+        try {
+            ruleStoreService.upsertFieldsByTemplateId(template.getId(), fields, name, contractType);
+        } catch (Exception ex) {
+            log.warn("init system template rules failed: {}", template.getId(), ex);
+        }
     }
 
     /**
@@ -404,5 +437,14 @@ public class ContractExtractTemplateServiceImpl implements ContractExtractTempla
         set.addAll(base);
         set.addAll(extra);
         return new ArrayList<>(set);
+    }
+
+    private List<String> parseFields(String fieldsJson) {
+        try {
+            List<String> list = objectMapper.readValue(fieldsJson, new com.fasterxml.jackson.core.type.TypeReference<List<String>>(){});
+            return list != null ? list : java.util.Collections.emptyList();
+        } catch (Exception e) {
+            return java.util.Collections.emptyList();
+        }
     }
 }

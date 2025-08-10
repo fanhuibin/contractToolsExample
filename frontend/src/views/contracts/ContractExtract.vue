@@ -7,7 +7,7 @@
             <h2>合同信息提取</h2>
             <p>上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。</p>
             <div class="actions">
-              <el-button type="primary" @click="$router.push('/rule-settings')">提取规则设置</el-button>
+              <el-button type="primary" @click="goRuleSettings">提取规则设置</el-button>
             </div>
           </div>
         </el-card>
@@ -16,7 +16,7 @@
     
     <el-row :gutter="20" class="main-content">
       <el-col :span="24">
-        <ContractExtractor />
+        <ContractExtractor ref="extractorRef" />
       </el-col>
     </el-row>
     
@@ -56,8 +56,19 @@
 import { ref } from 'vue';
 import ContractExtractor from '@/components/ai/ContractExtractor.vue';
 import { InfoFilled } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus'
 
 const activeCollapse = ref('');
+const extractorRef = ref<any>(null)
+
+function goRuleSettings() {
+  const inst = extractorRef.value
+  if (inst && typeof inst.openRuleSettingsForSelectedTemplate === 'function') {
+    inst.openRuleSettingsForSelectedTemplate()
+  } else {
+    ElMessage.warning('请先在右侧选择一个模板，再进入规则设置')
+  }
+}
 </script>
 
 <style scoped>

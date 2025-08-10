@@ -16,10 +16,11 @@
         text-color="#bfcbd9"
         active-text-color="#409EFF"
       >
-        <el-menu-item index="/fulfillment">
+        <el-menu-item index="/auto-fulfillment">
           <el-icon><Document /></el-icon>
-          <span>合同履约任务</span>
+          <span>自动履约任务</span>
         </el-menu-item>
+        
          <el-menu-item index="/contract-extract">
           <el-icon><Document /></el-icon>
           <span>合同抽取</span>

@@ -4,9 +4,7 @@
 
     <el-card class="toolbar">
       <div class="toolbar-row">
-        <el-select v-model="activeType" placeholder="选择合同模型" filterable style="width: 260px" @change="onTypeChange">
-          <el-option v-for="m in models" :key="m.contractType" :label="`${cnName(m.contractType)}（${m.filename}）`" :value="m.contractType" />
-        </el-select>
+        <div>当前模板：{{ template?.name || '加载中...' }}（类型：{{ cnName(template?.contractType) }}）</div>
         <el-button type="primary" :icon="Check" @click="onSave" :loading="saving">保存</el-button>
       </div>
     </el-card>
@@ -159,16 +157,19 @@
 
 <script lang="ts" setup>
 import { onMounted, reactive, ref, computed, defineAsyncComponent } from 'vue'
-import { listModels, readRule, saveRule } from '@/api/ai/rules'
-import { aiContract } from '@/api/ai/index'
+import { useRoute, useRouter } from 'vue-router'
+import { readRuleByTemplateId, saveRuleByTemplateId } from '@/api/ai/rules'
+import api from '@/api/ai/index'
 import { ElMessage } from 'element-plus'
 import { Check } from '@element-plus/icons-vue'
 
 // 轻量标签编辑器组件（内联）
 const TagEditor = defineAsyncComponent(() => import('@/views/contracts/components/TagEditor.vue'))
 
-const models = ref<Array<{ contractType: string; filename: string }>>([])
-const activeType = ref<string>()
+const route = useRoute()
+const router = useRouter()
+const templateId = ref<number>()
+const template = ref<any>()
 const activeTab = ref<'fields'|'prompt'>('fields')
 const raw = ref<any>({})
 const prompt = reactive<{ global: string[]; negative: string[]; format: string[]; fields: Record<string, string[]> }>(
@@ -197,25 +198,42 @@ function normalizePrompt(obj: any) {
   setFields(obj?.fields || {})
 }
 
-async function fetchModels() {
-  // 拉取数据库中的合同类型字典
+async function initByTemplateId() {
+  const qid = route.query.templateId
+  if (!qid) {
+    ElMessage.error('缺少 templateId')
+    router.back()
+    return
+  }
+  const idNum = Number(qid)
+  if (!idNum || Number.isNaN(idNum)) {
+    ElMessage.error('templateId 无效')
+    router.back()
+    return
+  }
+  templateId.value = idNum
   try {
-    const typeRes = await aiContract.getContractTypes()
+    const typeRes = await api.aiContract.getContractTypes()
     typeDict.value = typeRes.data || {}
   } catch {}
-  const { data } = await listModels()
-  models.value = data || []
-  if (!activeType.value && models.value.length) {
-    activeType.value = models.value[0].contractType
-    await onTypeChange(activeType.value)
+  // 读取模板详情
+  const tplRes: any = await api.aiContract.getTemplateById(idNum)
+  template.value = tplRes?.data
+  // 读取模板规则
+  const ruleRes: any = await readRuleByTemplateId(idNum)
+  raw.value = ruleRes?.data || {}
+  // 若无规则，则以模板字段生成默认规则结构
+  if (!raw.value || Object.keys(raw.value).length === 0) {
+    try {
+      const fieldsArr: string[] = JSON.parse(template.value?.fields || '[]')
+      const fieldsObj: Record<string, any> = {}
+      for (const f of fieldsArr) fieldsObj[f] = { type: 'string', required: false }
+      raw.value = { name: template.value?.name, contractType: template.value?.contractType, fields: fieldsObj, prompt: { global: [], negative: [], format: [], fields: {} } }
+    } catch {
+      raw.value = { name: template.value?.name, contractType: template.value?.contractType, fields: {}, prompt: { global: [], negative: [], format: [], fields: {} } }
+    }
   }
-}
-
-async function onTypeChange(type?: string) {
-  if (!type) return
-  const { data } = await readRule(type)
-  raw.value = data
-  normalizePrompt(data)
+  normalizePrompt(raw.value)
 }
 
 function openRuleDialog(field: string) {
@@ -264,7 +282,7 @@ function isStringArray(v: any) {
 // 高级编辑已移除
 
 async function onSave() {
-  if (!activeType.value) return
+  if (!templateId.value) return
   saving.value = true
   try {
     // 深拷贝 fields，避免响应式代理影响序列化
@@ -289,8 +307,8 @@ async function onSave() {
         rule.pattern = rule.pattern || '^-?\\d+$'
       }
     }
-    const out = { ...(raw.value || {}), fields: outFields, prompt: { global: prompt.global, negative: prompt.negative, format: prompt.format, fields: prompt.fields } }
-    await saveRule(activeType.value, out)
+    const out = { ...(raw.value || {}), name: template.value?.name, contractType: template.value?.contractType, fields: outFields, prompt: { global: prompt.global, negative: prompt.negative, format: prompt.format, fields: prompt.fields } }
+    await saveRuleByTemplateId(templateId.value, out)
     ElMessage.success('保存成功')
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
@@ -299,7 +317,7 @@ async function onSave() {
   }
 }
 
-onMounted(fetchModels)
+onMounted(initByTemplateId)
 </script>
 
 <style scoped>

@@ -1,15 +1,12 @@
 import request from '@/utils/request'
 
-export function listModels() {
-  return request({ url: '/ai/rules/models', method: 'get' })
+// New API by templateId (query param variant)
+export function readRuleByTemplateId(templateId: number) {
+  return request({ url: `/ai/rules/by-template`, method: 'get', params: { templateId } })
 }
 
-export function readRule(contractType: string) {
-  return request({ url: `/ai/rules/${contractType}`, method: 'get' })
-}
-
-export function saveRule(contractType: string, content: any) {
-  return request({ url: `/ai/rules/${contractType}`, method: 'put', data: content })
+export function saveRuleByTemplateId(templateId: number, content: any) {
+  return request({ url: `/ai/rules/by-template`, method: 'put', params: { templateId }, data: content })
 }
 
 
