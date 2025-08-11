@@ -5,7 +5,6 @@ import com.zhaoxinms.contract.tools.api.dto.TemplateDesignRequest;
 import com.zhaoxinms.contract.tools.api.dto.TemplateDesignResponse;
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.api.service.TemplateDesignService;
-import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -32,8 +31,7 @@ public class TemplateDesignController {
     @Autowired
     private TemplateDesignService templateDesignService;
     
-    @Autowired
-    private FileInfoService fileInfoService; // 预留给其他接口使用
+    // FileInfoService 预留字段移除，避免未使用告警
     
     @Value("${zxcm.file.upload.root-path:./uploads}")
     private String uploadRootPath;
@@ -71,6 +69,19 @@ public class TemplateDesignController {
         TemplateDesignRecord record = designRecordService.getById(id);
         if (record == null) {
             return Result.error("未找到设计记录");
+        }
+        return Result.success(record);
+    }
+
+    @GetMapping("/design/byTemplate/{templateId}")
+    @ApiOperation("根据模板ID获取模板设计明细")
+    public Result<TemplateDesignRecord> getDesignDetailByTemplateId(@PathVariable("templateId") String templateId) {
+        if (designRecordService == null) {
+            return Result.error("查询失败：设计记录服务不可用");
+        }
+        TemplateDesignRecord record = designRecordService.getByTemplateId(templateId);
+        if (record == null) {
+            return Result.error(404, "未找到模板设计记录");
         }
         return Result.success(record);
     }

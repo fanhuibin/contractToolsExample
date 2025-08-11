@@ -371,19 +371,14 @@ const createBlockContentControl = async (Id, Tag, Alias, Rich = true, ReadOnly =
   await postToPlugin({ action: 'createBlockContentControl', Id, Tag, Alias, Rich, ReadOnly })
 }
 
-// 工具方法
-const forceSave = () => {
-  if (!docEditor.value) {
-    ElMessage.warning('编辑器未准备就绪')
-    return
-  }
-
+// 工具方法：通过插件触发强制保存（与旧预览实现一致）
+const forceSave = async () => {
   try {
-    docEditor.value.processSaveResult(true)
-    ElMessage.success('保存命令已发送')
+    await postToPlugin({ action: 'forceSave' })
+    ElMessage.success('已触发强制保存')
   } catch (error) {
     console.error('强制保存失败:', error)
-    ElMessage.error('保存失败: ' + error.message)
+    ElMessage.error('保存失败: ' + (error?.message || '未知错误'))
   }
 }
 

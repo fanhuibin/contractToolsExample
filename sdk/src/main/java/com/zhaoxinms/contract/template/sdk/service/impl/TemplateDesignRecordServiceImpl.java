@@ -43,6 +43,13 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
     public TemplateDesignRecord getById(String id) {
         return mapper.selectById(id);
     }
+
+    @Override
+    public TemplateDesignRecord getByTemplateId(String templateId) {
+        return mapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TemplateDesignRecord>()
+                .eq("template_id", templateId)
+                .last("limit 1"));
+    }
 }
 
 

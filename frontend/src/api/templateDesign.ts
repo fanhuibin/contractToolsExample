@@ -50,4 +50,12 @@ export function getTemplateDesignDetail(id: string) {
   })
 }
 
+// 通过模板ID查询模板设计明细
+export function getTemplateDesignByTemplateId(templateId: string) {
+  return request({
+    url: `/template/design/byTemplate/${templateId}`,
+    method: 'get'
+  })
+}
+
 

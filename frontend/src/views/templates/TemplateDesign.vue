@@ -1,119 +1,19 @@
 <template>
   <div class="template-design-page">
-    <div class="design-body">
+    <div class="design-body" :style="{ gridTemplateColumns: gridColumns }">
       <div class="left-panel">
-        <el-card class="fields-card fields-card--flat" shadow="never" :body-style="{ padding: '0' }">
-          <template #header>
-            <div class="card-header">
-              <span>可插入元素</span>
-              <el-tag size="small">{{ elementsCount }}项</el-tag>
-            </div>
-          </template>
-          <div class="fields-tabs custom-tabs">
-            <div class="tabs-nav is-left">
-              <button
-                class="tab-item"
-                :class="{ active: activeTab === 'base' }"
-                @click="activeTab = 'base'"
-                :aria-pressed="activeTab === 'base'"
-              >
-                <span class="tab-label"><el-icon><Document /></el-icon> 字段</span>
-              </button>
-              <button
-                class="tab-item"
-                :class="{ active: activeTab === 'clause' }"
-                @click="activeTab = 'clause'"
-                :aria-pressed="activeTab === 'clause'"
-              >
-                <span class="tab-label"><el-icon><Tickets /></el-icon> 条款</span>
-              </button>
-              <button
-                class="tab-item"
-                :class="{ active: activeTab === 'party' }"
-                @click="activeTab = 'party'"
-                :aria-pressed="activeTab === 'party'"
-              >
-                <span class="tab-label"><el-icon><User /></el-icon> 签约方</span>
-              </button>
-              <button
-                class="tab-item"
-                :class="{ active: activeTab === 'seal' }"
-                @click="activeTab = 'seal'"
-                :aria-pressed="activeTab === 'seal'"
-              >
-                <span class="tab-label"><el-icon><Stamp /></el-icon> 印章</span>
-              </button>
-            </div>
-            <div class="tabs-content">
-              <div v-show="activeTab === 'base'" class="tab-pane-body">
-                <div class="custom-search"><input v-model="keyword" placeholder="搜索字段" class="search-input" /></div>
-                <div class="custom-scroll list">
-                  <div v-if="filteredBaseFields.length === 0" class="empty">暂无数据</div>
-                  <div v-for="f in filteredBaseFields" :key="f.code" class="field-item custom">
-                    <div class="meta">
-                      <div class="item-head">
-                        <div class="name">
-                          {{ f.name }}
-                          <span v-if="f.isRichText" class="badge-rich">富文本</span>
-                        </div>
-                        <button class="link-btn inline" @click="insertTag('base', f)">插入</button>
-                      </div>
-                      <div class="code"><span class="badge">{{ f.code }}</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-show="activeTab === 'clause'" class="tab-pane-body">
-                <div class="custom-search"><input v-model="keywordClause" placeholder="搜索条款" class="search-input" /></div>
-                <div class="custom-scroll list">
-                  <div v-if="filteredClauseFields.length === 0" class="empty">暂无数据</div>
-                  <div v-for="c in filteredClauseFields" :key="c.code" class="field-item custom clause-item">
-                    <div class="meta">
-                      <div class="item-head">
-                        <div class="name">{{ c.name }}</div>
-                        <button class="link-btn inline" @click="insertTag('clause', c)">插入</button>
-                      </div>
-                      <div class="code"><span class="badge">{{ c.code }}</span></div>
-                      <div class="clause-preview" v-html="resolveClauseHtml(c.content)"></div>
-                      <div class="full-preview" v-html="resolveClauseHtml(c.content)"></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-show="activeTab === 'party'" class="tab-pane-body">
-                <div class="custom-scroll list">
-                  <div v-if="(fields.counterpartyFields||[]).length === 0" class="empty">暂无数据</div>
-                  <div v-for="p in fields.counterpartyFields" :key="p.code" class="field-item custom">
-                    <div class="meta">
-                      <div class="item-head party">
-                        <div class="name">{{ p.name }}</div>
-                        <button class="link-btn inline" @click="insertTag('party', p)">插入</button>
-                      </div>
-                      <div class="code"><span class="badge">{{ p.code }}</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div v-show="activeTab === 'seal'" class="tab-pane-body">
-                <div class="custom-scroll list">
-                  <div v-if="(fields.sealFields||[]).length === 0" class="empty">暂无数据</div>
-                  <div v-for="s in fields.sealFields" :key="s.code" class="field-item custom">
-                    <div class="meta">
-                      <div class="item-head">
-                        <div class="name">{{ s.name }}</div>
-                        <button class="link-btn inline" @click="insertTag('seal', s)">插入</button>
-                      </div>
-                      <div class="code"><span class="badge">{{ s.code }}</span></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+        <template v-if="!leftCollapsed">
+        <InsertableElementsPanel :fields="fields" @insert="insertTag" />
+        <!-- 左侧折叠切换：位于与编辑区交界处 -->
+        <div class="edge-toggle edge-toggle--left" title="收起" @click="leftCollapsed = true">
+          <el-icon><CaretLeft /></el-icon>
+        </div>
+        </template>
+        <template v-else>
+          <div class="edge-toggle edge-toggle--left is-collapsed" title="展开" @click="leftCollapsed = false">
+            <el-icon><CaretRight /></el-icon>
           </div>
-        </el-card>
+        </template>
       </div>
       <div class="editor-panel">
         <OnlyOfficeEditor
@@ -121,7 +21,7 @@
           :file-id="fileId"
           :can-edit="true"
           :can-review="false"
-          :height="'100vh'"
+          :height="'100%'"
           :show-toolbar="false"
           :show-status="false"
           :update-onlyoffice-key="true"
@@ -130,39 +30,18 @@
         />
       </div>
       <div class="right-panel">
-        <el-card class="elements-card" shadow="never">
-          <template #header>
-            <div class="card-header">
-              <span>已插入元素</span>
-              <el-input v-model="elementsKeyword" placeholder="检索已插入元素" size="small" clearable prefix-icon="Search" class="ml8" style="max-width: 220px;" />
-            </div>
-          </template>
-          <el-scrollbar class="list">
-            <el-empty v-if="elements.length === 0" description="暂无元素" />
-            <div v-for="(el, idx) in filteredElements" :key="el.key" class="element-item">
-              <div class="element-main" @click="locateElement(el)">
-                <div class="title-line">
-                  <span class="title">{{ el.customName || el.name }}</span>
-                  <el-tag size="small" :type="typeTag(el.type)">{{ typeLabel(el.type) }}</el-tag>
-                  <el-tag v-if="el.meta?.partyIndex" size="small" type="warning">签约方{{ el.meta.partyIndex }}</el-tag>
-                </div>
-                <div class="desc">{{ elementDesc(el) }}</div>
-              </div>
-              <div class="actions">
-                <el-button size="small" text type="primary" @click.stop="locateElement(el)">定位</el-button>
-                <el-button size="small" text type="primary" @click.stop="editElement(idx)">编辑</el-button>
-                <el-popconfirm title="确认删除该元素？" confirm-button-text="删除" cancel-button-text="取消" @confirm="deleteElement(idx, el)">
-                  <template #reference>
-                    <el-button size="small" text type="danger">删除</el-button>
-                  </template>
-                </el-popconfirm>
-              </div>
-            </div>
-          </el-scrollbar>
-          <div class="actions">
-            <el-button type="primary" @click="saveDesign" :loading="saving">保存设计</el-button>
+        <template v-if="!rightCollapsed">
+        <InsertedElementsPanel :elements="elements" :fields="fields" @locate="locateElement" @edit="editElement" @delete="deleteElement" />
+        <!-- 右侧折叠切换：位于与编辑区交界处 -->
+        <div class="edge-toggle edge-toggle--right" title="收起" @click="rightCollapsed = true">
+          <el-icon><CaretRight /></el-icon>
+        </div>
+        </template>
+        <template v-else>
+          <div class="edge-toggle edge-toggle--right is-collapsed" title="展开" @click="rightCollapsed = false">
+            <el-icon><CaretLeft /></el-icon>
           </div>
-        </el-card>
+        </template>
       </div>
     </div>
   </div>
@@ -193,20 +72,25 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Tickets, User, Stamp, Search } from '@element-plus/icons-vue'
+import { Document, Tickets, User, Stamp, Search, Edit, Delete, CaretLeft, CaretRight } from '@element-plus/icons-vue'
+import InsertableElementsPanel from '@/components/template-design/InsertableElementsPanel.vue'
+import InsertedElementsPanel from '@/components/template-design/InsertedElementsPanel.vue'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
-import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignDetail } from '@/api/templateDesign'
+import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignByTemplateId } from '@/api/templateDesign'
 
 const route = useRoute()
 const templateId = computed(() => (route.query.id as string) || '')
-// 设计时固定使用一个示例文件（走通用 fileInfo），默认ID为 9999
-const fileId = computed(() => (route.query.fileId as string) || '9999')
-const designId = ref<string>((route.query.designId as string) || '')
+const fileId = computed(() => (route.query.fileId as string) || '')
+const designId = ref<string>('')
 
 const fields = reactive<any>({ baseFields: [], clauseFields: [], counterpartyFields: [], sealFields: [] })
 const activeTab = ref<'base' | 'clause' | 'party' | 'seal'>('base')
 const keyword = ref('')
 const keywordClause = ref('')
+const keywordParty = ref('')
+const keywordSeal = ref('')
+const leftCollapsed = ref(false)
+const rightCollapsed = ref(false)
 const insertDialogVisible = ref(false)
 const insertDialogSubmitting = ref(false)
 const pendingInsert = ref<{ type: string; item: any; key: string; tag: string; isRich: boolean } | null>(null)
@@ -214,11 +98,12 @@ const insertForm = reactive<{ customName: string; partyIndex: string }>({ custom
 const elementsKeyword = ref('')
 const elements = ref<Array<{ key: string; tag: string; type: string; name: string; customName?: string; meta?: any }>>([])
 const editorRef = ref<any>(null)
-const saving = ref(false)
 
 const elementsCount = computed(() => (fields.baseFields?.length || 0) + (fields.clauseFields?.length || 0) + (fields.sealFields?.length || 0) + (fields.counterpartyFields?.length || 0))
 const filteredBaseFields = computed(() => (fields.baseFields || []).filter((f: any) => !keyword.value || f.name.includes(keyword.value) || f.code.includes(keyword.value)))
 const filteredClauseFields = computed(() => (fields.clauseFields || []).filter((c: any) => !keywordClause.value || c.name.includes(keywordClause.value) || c.code.includes(keywordClause.value)))
+const filteredPartyFields = computed(() => (fields.counterpartyFields || []).filter((p: any) => !keywordParty.value || p.name.includes(keywordParty.value) || p.code.includes(keywordParty.value)))
+const filteredSealFields = computed(() => (fields.sealFields || []).filter((s: any) => !keywordSeal.value || s.name.includes(keywordSeal.value) || s.code.includes(keywordSeal.value)))
 const filteredElements = computed(() => elements.value.filter((e) => {
   if (!elementsKeyword.value) return true
   const kw = elementsKeyword.value.toLowerCase()
@@ -230,9 +115,19 @@ const filteredElements = computed(() => elements.value.filter((e) => {
   )
 }))
 
+const gridColumns = computed(() => {
+  const leftWidth = leftCollapsed.value ? '18px' : '320px'
+  const rightWidth = rightCollapsed.value ? '18px' : '360px'
+  return `${leftWidth} 1fr ${rightWidth}`
+})
+
 onMounted(async () => {
+  if (!templateId.value || !fileId.value) {
+    ElMessage.error('缺少模板ID或文件ID')
+    return
+  }
   await loadFields()
-  if (designId.value) await loadDesignDetail()
+  await loadDesignByTemplateId()
 })
 
 const loadFields = async () => {
@@ -243,11 +138,15 @@ const loadFields = async () => {
   fields.sealFields = res.data.sealFields || []
 }
 
-const loadDesignDetail = async () => {
+const loadDesignByTemplateId = async () => {
   try {
-    const res = await getTemplateDesignDetail(designId.value)
-    const data = typeof res.data === 'string' ? JSON.parse(res.data) : res.data
-    elements.value = data.elements || []
+    const res = await getTemplateDesignByTemplateId(templateId.value)
+    const raw = res?.data || {}
+    // 兼容不同返回结构
+    const elementsJson = (raw.elementsJson) || ''
+    const parsed = elementsJson ? JSON.parse(elementsJson) : (typeof raw === 'string' ? JSON.parse(raw) : raw)
+    elements.value = parsed?.elements || raw?.elements || []
+    if (raw?.id) designId.value = String(raw.id)
   } catch (e) {
     // ignore
   }
@@ -276,7 +175,7 @@ const insertTag = async (type: string, item: any) => {
   }
   const key = generateUniqueKey(item.code)
   const tag = `tagElement${key}`
-  const isRich = !!item?.richText
+  const isRich = !!(item?.isRichText || item?.richText)
   // 统一在一个弹窗中处理：显示名 + （若为签约方则）签约方选择
   pendingInsert.value = { type, item, key, tag, isRich }
   insertForm.customName = ''
@@ -311,25 +210,40 @@ const confirmInsert = async () => {
   if (!pendingInsert.value) return
   insertDialogSubmitting.value = true
   const { item, key, tag, isRich, type } = pendingInsert.value
+  // 准备即将保存的元素
+  const newElement = type === 'party'
+    ? { key, tag, type: 'party', name: item.name, customName: insertForm.customName, meta: { ...item, richText: isRich, partyIndex: insertForm.partyIndex } }
+    : { key, tag, type, name: item.name, customName: insertForm.customName, meta: { ...item, richText: isRich } }
+  const newElements = [...elements.value, newElement]
+  const prevElements = [...elements.value]
+  let savedId: string | undefined
   try {
+    // 1) 先保存后台
+    const res = await saveTemplateDesign({
+      id: designId.value || undefined,
+      templateId: templateId.value,
+      fileId: fileId.value,
+      elements: newElements
+    })
+    if (res?.data?.id) savedId = String(res.data.id)
+    // 2) 再插入到OnlyOffice
     if (isRich) {
       await (editorRef.value?.createBlockContentControl?.(key, tag, item.name, true, true) || Promise.resolve())
     } else {
       await (editorRef.value?.createContentControl?.(key, tag, item.name, false) || Promise.resolve())
     }
-    if (type === 'party') {
-      elements.value.push({
-        key,
-        tag,
-        type: 'party',
-        name: item.name,
-        customName: insertForm.customName,
-        meta: { ...item, richText: isRich, partyIndex: insertForm.partyIndex }
-      })
-    } else {
-      elements.value.push({ key, tag, type, name: item.name, customName: insertForm.customName, meta: { ...item, richText: isRich } })
-    }
-    ElMessage.success('已插入占位符')
+    // 3) 双方都成功后更新本地并提示
+    elements.value = newElements
+    if (savedId) designId.value = savedId
+    // 4) 插入后触发一次强制保存
+    try { editorRef.value?.forceSave?.() } catch {}
+    ElMessage.success('已保存并插入元素，并已强制保存')
+  } catch (err) {
+    // 回滚后端保存
+    try {
+      await saveTemplateDesign({ id: savedId || designId.value || undefined, templateId: templateId.value, fileId: fileId.value, elements: prevElements })
+    } catch {}
+    ElMessage.error('保存或插入失败，请重试')
   } finally {
     insertDialogSubmitting.value = false
     insertDialogVisible.value = false
@@ -365,13 +279,9 @@ const typeTag = (type: string) => {
 }
 
 const elementDesc = (el: any) => {
-  const parts: string[] = []
-  if (el.type === 'party' && el.meta?.partyIndex) {
-    parts.push(`签约方${el.meta.partyIndex}`)
-  }
+  // 名称与编号合并为一段，并且不再追加多余的标签信息
   const code = el?.meta?.code || ''
-  parts.push(el.name + (code ? `（${code}）` : ''))
-  return parts.join(' ')
+  return `${el.name}${code ? `（${code}）` : ''}`
 }
 
 // 解析条款变量，如 ${contract_name} -> 从基础字段或签约方字段映射可读名称
@@ -412,20 +322,7 @@ const resolveClauseHtml = (raw: string) => {
   })
 }
 
-const saveDesign = async () => {
-  saving.value = true
-  try {
-    await saveTemplateDesign({
-      id: designId.value || undefined,
-      templateId: templateId.value,
-      fileId: fileId.value,
-      elements: elements.value
-    })
-    ElMessage.success('保存成功')
-  } finally {
-    saving.value = false
-  }
-}
+// 保存按钮已移除：改为新增元素时自动保存
 </script>
 
 <style scoped>
@@ -439,36 +336,76 @@ const saveDesign = async () => {
   display: grid;
   grid-template-columns: 320px 1fr 360px;
   height: 100vh;
+  grid-template-rows: 1fr;
   overflow: hidden; /* 固定整体布局，避免因滚动条影响左右抖动 */
+  column-gap: 12px; /* 统一左右与中间的间距，更加呼吸 */
 }
-.left-panel, .right-panel {
-  padding: 10px;
-}
+.editor-panel { height: 100%; display: flex; }
+.editor-panel :deep(.onlyoffice-editor) { flex: 1; }
+.editor-panel :deep(.editor-container) { height: 100% !important; }
+.left-panel, .right-panel { padding: 0 10px; min-height: 0; display: flex; flex-direction: column; height: 100%; }
 .left-panel {
   background: #ffffff;
-  border-right: 1px solid #ebeef5;
+  /* 去掉硬分割线，配合 column-gap 呈现统一留白 */
 }
-.right-panel {
-  border-left: 1px solid #ebeef5;
+.right-panel { background: #ffffff; }
+.fields-card, .elements-card { height: 100%; min-height: 0; display: flex; flex-direction: column; }
+.custom-card { background: #fff; border: 1px solid #ebeef5; border-radius: 8px; }
+.custom-card .card-header { padding: 10px; border-bottom: 1px solid #ebeef5; }
+.custom-card .card-body { padding: 10px; }
+.custom-card.fill { display: flex; flex-direction: column; }
+.custom-card.fill .card-body { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.custom-card.fill .card-body > .list { flex: 1; min-height: 0; }
+.collapse-btn {
+  margin-left: auto;
+  border: 1px solid #e6ebf5;
+  background: #fff;
+  color: #909399;
+  width: 24px; height: 24px; border-radius: 4px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.fields-card, .elements-card {
-  height: calc(100vh - 20px);
+.collapse-btn:hover { background: #f7f8fa; }
+/* 统一边缘折叠按钮样式与位置（与编辑器交界处） */
+.edge-toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 48px;
+  border: 1px solid #e6ebf5;
+  border-radius: 6px;
+  background: #fff;
+  color: #606266;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  z-index: 3;
 }
+.edge-toggle:hover { background: #f7f8fa; }
+.edge-toggle--left { right: -12px; }
+.edge-toggle--right { left: -12px; }
+.left-panel, .right-panel { position: relative; overflow: hidden; }
+.edge-toggle.is-collapsed { height: calc(100vh - 20px); border-radius: 0; width: 18px; }
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
+.elements-header { display: grid; grid-template-rows: auto auto; gap: 8px; }
+.elements-header .header-top { display: flex; align-items: center; justify-content: space-between; }
+.elements-header .header-bottom { display: flex; align-items: center; }
 .fields-tabs { height: calc(100% - 10px); }
-.custom-tabs { display: grid; grid-template-columns: 84px 1fr; }
+.custom-tabs { display: grid; grid-template-columns: 52px 1fr; }
 .custom-tabs .tabs-nav {
-  width: 84px;
+  width: 52px;
   border-right: 1px solid #ebeef5;
   background: transparent;
-  padding: 6px 6px;
+  padding: 4px 4px;
 }
 .custom-tabs .tab-item {
-  width: 100%; height: 60px; padding: 6px; margin: 4px 0; line-height: 1;
+  width: 100%; height: 48px; padding: 4px; margin: 4px 0; line-height: 1;
   display: flex; align-items: center; justify-content: center; gap: 6px;
   border-radius: 8px; border: 1px solid transparent; background: transparent; color: #606266; cursor: pointer;
   transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
@@ -477,8 +414,8 @@ const saveDesign = async () => {
 .custom-tabs .tab-item.active { background: #f0f5ff; color: #3370ff; box-shadow: inset 2px 0 0 #3370ff; border-color: #c6dbff; }
 .custom-tabs .tabs-content { padding-left: 0; }
 .custom-tabs .tabs-nav.is-left { padding-top: 4px; }
-.tab-label { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; color: #606266; }
-.tab-label :deep(svg) { font-size: 16px; }
+.tab-label { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: #606266; }
+.tab-label :deep(svg) { font-size: 14px; }
 .tab-pane-body { padding: 8px 10px; }
 .list {
   height: calc(100vh - 140px); /* 拉满到页面底部，减掉头部与内边距 */
@@ -553,8 +490,8 @@ const saveDesign = async () => {
 /* 右侧卡片优化 */
 .element-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
   padding: 12px 10px;
   border: 1px solid #ebeef5;
   border-radius: 8px;
@@ -563,14 +500,23 @@ const saveDesign = async () => {
   transition: box-shadow .2s ease, border-color .2s ease;
 }
 .element-item:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color: #e4e7ed; }
-.element-main { flex: 1; cursor: pointer; }
-.title-line { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.title { font-weight: 600; color: #303133; }
-.desc { font-size: 12px; color: #909399; }
-.element-item .actions { display: flex; gap: 4px; padding: 0; }
+.element-main { flex: 1; cursor: pointer; width: 100%; }
+.line { display: flex; align-items: center; width: 100%; }
+.display-line { margin-bottom: 6px; gap: 6px; }
+.display-name { font-weight: 700; color: #303133; display: inline-block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; line-height: 20px; }
+.meta-line { justify-content: flex-start; margin-bottom: 4px; font-size: 12px; color: #606266; }
+.meta-left { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #606266; font-size: 12px; }
+.meta-code { color: #909399; margin-left: 4px; }
+.clause-line { margin-top: 6px; }
+.elem-clause-preview { color: #606266; font-size: 12px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.display-line :deep(.el-tag) { margin-left: 6px; }
+.element-item .actions { display: flex; gap: 2px; padding: 2px 0 0; justify-content: flex-end; width: 100%; }
+.element-item .actions :deep(.el-button) { font-size: 12px; height: 20px; padding: 0 0px; min-width: 0; }
 
 /* 右侧卡片区域更大的滚动空间，减少滚动条带来的视觉压迫 */
-.right-panel .list { height: calc(100vh - 220px); }
+.right-panel .list { height: auto; max-height: 100%; }
+/* 左侧列表滚动高度与右侧保持一致视觉节奏 */
+.left-panel .list { height: auto; max-height: 100%; }
 
 /* 去除左侧卡片边框与背景，让内容更轻盈 */
 .fields-card--flat { border: none; background: transparent; }
