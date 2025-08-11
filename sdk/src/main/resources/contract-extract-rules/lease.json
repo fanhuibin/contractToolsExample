@@ -1,0 +1,63 @@
+{
+  "version": "1.0",
+  "contractType": "lease",
+  "defaults": {"type": "string", "required": false, "normalize": ["trim"]},
+  "fields": {
+    "合同名称": {"type": "string", "required": false, "normalize": ["trim", {"regexReplace": ["(合同|合同书)$", ""]}]},
+    "承租方": {"type": "string"},
+    "出租方": {"type": "string"},
+    "甲方联系地址": {"type": "string"},
+    "乙方联系人地址": {"type": "string"},
+    "甲方联系人电话": {"type": "string", "normalize": ["trim", {"regexKeep": "[0-9\\-\\+\\(\\) ]+"}]},
+    "乙方联系人电话": {"type": "string", "normalize": ["trim", {"regexKeep": "[0-9\\-\\+\\(\\) ]+"}]},
+    "租赁地址": {"type": "string"},
+    "租赁面积": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "合同编号": {"type": "string"},
+    "甲方签署日期": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "乙方签署日期": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "合同有效期": {"type": "string"},
+    "合同起始时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁期限": {"type": "string"},
+    "租赁起始时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁终止时间": {"type": "date", "normalize": [{"parseDate": ["yyyy-MM-dd", "yyyy/MM/dd", "yyyy年MM月dd日", "yyyy.MM.dd"]}], "outputFormat": "yyyy-MM-dd"},
+    "租赁费用": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "租赁费用大写": {"type": "string"},
+    "每期金额": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "每期金额（大写)": {"type": "string"},
+    "履约保证金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "付款方式": {"type": "string"},
+    "支付周期": {"type": "string"},
+    "支付节点": {"type": "string"},
+    "甲方违约金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "乙方违约金": {"type": "number", "normalize": ["trim", {"regexKeep": "[\\d\\.\\-]+"}], "min": 0},
+    "甲方违约金（大写)": {"type": "string"},
+    "乙方违约金（大写)": {"type": "string"},
+    "甲方签署人": {"type": "string"},
+    "乙方签署人": {"type": "string"}
+  },
+  "prompt": {
+    "global": [
+      "你是合同信息抽取助手，只能返回有效 JSON，不要任何解释或多余文本。",
+      "当无法确定字段值时，请返回 null。"
+    ],
+    "negative": [
+      "禁止使用‘授权期限/永久授权’等表述推断合同期限。",
+      "禁止输出除 JSON 以外的任何字符（如 Markdown、注释、自然语言描述）。"
+    ],
+    "fields": {
+      "合同期限(天)": [
+        "以‘合同生效日期/合同起始时间’为开始，以‘合同终止日期/合同截止日期’为结束，返回两者相差的整数天数。",
+        "任一端缺失则返回 0。",
+        "仅返回数字，不带单位。"
+      ],
+      "合同名称": [
+        "若合同名称以‘合同/合同书’为后缀，请去掉该后缀，仅返回名称本体。",
+        "保留名称中部出现的‘合同’字样（如‘合同管理系统’）。"
+      ]
+    },
+    "format": [
+      "严格输出 JSON，键使用中文字段名，值类型与字段定义一致。"
+    ]
+  }
+}
+

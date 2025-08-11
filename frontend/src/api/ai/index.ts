@@ -1,6 +1,6 @@
 import baseRequest from '@/utils/request'
 
-import * as fulfillment from './fulfillment';
+// removed: fulfillment APIs
 
 /**
  * AI聊天相关API
@@ -116,6 +116,10 @@ export const aiContract = {
   getDefaultTemplate(contractType: string) {
     return baseRequest.get(`/ai/contract/template/default/${contractType}`);
   },
+  // 新增：按ID获取模板详情（用于规则设置页）
+  getTemplateById(id: number) {
+    return baseRequest.get(`/ai/contract/template/${id}`);
+  },
   
   /**
    * 创建新模板
@@ -177,21 +181,10 @@ export const aiContract = {
 };
 
 // 导出履约任务相关API
-export const aiFulfillment = {
-  getFulfillmentTemplates: fulfillment.getFulfillmentTemplates,
-  getFulfillmentTemplatesByType: fulfillment.getFulfillmentTemplatesByType,
-  createFulfillmentTemplate: fulfillment.createFulfillmentTemplate,
-  updateFulfillmentTemplate: fulfillment.updateFulfillmentTemplate,
-  deleteFulfillmentTemplate: fulfillment.deleteFulfillmentTemplate,
-  copyFulfillmentTemplate: fulfillment.copyFulfillmentTemplate,
-  getFulfillmentContractTypes: fulfillment.getFulfillmentContractTypes,
-  getFulfillmentHistory: fulfillment.getFulfillmentHistory,
-  extractFulfillmentTask: fulfillment.extractFulfillmentTask,
-  saveFulfillmentConfig: fulfillment.saveFulfillmentConfig
-};
+// removed: aiFulfillment export
 
 export default {
   aiChat,
   aiContract,
-  aiFulfillment
+  aiAutoFulfillment: (await import('./auto-fulfillment')).default
 };

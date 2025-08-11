@@ -104,3 +104,105 @@ ai:
 ## 联系方式
 项目负责人：[您的名字]
 电子邮件：[您的邮箱]
+
+## 变更记录
+
+### 2025-08-08 合同抽取字段规则库（新增扩展文件，未改代码）
+- 新增外置规则文件目录：`sdk/src/main/resources/contract-extract-rules/`
+  - `lease.json`、`purchase.json`、`labor.json`、`construction.json`、`technical.json`、`intellectual.json`、`operation.json`
+- 作用：为各合同类型提供字段级约束与规范化策略（类型、必填、正则清洗、日期/金额/百分比等），示例：
+  - “合同名称”自动去除“合同/合同书”后缀，并禁止包含这些词；
+  - 金额/比例字段仅保留数字与小数点；
+  - 日期字段解析多种格式并统一输出为 `yyyy-MM-dd`。
+- 说明：当前仅新增扩展文件，不影响现有流程；后续可在 SDK 的提示构建与结果后处理阶段按需加载应用。
+
+### 2025-08-08 合同抽取规则执行集成与“合同名称”策略调整
+- 修改：在 SDK 抽取流程中集成外置规则库执行（normalize + validate），路径：`sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/impl/ContractExtractServiceImpl.java`（抽取完成后按模板 `contractType` 加载并执行规则）
+- 新增：规则模型与服务
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/rules/ContractRules.java`
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/rules/FieldRule.java`
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/rules/RuleViolation.java`
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/RuleLoaderService.java`
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/RuleEngineService.java`
+- 配置：`sdk/src/main/resources/application-ai.yml` 新增 `zxcm.ai.contract.enforce-rules: true`
+- 规则：移除“合同名称”的 `denyContains`，仅保留后缀清洗 `(合同|合同书)$`
+  - 影响文件：`lease.json`、`purchase.json`、`labor.json`、`construction.json`、`technical.json`、`intellectual.json`、`operation.json`
+- 效果：
+  - “合同名称”中部的“合同”保留，末尾“合同/合同书”被去除。
+  - 示例：输入“肇新合同管理系统源码销售合同”→ 输出“肇新合同管理系统源码销售”。
+
+### 2025-08-10 规则与模板绑定（templateId 唯一）与前后端改造
+- 数据库
+  - 新增迁移：`backend/src/main/resources/db/migration/V4__alter_contract_rule_to_template.sql`
+    - 为每个 `contract_rule` 赋值 `template_id`（优先默认模板 → 最小ID模板 → 无则自动创建系统迁移模板）
+    - 删除 `contract_rule.contract_type` 唯一约束，新增 `UNIQUE(template_id)`
+- 后端
+  - 模型：`ContractRule` 新增 `templateId` 字段（唯一），保留 `contractType` 兼容
+  - 服务：`RuleStoreService` 新增 `readRuleByTemplateId`、`saveRuleByTemplateId`、`upsertFieldsByTemplateId`
+  - 控制器：`RuleAdminController` 新增
+    - `GET /api/ai/rules/template/{templateId}`
+    - `PUT /api/ai/rules/template/{templateId}`
+  - 模板服务：`ContractExtractTemplateServiceImpl`
+    - create/copy/update 时初始化/复制/补新增规则（不强删旧）
+  - 抽取服务：`ContractExtractServiceImpl` 构建 prompt 时优先按 `templateId` 加载规则并合并
+- 前端
+  - API：`frontend/src/api/ai/rules.ts` 新增 `readRuleByTemplateId`、`saveRuleByTemplateId`
+  - 规则设置页：`RuleSettings.vue` 改为按路由 `templateId` 加载模板与规则并保存
+  - 模板选择：`ContractExtractor.vue` 新增“编辑该模板规则”跳转；`ContractExtract.vue` 的“提取规则设置”按钮带上 `templateId`
+
+### 2025-08-08 规则与模板调整（去除通用类型并合并）
+- 删除：`sdk/src/main/resources/contract-extract-rules/common.json`
+- 合并：将原“通用”字段（编号、名称、甲乙方、地址、联系人、签署与起止日期、违约/争议/法律等）并入以下规则文件的 `fields`：
+  - `labor.json`、`construction.json`、`technical.json`、`intellectual.json`、`operation.json`
+- SDK 系统模板初始化调整：移除“通用合同模板”，并在 `ContractExtractTemplateServiceImpl.initSystemTemplates()` 中将通用字段合并进上述五类模板字段集合；新增 `mergeUnique()` 保证字段去重。
+
+### 2025-08-08 SDK 上传大小限制调整（配置变更）
+- `sdk/src/main/resources/application.yml`：新增 `spring.servlet.multipart` 配置，将上传上限设置为 `100MB`：
+  - `spring.servlet.multipart.max-file-size: 100MB`
+  - `spring.servlet.multipart.max-request-size: 100MB`
+  - `spring.servlet.multipart.enabled: true`
+  解决由于默认 1MB 导致的 `MaxUploadSizeExceededException`。
+
+### 2025-08-10 移除“合同履约任务”全部代码（前后端）
+- 追加：新增“自动履约任务”（完全按“合同抽取”供能实现）
+  - 数据库：`backend/src/main/resources/db/migration/V5__create_auto_fulfillment_tables.sql`
+    - `auto_fulfillment_template`（字段对齐 `contract_extract_template`）
+    - `auto_fulfillment_history`（字段对齐 `contract_extract_history`）
+  - 后端（SDK）：
+    - 控制器：`AutoFulfillmentController`（/api/ai/auto-fulfillment）、`AutoFulfillmentTemplateController`、`AutoFulfillmentHistoryController`
+    - 服务：`AutoFulfillmentServiceImpl`、`AutoFulfillmentTemplateServiceImpl`、`AutoFulfillmentHistoryServiceImpl`
+    - 实体/Mapper：`AutoFulfillmentTemplate`、`AutoFulfillmentHistory`、`AutoFulfillmentTemplateMapper`、`AutoFulfillmentHistoryMapper`
+  - 前端：
+    - API：`frontend/src/api/ai/auto-fulfillment.ts` 并在 `api/ai/index.ts` 下通过 `aiAutoFulfillment` 暴露
+    - 页面：`frontend/src/views/contracts/AutoFulfillment.vue`
+    - 路由：`/auto-fulfillment`
+    - 菜单：`frontend/src/layout/index.vue` 新增“自动履约任务”
+
+### 2025-08-10 SDK 编译错误修复（字典与 Mapper 拆分）
+- 修复：`The public type AutoFulfillmentTaskTypeMapper must be defined in its own file`
+  - 新增：`sdk/src/main/java/.../mapper/AutoFulfillmentTaskTypeMapper.java`
+  - 删除：`AutoFulfillmentDictMapper.java`（重复定义）
+  - 拆分模型：`AutoFulfillmentTaskType.java`、`AutoFulfillmentKeyword.java`
+- 新增字典迁移与接口（去硬编码，改为ID驱动）
+  - 迁移：`V6__auto_fulfillment_dicts.sql`（任务类型/关键词/关联表）
+  - 控制器：`AutoFulfillmentDictController` 提供 `/dicts/task-types` 与 `/dicts/keywords`
+- 前端
+  - 删除：`frontend/src/views/contracts/FulfillmentTask.vue`
+  - 删除：`frontend/src/api/ai/fulfillment.ts`
+  - 调整：`frontend/src/layout/index.vue` 移除侧边栏“合同履约任务”菜单
+  - 调整：`frontend/src/router/index.ts` 移除 `/fulfillment` 路由
+- 后端（SDK）
+  - 删除控制器：`FulfillmentTaskController`、`FulfillmentTemplateController`
+  - 删除服务/实现：`FulfillmentAiService`、`FulfillmentTaskService`、`FulfillmentTemplateService`、`FulfillmentTemplateServiceImpl`
+  - 删除模型：`FulfillmentTemplate`、`FulfillmentExtractResult`、`FulfillmentConfig`
+  - 删除持久层：`FulfillmentTemplateMapper` 及其 XML：`backend/src/main/java/.../mapper/xml/FulfillmentTemplateMapper.xml`
+- 影响
+  - 所有以 `/api/fulfillment/**`、`/api/fulfillment/template/**` 为前缀的接口已不可用
+  - 前端不再展示“合同履约任务”入口
+
+### 2025-08-10 Flyway V4 迁移修复（先新增列再更新）
+- 修改：`backend/src/main/resources/db/migration/V4__alter_contract_rule_to_template.sql`
+  - 在执行任何基于 `template_id` 的 `UPDATE` 之前，新增列存在性检查；若缺失则执行：`ALTER TABLE contract_rule ADD COLUMN template_id BIGINT NULL`
+  - 保持后续默认模板映射、兜底映射、删除 `contract_type` 唯一约束、添加 `UNIQUE(template_id)` 的逻辑不变
+- 影响：修复启动时 Flyway 报错 “Unknown column 'cr.template_id' in 'where clause'”，确保迁移可重复执行
+- 操作建议：重启应用触发 Flyway 自动迁移；或在数据库中单独执行该脚本后再启动

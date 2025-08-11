@@ -38,17 +38,24 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'OnlyOffice演示' }
       },
       {
+        path: '/auto-fulfillment',
+        name: 'AutoFulfillment',
+        component: () => import('@/views/contracts/AutoFulfillment.vue'),
+        meta: { title: '自动履约任务' }
+      },
+      {
         path: '/contract-extract',
         name: 'ContractExtract',
         component: () => import('@/views/contracts/ContractExtract.vue'),
         meta: { title: '合同信息提取' }
       },
       {
-        path: '/fulfillment',
-        name: 'FulfillmentTask',
-        component: () => import('@/views/contracts/FulfillmentTask.vue'),
-        meta: { title: '合同履约任务' }
-      }
+        path: '/rule-settings',
+        name: 'RuleSettings',
+        component: () => import('@/views/contracts/RuleSettings.vue'),
+        meta: { title: '提取规则设置' }
+      },
+      
     ]
   }
 ]
