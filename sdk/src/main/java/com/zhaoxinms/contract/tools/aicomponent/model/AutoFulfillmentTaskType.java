@@ -12,6 +12,8 @@ public class AutoFulfillmentTaskType {
     private Long parentId;
     private String name;
     private Integer sortOrder;
+
+    private String code;
 }
 
 

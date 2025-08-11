@@ -200,6 +200,22 @@ ai:
   - 所有以 `/api/fulfillment/**`、`/api/fulfillment/template/**` 为前缀的接口已不可用
   - 前端不再展示“合同履约任务”入口
 
+### 2025-08-10 自动履约模板分组与任务类型绑定改造
+- 数据库（V7、V8）
+  - `auto_fulfillment_template` 新增 `category_code`（从旧 `contract_type` 回填）、`task_type_id`；索引：`idx_template_category_code`、`idx_template_task_type_id`
+  - `auto_fulfillment_task_type` 新增唯一编码 `code`
+  - 新建映射表：`auto_fulfillment_task_type_keyword(task_type_id, keyword_id)` 主键二元组
+  - 初始化五大父类与子项（含 code）：开票/付款/收款/到期提醒/事件触发；插入关键词并建立映射；为每个子项初始化系统模板
+- 后端
+  - 模型：`AutoFulfillmentTemplate` 用 `categoryCode` 替代 `contractType`，新增 `taskTypeId`；`AutoFulfillmentTaskType` 新增 `code`
+  - 服务：`AutoFulfillmentTemplateService`/Impl 新增 `getTemplatesByCategory*`、`getAllCategories`；默认模板设置按 `categoryCode`
+  - 控制器：`/api/ai/auto-fulfillment/template/contract-types` 返回五大分类；`/type/{categoryCode}` 按分类列出模板；识别接口解析 `taskTypes/keywords` 并参与提示
+- 前端
+  - `AutoFulfillment.vue` 分组过滤改为基于 `categoryCode`（向后兼容旧字段）
+- 行为变化
+  - “选择识别模板”分组切换为：开票履约/付款履约/收款履约/到期提醒/事件触发；每个子项拥有独立模板集合（模板与叶子任务类型一对一）
+  - 识别时，所选任务类型与关键词将纳入提示构造，影响识别结果
+
 ### 2025-08-10 Flyway V4 迁移修复（先新增列再更新）
 - 修改：`backend/src/main/resources/db/migration/V4__alter_contract_rule_to_template.sql`
   - 在执行任何基于 `template_id` 的 `UPDATE` 之前，新增列存在性检查；若缺失则执行：`ALTER TABLE contract_rule ADD COLUMN template_id BIGINT NULL`

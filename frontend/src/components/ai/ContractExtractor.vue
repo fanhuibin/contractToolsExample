@@ -136,6 +136,15 @@
             >
               复制并编辑
             </el-button>
+            <el-button 
+              type="danger" 
+              link 
+              size="small" 
+              @click.stop="deleteTemplate(template)" 
+              class="copy-button"
+            >
+              删除
+            </el-button>
           </div>
         </div>
         <div v-else class="no-template-tip">暂无该类型模板</div>
@@ -180,7 +189,7 @@
 <script lang="ts" setup>
 import { ref, computed, onMounted, watch } from 'vue';
 import { UploadFilled, Delete, Plus, Document, CaretRight } from '@element-plus/icons-vue';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElMessageBox } from 'element-plus';
 import { aiContract } from '@/api/ai';
 import { useRouter } from 'vue-router'
 const router = useRouter()
@@ -482,6 +491,25 @@ const saveAsTemplate = async () => {
     ElMessage.error(err.message || '保存模板出错');
   }
 };
+
+async function deleteTemplate(template: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除模板“${template.name}”吗？此操作不可恢复。`, '提示', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消'
+    })
+    await aiContract.deleteTemplate(template.id)
+    ElMessage.success('删除成功')
+    await loadInitialData()
+    if (typeof selectedTemplateId.value === 'number' && selectedTemplateId.value === template.id) {
+      selectedTemplateId.value = null
+      selectedTemplateFields.value = []
+    }
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e?.message || '删除失败')
+  }
+}
 
 // --- Lifecycle & Watchers ---
 onMounted(loadInitialData);
