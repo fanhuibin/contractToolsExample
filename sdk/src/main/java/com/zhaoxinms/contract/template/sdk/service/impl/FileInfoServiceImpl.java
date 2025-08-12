@@ -3,19 +3,18 @@ package com.zhaoxinms.contract.template.sdk.service.impl;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.common.exception.FileOperationException;
-import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,9 +26,6 @@ import java.util.List;
 @Service
 public class FileInfoServiceImpl implements FileInfoService {
 
-    @Autowired
-    private ZxcmConfig zxcmConfig;
-
     @Value("${server.port:8081}")
     private String serverPort;
     
@@ -38,12 +34,17 @@ public class FileInfoServiceImpl implements FileInfoService {
 
     // 模拟数据存储（实际项目中应该使用数据库）
     private final ConcurrentHashMap<String, FileInfo> fileInfoMap = new ConcurrentHashMap<>();
-    private final AtomicLong idGenerator = new AtomicLong(1);
 
     @PostConstruct
     public void init() {
         // 获取uploads目录的绝对路径
         String absUploadPath = Paths.get(uploadRootPath).toAbsolutePath().toString();
+        try {
+            java.io.File uploadDir = new java.io.File(absUploadPath);
+            if (!uploadDir.exists()) {
+                uploadDir.mkdirs();
+            }
+        } catch (Exception ignore) {}
         // 文件1
         FileInfo fileInfo1 = new FileInfo();
         fileInfo1.setId(1L);
@@ -99,6 +100,42 @@ public class FileInfoServiceImpl implements FileInfoService {
         fileInfo4.setUpdateTime(LocalDateTime.now());
         fileInfo4.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
         fileInfoMap.put("4", fileInfo4);
+
+        // 保证存在并注册模板设计固定文件 templateDesign.docx
+        try {
+            java.io.File templateFile = new java.io.File(absUploadPath + "/templateDesign.docx");
+            if (!templateFile.exists()) {
+                java.io.File candidate = findFirstExisting(
+                    absUploadPath + "/templateDesign.docx",
+                    absUploadPath + "/test_document.docx",
+                    Paths.get("sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString()
+                );
+                if (candidate != null && candidate.exists()) {
+                    Files.copy(candidate.toPath(), templateFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+            if (templateFile.exists()) {
+                FileInfo tplInfo = new FileInfo();
+                tplInfo.setId(9999L);
+                tplInfo.setOriginalName("templateDesign.docx");
+                tplInfo.setFileName("templateDesign.docx");
+                tplInfo.setFileExtension("docx");
+                tplInfo.setFileSize(templateFile.length());
+                tplInfo.setStorePath(templateFile.getAbsolutePath());
+                tplInfo.setStatus(0);
+                tplInfo.setCreateTime(LocalDateTime.now());
+                tplInfo.setUpdateTime(LocalDateTime.now());
+                tplInfo.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
+                fileInfoMap.put("9999", tplInfo);
+            }
+        } catch (Exception e) {
+            log.warn("初始化templateDesign.docx失败: {}", e.getMessage());
+        }
     }
 
     @Override
@@ -106,6 +143,65 @@ public class FileInfoServiceImpl implements FileInfoService {
         FileInfo fileInfo = fileInfoMap.get(id);
         if (fileInfo != null && fileInfo.getStatus() != null && fileInfo.getStatus() == 0) {
             return fileInfo;
+        }
+        // 动态注册模板设计示例文件
+        if ("templateDesign".equals(id)) {
+            // 优先返回已注册的9999
+            FileInfo tpl = fileInfoMap.get("9999");
+            if (tpl != null && tpl.getStatus() != null && tpl.getStatus() == 0) {
+                return tpl;
+            }
+            String absPath = java.nio.file.Paths.get(uploadRootPath).toAbsolutePath().toString();
+            java.io.File tplFile = new java.io.File(absPath + "/templateDesign.docx");
+            if (!tplFile.exists()) {
+                java.io.File candidate = findFirstExisting(
+                    absPath + "/templateDesign.docx",
+                    absPath + "/test_document.docx",
+                    Paths.get("sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
+                    Paths.get("..", "..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString()
+                );
+                try {
+                    if (candidate != null && candidate.exists()) {
+                        Files.copy(candidate.toPath(), new java.io.File(absPath + "/templateDesign.docx").toPath(), StandardCopyOption.REPLACE_EXISTING);
+                        tplFile = new java.io.File(absPath + "/templateDesign.docx");
+                    }
+                } catch (Exception copyErr) {
+                    log.warn("复制模板设计文件失败: {}", copyErr.getMessage());
+                }
+            }
+            if (tplFile.exists()) {
+                FileInfo created = new FileInfo();
+                created.setId(9999L);
+                created.setOriginalName("templateDesign.docx");
+                created.setFileName("templateDesign.docx");
+                created.setFileExtension("docx");
+                created.setFileSize(tplFile.length());
+                created.setStorePath(tplFile.getAbsolutePath());
+                created.setStatus(0);
+                created.setCreateTime(LocalDateTime.now());
+                created.setUpdateTime(LocalDateTime.now());
+                created.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
+                fileInfoMap.put("9999", created);
+                return created;
+            }
+        }
+        return null;
+    }
+
+    private java.io.File findFirstExisting(String... candidates) {
+        if (candidates == null) return null;
+        for (String p : candidates) {
+            try {
+                if (p == null) continue;
+                java.io.File f = new java.io.File(p);
+                if (f.exists() && f.isFile()) {
+                    return f;
+                }
+            } catch (Exception ignore) {}
         }
         return null;
     }
@@ -256,15 +352,6 @@ public class FileInfoServiceImpl implements FileInfoService {
         return new ArrayList<>(fileInfoMap.values());
     }
 
-    /**
-     * 生成OnlyOffice key，格式为：文件id + 分隔符 + 雪花id
-     */
-    private String generateOnlyOfficeKey() {
-        // 使用当前时间戳作为雪花ID的简化版本
-        long snowflakeId = System.currentTimeMillis();
-        return snowflakeId + "_" + java.util.UUID.randomUUID().toString().replace("-", "");
-    }
-    
     /**
      * 为指定文件ID生成OnlyOffice key，格式为：文件id + 分隔符 + 雪花id
      */

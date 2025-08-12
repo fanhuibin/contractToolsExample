@@ -18,67 +18,98 @@ public class TemplateServiceImpl implements TemplateService {
     public FieldResponse getFields() {
         FieldResponse response = new FieldResponse();
         
-        // 基础字段数据
+        // 基础字段数据（按用户要求补充并规范code前缀）
         List<BaseField> baseFields = new ArrayList<>();
-        BaseField baseField1 = new BaseField();
-        baseField1.setId("base_001");
-        baseField1.setName("合同名称");
-        baseField1.setCode("contract_name");
-        baseField1.setIsRichText(false);
-        baseField1.setSampleValue("测试合同名称");
-        baseFields.add(baseField1);
-        
-        BaseField baseField2 = new BaseField();
-        baseField2.setId("base_002");
-        baseField2.setName("合同描述");
-        baseField2.setCode("contract_description");
-        baseField2.setIsRichText(true);
-        baseField2.setSampleValue("这是一个富文本的描述，包含换行\n与更多示例内容。");
-        baseFields.add(baseField2);
-        
-        BaseField baseField3 = new BaseField();
-        baseField3.setId("base_003");
-        baseField3.setName("合同金额");
-        baseField3.setCode("contract_amount");
-        baseField3.setIsRichText(false);
-        baseField3.setSampleValue("100000.00");
-        baseFields.add(baseField3);
+
+        BaseField base1 = new BaseField();
+        base1.setId("1");
+        base1.setName("合同名");
+        base1.setCode("base_contractName");
+        base1.setIsRichText(false);
+        base1.setSampleValue("示例-合同名");
+        baseFields.add(base1);
+
+        BaseField base2 = new BaseField();
+        base2.setId("2");
+        base2.setName("合同编号");
+        base2.setCode("base_contractCode");
+        base2.setIsRichText(false);
+        base2.setSampleValue("HT-2025-0001");
+        baseFields.add(base2);
+
+        BaseField base3 = new BaseField();
+        base3.setId("3");
+        base3.setName("收支类型");
+        base3.setCode("base_inouttype");
+        base3.setIsRichText(false);
+        base3.setSampleValue("支出");
+        baseFields.add(base3);
+
+        BaseField base4 = new BaseField();
+        base4.setId("4");
+        base4.setName("合同金额");
+        base4.setCode("base_amount");
+        base4.setIsRichText(false);
+        base4.setSampleValue("100000.00");
+        baseFields.add(base4);
+
+        BaseField base5 = new BaseField();
+        base5.setId("5");
+        base5.setName("合同金额大写");
+        base5.setCode("base_amountB");
+        base5.setIsRichText(false);
+        base5.setSampleValue("壹拾万元整");
+        baseFields.add(base5);
+
+        BaseField base6 = new BaseField();
+        base6.setId("6");
+        base6.setName("所属项目");
+        base6.setCode("base_project");
+        base6.setIsRichText(false);
+        base6.setSampleValue("上海新总部项目");
+        baseFields.add(base6);
+
+        BaseField base7 = new BaseField();
+        base7.setId("7");
+        base7.setName("生效时间");
+        base7.setCode("base_effectiveTime");
+        base7.setIsRichText(false);
+        base7.setSampleValue("2025-01-01");
+        baseFields.add(base7);
+
+        BaseField base8 = new BaseField();
+        base8.setId("8");
+        base8.setName("截止时间");
+        base8.setCode("base_deadline");
+        base8.setIsRichText(false);
+        base8.setSampleValue("2025-12-31");
+        baseFields.add(base8);
+
+        // 富文本字段：产品明细（页面需标记）
+        BaseField base9 = new BaseField();
+        base9.setId("9");
+        base9.setName("产品明细");
+        base9.setCode("base_productDetail");
+        base9.setIsRichText(true);
+        base9.setSampleValue("<p>产品A x 10，产品B x 5</p>");
+        baseFields.add(base9);
         
         response.setBaseFields(baseFields);
         
-        // 相对方字段数据
+        // 相对方（签约方/主体）字段数据（按用户提供清单）
         List<CounterpartyField> counterpartyFields = new ArrayList<>();
-        CounterpartyField counterpartyField1 = new CounterpartyField();
-        counterpartyField1.setId("cp_001");
-        counterpartyField1.setName("甲方名称");
-        counterpartyField1.setCode("party_a_name");
-        counterpartyField1.setCounterpartyIndex(1);
-        counterpartyField1.setSampleValue("上海甲方有限公司");
-        counterpartyFields.add(counterpartyField1);
-        
-        CounterpartyField counterpartyField2 = new CounterpartyField();
-        counterpartyField2.setId("cp_002");
-        counterpartyField2.setName("乙方名称");
-        counterpartyField2.setCode("party_b_name");
-        counterpartyField2.setCounterpartyIndex(2);
-        counterpartyField2.setSampleValue("深圳乙方科技有限公司");
-        counterpartyFields.add(counterpartyField2);
-        
-        CounterpartyField counterpartyField3 = new CounterpartyField();
-        counterpartyField3.setId("cp_003");
-        counterpartyField3.setName("甲方地址");
-        counterpartyField3.setCode("party_a_address");
-        counterpartyField3.setCounterpartyIndex(1);
-        counterpartyField3.setSampleValue("上海市浦东新区世纪大道1号");
-        counterpartyFields.add(counterpartyField3);
-        
-        CounterpartyField counterpartyField4 = new CounterpartyField();
-        counterpartyField4.setId("cp_004");
-        counterpartyField4.setName("乙方地址");
-        counterpartyField4.setCode("party_b_address");
-        counterpartyField4.setCounterpartyIndex(2);
-        counterpartyField4.setSampleValue("深圳市南山区科技园路88号");
-        counterpartyFields.add(counterpartyField4);
+
+        counterpartyFields.add(createCounterpartyField("101", "主体名称", "subject_name", 1, "某某科技有限公司"));
+        counterpartyFields.add(createCounterpartyField("110", "法人姓名", "subject_contractLegalPerson", 1, "张三"));
+        counterpartyFields.add(createCounterpartyField("111", "法人身份证", "subject_contractLegalPersonId", 1, "110101199001010011"));
+        counterpartyFields.add(createCounterpartyField("102", "统一信用代码", "subject_uscc", 1, "91310101MA1KXXXXXX"));
+        counterpartyFields.add(createCounterpartyField("103", "主体地址", "subject_address", 1, "上海市浦东新区世纪大道1号"));
+        counterpartyFields.add(createCounterpartyField("104", "联系人", "subject_contactName", 1, "李四"));
+        counterpartyFields.add(createCounterpartyField("105", "联系电话", "subject_contactTel", 1, "13800138000"));
+        counterpartyFields.add(createCounterpartyField("108", "联系人邮箱", "subject_contractEmail", 1, "a@example.com"));
+        counterpartyFields.add(createCounterpartyField("109", "联系人地址", "subject_contractAddr", 1, "上海市浦东新区XX路88号"));
+        counterpartyFields.add(createCounterpartyField("106", "收款帐号", "subject_cardNo", 1, "622202*********1234"));
+        counterpartyFields.add(createCounterpartyField("107", "开户行", "subject_bankName", 1, "中国工商银行上海分行"));
         
         response.setCounterpartyFields(counterpartyFields);
         
@@ -88,7 +119,7 @@ public class TemplateServiceImpl implements TemplateService {
         clauseField1.setId("clause_001");
         clauseField1.setName("第一条");
         clauseField1.setCode("clause_1");
-        clauseField1.setContent("甲方：${party_a_name}，乙方：${party_b_name}，就${contract_name}达成如下协议：");
+        clauseField1.setContent("甲方：${party_a_name}，乙方：${party_b_name}，就${base_contractName}达成如下协议：");
         clauseField1.setType("general");
         clauseField1.setTypeName("通用条款");
         clauseField1.setSampleValue("示例条款一（含变量展示）");
@@ -138,6 +169,16 @@ public class TemplateServiceImpl implements TemplateService {
         response.setClauseFields(clauseFields);
         
         return response;
+    }
+
+    private CounterpartyField createCounterpartyField(String id, String name, String code, int index, String sample) {
+        CounterpartyField f = new CounterpartyField();
+        f.setId(id);
+        f.setName(name);
+        f.setCode(code);
+        f.setCounterpartyIndex(index);
+        f.setSampleValue(sample);
+        return f;
     }
 
     @Override

@@ -1,11 +1,7 @@
 package com.zhaoxinms.contract.tools.onlyoffice;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -28,7 +24,7 @@ public class ChangeFileToPDFService {
     @Autowired
     private DefaultServiceConverter covertService;
     @Autowired
-    private FileInfoService fileInfoService;
+    private FileInfoService fileInfoService; // 留作兼容，当前类方法未直接使用
     
     /** 
      * 将文件转换为PDF
@@ -41,26 +37,42 @@ public class ChangeFileToPDFService {
             // 获取文件扩展名
             String fileExtension = getFileExtension(fileUrl);
             
-            // 调用OnlyOffice转换服务
-            String convertedUrl = covertService.getConvertedUri(
-                fileUrl,
-                fileExtension, 
-                "pdf", 
-                "", 
-                "", 
-                false, 
-                "zh-CN"
-            );
-            
-            if (convertedUrl != null && !convertedUrl.isEmpty()) {
-                // 下载转换后的文件
-                downloadFile(convertedUrl, destPdfPath);
-                log.info("文件转换成功，源文件URL: {}, 目标文件: {}", fileUrl, destPdfPath);
-                return destPdfPath;
-            } else {
+            // 调用OnlyOffice转换服务（轮询直到转换完成）
+            String convertedUrl = null;
+            long deadline = System.currentTimeMillis() + 120_000L; // 最长等待120秒
+            while (System.currentTimeMillis() < deadline) {
+                String url = covertService.getConvertedUri(
+                    fileUrl,
+                    fileExtension,
+                    "pdf",
+                    "",
+                    "",
+                    false,
+                    "zh-CN"
+                );
+                if (url != null && !url.isEmpty()) {
+                    convertedUrl = url;
+                    break;
+                }
+                try { Thread.sleep(1500); } catch (InterruptedException ignore) { Thread.currentThread().interrupt(); break; }
+            }
+
+            if (convertedUrl == null || convertedUrl.isEmpty()) {
                 log.error("文件转换失败，转换URL为空，源文件URL: {}", fileUrl);
                 return null;
             }
+
+            // 下载转换后的文件
+            downloadFile(convertedUrl, destPdfPath);
+
+            // 校验PDF有效性
+            File out = new File(destPdfPath);
+            if (!out.exists() || out.length() == 0 || !isValidPdf(out)) {
+                log.error("转换后的PDF无效或为空，URL: {}，文件: {}", convertedUrl, destPdfPath);
+                return null;
+            }
+            log.info("文件转换成功，源文件URL: {}, 目标文件: {}", fileUrl, destPdfPath);
+            return destPdfPath;
             
         } catch (Exception e) {
             log.error("文件转换异常，源文件URL: {}, 错误: {}", fileUrl, e.getMessage(), e);
@@ -175,23 +187,47 @@ public class ChangeFileToPDFService {
      * @return 文件扩展名（不包含点）
      */
     private String getFileExtension(String fileUrl) {
-        if (fileUrl == null) {
-            return "";
-        }
-        
-        // 如果是URL，先提取文件名部分
-        String fileName = fileUrl;
-        if (fileUrl.contains("/")) {
-            fileName = fileUrl.substring(fileUrl.lastIndexOf("/") + 1);
-            // 移除查询参数
-            if (fileName.contains("?")) {
-                fileName = fileName.substring(0, fileName.indexOf("?"));
+        if (fileUrl == null) return "";
+        try {
+            // 优先从 query 参数 name 中解析
+            int q = fileUrl.indexOf('?');
+            if (q >= 0) {
+                String query = fileUrl.substring(q + 1);
+                for (String part : query.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq > 0) {
+                        String key = part.substring(0, eq);
+                        if ("name".equalsIgnoreCase(key)) {
+                            String value = part.substring(eq + 1);
+                            try { value = java.net.URLDecoder.decode(value, java.nio.charset.StandardCharsets.UTF_8.name()); } catch (Exception ignore) {}
+                            int dot = value.lastIndexOf('.');
+                            return dot >= 0 ? value.substring(dot + 1).toLowerCase() : "";
+                        }
+                    }
+                }
             }
-        }
-        
-        if (fileName.lastIndexOf(".") == -1) {
+            // 回退：取最后一个路径段
+            String fileName = fileUrl;
+            int slash = fileUrl.lastIndexOf('/');
+            if (slash >= 0) fileName = fileUrl.substring(slash + 1);
+            int hash = fileName.indexOf('#');
+            if (hash >= 0) fileName = fileName.substring(0, hash);
+            int qm = fileName.indexOf('?');
+            if (qm >= 0) fileName = fileName.substring(0, qm);
+            int dot = fileName.lastIndexOf('.');
+            return dot >= 0 ? fileName.substring(dot + 1).toLowerCase() : "";
+        } catch (Exception e) {
             return "";
         }
-        return fileName.substring(fileName.lastIndexOf(".") + 1).toLowerCase();
+    }
+
+    private boolean isValidPdf(File file) {
+        try (java.io.InputStream in = new java.io.FileInputStream(file)) {
+            byte[] head = new byte[5];
+            int n = in.read(head);
+            return n >= 4 && head[0] == '%' && head[1] == 'P' && head[2] == 'D' && head[3] == 'F';
+        } catch (Exception e) {
+            return false;
+        }
     }
 }

@@ -12,7 +12,6 @@ import org.springframework.web.bind.annotation.*;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
-import java.util.ArrayList;
 
 /**
  * 文件管理控制器
@@ -37,7 +36,7 @@ public class FileController {
             if (fileInfo == null) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
-            }
+            } 
             
             // 获取文件路径
             String filePath = fileInfoService.getFileDiskPath(fileId);
@@ -127,7 +126,24 @@ public class FileController {
     @ApiOperation("获取所有文件列表")
     public Result<List<FileInfo>> getFileList() {
         try {
+            // 若找不到模板设计示例文件，则自动注册一个指向 uploads/templateDesign.docx 的记录
             List<FileInfo> files = fileInfoService.getAllFiles();
+            boolean hasTemplate = files.stream().anyMatch(f -> "templateDesign.docx".equals(f.getOriginalName()));
+            if (!hasTemplate) {
+                java.nio.file.Path path = java.nio.file.Paths.get("uploads", "templateDesign.docx");
+                java.io.File f = path.toFile();
+                if (f.exists()) {
+                    FileInfo info = new FileInfo();
+                    info.setFileName("templateDesign.docx");
+                    info.setOriginalName("templateDesign.docx");
+                    info.setFileExtension("docx");
+                    info.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
+                    info.setFileSize(f.length());
+                    info.setStatus(0);
+                    info.setStorePath(f.getAbsolutePath());
+                    files.add(info);
+                }
+            }
             return Result.success(files);
         } catch (Exception e) {
             return Result.error("获取文件列表失败：" + e.getMessage());

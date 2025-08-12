@@ -12,7 +12,36 @@ const routes: RouteRecordRaw[] = [
         path: '/template-design',
         name: 'TemplateDesign',
         component: () => import('@/views/templates/TemplateDesign.vue'),
-        meta: { title: '模板在线设计', fullscreen: true }
+        meta: { title: '模板在线设计', fullscreen: true },
+        beforeEnter: (to, _from, next) => {
+          const defaultTemplateId = 'demo'
+          const defaultFileId = '9999'
+          const id = (to.query.id as string) || defaultTemplateId
+          const fileId = (to.query.fileId as string) || defaultFileId
+          if (!to.query.id || !to.query.fileId) {
+            next({ path: to.path, query: { ...to.query, id, fileId } })
+          } else {
+            next()
+          }
+        }
+      },
+      {
+        path: '/compare',
+        name: 'CompareUpload',
+        component: () => import('@/views/documents/Compare.vue'),
+        meta: { title: 'PDF合同比对' }
+      },
+      {
+        path: '/compare/result/:id',
+        name: 'CompareResult',
+        component: () => import('@/views/documents/CompareResult.vue'),
+        meta: { title: 'PDF合同比对结果' }
+      },
+      {
+        path: '/template-design-demo',
+        name: 'TemplateDesignDemo',
+        component: () => import('@/views/templates/TemplateDesignDemo.vue'),
+        meta: { title: '模板设计演示' }
       },
       {
         path: '/onlyoffice',
