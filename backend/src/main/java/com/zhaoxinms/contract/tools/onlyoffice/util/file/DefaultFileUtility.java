@@ -64,31 +64,52 @@ public class DefaultFileUtility implements FileUtility {
 
     // get file name from its URL
     public String getFileName(String url) {
-        if (url == null)
-            return "";
-
-        // get file name from the last part of URL
+        if (url == null) return "";
+        // try to extract from query parameter 'name'
+        int qIndex = url.indexOf('?');
+        if (qIndex >= 0) {
+            String query = url.substring(qIndex + 1);
+            String[] parts = query.split("&");
+            for (String part : parts) {
+                int eq = part.indexOf('=');
+                if (eq > 0) {
+                    String key = part.substring(0, eq);
+                    if ("name".equalsIgnoreCase(key)) {
+                        String value = part.substring(eq + 1);
+                        try {
+                            value = java.net.URLDecoder.decode(value, java.nio.charset.StandardCharsets.UTF_8.name());
+                        } catch (Exception ignore) {}
+                        return value;
+                    }
+                }
+            }
+        }
+        // fallback: last path segment, strip query/fragment
         String fileName = url.substring(url.lastIndexOf('/') + 1);
-        fileName = fileName.split("\\?")[0];
+        int hash = fileName.indexOf('#');
+        if (hash >= 0) fileName = fileName.substring(0, hash);
+        int qm = fileName.indexOf('?');
+        if (qm >= 0) fileName = fileName.substring(0, qm);
         return fileName;
     }
 
     // get file name without extension
     public String getFileNameWithoutExtension(String url) {
         String fileName = getFileName(url);
-        if (fileName == null)
-            return null;
-        String fileNameWithoutExt = fileName.substring(0, fileName.lastIndexOf('.'));
-        return fileNameWithoutExt;
+        if (fileName == null) return null;
+        int dot = fileName.lastIndexOf('.');
+        if (dot < 0) return fileName; // no extension
+        return fileName.substring(0, dot);
     }
 
     // get file extension from URL
     public String getFileExtension(String url) {
         String fileName = getFileName(url);
-        if (fileName == null)
-            return null;
-        String fileExt = fileName.substring(fileName.lastIndexOf("."));
-        return fileExt.toLowerCase();
+        if (fileName == null || fileName.isEmpty()) return "";
+        int dot = fileName.lastIndexOf('.')
+        ;
+        if (dot < 0) return "";
+        return fileName.substring(dot).toLowerCase();
     }
 
     // get an editor internal extension

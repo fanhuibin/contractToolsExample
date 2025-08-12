@@ -26,6 +26,18 @@ const routes: RouteRecordRaw[] = [
         }
       },
       {
+        path: '/compare',
+        name: 'CompareUpload',
+        component: () => import('@/views/documents/Compare.vue'),
+        meta: { title: 'PDF合同比对' }
+      },
+      {
+        path: '/compare/result/:id',
+        name: 'CompareResult',
+        component: () => import('@/views/documents/CompareResult.vue'),
+        meta: { title: 'PDF合同比对结果' }
+      },
+      {
         path: '/template-design-demo',
         name: 'TemplateDesignDemo',
         component: () => import('@/views/templates/TemplateDesignDemo.vue'),

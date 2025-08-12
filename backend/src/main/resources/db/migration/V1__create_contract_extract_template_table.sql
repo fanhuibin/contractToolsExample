@@ -36,3 +36,12 @@ CREATE TABLE IF NOT EXISTS template_design_record (
   created_at    datetime     NULL,
   updated_at    datetime     NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS compare_record (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  biz_id VARCHAR(64) NOT NULL UNIQUE,
+  old_pdf_name VARCHAR(255) NOT NULL,
+  new_pdf_name VARCHAR(255) NOT NULL,
+  results_json LONGTEXT,
+  created_at DATETIME NOT NULL
+);

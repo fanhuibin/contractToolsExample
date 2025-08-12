@@ -36,7 +36,7 @@ public class FileController {
             if (fileInfo == null) {
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
-            }
+            } 
             
             // 获取文件路径
             String filePath = fileInfoService.getFileDiskPath(fileId);
