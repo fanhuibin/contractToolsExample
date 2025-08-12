@@ -33,6 +33,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '合同信息提取' }
       },
       {
+        path: '/contract-review',
+        name: 'ContractReview',
+        component: () => import('@/views/contracts/ContractReview.vue'),
+        meta: { title: '合同智能审核执行' }
+      },
+      {
+        path: '/risk-library',
+        name: 'RiskLibrary',
+        component: () => import('@/views/contracts/RiskLibrary.vue'),
+        meta: { title: '清单管理', hidden: true }
+      },
+      {
         path: '/rule-settings',
         name: 'RuleSettings',
         component: () => import('@/views/contracts/RuleSettings.vue'),

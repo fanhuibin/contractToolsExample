@@ -107,6 +107,208 @@ ai:
 
 ## 变更记录
 
+### 2025-08-12 强制 AI 分支与耗时分析
+- 变更记录
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/controller/RiskLibraryController.java`：`/ai/review-lib/review/execute` 仅接受 `multipart/form-data`，`file` 必填；删除“轻量 DB 映射”分支，强制走 AI。
+  - `frontend/src/api/ai/risk.ts`：`executeReview` 强制以 `multipart/form-data` 提交并必须携带文件；`pointIds` 以 JSON Blob 传入。
+- 性能观测（按后台日志）
+  - DB 读取与清单构建：若干 `SELECT ...`，总计 < 1s。
+  - DashScope 文件上传：约 1.3s（`upload ok: fileId=... costMs=1322`）。
+  - 模型对话生成：约 294s（`chat done ... costMs=293857`）。
+  - 结论：耗时主要集中在模型生成阶段（`qwen-long`，提示约 15k 字符，选中点位对应 68 条 prompt，输出约 19k 字符）。
+- 优化建议（不引入本地算法，保持单次大提示思路）
+  - 在提示中限制输出体量：
+    - `message` 控制在 50-80 字，禁止赘述与重复定义；
+    - 非命中项仅返回 `decisionType/statusType`，不生成 `message/evidence`；
+    - `evidence` 单段 ≤120 字，最多 3 段；
+    - `actions` 仅返回命中 `actionId` 与 `actionType`，不重复输出 `action_message` 文案；
+  - 若业务可接受，切换更快模型（如 `qwen-plus`），或为 `qwen-long` 裁剪冗余提示说明；
+  - 若 API 支持，设置最大生成长度（max_tokens）/严格 JSON 输出以避免过度生成；
+  - 增加阶段耗时日志：prompt 构建、上传、聊天开始/结束、解析 JSON 各自耗时，便于持续定位性能瓶颈。
+
+### 2025-08-12 智能审核方案对比（行业 vs 当前）
+### 2025-08-12 风险库V12全量种子导入（98条）
+- 变更记录
+  - 新增 `sdk/src/main/resources/db/migration/V12__seed_risk_review_full.sql`：基于“原创化且扩充为98条”的清单，按 `pointCode` 全量写入 `review_point`/`review_prompt`/`review_action` 与 `review_profile_item`，并保持与 `orderList` 一致顺序；所有编号（如 `3437`）未变。
+  - 设计为幂等：
+    - 先确保 `review_clause_type` 与各 `review_point` 存在；
+    - 删除目标点位下旧 `prompt/action` 再重建，避免重复；
+    - `review_profile`/`review_profile_item` 使用 `ON DUPLICATE KEY UPDATE` 维护顺序。
+- 使用方式
+  1. 启动或重启后端，Flyway 将自动执行 V12；
+  2. 前端 `风险库/审核清单` 页面即可看到新顺序与内容；
+  3. 若数据库已存在同名点位/提示，将被以新版内容覆盖到最新状态。
+
+- 行业常见实现
+  - 规则引擎/正则库：高可控、低误报；难覆盖语义、维护成本高。
+  - RAG（分段检索+LLM）：先切分与索引，按风险点检索相关段再让 LLM 判定，速度更快、可解释性更好。
+  - 多阶段流水线：结构化解析 → 局部判定 → 汇总与建议，稳定性更高、可灰度回退。
+  - 专用分类器/微调模型：对“是否存在某条款/是否合规”做分类，再由 LLM 生成人话提示。
+- 本项目当前实现
+  - 单次大提示 + Qwen（fileid）+ 数据驱动 Prompt（DB 中 prompts/actions），后端不做算法。
+- 差异与权衡
+  - 你的方式：上线快、改配置即可扩展，但时延较高、稳定性/一致性依赖提示设计与模型负载。
+  - 行业主流：RAG/多阶段更常见，吞吐与可控性更优，但工程复杂度高。
+  - 若保持“无后端算法”原则，可引入轻量“输入裁剪”和“输出约束”来接近 RAG 的收益，而不改变核心理念。
+
+### 2025-08-12 功能增强建议（对标当前实现）
+- 体验与可观测性
+  - 服务端流式转发与进度上报（上传/构造提示/模型推理/解析各阶段耗时与状态）。
+  - 失败可重试与“继续上次任务”（基于 `traceId` 与文件 `hash`）。
+  - 模型动态选择：短文 `qwen-plus`，长文自动切 `qwen-long`。
+- 输出收敛与速度优化（保持“无后端算法”）
+  - 严格 JSON schema 校验与自动纠偏（有限状态机式补全，拒绝非 JSON 文本）。
+  - 提示中限制非命中项仅返回 `decisionType/statusType`；限制 `message/evidence/actions` 长度与数量。
+- 审核历史与审计
+  - 新增：`review_job`、`review_result`、`review_evidence`、`review_action_record` 表；落库完整 JSON 与索引字段（pointId、decisionType）。
+  - 审计日志：谁在何时用哪个方案审核了哪个文件；版本与回溯。
+- 风险库治理
+  - 版本/草稿-发布/生效时间窗；启停与灰度；标签与权重；动作库复用与分组。
+  - Prompt 参数化（变量占位），批量回滚与快速对比测试（A/B）。
+- 权限与租户
+  - 角色与数据域隔离（库与模板按组织/项目划分）。
+- 文档与证据定位
+  - 与 ONLYOFFICE 的锚点联动：段落/字符偏移双向定位与高亮，支持多段证据。
+  - 扫描件支持：OCR（docTR/Tesseract）+ 坐标映射存储。
+- 运维与成本
+  - Token 统计与费用看板；超长文档分片策略白名单（仅在业务允许时）。
+  - 速率/并发控制与队列优先级；熔断与降级（只返回命中摘要）。
+
+### 2025-08-12 清单管理页改进（返回主页与树同步）
+### 2025-08-12 风险库树结构调整（提示为叶子，联动真实SQL表）
+### 2025-08-12 风险库中文改写（V13 迁移）
+- 目的：将风险库的中文描述统一为更规范的表达（非英文），保持前后端联动一致；不再在前端进行临时替换。
+- 范围：
+  - 分类名（`review_clause_type.clause_name`）：除“合同主体”外统一改写为“法律条款引用/价款与支付/履约安排/…”
+  - 风险点（`review_point.point_name/algorithm_type`）：如“己方主体 → 内部相对方”、“对方主体 → 外部相对方”；若仅名称调整，`algorithm_type` 同步。
+  - 提示（`review_prompt.prompt_key/name/message`）：口径统一为“确认/缺失/不清/不一致”等中性表述；3649/3702 等涉及“内部/外部相对方”已精确改写。
+- 不改动：
+  - 编码（`point_code`）保留（如 3649/3702），仅作幂等定位；前端已隐藏显示。
+  - 状态/排序不变。
+- 迁移文件：`sdk/src/main/resources/db/migration/V13__refine_risk_text_cn.sql`
+- 回滚建议：如需恢复旧表述，追加 `V14__rollback_risk_text_cn.sql` 还原相同字段。
+- 接口 JSON 变更（示例）
+  - 旧 `/ai/review-lib/tree`（仅分类→点）
+```json
+[
+  {
+    "clauseType": { "id": 1, "clauseName": "合同主体", "enabled": true, "sortOrder": 10 },
+    "points": [
+      { "id": 101, "clauseTypeId": 1, "pointCode": "3649", "pointName": "己方主体名称规范性审查", "algorithmType": "...", "enabled": true, "sortOrder": 1 }
+    ]
+  }
+]
+```
+  - 新增 `/ai/review-lib/tree-prompts`（分类→点→提示）
+```json
+[
+  {
+    "clauseType": { "id": 1, "clauseName": "合同主体", "enabled": true, "sortOrder": 10 },
+    "points": [
+      {
+        "point": { "id": 101, "clauseTypeId": 1, "pointCode": "3649", "pointName": "己方主体名称规范性审查", "algorithmType": "...", "enabled": true, "sortOrder": 1 },
+        "prompts": [
+          { "id": 10001, "pointId": 101, "promptKey": "首部己方主体名称缺失", "name": "首部己方主体名称缺失", "statusType": "ERROR", "message": "...", "enabled": true, "sortOrder": 1 }
+        ]
+      }
+    ]
+  }
+]
+```
+  - 预览与审核入参未变：仍以 `pointIds`（number[]）为请求体
+```json
+[101, 102, 103]
+```
+  - 前端树渲染内部节点（用于 el-tree）由“点为叶”改为“提示为叶”，并增加 `type` 与带前缀的 `id`（用于选择聚合）：
+```json
+{
+  "id": "c-1", "type": "CLAUSE", "label": "合同主体", "children": [
+    { "id": "p-101", "type": "POINT", "label": "己方主体名称规范性审查", "raw": {"id":101}, "children": [
+      { "id": "r-10001", "type": "PROMPT", "label": "首部己方主体名称缺失（ERROR）", "raw": {"id":10001}, "parentPoint": {"id":101} }
+    ]}
+  ]
+}
+```
+- 变更记录
+  - 后端：新增树接口返回“分类→风险点→提示”三级结构（提示为叶子，来源 `review_prompt` 实表），保持与真实数据库一致。
+    - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/RiskLibraryService.java`：新增 `TreeNodeV2`、`PointNode` DTO 与 `treeWithPrompts(Boolean enabled)` 方法签名。
+    - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/service/impl/RiskLibraryServiceImpl.java`：实现 `treeWithPrompts`，按 `enabled` 过滤并按 `sort_order,id` 排序，组装三级数据。
+    - `sdk/src/main/java/com/zhaoxinms/contract/tools/aicomponent/controller/RiskLibraryController.java`：新增 `GET /api/ai/review-lib/tree-prompts`。
+  - 前端：`RiskLibrary.vue` 树改为“提示（prompt）”为叶子；勾选提示后映射为所属 `pointId` 去重，再调用原有预览/审核接口；应用方案时按 `pointId` 勾选对应点下的全部提示叶。
+    - `frontend/src/api/ai/risk.ts`：新增 `getTreePrompts(enabled?)`；`deleteProfile(id, force?)` 支持强删。
+    - `frontend/src/views/contracts/RiskLibrary.vue`：
+      - `loadTree()` 切换为 `getTreePrompts()`；`buildTree()` 生成 3 级节点（`CLAUSE/POINT/PROMPT`），叶子为 `PROMPT`。
+      - `onPreviewSelection()`：从被勾选 `PROMPT` 节点收集所属 `pointId` 去重预览。
+      - `applyProfile()`：将方案里的 `pointId` 映射成该点下的所有 `PROMPT` 节点 key（`r-<id>`）批量勾选。
+      - 点击提示叶时同步右侧“提示与动作”列表基于父级风险点加载。
+- 影响
+  - 树的叶子与真实 `review_prompt` 表记录一致（而非固定 98 条，V12 仅为初始种子）。
+  - 预览与执行审核仍按 `pointId` 粒度，无需后端执行链路改造。
+  - `enabled=true` 时仅返回启用的分类/点/提示；“显示停用”开关生效后端联动。
+- 变更记录
+  - `frontend/src/views/contracts/RiskLibrary.vue`：
+    - 在左侧卡片 header 增加“返回主页”按钮（`goHome()` → `router.push('/')`）。
+    - 树数据保持与后端一致：继续使用 `riskApi.getTree(enabled?)` 从后端实时加载，`showDisabled` 控制是否仅看启用数据。
+- 影响
+  - 便于从清单管理页一键返回系统主页；
+  - 树形结构严格以数据库为准，新增/启停/删除后通过 `loadTree()` 即时反映。
+
+### 2025-08-12 供应商条款分析调研（思通数科）
+- 信息来源
+  - Gitee 开源仓库：`free-nlp-api`
+  - 在线体验：`nlp.stonedt.com`
+- 公开能力（概述）
+  - NLP、OCR、图像识别、文本抽取，多格式文档处理（PDF/PPT/CSV/PNG/SVG）。
+- 条款分析常见实现路径（推断性归纳，官方未公开内核细节）
+  - 文档解析与分块：OCR/版面分析→段落/标题/列表切分。
+  - 规则/词典匹配：关键词、正则、条款模板初筛。
+  - 向量检索/RAG：条款库嵌入相似度召回相关片段后再判定。
+  - 条款归类与证据：输出条款类型、命中文段、位置信息与置信度。
+  - 结构化返回：用于搜索、推荐与审核提示。
+  - 工程特点：规则+检索+模型组合，支持本地化部署与接口化集成。
+
+### 2025-08-12 完全开源文档审核工具清单（可组合）
+- RAG/工作流
+  - Haystack（Apache-2.0）、LlamaIndex（MIT）、LangChain4j（Apache-2.0）、Spring AI（Apache-2.0）
+- 文档解析/分块
+  - Unstructured（Apache-2.0）、Apache Tika（Apache-2.0）、pdfminer.six（MIT）、PDFPlumber（MIT）
+- 文本位置/坐标
+  - PyMuPDF（AGPL-3.0，注意许可限制）、PDFBox（Apache-2.0）、pdfplumber 字符级框有限支持
+- OCR
+  - Tesseract（Apache-2.0）、PaddleOCR（Apache-2.0）、docTR（Apache-2.0）
+- 向量库
+  - Milvus、Qdrant、Weaviate、OpenSearch k-NN（均开源许可）
+- 规则引擎
+  - Drools（Apache-2.0）、Easy Rules（Apache-2.0）
+- PII/敏感信息
+  - Microsoft Presidio（MIT）
+- 法律NLP/数据集
+  - Blackstone（MIT）、LexNLP（GPL-3.0，注意许可）、CUAD 数据集/基线模型
+
+### 2025-08-12 模型建议子系统：快速落地选型与路径
+- 目标：用时短、正确率高、提示词可自编辑
+- 选型（成熟度优先）
+  - Dify（Apache-2.0）：可视化 Prompt 编辑、应用接口直调；支持 DashScope/Qwen；易于搭建与运维。
+  - Flowise（Apache-2.0）：节点流式编排，Prompt 可视化；REST 推理接口；插件生态丰富。
+  - LangChain4j / Spring AI（Apache-2.0）：在现有 Java 项目内直接集成，支持结构化输出（函数调用/JSON Schema）。
+- 不引入平台的轻改路径（保持现有 Qwen 链路）
+  - 启用严格 JSON 约束（response_format 或 tools/function 调用），减少解析失败与跑偏。
+  - 提示词可视化与版本化：在 DB 增加 `review_prompt_example`（few-shot），前端提供编辑与回归测试入口。
+  - 调参与模型：`temperature/top_p` 降低；短文用 `qwen-plus`；限制 message/evidence 长度与数量以控时。
+- 预估工期
+  - Dify/Flowise 对接：0.5–1 天（含容器部署与后端对接）。
+  - LangChain4j/Spring AI：1–2 天（结构化输出改造 + DB 驱动 Prompt）。
+  - 现有代码轻改：0.5 天（约束输出 + 参数化 + 少样本支持）。
+
+### 2025-08-11 风险库页面树数据修复与种子脚本字段名修正（最小版功能说明）
+- 变更记录
+  - `frontend/src/views/contracts/RiskLibrary.vue`：将树接口调用从 `riskApi.tree(true)` 更正为 `riskApi.getTree(true)`，修复因方法名不匹配导致左侧树始终为空的问题。
+  - `sdk/src/main/resources/db/migration/V10__seed_risk_review.sql`：将一处列名 `sortOrder` 更正为 `sort_order`（第315行），修复 Flyway 执行报错 `Unknown column 'sortOrder' in 'field list'`。
+- 现状说明（MVP）
+  - 风险库页面当前仅提供：搜索+可勾选树、点击节点查看详情、生成审核清单预览；未实现对条款分类/风险点/提示/动作的增删改与排序。
+- 后续建议
+  - 新增后台 CRUD 接口（分类/风险点/提示/动作）与前端增删改查表单、启停与拖拽排序、保存为方案等功能。
+
 ### 2025-08-08 合同抽取字段规则库（新增扩展文件，未改代码）
 - 新增外置规则文件目录：`sdk/src/main/resources/contract-extract-rules/`
   - `lease.json`、`purchase.json`、`labor.json`、`construction.json`、`technical.json`、`intellectual.json`、`operation.json`
