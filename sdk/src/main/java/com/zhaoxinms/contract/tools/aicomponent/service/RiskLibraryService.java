@@ -45,14 +45,18 @@ public interface RiskLibraryService {
     ReviewClauseType createClauseType(ClauseTypeDTO dto);
     ReviewClauseType updateClauseType(Long id, ClauseTypeDTO dto);
     boolean deleteClauseType(Long id);
+    boolean deleteClauseType(Long id, boolean force);
     boolean enableClauseType(Long id, boolean value);
+    boolean enableClauseType(Long id, boolean value, boolean cascade);
     void reorderClauseTypes(java.util.List<IdSortDTO> items);
 
     // Point
     ReviewPoint createPoint(PointDTO dto);
     ReviewPoint updatePoint(Long id, PointDTO dto);
     boolean deletePoint(Long id);
+    boolean deletePoint(Long id, boolean force);
     boolean enablePoint(Long id, boolean value);
+    boolean enablePoint(Long id, boolean value, boolean cascade);
     void reorderPoints(Long clauseTypeId, java.util.List<IdSortDTO> items);
 
     // Prompt
@@ -60,7 +64,9 @@ public interface RiskLibraryService {
     ReviewPrompt createPrompt(PromptDTO dto);
     ReviewPrompt updatePrompt(Long id, PromptDTO dto);
     boolean deletePrompt(Long id);
+    boolean deletePrompt(Long id, boolean force);
     boolean enablePrompt(Long id, boolean value);
+    boolean enablePrompt(Long id, boolean value, boolean cascade);
     void reorderPrompts(Long pointId, java.util.List<IdSortDTO> items);
 
     // Action

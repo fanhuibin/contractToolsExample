@@ -26,14 +26,14 @@ export const riskApi = {
   // ---- manage: clause types ----
   createClauseType(data: any) { return baseRequest.post('/ai/review-lib/clause-type', data) },
   updateClauseType(id: number, data: any) { return baseRequest.put(`/ai/review-lib/clause-type/${id}`, data) },
-  deleteClauseType(id: number) { return baseRequest.delete(`/ai/review-lib/clause-type/${id}`) },
+  deleteClauseType(id: number, force?: boolean) { return baseRequest.delete(`/ai/review-lib/clause-type/${id}${force ? '?force=1' : ''}`) },
   enableClauseType(id: number, value: boolean) { return baseRequest.patch(`/ai/review-lib/clause-type/${id}/enabled?value=${value ? 1 : 0}`) },
   reorderClauseTypes(items: Array<{id:number, sortOrder:number}>) { return baseRequest.put('/ai/review-lib/clause-types/reorder', items) },
 
   // ---- manage: points ----
   createPoint(data: any) { return baseRequest.post('/ai/review-lib/point', data) },
   updatePoint(id: number, data: any) { return baseRequest.put(`/ai/review-lib/point/${id}`, data) },
-  deletePoint(id: number) { return baseRequest.delete(`/ai/review-lib/point/${id}`) },
+  deletePoint(id: number, force?: boolean) { return baseRequest.delete(`/ai/review-lib/point/${id}${force ? '?force=1' : ''}`) },
   enablePoint(id: number, value: boolean) { return baseRequest.patch(`/ai/review-lib/point/${id}/enabled?value=${value ? 1 : 0}`) },
   reorderPoints(clauseTypeId: number, items: Array<{id:number, sortOrder:number}>) { return baseRequest.put(`/ai/review-lib/points/reorder?clauseTypeId=${clauseTypeId}`, items) },
 
@@ -41,7 +41,7 @@ export const riskApi = {
   listPrompts(pointId: number) { return baseRequest.get(`/ai/review-lib/point/${pointId}/prompts`) },
   createPrompt(data: any) { return baseRequest.post('/ai/review-lib/prompt', data) },
   updatePrompt(id: number, data: any) { return baseRequest.put(`/ai/review-lib/prompt/${id}`, data) },
-  deletePrompt(id: number) { return baseRequest.delete(`/ai/review-lib/prompt/${id}`) },
+  deletePrompt(id: number, force?: boolean) { return baseRequest.delete(`/ai/review-lib/prompt/${id}${force ? '?force=1' : ''}`) },
   enablePrompt(id: number, value: boolean) { return baseRequest.patch(`/ai/review-lib/prompt/${id}/enabled?value=${value ? 1 : 0}`) },
   reorderPrompts(pointId: number, items: Array<{id:number, sortOrder:number}>) { return baseRequest.put(`/ai/review-lib/prompts/reorder?pointId=${pointId}`, items) },
 

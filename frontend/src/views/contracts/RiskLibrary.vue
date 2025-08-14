@@ -1,8 +1,8 @@
 <template>
   <div class="risk-lib-page">
     <el-row :gutter="16">
-      <!-- 左侧：条款树与筛选 -->
-      <el-col :span="8">
+      <!-- 左侧：条款树与筛选（加宽至 10/24） -->
+      <el-col :span="10" class="left-col">
         <el-card class="side-card">
           <template #header>
             <div class="card-header between">
@@ -17,6 +17,7 @@
             <el-input v-model="keyword" placeholder="搜索提示/风险点/算法类型/编号" clearable @input="loadTree" />
             <div class="toolbar-row">
               <el-switch v-model="showDisabled" active-text="显示停用" size="small" @change="loadTree" />
+              <div class="spacer" />
               <el-button v-if="manageMode" type="primary" size="small" @click="openCreatePointFromClause">新增风险点</el-button>
               <el-button type="primary" size="small" plain @click="onPreviewSelection">生成清单</el-button>
             </div>
@@ -31,62 +32,16 @@
               highlight-current
               default-expand-all
               @node-click="onNodeClick"
+              :render-content="renderTreeNode"
             />
           </div>
         </el-card>
       </el-col>
 
-      <!-- 右侧：分栏标签 -->
-      <el-col :span="16">
-        <el-card>
-          <el-tabs v-model="activeTab">
-            <el-tab-pane label="详情" name="detail">
-              <div v-if="currentPoint">
-                <el-descriptions :column="2" size="small" border>
-                  <el-descriptions-item label="名称">{{ currentPoint.pointName }}</el-descriptions-item>
-                  <el-descriptions-item label="算法类型">{{ currentPoint.algorithmType }}</el-descriptions-item>
-                  <el-descriptions-item label="所属分类">{{ currentClause?.clauseName }}</el-descriptions-item>
-                </el-descriptions>
-                <div v-if="manageMode" class="btn-line">
-                  <el-button type="primary" size="small" @click="openEditPoint(currentPoint)">编辑</el-button>
-                  <el-button type="warning" size="small" @click="togglePointEnabled(currentPoint)">{{ currentPoint.enabled ? '停用' : '启用' }}</el-button>
-                  <el-popconfirm title="确定删除该风险点？" @confirm="deletePoint(currentPoint)">
-                    <template #reference>
-                      <el-button type="danger" size="small">删除</el-button>
-                    </template>
-                  </el-popconfirm>
-                  <el-button type="primary" plain size="small" @click="openCreatePrompt(currentPoint)">新增提示</el-button>
-                </div>
-              </div>
-              <div v-else class="muted">请选择左侧的风险点查看详情</div>
-            </el-tab-pane>
-
-            <el-tab-pane label="提示与动作" name="prompts">
-              <el-table :data="prompts" size="small" border>
-                <el-table-column prop="promptKey" label="Key" width="160" />
-                <el-table-column prop="name" label="名称" min-width="180" />
-                <el-table-column prop="statusType" label="级别" width="90" />
-                <el-table-column prop="enabled" label="启用" width="80">
-                  <template #default="{row}"><el-tag :type="row.enabled?'success':'info'">{{ row.enabled? '是':'否' }}</el-tag></template>
-                </el-table-column>
-                <el-table-column label="操作" width="160" fixed="right">
-                  <template #default="{row}">
-                    <el-dropdown trigger="click">
-                      <el-button size="small">操作</el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item @click.native="openEditPrompt(row)">编辑</el-dropdown-item>
-                          <el-dropdown-item @click.native="togglePromptEnabled(row)">{{ row.enabled? '停用':'启用' }}</el-dropdown-item>
-                          <el-dropdown-item @click.native="openCreateAction(row)">新增动作</el-dropdown-item>
-                          <el-dropdown-item divided @click.native="deletePrompt(row)">删除</el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </template>
-                </el-table-column>
-              </el-table>
-            </el-tab-pane>
-
+      <!-- 右侧：上部=清单预览/方案管理；下部=显示详情（隐藏，点击显示详情才出现） -->
+      <el-col :span="14" class="right-col">
+        <el-card class="main-card">
+          <el-tabs v-model="mainTab">
             <el-tab-pane label="清单预览" name="preview">
               <div class="pane-toolbar">
                 <div class="spacer" />
@@ -100,7 +55,6 @@
                 <el-table-column prop="algorithmType" label="算法类型" width="240"/>
               </el-table>
             </el-tab-pane>
-
             <el-tab-pane label="方案管理" name="profiles">
               <div class="pane-toolbar">
                 <el-input v-model="profileFilter" placeholder="搜索方案名称" size="small" style="width:220px" />
@@ -135,11 +89,54 @@
             </el-tab-pane>
           </el-tabs>
         </el-card>
+        <el-card v-if="showDetail" class="detail-card mt12">
+          <template #header>
+            <div class="card-header between"><span>详情</span></div>
+          </template>
+          <div v-if="currentPoint">
+            <el-descriptions :column="2" size="small" border>
+              <el-descriptions-item label="名称">{{ currentPoint.pointName }}</el-descriptions-item>
+              <el-descriptions-item label="算法类型">{{ currentPoint.algorithmType }}</el-descriptions-item>
+              <el-descriptions-item label="所属分类">{{ currentClause?.clauseName }}</el-descriptions-item>
+            </el-descriptions>
+            <div class="mt12" />
+            <el-table :data="prompts" size="small" border>
+              <el-table-column prop="promptKey" label="Key" width="160" />
+              <el-table-column prop="name" label="名称" min-width="180" />
+              <el-table-column prop="statusType" label="级别" width="90" />
+              <el-table-column prop="enabled" label="启用" width="80">
+                <template #default="{row}"><el-tag :type="row.enabled?'success':'info'">{{ row.enabled? '是':'否' }}</el-tag></template>
+              </el-table-column>
+              <el-table-column label="操作" width="160" fixed="right">
+                <template #default="{row}">
+                  <el-dropdown trigger="click">
+                    <el-button size="small">操作</el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item @click.native="openEditPrompt(row)">编辑</el-dropdown-item>
+                        <el-dropdown-item @click.native="togglePromptEnabled(row)">{{ row.enabled? '停用':'启用' }}</el-dropdown-item>
+                        <el-dropdown-item @click.native="openCreateAction(row)">新增动作</el-dropdown-item>
+                        <el-dropdown-item divided @click.native="deletePrompt(row)">删除</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <div v-else class="muted">未选择风险点</div>
+        </el-card>
       </el-col>
     </el-row>
     <!-- 编辑风险点 -->
-    <el-dialog v-model="pointDlg.visible" :title="pointDlg.mode==='create' ? '新增风险点' : '编辑风险点'" width="520px">
+    <el-dialog v-model="pointDlg.visible" :title="pointDlgTitle" width="520px">
       <el-form :model="pointDlg.form" label-width="100px">
+        <el-form-item label="父节点">
+          <el-select v-model="pointDlg.parentKey" placeholder="请选择父节点（分类/风险点），不支持选择提示" style="width:100%" @change="onPointParentChange">
+            <el-option :key="'root'" label="（无父节点：新增分类）" value="" />
+            <el-option v-for="opt in parentOptions" :key="opt.value" :label="opt.label" :value="opt.value" :disabled="opt.disabled" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="编号"><el-input v-model="pointDlg.form.pointCode" /></el-form-item>
         <el-form-item label="名称"><el-input v-model="pointDlg.form.pointName" /></el-form-item>
         <el-form-item label="算法类型"><el-input v-model="pointDlg.form.algorithmType" /></el-form-item>
@@ -198,10 +195,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, reactive, computed } from 'vue'
+import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
 import riskApi from '@/api/ai/risk'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElDropdown, ElDropdownMenu, ElDropdownItem, ElButton } from 'element-plus'
 
 const treeRef = ref()
 const treeData = ref<any[]>([])
@@ -216,15 +213,74 @@ const previewList = ref<any[]>([])
   const profiles = ref<any[]>([])
   const profileName = ref('')
   const profileFilter = ref('')
-  const activeTab = ref('detail')
+  const mainTab = ref('preview')
+  const showDetail = ref(false)
 // 返回到合同智能审核页
 const router = useRouter()
 function goBack() {
   router.push('/contract-review')
 }
-  const pointDlg = reactive<any>({ visible: false, mode: 'create', form: { id: null, clauseTypeId: null, pointCode: '', pointName: '', algorithmType: '', sortOrder: 1, enabled: true } })
+  const pointDlg = reactive<any>({ visible: false, mode: 'create', parentKey: '', form: { id: null, clauseTypeId: null, pointCode: '', pointName: '', algorithmType: '', sortOrder: 1, enabled: true } })
   const promptDlg = reactive<any>({ visible: false, mode: 'create', form: { id: null, pointId: null, promptKey: '', name: '', statusType: 'INFO', message: '', sortOrder: 1, enabled: true } })
   const actionDlg = reactive<any>({ visible: false, mode: 'create', form: { id: null, promptId: null, actionId: '', actionType: 'COPY', actionMessage: '', sortOrder: 1, enabled: true } })
+
+// 动态标题：根据父节点选择显示新增分类/风险点/提示
+const pointDlgTitle = computed(() => {
+  const pk = String(pointDlg.parentKey || '')
+  if (!pk) return pointDlg.mode === 'create' ? '新增分类' : '编辑'
+  if (pk.startsWith('c-')) return pointDlg.mode === 'create' ? '新增风险点' : '编辑风险点'
+  if (pk.startsWith('p-')) return '新增提示'
+  return '新增/编辑'
+})
+
+// 父节点选项（显示现有所有节点：分类/风险点；提示节点禁用）
+const parentOptions = computed(() => {
+  const opts: Array<{ value: string; label: string; disabled?: boolean }> = []
+  for (const c of treeData.value as any[]) {
+    opts.push({ value: String(c.id), label: `[分类] ${c.label}` })
+    for (const p of (c.children || [])) {
+      if (p?.type === 'POINT') {
+        opts.push({ value: String(p.id), label: `  └ [风险点] ${p.label}` })
+        for (const r of (p.children || [])) {
+          if (r?.type === 'PROMPT') {
+            opts.push({ value: String(r.id), label: `    └ [提示] ${r.label}`, disabled: true })
+          }
+        }
+      }
+    }
+  }
+  return opts
+})
+
+function getClauseIdFromNodeKey(key: string | undefined | null): number | null {
+  if (!key) return null
+  const k = String(key)
+  if (k.startsWith('c-')) return Number(k.slice(2))
+  if (k.startsWith('p-')) {
+    // 若 key 为点节点，则优先取该点的 parentClause.id；找不到则回退扫描树
+    for (const c of treeData.value as any[]) {
+      for (const p of (c.children || [])) {
+        if (String(p.id) === k) return Number(String(c.id).slice(2))
+      }
+    }
+  }
+  if (k.startsWith('r-')) {
+    // 若 key 为提示节点，优先取其 parentPoint 的父分类；回退扫描树
+    for (const c of treeData.value as any[]) {
+      for (const p of (c.children || [])) {
+        for (const r of (p.children || [])) {
+          if (String(r.id) === k) return Number(String(c.id).slice(2))
+        }
+      }
+    }
+  }
+  return null
+}
+
+function onPointParentChange(val: string) {
+  const clauseId = getClauseIdFromNodeKey(val)
+  pointDlg.form.clauseTypeId = clauseId
+}
 
 function buildTree(raw: any[], kw: string) {
   const out: any[] = []
@@ -239,15 +295,20 @@ function buildTree(raw: any[], kw: string) {
       // 关键字过滤：命中提示或命中点/分类
       if (keyword) {
         const baseHit = JSON.stringify({ clause, p }).includes(keyword)
-        prompts = prompts.filter((pr: any) => baseHit || JSON.stringify(pr).includes(keyword))
+        if (!baseHit) {
+          prompts = prompts.filter((pr: any) => JSON.stringify(pr).includes(keyword))
+        }
+        // 若关键字不命中点/分类，且过滤后提示为空，则跳过该点
+        if (!baseHit && prompts.length === 0) {
+          continue
+        }
       }
-      if (!prompts.length) continue
       const pointNode: any = { id: `p-${p.id}`, type: 'POINT', label: `${p.pointName}` , raw: p, parentClause: clause, children: [] as any[] }
       for (const pr of prompts) {
         pointNode.children.push({
           id: `r-${pr.id}`,
           type: 'PROMPT',
-          label: `${pr.name}${pr.statusType ? '（' + pr.statusType + '）' : ''}`,
+          label: `${(pr.name && String(pr.name).trim()) || pr.promptKey || '未命名提示'}${pr.statusType ? '（' + pr.statusType + '）' : ''}`,
           raw: pr,
           parentPoint: p,
           parentClause: clause,
@@ -283,6 +344,117 @@ function onNodeClick(data: any) {
   }
 }
 
+// 自定义树节点：右侧只保留“操作”下拉，包含 显示详情/编辑/停用或启用/删除/新增提示
+const renderTreeNode = (_: any, { data }: any) => {
+  const label = data.label as string
+  const type = data.type as string
+  const id = data.id as string
+
+  const onShowDetail = (e: MouseEvent) => {
+    e.stopPropagation()
+    if (type === 'POINT') {
+      currentPoint.value = data.raw
+      currentClause.value = data.parentClause
+      showDetail.value = true
+      loadPrompts()
+    } else if (type === 'PROMPT') {
+      currentPoint.value = data.parentPoint
+      currentClause.value = data.parentClause
+      showDetail.value = true
+      loadPrompts()
+    }
+  }
+  const onEdit = async (e: MouseEvent) => {
+    e.stopPropagation()
+    if (type === 'POINT') openEditPoint(data.raw)
+    else if (type === 'PROMPT') openEditPrompt(data.raw)
+  }
+  const onToggleClick = async (e: MouseEvent) => { e.stopPropagation(); await onToggle(data) }
+  const onDeleteClick = async (e: MouseEvent) => {
+    e.stopPropagation()
+    if (type === 'PROMPT') await deletePromptByKey(id)
+    else if (type === 'POINT') await deletePointByKey(id)
+    else if (type === 'CLAUSE') await deleteClauseByKey(id)
+  }
+  const onAddPrompt = async (e: MouseEvent) => {
+    e.stopPropagation()
+    if (type === 'POINT') openCreatePrompt(data.raw)
+  }
+
+  // 右侧“操作”下拉（使用 Element Plus 组件渲染）
+  const menu = h(ElDropdown, { trigger: 'click', onClick: (e: MouseEvent)=> e.stopPropagation() }, {
+    default: () => h(ElButton, { size: 'small' }, '操作'),
+    dropdown: () => h(ElDropdownMenu, null, [
+      h(ElDropdownItem, { onClick: onShowDetail }, () => '显示详情'),
+      type !== 'CLAUSE' ? h(ElDropdownItem, { onClick: onEdit }, () => '编辑') : null,
+      h(ElDropdownItem, { onClick: onToggleClick }, () => (data.enabled===false?'启用':'停用')),
+      type === 'POINT' ? h(ElDropdownItem, { onClick: onAddPrompt }, () => '新增提示') : null,
+      h(ElDropdownItem, { divided: true, class: 'danger', onClick: onDeleteClick }, () => '删除')
+    ].filter(Boolean) as any)
+  })
+
+  return h('span', { class: 'custom-tree-node', style: 'display:flex;align-items:center;justify-content:space-between;width:100%' }, [
+    h('span', null, label),
+    menu
+  ])
+}
+
+async function onToggle(data: any) {
+  const type = data.type as string
+  const id = data.id as string
+  if (type === 'CLAUSE') {
+    const cid = Number(String(id).slice(2))
+    const to = !(data.enabled !== false)
+    await riskApi.enableClauseType(cid, to)
+    data.enabled = to
+  } else if (type === 'POINT') {
+    const pid = Number(String(id).slice(2))
+    const to = !(data.raw?.enabled !== false)
+    await riskApi.enablePoint(pid, to)
+    if (data.raw) data.raw.enabled = to
+  } else if (type === 'PROMPT') {
+    const rid = Number(String(id).slice(2))
+    const to = !(data.raw?.enabled !== false)
+    await riskApi.enablePrompt(rid, to)
+    if (data.raw) data.raw.enabled = to
+  }
+  await loadTree()
+}
+
+async function deleteClauseByKey(key: string) {
+  const cid = String(key).startsWith('c-') ? Number(String(key).slice(2)) : null
+  if (!cid) return
+  try {
+    await ElMessageBox.confirm('删除分类将清除其下所有风险点/提示/动作，是否继续？','确认',{type:'warning'})
+    // 调后端分类删除（带强制）
+    await riskApi.deleteClauseType(cid, true as any)
+    ElMessage.success('已删除分类')
+    await loadTree()
+  } catch {}
+}
+
+async function deletePointByKey(key: string) {
+  const pid = String(key).startsWith('p-') ? Number(String(key).slice(2)) : null
+  if (!pid) return
+  try {
+    await ElMessageBox.confirm('是否删除该风险点及其下的提示/动作（强制）？','确认',{type:'warning'})
+    await riskApi.deletePoint(pid, true)
+    ElMessage.success('已删除风险点')
+    await loadTree()
+  } catch {}
+}
+
+async function deletePromptByKey(key: string) {
+  const rid = String(key).startsWith('r-') ? Number(String(key).slice(2)) : null
+  if (!rid) return
+  try {
+    await ElMessageBox.confirm('是否删除该提示及其动作（强制）？','确认',{type:'warning'})
+    await riskApi.deletePrompt(rid, true)
+    ElMessage.success('已删除提示')
+    await loadTree()
+  } catch {}
+}
+
 async function onPreviewSelection() {
   const nodes: any[] = (treeRef.value?.getCheckedNodes && treeRef.value.getCheckedNodes(true)) || []
   const pointIds = new Set<number>()
@@ -314,11 +486,24 @@ onMounted(async () => { await loadTree(); await loadProfiles() })
 
 // ---- manage helpers ----
 function openCreatePointFromClause() {
-  // 仅当当前选中为分类节点时允许快速新建
+  // 允许在三种情况下新增：
+  // 1) 当前选中为分类节点 → 直接挂到该分类
+  // 2) 当前选中为点/提示 → 挂到其父分类
+  // 3) 未选中任何节点 → 选择第一个分类作为默认（或弹确认）
   const sel: any = (treeRef.value?.getCurrentNode && treeRef.value.getCurrentNode()) || null
-  if (!sel || !String(sel.id).startsWith('c-')) return
+  let defaultKey = ''
+  if (sel && sel.id) {
+    const sid = String(sel.id)
+    if (sid.startsWith('c-')) defaultKey = sid
+    else if (sid.startsWith('p-')) defaultKey = sid
+    else if (sid.startsWith('r-')) defaultKey = `p-${sel.parentPoint?.id}`
+  } else if (treeData.value.length && String(treeData.value[0].id).startsWith('c-')) {
+    defaultKey = String(treeData.value[0].id)
+  }
+  const clauseId = getClauseIdFromNodeKey(defaultKey)
   pointDlg.mode = 'create'
-  pointDlg.form = { id: null, clauseTypeId: Number(String(sel.id).slice(2)), pointCode: '', pointName: '', algorithmType: '', sortOrder: 1, enabled: true }
+  pointDlg.parentKey = defaultKey
+  pointDlg.form = { id: null, clauseTypeId: clauseId, pointCode: '', pointName: '', algorithmType: '', sortOrder: 1, enabled: true }
   pointDlg.visible = true
 }
 
@@ -339,7 +524,15 @@ async function togglePointEnabled(p: any) {
   ElMessage.success('已更新状态')
 }
 async function deletePoint(p: any) {
-  await riskApi.deletePoint(p.id)
+  try {
+    await riskApi.deletePoint(p.id)
+  } catch (e:any) {
+    try {
+      await ElMessageBox.confirm('该风险点包含提示/被方案引用，是否强制删除？','确认',{type:'warning'})
+      await riskApi.deletePoint(p.id, true)
+      ElMessage.success('已强制删除风险点')
+    } catch { return }
+  }
   await loadTree(); currentPoint.value = null
 }
 
@@ -354,7 +547,19 @@ function openEditPrompt(pr: any) {
   promptDlg.visible = true
 }
 async function togglePromptEnabled(pr: any) { await riskApi.enablePrompt(pr.id, !pr.enabled); pr.enabled = !pr.enabled }
-async function deletePrompt(pr: any) { await riskApi.deletePrompt(pr.id); await loadPrompts() }
+// 删除提示；若删除失败则提供强制删除选项
+async function deletePrompt(pr: any) {
+  try {
+    await riskApi.deletePrompt(pr.id)
+  } catch (e:any) {
+    try {
+      await ElMessageBox.confirm('该提示包含动作引用，是否强制删除？','确认',{type:'warning'})
+      await riskApi.deletePrompt(pr.id, true)
+      ElMessage.success('已强制删除提示')
+    } catch { return }
+  }
+  await loadPrompts()
+}
 
 function openCreateAction(pr: any) {
   actionDlg.mode = 'create'
@@ -363,17 +568,73 @@ function openCreateAction(pr: any) {
 }
 
 async function savePoint() {
-  if (pointDlg.mode === 'create') {
-    await riskApi.createPoint(pointDlg.form)
-  } else {
-    await riskApi.updatePoint(pointDlg.form.id, pointDlg.form)
+  // 前端兜底：校验并生成默认值
+  const f = pointDlg.form
+  const name = String(f.pointName || '').trim()
+  if (!name) { ElMessage.warning('请填写风险点名称'); return }
+  // 移除前端自动编号分配，让后端统一分配 ZX-XXXX 编码
+  if (!f.algorithmType || String(f.algorithmType).trim() === '') {
+    f.algorithmType = name
+  }
+  // 分三种：
+  // 1) parentKey 为空 → 新增分类
+  // 2) parentKey 为 c-xxx → 在该分类下新增风险点
+  // 3) parentKey 为 p-xxx → 在该风险点下新增“提示”（不是风险点）
+  const pk = String(pointDlg.parentKey || '')
+  if (!pk) {
+    // 新增分类
+    const code = 'c_' + Date.now()
+    const data = { clauseCode: code, clauseName: f.pointName, sortOrder: f.sortOrder ?? 1, enabled: f.enabled !== false }
+    await riskApi.createClauseType(data)
+    ElMessage.success('已新增分类')
+  } else if (pk.startsWith('c-')) {
+    // 在分类下新增风险点
+    if (!f.clauseTypeId) { ElMessage.warning('请选择父分类'); return }
+    if (pointDlg.mode === 'create') {
+      await riskApi.createPoint(pointDlg.form)
+    } else {
+      await riskApi.updatePoint(pointDlg.form.id, pointDlg.form)
+    }
+    ElMessage.success('已保存风险点')
+  } else if (pk.startsWith('p-')) {
+    // 在风险点下新增提示
+    const parentPointId = Number(pk.slice(2))
+    if (!Number.isFinite(parentPointId)) { ElMessage.warning('父风险点无效'); return }
+    // 复用当前输入：名称→提示名称；算法类型/编号忽略
+    const pr = { pointId: parentPointId, promptKey: 'pr' + Date.now(), name: f.pointName, statusType: 'INFO', message: '', sortOrder: 1, enabled: true }
+    await riskApi.createPrompt(pr)
+    ElMessage.success('已在父风险点下新增提示')
   }
   pointDlg.visible = false
   await loadTree()
+  // 尝试定位到新建/编辑的点节点
+  try {
+    const pid = pointDlg.form.id
+    const cid = pointDlg.form.clauseTypeId
+    if (treeRef.value && cid) {
+      // 展开目标分类
+      const clauseKey = `c-${cid}`
+      // el-tree 无直接展开API，这里通过默认展开全部已满足
+      // 将当前节点设置为刚保存的点（如果能在树中找到）
+      const all = (treeRef.value.getNode && treeRef.value.getNode(clauseKey)) ? treeRef.value : null
+    }
+  } catch {}
   ElMessage.success('已保存风险点')
 }
 
 async function savePrompt() {
+  // 兜底：保证名称与Key不为空，避免树上只显示级别
+  const f = promptDlg.form
+  const nm = String(f.name || '').trim()
+  const pk = String(f.promptKey || '').trim()
+  if (!nm && !pk) {
+    f.promptKey = 'pr' + Date.now()
+    f.name = '未命名提示'
+  } else if (!nm) {
+    f.name = pk
+  } else if (!pk) {
+    f.promptKey = 'pr' + Date.now()
+  }
   if (promptDlg.mode === 'create') {
     await riskApi.createPrompt(promptDlg.form)
   } else {
@@ -489,19 +750,27 @@ async function createQuickProfile() {
 </script>
 
 <style scoped>
-.risk-lib-page { padding: 8px; }
+.risk-lib-page { padding: 12px; display:flex; flex-direction:column; }
+.risk-lib-page > .el-row { flex:1; min-height: 0; }
+.left-col { display:flex; }
 .card-header { font-weight: 600; display:flex; align-items:center; justify-content:space-between; }
 .card-header.between { display:flex; align-items:center; justify-content:space-between; }
-.tree-wrap { max-height: 520px; overflow: auto; margin-top: 8px; }
+.side-card { height: calc(100vh - 24px); display:flex; flex-direction:column; width:100%; }
+.side-card :deep(.el-card__body){ padding-top: 10px; display:flex; flex-direction:column; flex:1; min-height:0; }
+.tree-wrap { flex: 1; min-height: 0; overflow: auto; margin-top: 8px; }
 .actions { margin-top: 12px; display: flex; gap: 8px; }
 .toolbar { display:flex; flex-direction:column; gap:8px; }
 .toolbar-row { display:flex; align-items:center; gap:8px; }
+.toolbar-row .spacer { flex:1; }
 .pane-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
 .pane-toolbar .spacer { flex:1; }
 .btn-line { display:flex; gap:8px; margin-top:12px; }
 .mt12 { margin-top: 12px; }
 .muted { color: #909399; padding: 16px; }
-.side-card :deep(.el-card__body){ padding-top: 10px; }
+
+/* 树节点“操作”下拉的简易样式（悬浮显示菜单） */
+/* 调整下拉项的危险色 */
+.danger { color: #f56c6c; }
 </style>
 
 

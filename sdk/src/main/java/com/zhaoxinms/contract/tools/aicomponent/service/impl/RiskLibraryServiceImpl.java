@@ -28,7 +28,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Service
+@Service 
 @RequiredArgsConstructor
 public class RiskLibraryServiceImpl implements RiskLibraryService {
 
@@ -171,11 +171,69 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
 
     @Override
     @Transactional
+    public boolean deleteClauseType(Long id, boolean force) {
+        if (!force) return deleteClauseType(id);
+        // 级联删除该分类下所有点、其提示/动作，以及方案项
+        LambdaQueryWrapper<ReviewPoint> qw = new LambdaQueryWrapper<>();
+        qw.eq(ReviewPoint::getClauseTypeId, id);
+        List<ReviewPoint> pts = pointMapper.selectList(qw);
+        if (pts != null) {
+            for (ReviewPoint p : pts) {
+                deletePoint(p.getId(), true);
+            }
+        }
+        return clauseTypeMapper.deleteById(id) > 0;
+    }
+
+    @Override
+    @Transactional
     public boolean enableClauseType(Long id, boolean value) {
         ReviewClauseType e = clauseTypeMapper.selectById(id);
         if (e == null) return false;
         e.setEnabled(value);
         clauseTypeMapper.updateById(e);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean enableClauseType(Long id, boolean value, boolean cascade) {
+        ReviewClauseType e = clauseTypeMapper.selectById(id);
+        if (e == null) return false;
+        e.setEnabled(value);
+        clauseTypeMapper.updateById(e);
+        if (cascade) {
+            // cascade to points -> prompts -> actions
+            LambdaQueryWrapper<ReviewPoint> qw = new LambdaQueryWrapper<>();
+            qw.eq(ReviewPoint::getClauseTypeId, id);
+            List<ReviewPoint> pts = pointMapper.selectList(qw);
+            if (pts != null && !pts.isEmpty()) {
+                for (ReviewPoint p : pts) {
+                    p.setEnabled(value);
+                    pointMapper.updateById(p);
+
+                    LambdaQueryWrapper<ReviewPrompt> qwp = new LambdaQueryWrapper<>();
+                    qwp.eq(ReviewPrompt::getPointId, p.getId());
+                    List<ReviewPrompt> prs = promptMapper.selectList(qwp);
+                    if (prs != null && !prs.isEmpty()) {
+                        for (ReviewPrompt pr : prs) {
+                            pr.setEnabled(value);
+                            promptMapper.updateById(pr);
+
+                            LambdaQueryWrapper<ReviewAction> qwa = new LambdaQueryWrapper<>();
+                            qwa.eq(ReviewAction::getPromptId, pr.getId());
+                            List<ReviewAction> acts = actionMapper.selectList(qwa);
+                            if (acts != null && !acts.isEmpty()) {
+                                for (ReviewAction a : acts) {
+                                    a.setEnabled(value);
+                                    actionMapper.updateById(a);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return true;
     }
 
@@ -197,7 +255,13 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
     public ReviewPoint createPoint(PointDTO dto) {
         ReviewPoint e = new ReviewPoint();
         e.setClauseTypeId(dto.getClauseTypeId());
-        e.setPointCode(dto.getPointCode());
+        // 自动分配自定义编码：当未传入或为空时，分配下一个 ZX-XXXX 编码
+        String incomingCode = dto.getPointCode();
+        if (incomingCode == null || incomingCode.trim().isEmpty()) {
+            e.setPointCode(generateNextPointCode());
+        } else {
+            e.setPointCode(incomingCode.trim());
+        }
         e.setPointName(dto.getPointName());
         e.setAlgorithmType(dto.getAlgorithmType());
         e.setSortOrder(dto.getSortOrder());
@@ -237,11 +301,70 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
 
     @Override
     @Transactional
+    public boolean deletePoint(Long id, boolean force) {
+        if (!force) return deletePoint(id);
+        // 级联删除该点下的 prompts 与其 actions、以及方案条目
+        // 1) 删除 actions -> prompts
+        LambdaQueryWrapper<ReviewPrompt> qwp = new LambdaQueryWrapper<>();
+        qwp.eq(ReviewPrompt::getPointId, id);
+        List<ReviewPrompt> prs = promptMapper.selectList(qwp);
+        if (prs != null && !prs.isEmpty()) {
+            List<Long> pidList = prs.stream().map(ReviewPrompt::getId).collect(java.util.stream.Collectors.toList());
+            if (!pidList.isEmpty()) {
+                LambdaQueryWrapper<ReviewAction> qwa = new LambdaQueryWrapper<>();
+                qwa.in(ReviewAction::getPromptId, pidList);
+                actionMapper.delete(qwa);
+            }
+            // 删除 prompts
+            promptMapper.delete(qwp);
+        }
+        // 2) 删除 profile items
+        LambdaQueryWrapper<ReviewProfileItem> qpi = new LambdaQueryWrapper<>();
+        qpi.eq(ReviewProfileItem::getPointId, id);
+        profileItemMapper.delete(qpi);
+        // 3) 删除 point
+        return pointMapper.deleteById(id) > 0;
+    }
+
+    @Override
+    @Transactional
     public boolean enablePoint(Long id, boolean value) {
         ReviewPoint e = pointMapper.selectById(id);
         if (e == null) return false;
         e.setEnabled(value);
         pointMapper.updateById(e);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean enablePoint(Long id, boolean value, boolean cascade) {
+        ReviewPoint e = pointMapper.selectById(id);
+        if (e == null) return false;
+        e.setEnabled(value);
+        pointMapper.updateById(e);
+        if (cascade) {
+            // cascade to prompts -> actions
+            LambdaQueryWrapper<ReviewPrompt> qwp = new LambdaQueryWrapper<>();
+            qwp.eq(ReviewPrompt::getPointId, id);
+            List<ReviewPrompt> prs = promptMapper.selectList(qwp);
+            if (prs != null && !prs.isEmpty()) {
+                for (ReviewPrompt pr : prs) {
+                    pr.setEnabled(value);
+                    promptMapper.updateById(pr);
+
+                    LambdaQueryWrapper<ReviewAction> qwa = new LambdaQueryWrapper<>();
+                    qwa.eq(ReviewAction::getPromptId, pr.getId());
+                    List<ReviewAction> acts = actionMapper.selectList(qwa);
+                    if (acts != null && !acts.isEmpty()) {
+                        for (ReviewAction a : acts) {
+                            a.setEnabled(value);
+                            actionMapper.updateById(a);
+                        }
+                    }
+                }
+            }
+        }
         return true;
     }
 
@@ -271,7 +394,12 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
     public ReviewPrompt createPrompt(PromptDTO dto) {
         ReviewPrompt e = new ReviewPrompt();
         e.setPointId(dto.getPointId());
-        e.setPromptKey(dto.getPromptKey());
+        // 分配全局唯一的 prompt_key：优先使用传入的 promptKey，否则取 name；若冲突自动追加 -2/-3...
+        String baseKey = dto.getPromptKey();
+        if (baseKey == null || baseKey.trim().isEmpty()) baseKey = dto.getName();
+        if (baseKey == null || baseKey.trim().isEmpty()) baseKey = "prompt-" + System.currentTimeMillis();
+        String uniqueKey = ensurePromptKeyUnique(baseKey.trim(), null);
+        e.setPromptKey(uniqueKey);
         e.setName(dto.getName());
         e.setMessage(dto.getMessage());
         e.setStatusType(dto.getStatusType());
@@ -287,7 +415,12 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
         ReviewPrompt e = promptMapper.selectById(id);
         if (e == null) return null;
         if (dto.getPointId() != null) e.setPointId(dto.getPointId());
-        if (dto.getPromptKey() != null) e.setPromptKey(dto.getPromptKey());
+        if (dto.getPromptKey() != null) {
+            String nk = dto.getPromptKey().trim();
+            if (nk.isEmpty()) nk = e.getName() == null ? ("prompt-" + System.currentTimeMillis()) : e.getName();
+            nk = ensurePromptKeyUnique(nk, id);
+            e.setPromptKey(nk);
+        }
         if (dto.getName() != null) e.setName(dto.getName());
         if (dto.getMessage() != null) e.setMessage(dto.getMessage());
         if (dto.getStatusType() != null) e.setStatusType(dto.getStatusType());
@@ -295,6 +428,32 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
         if (dto.getEnabled() != null) e.setEnabled(dto.getEnabled());
         promptMapper.updateById(e);
         return e;
+    }
+
+    // 保障 review_prompt.prompt_key 全局唯一；ignoreId 用于更新时忽略自身
+    private String ensurePromptKeyUnique(String key, Long ignoreId) {
+        String normalized = key;
+        if (normalized.length() > 120) { // 预留给后缀，避免超出 128
+            normalized = normalized.substring(0, 120);
+        }
+        String candidate = normalized;
+        int suffix = 2;
+        while (true) {
+            LambdaQueryWrapper<ReviewPrompt> qw = new LambdaQueryWrapper<>();
+            qw.eq(ReviewPrompt::getPromptKey, candidate);
+            if (ignoreId != null) {
+                qw.ne(ReviewPrompt::getId, ignoreId);
+            }
+            Long cnt = promptMapper.selectCount(qw);
+            if (cnt == null || cnt == 0L) return candidate;
+            String base = normalized;
+            String add = "-" + suffix;
+            if (base.length() + add.length() > 128) {
+                base = base.substring(0, 128 - add.length());
+            }
+            candidate = base + add;
+            suffix++;
+        }
     }
 
     @Override
@@ -309,11 +468,43 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
 
     @Override
     @Transactional
+    public boolean deletePrompt(Long id, boolean force) {
+        if (!force) return deletePrompt(id);
+        // 级联删除该提示下的所有动作
+        LambdaQueryWrapper<ReviewAction> qwa = new LambdaQueryWrapper<>();
+        qwa.eq(ReviewAction::getPromptId, id);
+        actionMapper.delete(qwa);
+        return promptMapper.deleteById(id) > 0;
+    }
+
+    @Override
+    @Transactional
     public boolean enablePrompt(Long id, boolean value) {
         ReviewPrompt e = promptMapper.selectById(id);
         if (e == null) return false;
         e.setEnabled(value);
         promptMapper.updateById(e);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean enablePrompt(Long id, boolean value, boolean cascade) {
+        ReviewPrompt e = promptMapper.selectById(id);
+        if (e == null) return false;
+        e.setEnabled(value);
+        promptMapper.updateById(e);
+        if (cascade) {
+            LambdaQueryWrapper<ReviewAction> qwa = new LambdaQueryWrapper<>();
+            qwa.eq(ReviewAction::getPromptId, id);
+            List<ReviewAction> acts = actionMapper.selectList(qwa);
+            if (acts != null && !acts.isEmpty()) {
+                for (ReviewAction a : acts) {
+                    a.setEnabled(value);
+                    actionMapper.updateById(a);
+                }
+            }
+        }
         return true;
     }
 
@@ -365,6 +556,31 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
         if (dto.getEnabled() != null) e.setEnabled(dto.getEnabled());
         actionMapper.updateById(e);
         return e;
+    }
+
+    // 生成下一个 ZX 编码（形如 ZX-0001、ZX-0002 ...），按照 point_code 字符串倒序取最大值再 +1
+    private String generateNextPointCode() {
+        // 查找现有以 ZX- 前缀的最大编码
+        LambdaQueryWrapper<ReviewPoint> qw = new LambdaQueryWrapper<>();
+        qw.like(ReviewPoint::getPointCode, "ZX-");
+        qw.orderByDesc(ReviewPoint::getPointCode);
+        qw.last("LIMIT 1");
+        List<ReviewPoint> list = pointMapper.selectList(qw);
+        int next = 1;
+        if (list != null && !list.isEmpty()) {
+            String maxCode = list.get(0).getPointCode();
+            if (maxCode != null && maxCode.startsWith("ZX-")) {
+                try {
+                    String num = maxCode.substring(3).trim();
+                    // 去除非数字字符的干扰
+                    num = num.replaceAll("[^0-9]", "");
+                    if (!num.isEmpty()) {
+                        next = Integer.parseInt(num) + 1;
+                    }
+                } catch (Exception ignore) {}
+            }
+        }
+        return String.format("ZX-%04d", next);
     }
 
     @Override

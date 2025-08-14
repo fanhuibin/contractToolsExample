@@ -57,13 +57,16 @@ public class RiskLibraryController {
     }
 
     @DeleteMapping("/clause-type/{id}")
-    public Result<?> deleteClauseType(@PathVariable Long id) {
-        return riskLibraryService.deleteClauseType(id) ? Result.success("ok", true) : Result.error("存在下级数据或删除失败");
+    public Result<?> deleteClauseType(@PathVariable Long id, @RequestParam(value = "force", required = false) Boolean force) {
+        boolean ok = Boolean.TRUE.equals(force) ? riskLibraryService.deleteClauseType(id, true) : riskLibraryService.deleteClauseType(id);
+        return ok ? Result.success("ok", true) : Result.error(Boolean.TRUE.equals(force) ? "删除失败" : "存在下级数据或删除失败");
     }
 
     @PatchMapping("/clause-type/{id}/enabled")
-    public Result<?> enableClauseType(@PathVariable Long id, @RequestParam("value") boolean value) {
-        return riskLibraryService.enableClauseType(id, value) ? Result.success("ok", true) : Result.error("操作失败");
+    public Result<?> enableClauseType(@PathVariable Long id, @RequestParam("value") boolean value,
+                                      @RequestParam(value = "cascade", required = false) Boolean cascade) {
+        boolean ok = Boolean.TRUE.equals(cascade) ? riskLibraryService.enableClauseType(id, value, true) : riskLibraryService.enableClauseType(id, value);
+        return ok ? Result.success("ok", true) : Result.error("操作失败");
     }
 
     @PutMapping("/clause-types/reorder")
@@ -84,13 +87,16 @@ public class RiskLibraryController {
     }
 
     @DeleteMapping("/point/{id}")
-    public Result<?> deletePoint(@PathVariable Long id) {
-        return riskLibraryService.deletePoint(id) ? Result.success("ok", true) : Result.error("被引用或删除失败");
+    public Result<?> deletePoint(@PathVariable Long id, @RequestParam(value = "force", required = false) Boolean force) {
+        boolean ok = Boolean.TRUE.equals(force) ? riskLibraryService.deletePoint(id, true) : riskLibraryService.deletePoint(id);
+        return ok ? Result.success("ok", true) : Result.error(Boolean.TRUE.equals(force) ? "删除失败" : "被引用或删除失败");
     }
 
     @PatchMapping("/point/{id}/enabled")
-    public Result<?> enablePoint(@PathVariable Long id, @RequestParam("value") boolean value) {
-        return riskLibraryService.enablePoint(id, value) ? Result.success("ok", true) : Result.error("操作失败");
+    public Result<?> enablePoint(@PathVariable Long id, @RequestParam("value") boolean value,
+                                 @RequestParam(value = "cascade", required = false) Boolean cascade) {
+        boolean ok = Boolean.TRUE.equals(cascade) ? riskLibraryService.enablePoint(id, value, true) : riskLibraryService.enablePoint(id, value);
+        return ok ? Result.success("ok", true) : Result.error("操作失败");
     }
 
     @PutMapping("/points/reorder")
@@ -116,13 +122,16 @@ public class RiskLibraryController {
     }
 
     @DeleteMapping("/prompt/{id}")
-    public Result<?> deletePrompt(@PathVariable Long id) {
-        return riskLibraryService.deletePrompt(id) ? Result.success("ok", true) : Result.error("被引用或删除失败");
+    public Result<?> deletePrompt(@PathVariable Long id, @RequestParam(value = "force", required = false) Boolean force) {
+        boolean ok = Boolean.TRUE.equals(force) ? riskLibraryService.deletePrompt(id, true) : riskLibraryService.deletePrompt(id);
+        return ok ? Result.success("ok", true) : Result.error(Boolean.TRUE.equals(force) ? "删除失败" : "被引用或删除失败");
     }
 
     @PatchMapping("/prompt/{id}/enabled")
-    public Result<?> enablePrompt(@PathVariable Long id, @RequestParam("value") boolean value) {
-        return riskLibraryService.enablePrompt(id, value) ? Result.success("ok", true) : Result.error("操作失败");
+    public Result<?> enablePrompt(@PathVariable Long id, @RequestParam("value") boolean value,
+                                  @RequestParam(value = "cascade", required = false) Boolean cascade) {
+        boolean ok = Boolean.TRUE.equals(cascade) ? riskLibraryService.enablePrompt(id, value, true) : riskLibraryService.enablePrompt(id, value);
+        return ok ? Result.success("ok", true) : Result.error("操作失败");
     }
 
     @PutMapping("/prompts/reorder")
