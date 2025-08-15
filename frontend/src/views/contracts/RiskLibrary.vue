@@ -750,27 +750,220 @@ async function createQuickProfile() {
 </script>
 
 <style scoped>
-.risk-lib-page { padding: 12px; display:flex; flex-direction:column; }
-.risk-lib-page > .el-row { flex:1; min-height: 0; }
-.left-col { display:flex; }
-.card-header { font-weight: 600; display:flex; align-items:center; justify-content:space-between; }
-.card-header.between { display:flex; align-items:center; justify-content:space-between; }
-.side-card { height: calc(100vh - 24px); display:flex; flex-direction:column; width:100%; }
-.side-card :deep(.el-card__body){ padding-top: 10px; display:flex; flex-direction:column; flex:1; min-height:0; }
-.tree-wrap { flex: 1; min-height: 0; overflow: auto; margin-top: 8px; }
-.actions { margin-top: 12px; display: flex; gap: 8px; }
-.toolbar { display:flex; flex-direction:column; gap:8px; }
-.toolbar-row { display:flex; align-items:center; gap:8px; }
-.toolbar-row .spacer { flex:1; }
-.pane-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
-.pane-toolbar .spacer { flex:1; }
-.btn-line { display:flex; gap:8px; margin-top:12px; }
-.mt12 { margin-top: 12px; }
-.muted { color: #909399; padding: 16px; }
+/* 全局变量定义 */
+:root {
+  --primary-color: #409eff;
+  --primary-light: #ecf5ff;
+  --border-radius: 6px;
+  --card-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  --hover-shadow: 0 4px 16px 0 rgba(0, 0, 0, 0.15);
+  --transition-time: 0.3s;
+}
 
-/* 树节点“操作”下拉的简易样式（悬浮显示菜单） */
-/* 调整下拉项的危险色 */
-.danger { color: #f56c6c; }
+/* 基础布局 */
+.risk-lib-page { 
+  padding: 16px; 
+  display: flex; 
+  flex-direction: column; 
+  background-color: #f5f7fa;
+}
+
+.risk-lib-page > .el-row { 
+  flex: 1; 
+  min-height: 0; 
+}
+
+.left-col { 
+  display: flex; 
+}
+
+/* 卡片样式增强 */
+.side-card { 
+  height: calc(100vh - 32px); 
+  display: flex; 
+  flex-direction: column; 
+  width: 100%; 
+  border-radius: var(--border-radius);
+  box-shadow: var(--card-shadow);
+  transition: box-shadow var(--transition-time);
+}
+
+.side-card:hover {
+  box-shadow: var(--hover-shadow);
+}
+
+.side-card :deep(.el-card__body) { 
+  padding-top: 10px; 
+  display: flex; 
+  flex-direction: column; 
+  flex: 1; 
+  min-height: 0; 
+}
+
+/* 卡片头部样式 */
+.card-header { 
+  font-weight: 600; 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+  padding: 4px 0;
+  color: #303133;
+}
+
+.card-header.between { 
+  display: flex; 
+  align-items: center; 
+  justify-content: space-between; 
+}
+
+/* 树形控件样式增强 */
+.tree-wrap { 
+  flex: 1; 
+  min-height: 0; 
+  overflow: auto; 
+  margin-top: 8px; 
+  padding: 4px;
+  border-radius: var(--border-radius);
+}
+
+/* 树节点悬停效果 */
+.tree-wrap :deep(.el-tree-node__content) {
+  border-radius: 4px;
+  transition: background-color var(--transition-time);
+}
+
+.tree-wrap :deep(.el-tree-node__content:hover) {
+  background-color: var(--primary-light);
+}
+
+/* 自定义树节点样式 */
+.custom-tree-node {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 2px 0;
+}
+
+/* 按钮和工具栏样式 */
+.actions { 
+  margin-top: 12px; 
+  display: flex; 
+  gap: 8px; 
+}
+
+.toolbar { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 8px; 
+  margin-bottom: 12px;
+}
+
+.toolbar-row { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  padding: 4px 0;
+}
+
+.toolbar-row .spacer { 
+  flex: 1; 
+}
+
+.pane-toolbar { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  margin-bottom: 12px; 
+  padding: 4px 8px;
+  background-color: #f5f7fa;
+  border-radius: var(--border-radius);
+}
+
+.pane-toolbar .spacer { 
+  flex: 1; 
+}
+
+/* 按钮悬停效果增强 */
+.btn-line { 
+  display: flex; 
+  gap: 8px; 
+  margin-top: 12px; 
+}
+
+.btn-line :deep(.el-button),
+.actions :deep(.el-button),
+.toolbar-row :deep(.el-button),
+.pane-toolbar :deep(.el-button) {
+  transition: transform var(--transition-time), box-shadow var(--transition-time);
+}
+
+.btn-line :deep(.el-button:hover),
+.actions :deep(.el-button:hover),
+.toolbar-row :deep(.el-button:hover),
+.pane-toolbar :deep(.el-button:hover) {
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* 表格悬停效果 */
+:deep(.el-table__row) {
+  transition: background-color var(--transition-time);
+}
+
+:deep(.el-table__row:hover) {
+  background-color: var(--primary-light) !important;
+}
+
+/* 标签页样式增强 */
+:deep(.el-tabs__item) {
+  transition: all var(--transition-time);
+}
+
+:deep(.el-tabs__item:hover) {
+  color: var(--primary-color);
+  transform: translateY(-2px);
+}
+
+/* 表单项悬停效果 */
+:deep(.el-form-item) {
+  transition: transform var(--transition-time);
+}
+
+:deep(.el-form-item:hover) {
+  transform: translateY(-2px);
+}
+
+.mt12 { 
+  margin-top: 12px; 
+}
+
+.muted { 
+  color: #909399; 
+  padding: 16px; 
+  font-style: italic;
+  border-radius: var(--border-radius);
+  background-color: #f5f7fa;
+}
+
+/* 树节点"操作"下拉的样式 */
+.danger { 
+  color: #f56c6c; 
+}
+
+/* 下拉菜单悬停效果 */
+:deep(.el-dropdown-menu__item) {
+  transition: background-color var(--transition-time), transform var(--transition-time);
+}
+
+:deep(.el-dropdown-menu__item:hover) {
+  background-color: var(--primary-light);
+  transform: translateX(4px);
+}
+
+:deep(.el-dropdown-menu__item.danger:hover) {
+  background-color: #fef0f0;
+}
 </style>
 
 

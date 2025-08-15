@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '合同智能审核执行' }
       },
       {
+        path: '/contract-review-detail/:fileId',
+        name: 'ContractReviewDetail',
+        component: () => import('@/views/contracts/ContractReviewDetail.vue'),
+        meta: { title: '审核结果详情' }
+      },
+      {
         path: '/risk-library',
         name: 'RiskLibrary',
         component: () => import('@/views/contracts/RiskLibrary.vue'),
