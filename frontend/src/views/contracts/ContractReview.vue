@@ -77,10 +77,7 @@
             <div class="result-header">
               <h4><el-icon class="result-icon"><Check /></el-icon>审核结果</h4>
               <div class="result-actions">
-                <el-button type="primary" size="small" @click="viewDetailResult">
-                  <el-icon><View /></el-icon>查看详情
-                </el-button>
-                <el-button type="info" size="small" @click="copyJson()">
+                <el-button type="primary" size="small" @click="copyJson()">
                   <el-icon><CopyDocument /></el-icon>复制JSON
                 </el-button>
               </div>
@@ -149,17 +146,15 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, defineAsyncComponent } from 'vue'
-import { UploadFilled, Document, CaretRight, Loading, Check, CopyDocument, List, Setting, Select, FolderAdd, Collection, View } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { UploadFilled, Document, CaretRight, Loading, Check, CopyDocument, List, Setting, Select, FolderAdd, Collection } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import riskApi from '@/api/ai/risk'
 
 // 轻量内嵌的条款库选择器（最小实现：只提供选择和预览功能）
 const RiskLibraryEmbed = defineAsyncComponent(() => import('./RiskLibraryEmbed.vue'))
   
-const router = useRouter()
+
 const selectedFile = ref<File | null>(null)
-const uploadedFileId = ref<string | null>(null) // 新增：用于存储上传后的文件ID
 const reviewing = ref(false)
 const progress = ref(0)
 const progressStatus = ref<'success' | 'warning' | 'exception' | ''>('')
@@ -230,28 +225,6 @@ function tagType(t: string) {
   return 'info'
 }
 
-function viewDetailResult() {
-  if (!uploadedFileId.value) {
-    ElMessage.warning('无法查看详情，因为没有有效的文件ID。请先成功执行一次审核。')
-    return
-  }
-  
-  // 使用上传并审核后得到的真实文件ID进行跳转
-  const fileId = uploadedFileId.value
-  
-  // 跳转到详情页面
-  router.push(`/contract-review-detail/${fileId}`)
-  
-  // 可以通过localStorage传递一些临时数据
-  localStorage.setItem('review_result_data', JSON.stringify({
-    fileName: selectedFile.value.name,
-    reviewDate: new Date().toLocaleString(),
-    results: results.value
-  }))
-  
-  ElMessage.success('正在跳转到详情页面')
-}
-
 function copyJson() {
   try {
     const text = JSON.stringify({ traceId: traceId.value, elapsedMs: elapsedMs.value, docMeta: docMeta.value, results: results.value }, null, 2)
@@ -275,30 +248,41 @@ async function startReview() {
     const res: any = await riskApi.executeReview(selectedProfileId.value || undefined, payload, selectedFile.value as File)
     console.log('[review] response', res)
     progress.value = 80
-    statusText.value = '正在解析审核结果...'
+    statusText.value = '生成报告...'
+    const data = res?.data || {}
+    traceId.value = data.traceId
+    elapsedMs.value = data.elapsedMs || 0
+    docMeta.value = data.docMeta || { pages: 0, paragraphs: 0 }
+    usage.value = data.usage || null
+    // 兼容 findings（旧结构）与 results（新结构）
+    if (Array.isArray(data.results)) {
+      results.value = data.results
+    } else if (Array.isArray(data.findings)) {
+      const mapped = [] as any[]
+      for (const f of data.findings) {
+        const prompts = Array.isArray(f.prompts) ? f.prompts : []
+        for (const pr of prompts) {
+          mapped.push({
+            clauseType: f.clauseTypeName || f.clauseType || '',
+            pointId: String(f.pointId ?? f.pointCode ?? ''),
+            algorithmType: f.algorithmType,
+            decisionType: pr.name || pr.promptKey || '',
+            statusType: pr.statusType || 'INFO',
+            message: pr.message || '',
+            actions: [],
+            evidence: []
+          })
+        }
+      }
+      results.value = mapped
+    } else {
+      results.value = []
+    }
     progress.value = 100
     progressStatus.value = 'success'
-    
-    // 从返回结果中提取关键信息
-    results.value = res.data.data?.results || []
-    traceId.value = res.data.data?.traceId || ''
-    elapsedMs.value = res.data.data?.elapsedMs || 0
-    docMeta.value = res.data.data?.docMeta || { pages: 0, paragraphs: 0 }
-    usage.value = res.data.data?.usage || null
-
-    // 新增：从响应中获取并存储上传后的文件ID
-    // 注意：这里的 'res.data.data.fileId' 是一个假设的路径，需要根据后端真实返回的结构进行调整
-    if (res.data.data && res.data.data.fileId) {
-      uploadedFileId.value = res.data.data.fileId
-    } else {
-      // 如果后端没有返回 fileId，我们做一个兜底，仍然使用示例文件
-      // 但在生产环境中，这里应该抛出一个错误或警告
-      console.warn("后端响应中未找到 fileId，将使用默认示例文件进行预览。")
-      uploadedFileId.value = 'templateDesign' 
-    }
-
-  } catch (err: any) {
-    error.value = err?.message || '审核失败'
+    statusText.value = '完成'
+  } catch (e: any) {
+    error.value = e?.message || '审核失败'
     progressStatus.value = 'exception'
   } finally {
     reviewing.value = false
@@ -332,6 +316,8 @@ async function applySelectionFromLibrary() {
 }
 
 // 审核清单管理：跳转独立页面
+import { useRouter } from 'vue-router'
+const router = useRouter()
 function openChecklistManager() { router.push({ path: '/risk-library', query: { from: 'contract-review' } }) }
 
 // 保存为方案
