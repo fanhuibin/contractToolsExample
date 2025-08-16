@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.util.StreamUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -36,6 +37,7 @@ import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.compare.CompareOptions;
 import com.zhaoxinms.contract.tools.compare.PDFComparsionHelper;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import com.zhaoxinms.contract.tools.onlyoffice.exception.OnlyOfficeServiceUnavailableException;
 
 import cn.hutool.core.util.StrUtil;
 
@@ -56,6 +58,10 @@ public class CompareController {
     private ObjectMapper objectMapper;
     @Autowired
     private CompareRecordService compareRecordService;
+    
+    // 注入OCR比对服务
+    @Autowired(required = false)
+    private com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareService ocrCompareService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<Map<String, Object>> uploadAndCompare(
@@ -66,11 +72,14 @@ public class CompareController {
             @RequestParam(value = "footerHeightMm", required = false, defaultValue = "20") float footerHeightMm,
             @RequestParam(value = "ignoreCase", required = false, defaultValue = "true") boolean ignoreCase,
             @RequestParam(value = "ignoredSymbols", required = false, defaultValue = "_＿") String ignoredSymbols,
+            @RequestParam(value = "useOCR", required = false, defaultValue = "false") boolean useOCR,
+            @RequestParam(value = "ignoreSpaces", required = false, defaultValue = "false") boolean ignoreSpaces,
             HttpServletRequest request
     ) {
         try {
             String ts = TS.format(LocalDateTime.now());
             File workDir = ensureWorkDir();
+            
             // 保存原始文件（保留后缀）
             String oldExt = getExt(oldFile.getOriginalFilename());
             String newExt = getExt(newFile.getOriginalFilename());
@@ -78,16 +87,107 @@ public class CompareController {
             File newSrc = new File(workDir, "new_" + ts + (newExt.isEmpty() ? "" : ("." + newExt)));
             ensureParent(oldSrc);
             ensureParent(newSrc);
-            oldFile.transferTo(oldSrc);
-            newFile.transferTo(newSrc);
+            
+            // 保存文件并验证
+            try {
+                oldFile.transferTo(oldSrc);
+                newFile.transferTo(newSrc);
+                
+                // 等待文件系统同步
+                Thread.sleep(100);
+                
+            } catch (Exception e) {
+                throw new IllegalStateException("文件保存失败: " + e.getMessage(), e);
+            }
+            
+            // 验证文件保存是否成功
+            System.out.println("文件保存验证:");
+            System.out.println("  旧文件: " + oldSrc.getAbsolutePath() + " (大小: " + oldSrc.length() + " bytes)");
+            System.out.println("  新文件: " + newSrc.getAbsolutePath() + " (大小: " + newSrc.length() + " bytes)");
+            
+            if (!oldSrc.exists()) {
+                throw new IllegalStateException("旧文件保存失败，文件不存在: " + oldSrc.getAbsolutePath());
+            }
+            if (!newSrc.exists()) {
+                throw new IllegalStateException("新文件保存失败，文件不存在: " + newSrc.getAbsolutePath());
+            }
+            
+            if (oldSrc.length() == 0) {
+                throw new IllegalStateException("旧文件保存失败，文件大小为0: " + oldSrc.getAbsolutePath());
+            }
+            if (newSrc.length() == 0) {
+                throw new IllegalStateException("新文件保存失败，文件大小为0: " + newSrc.getAbsolutePath());
+            }
+            
+            // 验证文件权限
+            if (!oldSrc.canRead()) {
+                throw new IllegalStateException("旧文件无读权限: " + oldSrc.getAbsolutePath());
+            }
+            if (!newSrc.canRead()) {
+                throw new IllegalStateException("新文件无读权限: " + newSrc.getAbsolutePath());
+            }
 
             // 转为PDF
             File oldPdf = new File(workDir, "old_" + ts + ".pdf");
             File newPdf = new File(workDir, "new_" + ts + ".pdf");
+            
+            System.out.println("开始PDF转换:");
+            System.out.println("  旧文件 -> PDF: " + oldSrc.getName() + " -> " + oldPdf.getName());
             ensurePdf(request, oldSrc, oldPdf);
+            System.out.println("  新文件 -> PDF: " + newSrc.getName() + " -> " + newPdf.getName());
             ensurePdf(request, newSrc, newPdf);
+            
+            // 验证PDF转换结果
+            System.out.println("PDF转换结果验证:");
+            System.out.println("  旧PDF: " + oldPdf.getAbsolutePath() + " (大小: " + oldPdf.length() + " bytes)");
+            System.out.println("  新PDF: " + newPdf.getAbsolutePath() + " (大小: " + newPdf.length() + " bytes)");
+            
+            if (oldPdf.length() == 0 || newPdf.length() == 0) {
+                throw new IllegalStateException("PDF转换失败，生成的PDF文件为空");
+            }
 
-            // 生成对比结果PDF
+            // 如果使用OCR比对
+            if (useOCR) {
+                try {
+                    // 检查OCR比对服务是否可用
+                    if (ocrCompareService == null) {
+                        return Result.error("OCR比对服务未配置，请检查服务依赖");
+                    }
+                    
+                    // 创建OCR比对选项
+                    com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareOptions ocrOptions = 
+                        new com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareOptions();
+                    ocrOptions.setIgnoreHeaderFooter(ignoreHeaderFooter);
+                    ocrOptions.setIgnoreCase(ignoreCase);
+                    ocrOptions.setIgnoreSpaces(ignoreSpaces);
+                    
+                                         // 重要：OCR比对服务需要PDF文件路径，而不是原始文件路径
+                     // 我们已经转换了文件为PDF，现在传递PDF文件路径
+                     String oldPdfPath = oldPdf.getAbsolutePath();
+                     String newPdfPath = newPdf.getAbsolutePath();
+                     
+                     System.out.println("提交OCR比对任务:");
+                     System.out.println("  旧PDF: " + oldPdfPath);
+                     System.out.println("  新PDF: " + newPdfPath);
+                     
+                     // 调用OCR比对服务，传递PDF文件路径
+                     String taskId = ocrCompareService.submitCompareTaskWithPaths(oldPdfPath, newPdfPath, ocrOptions);
+                    
+                    Map<String, Object> data = new HashMap<>();
+                    data.put("id", taskId);
+                    data.put("message", "OCR比对任务已提交，请等待处理完成");
+                    data.put("useOCR", true);
+                    data.put("taskType", "OCR_COMPARE");
+                    data.put("status", "PROCESSING");
+                    
+                    return Result.success(data);
+                    
+                } catch (Exception e) {
+                    return Result.error("OCR比对失败: " + e.getMessage());
+                }
+            }
+
+            // 普通比对逻辑
             File outOld = new File(workDir, "out_old_" + ts + ".pdf");
             File outNew = new File(workDir, "out_new_" + ts + ".pdf");
             ensureParent(outOld);
@@ -115,6 +215,7 @@ public class CompareController {
             data.put("id", ts);
             data.putAll(buildResponseUrls(request, outOld, outNew));
             data.put("results", results);
+            data.put("useOCR", false);
             return Result.success(data);
         } catch (Exception e) {
             return Result.error("合同比对失败: " + e.getMessage());
@@ -209,9 +310,56 @@ public class CompareController {
         String ext = getExt(src.getName());
         if ("pdf".equalsIgnoreCase(ext)) {
             // 直接复制/重命名为目标PDF
-            try (java.io.InputStream in = new java.io.FileInputStream(src);
-                 java.io.FileOutputStream out = new java.io.FileOutputStream(destPdf)) {
-                StreamUtils.copy(in, out);
+            try {
+                // 确保目标目录存在
+                ensureParent(destPdf);
+                
+                // 验证源文件
+                if (!src.exists()) {
+                    throw new IllegalStateException("源文件不存在: " + src.getAbsolutePath());
+                }
+                if (src.length() == 0) {
+                    throw new IllegalStateException("源文件为空: " + src.getAbsolutePath());
+                }
+                
+                // 如果源文件和目标文件是同一个文件，直接返回
+                if (src.getAbsolutePath().equals(destPdf.getAbsolutePath())) {
+                    System.out.println("源文件和目标文件相同，跳过复制: " + src.getName());
+                    return;
+                }
+                
+                System.out.println("开始复制PDF文件: " + src.getName() + " (大小: " + src.length() + " bytes) -> " + destPdf.getName());
+                
+                // 使用缓冲区复制，确保数据正确传输
+                try (java.io.FileInputStream in = new java.io.FileInputStream(src);
+                     java.io.FileOutputStream out = new java.io.FileOutputStream(destPdf)) {
+                    
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, bytesRead);
+                    }
+                    out.flush();
+                }
+                
+                // 验证复制后的文件
+                if (destPdf.length() == 0) {
+                    throw new IllegalStateException("PDF文件复制失败，目标文件为空: " + destPdf.getAbsolutePath());
+                }
+                
+                System.out.println("PDF文件复制成功: " + src.getName() + " -> " + destPdf.getName() + 
+                                 " (大小: " + src.length() + " -> " + destPdf.length() + " bytes)");
+                                 
+            } catch (Exception e) {
+                // 如果复制失败，尝试使用转换服务
+                System.out.println("PDF文件直接复制失败，尝试使用转换服务: " + e.getMessage());
+                
+                // 对于PDF文件，如果转换服务不可用，直接抛出错误
+                if (changeFileToPDFService == null) {
+                    throw new IllegalStateException("PDF文件复制失败且转换服务不可用: " + e.getMessage());
+                }
+                
+                convertLocalToPdf(request, src, destPdf);
             }
             return;
         }
@@ -222,6 +370,9 @@ public class CompareController {
         if (changeFileToPDFService == null) {
             throw new IllegalStateException("未启用OnlyOffice转换服务，无法将非PDF文件转换为PDF");
         }
+        
+        System.out.println("开始转换文件为PDF: " + src.getName() + " -> " + destPdf.getName());
+        
         // 用 onlyoffice.callback.url 来推导可被 OnlyOffice 访问的对外地址
         String callbackUrl = (zxcmConfig != null && zxcmConfig.getOnlyOffice() != null && zxcmConfig.getOnlyOffice().getCallback() != null)
             ? zxcmConfig.getOnlyOffice().getCallback().getUrl() : null;
@@ -238,17 +389,41 @@ public class CompareController {
             ctxPath = request.getContextPath();
         }
         String srcUrl = origin + (ctxPath == null ? "" : ctxPath) + "/compare/source?name=" + urlEncode(src.getName());
-        String path = changeFileToPDFService.covertToPdf(srcUrl, destPdf.getAbsolutePath());
-        if (path == null) {
-            throw new IllegalStateException("文件转换为PDF失败: " + src.getName());
+        
+        System.out.println("调用OnlyOffice转换服务，源文件URL: " + srcUrl);
+        
+        try {
+            String path = changeFileToPDFService.covertToPdf(srcUrl, destPdf.getAbsolutePath());
+            if (path == null) {
+                throw new IllegalStateException("文件转换为PDF失败: " + src.getName());
+            }
+            System.out.println("文件转换完成: " + src.getName() + " -> " + destPdf.getName());
+        } catch (OnlyOfficeServiceUnavailableException e) {
+            throw new IllegalStateException("OnlyOffice服务不可用，无法转换文档格式: " + src.getName() + "。请检查OnlyOffice服务状态或联系管理员。", e);
         }
     }
 
     private void ensureParent(File file) throws Exception {
         File p = file.getParentFile();
         if (p != null && !p.exists()) {
-            if (!p.mkdirs() && !p.exists()) {
-                throw new Exception("无法创建目录: " + p.getAbsolutePath());
+            System.out.println("创建目录: " + p.getAbsolutePath());
+            if (!p.mkdirs()) {
+                // 等待一下再检查
+                try { Thread.sleep(100); } catch (InterruptedException ignore) {}
+                if (!p.exists()) {
+                    throw new Exception("无法创建目录: " + p.getAbsolutePath());
+                }
+            }
+            System.out.println("目录创建成功: " + p.getAbsolutePath());
+        }
+        
+        // 验证目录权限
+        if (p != null && p.exists()) {
+            if (!p.canWrite()) {
+                throw new Exception("目录无写权限: " + p.getAbsolutePath());
+            }
+            if (!p.canRead()) {
+                throw new Exception("目录无读权限: " + p.getAbsolutePath());
             }
         }
     }
@@ -259,9 +434,13 @@ public class CompareController {
             downloadTo(sourceUrl, destPdf);
             return;
         }
-        String path = changeFileToPDFService.covertToPdf(sourceUrl, destPdf.getAbsolutePath());
-        if (path == null) {
-            throw new IllegalStateException("URL 转PDF失败: " + sourceUrl);
+        try {
+            String path = changeFileToPDFService.covertToPdf(sourceUrl, destPdf.getAbsolutePath());
+            if (path == null) {
+                throw new IllegalStateException("URL 转PDF失败: " + sourceUrl);
+            }
+        } catch (OnlyOfficeServiceUnavailableException e) {
+            throw new IllegalStateException("OnlyOffice服务不可用，无法转换URL文档: " + sourceUrl + "。请检查OnlyOffice服务状态或联系管理员。", e);
         }
     }
 
@@ -410,6 +589,86 @@ public class CompareController {
             return Result.success(data);
         } catch (Exception e) {
             return Result.error("读取结果失败");
+        }
+    }
+
+    /**
+     * 查询OCR比对任务状态
+     */
+    @GetMapping("/ocr-task/{taskId}/status")
+    public Result<Object> getOCRTaskStatus(@PathVariable String taskId) {
+        try {
+            if (ocrCompareService == null) {
+                return Result.error("OCR比对服务未配置");
+            }
+            
+            Object taskStatus = ocrCompareService.getTaskStatus(taskId);
+            if (taskStatus != null) {
+                return Result.success(taskStatus);
+            } else {
+                return Result.error("OCR比对任务不存在");
+            }
+        } catch (Exception e) {
+            return Result.error("查询OCR比对任务状态失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 获取OCR比对结果
+     */
+    @GetMapping("/ocr-task/{taskId}/result")
+    public Result<Object> getOCRTaskResult(@PathVariable String taskId) {
+        try {
+            if (ocrCompareService == null) {
+                return Result.error("OCR比对服务未配置");
+            }
+            
+            Object result = ocrCompareService.getCompareResult(taskId);
+            if (result != null) {
+                return Result.success(result);
+            } else {
+                return Result.error("OCR比对结果不存在");
+            }
+        } catch (Exception e) {
+            return Result.error("获取OCR比对结果失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取所有OCR比对任务
+     */
+    @GetMapping("/ocr-task/list")
+    public Result<List<Object>> getAllOCRTasks() {
+        try {
+            if (ocrCompareService == null) {
+                return Result.error("OCR比对服务未配置");
+            }
+            
+            List<?> tasks = ocrCompareService.getAllTasks();
+            return Result.success(tasks.stream().map(task -> (Object) task).collect(java.util.stream.Collectors.toList()));
+        } catch (Exception e) {
+            return Result.error("获取OCR比对任务列表失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 删除OCR比对任务
+     */
+    @DeleteMapping("/ocr-task/{taskId}")
+    public Result<Boolean> deleteOCRTask(@PathVariable String taskId) {
+        try {
+            if (ocrCompareService == null) {
+                return Result.error("OCR比对服务未配置");
+            }
+            
+            boolean deleted = ocrCompareService.deleteTask(taskId);
+            if (deleted) {
+                return Result.success(true);
+            } else {
+                return Result.error("OCR比对任务不存在");
+            }
+        } catch (Exception e) {
+            return Result.error("删除OCR比对任务失败: " + e.getMessage());
         }
     }
 }

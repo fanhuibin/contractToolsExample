@@ -1,0 +1,17 @@
+# RapidOCR HTTP服务依赖
+flask>=2.0.0
+flask-cors>=3.0.0
+requests>=2.25.0
+PyMuPDF>=1.18.0
+opencv-python>=4.5.0
+numpy>=1.19.0
+
+# OCR引擎 - 选择其中一个安装
+# GPU版本（推荐，需要CUDA环境）
+rapidocr-onnxruntime-gpu>=1.3.0
+
+# CPU版本（备用，如果GPU版本安装失败）
+# rapidocr-onnxruntime>=1.3.0
+
+# 可选依赖（用于GPU信息获取）
+pynvml>=11.0.0

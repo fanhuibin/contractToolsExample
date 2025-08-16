@@ -107,6 +107,29 @@ ai:
 
 ## 变更记录
 
+### 2025-08-15 OCR 比对页码与坐标修复与联动
+#### 变更记录
+- `backend/src/main/java/com/zhaoxinms/contract/tools/compare/result/Position.java`：
+  + 新增构造函数 `Position(float x, float y, float pageWidth, float pageHeight, int page)`，支持直接注入坐标与页尺寸（用于OCR坐标换算）。
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/OCRCompareService.java`：
+  + 解析 OCR JSON 的 `pages[].items[].box`（四点）为外接矩形；携带 `image_width/image_height`。
+  + 新增从 OCR 像素坐标到 PDF 坐标（pt）的换算，结合 PDF 实际 `MediaBox` 宽高，统一使用 TextPosition 风格的 `yDirAdj`（自上而下）。
+  + 为差异生成 `oldPosition/newPosition`（含 `page/x/y/pageWidth/pageHeight`），用于前端左右联动。
+  + PDF 标注改为依据 `Position` 的页码与坐标定位，添加 `QuadPoints`，分别以不同颜色高亮新增/删除。
+- 前端无需改动 API，仅消费 `differences[].oldPosition/newPosition` 实现页内滚动对齐与左右联动。
+
+#### 影响与收益
+- 修复 OCR 比对结果中页码与定位错误问题；PDF 高亮位置与前端预览联动一致。
+- 非 OCR 比对保持原有行为不变。
+
+#### 技术栈
+- 后端：Spring Boot、PDFBox、Jackson、Hutool
+- 前端：Vue3、TypeScript、Element Plus、mozilla/pdf.js viewer
+
+#### 相关文件
+- 后端：`Position.java`、`OCRCompareService.java`
+- 前端：`frontend/src/views/documents/OCRCompareResult.vue`（消费新字段）
+
 ### 2025-08-08 合同抽取字段规则库（新增扩展文件，未改代码）
 - 新增外置规则文件目录：`sdk/src/main/resources/contract-extract-rules/`
   - `lease.json`、`purchase.json`、`labor.json`、`construction.json`、`technical.json`、`intellectual.json`、`operation.json`

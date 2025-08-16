@@ -10,6 +10,7 @@ import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.onlyoffice.util.service.DefaultServiceConverter;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import com.zhaoxinms.contract.tools.onlyoffice.exception.OnlyOfficeServiceUnavailableException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -75,6 +76,11 @@ public class ChangeFileToPDFService {
             return destPdfPath;
             
         } catch (Exception e) {
+            // 检查是否为OnlyOffice服务不可用的情况
+            if (isOnlyOfficeServiceUnavailable(e)) {
+                log.error("OnlyOffice服务不可用，源文件URL: {}, 错误: {}", fileUrl, e.getMessage(), e);
+                throw new OnlyOfficeServiceUnavailableException("OnlyOffice服务不可用，请检查服务状态", e);
+            }
             log.error("文件转换异常，源文件URL: {}, 错误: {}", fileUrl, e.getMessage(), e);
             return null;
         }
@@ -141,6 +147,42 @@ public class ChangeFileToPDFService {
             log.error("DOC转DOCX异常，源文件: {}, 错误: {}", fileInfo.getOriginalName(), e.getMessage(), e);
             return null;
         }
+    }
+    
+    /**
+     * 判断是否为OnlyOffice服务不可用的情况
+     * @param e 异常对象
+     * @return 是否为OnlyOffice服务不可用
+     */
+    private boolean isOnlyOfficeServiceUnavailable(Exception e) {
+        // 检查异常消息中是否包含OnlyOffice相关的错误信息
+        String message = e.getMessage();
+        if (message != null) {
+            // 检查是否为下载错误（错误码-4）
+            if (message.contains("Error download error")) {
+                return true;
+            }
+            // 检查是否为转换服务错误
+            if (message.contains("Error occurred in the ConvertService")) {
+                return true;
+            }
+            // 检查是否为网络连接相关错误
+            if (message.contains("Connection refused") || 
+                message.contains("ConnectException") ||
+                message.contains("UnknownHostException") ||
+                message.contains("SocketTimeoutException")) {
+                return true;
+            }
+        }
+        
+        // 检查异常类型
+        if (e instanceof java.net.ConnectException ||
+            e instanceof java.net.UnknownHostException ||
+            e instanceof java.net.SocketTimeoutException) {
+            return true;
+        }
+        
+        return false;
     }
     
     /**

@@ -3,6 +3,8 @@ package com.zhaoxinms.contract.tools.compare.result;
 import org.apache.pdfbox.text.TextPosition;
 
 import lombok.Data;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 public class Position {
@@ -11,6 +13,11 @@ public class Position {
     private final float pageHeight;
     private final float pageWidth;
     private final int page;
+    // 可选：用于标注的矩形宽高（pt）。当>0时，优先用于高亮框尺寸。
+    private float rectWidth;
+    private float rectHeight;
+    // 可选：多段高亮矩形（同页），每个 float[4] 依次为 xTopLeft, yTop, width, height（单位：pt，自上而下y）
+    private List<float[]> rects;
     public Position(TextPosition p, int page) {
         if(p == null) {
             this.x = 0;
@@ -25,5 +32,32 @@ public class Position {
         }
 
         this.page = page;
+        this.rectWidth = 0;
+        this.rectHeight = 0;
+        this.rects = new ArrayList<float[]>();
+    }
+
+    /**
+     * 构造函数：直接使用坐标与页面尺寸（用于OCR坐标换算到PDF坐标后注入）
+     * 说明：x/y 采用与 PDFBox TextPosition.getYDirAdj 相同的“自上而下”的坐标系，
+     * pageWidth/pageHeight 为 PDF 页面尺寸（单位：pt），page 为 0-based 页码。
+     */
+    public Position(float x, float y, float pageWidth, float pageHeight, int page) {
+        this.x = x;
+        this.y = y;
+        this.pageWidth = pageWidth;
+        this.pageHeight = pageHeight;
+        this.page = page;
+        this.rectWidth = 0;
+        this.rectHeight = 0;
+        this.rects = new ArrayList<float[]>();
+    }
+
+    public Position addRect(float xTopLeft, float yTop, float width, float height) {
+        if (this.rects == null) {
+            this.rects = new ArrayList<float[]>();
+        }
+        this.rects.add(new float[]{xTopLeft, yTop, width, height});
+        return this;
     }
 }

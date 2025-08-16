@@ -9,6 +9,7 @@ spring:
   config:
     import:
       - classpath:aicomponent/application-ai.yml
+      - classpath:application-ocr.yml
   
   # 文件上传配置
   servlet:
