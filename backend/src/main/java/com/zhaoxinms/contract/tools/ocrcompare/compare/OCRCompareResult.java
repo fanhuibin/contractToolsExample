@@ -12,6 +12,8 @@ public class OCRCompareResult {
     private String taskId;                           // 任务ID
     private String oldPdfUrl;                        // 旧文档PDF URL
     private String newPdfUrl;                        // 新文档PDF URL
+    private String oldOcrTaskId;                     // 旧文档OCR任务ID
+    private String newOcrTaskId;                     // 新文档OCR任务ID
     private List<Map<String, Object>> differences;  // 差异列表
     private int totalDifferences;                    // 总差异数
     private double similarity;                       // 相似度
@@ -37,6 +39,12 @@ public class OCRCompareResult {
     
     public String getNewPdfUrl() { return newPdfUrl; }
     public void setNewPdfUrl(String newPdfUrl) { this.newPdfUrl = newPdfUrl; }
+    
+    public String getOldOcrTaskId() { return oldOcrTaskId; }
+    public void setOldOcrTaskId(String oldOcrTaskId) { this.oldOcrTaskId = oldOcrTaskId; }
+    
+    public String getNewOcrTaskId() { return newOcrTaskId; }
+    public void setNewOcrTaskId(String newOcrTaskId) { this.newOcrTaskId = newOcrTaskId; }
     
     public List<Map<String, Object>> getDifferences() { return differences; }
     public void setDifferences(List<Map<String, Object>> differences) { 

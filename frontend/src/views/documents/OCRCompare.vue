@@ -39,6 +39,8 @@
         </el-button>
         
         <el-button text @click="settingsOpen = true">比对设置</el-button>
+        
+        <el-button type="warning" @click="debugDialogVisible = true">调试模式</el-button>
       </el-form>
       
       <el-alert 
@@ -152,6 +154,33 @@
       </el-table>
     </el-card>
 
+    <!-- 调试对话框 -->
+    <el-dialog v-model="debugDialogVisible" title="OCR比对调试模式" width="500px">
+      <el-form label-width="120px">
+        <el-form-item label="旧文档OCR任务ID">
+          <el-input v-model="debugForm.oldOcrTaskId" placeholder="输入已完成的OCR任务ID"></el-input>
+        </el-form-item>
+        <el-form-item label="新文档OCR任务ID">
+          <el-input v-model="debugForm.newOcrTaskId" placeholder="输入已完成的OCR任务ID"></el-input>
+        </el-form-item>
+        <el-alert
+          title="说明：调试模式将跳过上传和OCR识别过程，直接使用已有的OCR结果进行比对。请确保输入的OCR任务ID已经完成识别。"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="mb12"
+        />
+      </el-form>
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="debugDialogVisible = false">取消</el-button>
+          <el-button type="primary" @click="startDebugCompare" :loading="debugLoading">
+            开始调试比对
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
+
     <!-- 比对设置抽屉 -->
     <el-drawer v-model="settingsOpen" title="OCR比对设置" size="400px">
       <el-form label-width="140px">
@@ -173,6 +202,9 @@
         <el-form-item label="忽略空格">
           <el-switch v-model="settings.ignoreSpaces" />
         </el-form-item>
+        <el-form-item label="忽略印章">
+          <el-switch v-model="settings.ignoreSeals" />
+        </el-form-item>
         <el-alert 
           title="说明：这些设置影响OCR识别结果的比对过滤，页眉页脚设置影响OCR识别区域。" 
           type="info" 
@@ -193,6 +225,7 @@ import {
   getOCRCompareTaskStatus, 
   getAllOCRCompareTasks,
   deleteOCRCompareTask,
+  debugCompareWithExistingOCR,
   type OCRCompareTaskStatus 
 } from '@/api/ocr-compare'
 
@@ -212,6 +245,14 @@ const currentTask = ref<OCRCompareTaskStatus | null>(null)
 const taskHistory = ref<OCRCompareTaskStatus[]>([])
 const progressTimer = ref<number | null>(null)
 
+// 调试相关
+const debugDialogVisible = ref(false)
+const debugLoading = ref(false)
+const debugForm = reactive({
+  oldOcrTaskId: '',
+  newOcrTaskId: ''
+})
+
 // 设置相关
 const settingsOpen = ref(false)
 const settings = reactive({
@@ -220,7 +261,8 @@ const settings = reactive({
   footerHeightMm: 20,
   ignoreCase: true,
   ignoredSymbols: '_＿',
-  ignoreSpaces: false
+  ignoreSpaces: false,
+  ignoreSeals: true
 })
 
 // 生命周期
@@ -266,6 +308,7 @@ const doUploadOCRCompare = async () => {
   formData.append('ignoreCase', String(settings.ignoreCase))
   formData.append('ignoredSymbols', settings.ignoredSymbols || '')
   formData.append('ignoreSpaces', String(settings.ignoreSpaces))
+  formData.append('ignoreSeals', String(settings.ignoreSeals))
   
   uploading.value = true
   
@@ -448,6 +491,55 @@ const getProgressStatus = (status: string) => {
     case 'COMPLETED': return 'success'
     case 'FAILED': return 'exception'
     default: return undefined
+  }
+}
+
+// 开始调试比对
+const startDebugCompare = async () => {
+  if (!debugForm.oldOcrTaskId || !debugForm.newOcrTaskId) {
+    ElMessage.warning('请输入完整的OCR任务ID')
+    return
+  }
+  
+  debugLoading.value = true
+  
+  try {
+    const res = await debugCompareWithExistingOCR({
+      oldOcrTaskId: debugForm.oldOcrTaskId,
+      newOcrTaskId: debugForm.newOcrTaskId,
+      options: {
+        ignoreHeaderFooter: settings.ignoreHeaderFooter,
+        headerHeightMm: settings.headerHeightMm,
+        footerHeightMm: settings.footerHeightMm,
+        ignoreCase: settings.ignoreCase,
+        ignoredSymbols: settings.ignoredSymbols || '',
+        ignoreSpaces: settings.ignoreSpaces,
+        ignoreSeals: settings.ignoreSeals
+      }
+    })
+    
+    console.log('调试比对响应:', res)
+    
+    // 获取任务ID
+    const taskId = res.data.taskId
+    
+    if (!taskId) {
+      throw new Error('任务ID为空')
+    }
+    
+    ElMessage.success('调试比对任务已提交，正在处理中...')
+    
+    // 关闭对话框
+    debugDialogVisible.value = false
+    
+    // 开始监控任务进度
+    monitorTask(taskId)
+    
+  } catch (e: any) {
+    console.error('调试比对失败:', e)
+    ElMessage.error(e?.message || '调试比对任务提交失败')
+  } finally {
+    debugLoading.value = false
   }
 }
 

@@ -132,3 +132,27 @@ export function getSupportedFormats(): Promise<{
     method: 'get'
   })
 }
+
+/**
+ * 调试接口：使用已有的OCR结果进行比对
+ * 跳过上传和OCR识别过程，直接使用已有的OCR任务ID进行比对
+ */
+export function debugCompareWithExistingOCR(params: {
+  oldOcrTaskId: string, 
+  newOcrTaskId: string, 
+  options?: OCRCompareOptions
+}): Promise<{
+  code: number
+  message: string
+  data: {
+    taskId: string
+    message: string
+  }
+}> {
+  return request({
+    url: '/ocr-compare/debug',
+    method: 'post',
+    data: params
+  })
+}
+

@@ -32,6 +32,7 @@ import com.zhaoxinms.contract.tools.compare.DiffUtil;
 import com.zhaoxinms.contract.tools.compare.DiffUtil.Operation;
 import com.zhaoxinms.contract.tools.compare.result.CompareResult;
 import com.zhaoxinms.contract.tools.compare.result.Position;
+import com.zhaoxinms.contract.tools.compare.util.TextNormalizer;
 import cn.hutool.core.util.StrUtil;
 
 /**
@@ -156,6 +157,451 @@ public class OCRCompareService {
     }
     
     /**
+     * 执行文本比对并解析OCR结果中的位置信息
+     * 按照文本顺序推进索引，参考PDFComparsionHelper中的逻辑
+     */
+    private List<CompareResult> enrichCompareResultsWithPositionInfo(String oldText, String newText, OCRCompareOptions options,
+                                                                     String oldOcrTaskId, String newOcrTaskId,
+                                                                     String oldPdfPath, String newPdfPath) {
+        // 创建比对结果列表
+        List<CompareResult> compareResults = new ArrayList<>();
+        
+        try {
+            // 获取OCR结果的详细信息
+            com.fasterxml.jackson.databind.JsonNode oldOcrResult = ocrTaskService.getOCRResultViaHttp(oldOcrTaskId);
+            com.fasterxml.jackson.databind.JsonNode newOcrResult = ocrTaskService.getOCRResultViaHttp(newOcrTaskId);
+            
+            if (oldOcrResult == null || newOcrResult == null) {
+                log.warn("无法获取OCR结果，oldResult={}, newResult={}", oldOcrResult != null, newOcrResult != null);
+                return new ArrayList<>();
+            }
+            
+            // 解析OCR结果中的页面和位置信息
+            log.info("开始解析OCR结果位置信息... oldTaskId={}, newTaskId={}", oldOcrTaskId, newOcrTaskId);
+            
+            // 获取json_data
+            com.fasterxml.jackson.databind.JsonNode oldJsonData = oldOcrResult.path("json_data");
+            com.fasterxml.jackson.databind.JsonNode newJsonData = newOcrResult.path("json_data");
+            if (oldJsonData.isMissingNode() || newJsonData.isMissingNode()) {
+                log.warn("OCR结果缺少 json_data 字段，oldHasJsonData={} newHasJsonData={}", !oldJsonData.isMissingNode(), !newJsonData.isMissingNode());
+                return new ArrayList<>();
+            }
+            
+            // 解析旧/新文档的OCR结果
+            List<PageTextInfo> oldPageInfos = parseOCRResultToPageInfos(oldJsonData);
+            List<PageTextInfo> newPageInfos = parseOCRResultToPageInfos(newJsonData);
+            log.info("OCR解析页信息：oldPages={}, newPages={}", oldPageInfos.size(), newPageInfos.size());
+            
+            // 读取PDF页尺寸（pt）用于坐标换算
+            float[] oldPageWidths = null, oldPageHeights = null;
+            float[] newPageWidths = null, newPageHeights = null;
+            try (PDDocument oldDoc = PDDocument.load(new File(oldPdfPath));
+                 PDDocument newDoc = PDDocument.load(new File(newPdfPath))) {
+                int oldN = oldDoc.getNumberOfPages();
+                oldPageWidths = new float[oldN];
+                oldPageHeights = new float[oldN];
+                for (int i = 0; i < oldN; i++) {
+                    PDPage p = oldDoc.getPage(i);
+                    PDRectangle mb = p.getMediaBox();
+                    oldPageWidths[i] = mb.getWidth();
+                    oldPageHeights[i] = mb.getHeight();
+                }
+                int newN = newDoc.getNumberOfPages();
+                newPageWidths = new float[newN];
+                newPageHeights = new float[newN];
+                for (int i = 0; i < newN; i++) {
+                    PDPage p = newDoc.getPage(i);
+                    PDRectangle mb = p.getMediaBox();
+                    newPageWidths[i] = mb.getWidth();
+                    newPageHeights[i] = mb.getHeight();
+                }
+            } catch (Exception e) {
+                log.warn("读取PDF页尺寸失败", e);
+            }
+            
+            // 构建文本位置索引
+            List<TextPositionInfo> oldTextPositions = buildTextPositionIndex(oldPageInfos);
+            List<TextPositionInfo> newTextPositions = buildTextPositionIndex(newPageInfos);
+            
+            if (oldText == null || newText == null) {
+                log.warn("OCR文本内容为空，无法进行位置匹配");
+                return new ArrayList<>();
+            }
+            
+            // 执行文本比对，获取差异
+            DiffUtil dmp = new DiffUtil();
+            String left = oldText == null ? "" : oldText;
+            String right = newText == null ? "" : newText;
+            
+            // 使用TextNormalizer进行文本标准化，排除符号干扰
+            boolean ignoreCase = options != null ? options.isIgnoreCase() : true;
+            boolean ignoreWhitespace = options != null ? options.isIgnoreWhitespace() : true;
+            boolean ignorePunctuation = options != null ? options.isIgnorePunctuation() : false;
+            
+            left = TextNormalizer.normalizeForComparison(left, ignoreCase, ignoreWhitespace, ignorePunctuation);
+            right = TextNormalizer.normalizeForComparison(right, ignoreCase, ignoreWhitespace, ignorePunctuation);
+            
+            // 执行文本比对
+            java.util.LinkedList<DiffUtil.Diff> diffList = dmp.diff_main(left, right);
+            dmp.diff_cleanupSemantic(diffList);
+            
+            // 按照文本顺序推进索引，为每个差异分配位置信息
+            int oldCurrentPosition = 0;
+            int newCurrentPosition = 0;
+            
+            int assignedOld = 0;
+            int assignedNew = 0;
+            
+            // 遍历所有差异，按顺序处理
+            for (DiffUtil.Diff d : diffList) {
+                String realText = d.text.replaceAll("¶", "").replaceAll("\r", "").replaceAll("\n", "");
+                realText = realText.replaceAll(" ", "");
+                if (d.operation == Operation.EQUAL) {
+                    // 相等部分，同步推进两个索引,但是要忽略空格的影响。
+                    oldCurrentPosition += realText.length();
+                    newCurrentPosition += realText.length();
+                    continue;
+                }
+                
+                // 使用TextNormalizer过滤掉纯符号的差异
+                String normalizedText = TextNormalizer.normalizeForComparison(realText, true, true, true);
+                if (StrUtil.isBlank(normalizedText)) {
+                    if (d.operation == Operation.DELETE) {
+                        oldCurrentPosition += realText.length();
+                    } else if (d.operation == Operation.INSERT) {
+                        newCurrentPosition += realText.length();
+                    }
+                    continue;
+                }
+                
+                // 处理差异部分
+                if (d.operation == Operation.DELETE) {
+                    // 创建比对结果，先设置默认位置
+                    Position oldPos = new Position(null, 1);
+                    Position newPos = new Position(null, 1);
+                    CompareResult result = new CompareResult(oldPos, newPos, d);
+                    
+                    // 在旧文档中查找位置
+                    TextPositionInfo posInfo = getTextPositionAtIndex(oldTextPositions, oldCurrentPosition);
+                    if (posInfo != null) {
+                        int pageIdx0 = Math.max(0, posInfo.pageIndex - 1); // 转为0-based
+                        float pageW = (oldPageWidths != null && pageIdx0 < oldPageWidths.length) ? oldPageWidths[pageIdx0] : 595f;
+                        float pageH = (oldPageHeights != null && pageIdx0 < oldPageHeights.length) ? oldPageHeights[pageIdx0] : 842f;
+                        
+                        // 坐标转换
+                        float scaleX = pageW / Math.max(1f, posInfo.imageWidth);
+                        float scaleY = pageH / Math.max(1f, posInfo.imageHeight);
+                        float x = posInfo.x * scaleX;
+                        float yTop = posInfo.y * scaleY;
+                        
+                        Position newOldPos = new Position(x, yTop, pageW, pageH, pageIdx0);
+                        if (posInfo.width > 0 && posInfo.height > 0) {
+                            newOldPos.setRectWidth(posInfo.width * scaleX);
+                            newOldPos.setRectHeight(posInfo.height * scaleY);
+                        }
+                        
+                        // 如果文本跨多行，添加多个矩形
+                        List<TextPositionInfo> multiLinePositions = getMultiLinePositions(oldTextPositions, oldCurrentPosition, realText.length());
+                        if (multiLinePositions.size() > 1) {
+                            for (TextPositionInfo linePos : multiLinePositions) {
+                                newOldPos.addRect(
+                                    linePos.x * scaleX,
+                                    linePos.y * scaleY,
+                                    linePos.width * scaleX,
+                                    linePos.height * scaleY
+                                );
+                            }
+                        } else if (multiLinePositions.size() == 1) {
+                        	newOldPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
+                        	newOldPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
+                        }
+                        
+                        result.setOldPosition(newOldPos);
+                        assignedOld++;
+                        log.debug("DELETE 定位成功: text='{}' page={} x={} y={}", 
+                            abbreviate(realText, 60), pageIdx0 + 1, x, yTop);
+                    }
+                    
+                    // 在新文档中查找当前索引位置的信息（用于设置新文档的位置参考）
+                    TextPositionInfo newPosInfo = getTextPositionAtIndex(newTextPositions, Math.max(0, newCurrentPosition-1));
+                    if (newPosInfo != null) {
+                        int newPageIdx0 = Math.max(0, newPosInfo.pageIndex - 1); // 转为0-based
+                        float newPageW = (newPageWidths != null && newPageIdx0 < newPageWidths.length) ? newPageWidths[newPageIdx0] : 595f;
+                        float newPageH = (newPageHeights != null && newPageIdx0 < newPageHeights.length) ? newPageHeights[newPageIdx0] : 842f;
+                        
+                        // 坐标转换
+                        float newScaleX = newPageW / Math.max(1f, newPosInfo.imageWidth);
+                        float newScaleY = newPageH / Math.max(1f, newPosInfo.imageHeight);
+                        float newX = newPosInfo.x * newScaleX;
+                        float newYTop = newPosInfo.y * newScaleY;
+                        
+                        Position newNewPos = new Position(newX, newYTop, newPageW, newPageH, newPageIdx0);
+                        if (newPosInfo.width > 0 && newPosInfo.height > 0) {
+                            newNewPos.setRectWidth(newPosInfo.width * newScaleX);
+                            newNewPos.setRectHeight(newPosInfo.height * newScaleY);
+                        }
+                        
+                        result.setNewPosition(newNewPos);
+                        log.debug("DELETE 新文档定位成功: page={} x={} y={}", 
+                            newPageIdx0 + 1, newX, newYTop);
+                    }
+                    
+                    compareResults.add(result);
+                    // 推进旧文档索引
+                    oldCurrentPosition += realText.length();
+                    
+                } else if (d.operation == Operation.INSERT) {
+                    // 创建比对结果
+                    Position oldPos = new Position(null, 1);
+                    Position newPos = new Position(null, 1);
+                    CompareResult result = new CompareResult(oldPos, newPos, d);
+                    
+                    // 在旧文档中查找当前索引位置的信息（用于设置旧文档的位置参考）
+                    TextPositionInfo oldPosInfo = getTextPositionAtIndex(oldTextPositions, Math.max(0, oldCurrentPosition-1));
+                    if (oldPosInfo != null) {
+                        int newPageIdx0 = Math.max(0, oldPosInfo.pageIndex - 1); // 转为0-based
+                        float newPageW = (newPageWidths != null && newPageIdx0 < newPageWidths.length) ? newPageWidths[newPageIdx0] : 595f;
+                        float newPageH = (newPageHeights != null && newPageIdx0 < newPageHeights.length) ? newPageHeights[newPageIdx0] : 842f;
+                        
+                        // 坐标转换
+                        float newScaleX = newPageW / Math.max(1f, oldPosInfo.imageWidth);
+                        float newScaleY = newPageH / Math.max(1f, oldPosInfo.imageHeight);
+                        float newX = oldPosInfo.x * newScaleX;
+                        float newYTop = oldPosInfo.y * newScaleY;
+                        
+                        Position oldNewPos = new Position(newX, newYTop, newPageW, newPageH, newPageIdx0);
+                        if (oldPosInfo.width > 0 && oldPosInfo.height > 0) {
+                        	oldNewPos.setRectWidth(oldPosInfo.width * newScaleX);
+                        	oldNewPos.setRectHeight(oldPosInfo.height * newScaleY);
+                        }
+                        
+                        result.setOldPosition(oldNewPos);
+                        log.debug("DELETE 新文档定位成功: page={} x={} y={}", 
+                            newPageIdx0 + 1, newX, newYTop);
+                    }
+                    
+                    // 在新文档中查找位置
+                    TextPositionInfo posInfo = getTextPositionAtIndex(newTextPositions, newCurrentPosition);
+                    if (posInfo != null) {
+                        int pageIdx0 = Math.max(0, posInfo.pageIndex - 1); // 转为0-based
+                        float pageW = (newPageWidths != null && pageIdx0 < newPageWidths.length) ? newPageWidths[pageIdx0] : 595f;
+                        float pageH = (newPageHeights != null && pageIdx0 < newPageHeights.length) ? newPageHeights[pageIdx0] : 842f;
+                        
+                        // 坐标转换
+                        float scaleX = pageW / Math.max(1f, posInfo.imageWidth);
+                        float scaleY = pageH / Math.max(1f, posInfo.imageHeight);
+                        float x = posInfo.x * scaleX;
+                        float yTop = posInfo.y * scaleY;
+                        
+                        Position newNewPos = new Position(x, yTop, pageW, pageH, pageIdx0);
+                        if (posInfo.width > 0 && posInfo.height > 0) {
+                            newNewPos.setRectWidth(posInfo.width * scaleX);
+                            newNewPos.setRectHeight(posInfo.height * scaleY);
+                        }
+                        
+                        // 如果文本跨多行，添加多个矩形
+                        List<TextPositionInfo> multiLinePositions = getMultiLinePositions(newTextPositions, newCurrentPosition, realText.length());
+                        if (multiLinePositions.size() > 1) {
+                            for (TextPositionInfo linePos : multiLinePositions) {
+                                newNewPos.addRect(
+                                    linePos.x * scaleX,
+                                    linePos.y * scaleY,
+                                    linePos.width * scaleX,
+                                    linePos.height * scaleY
+                                );
+                            }
+                        } else if (multiLinePositions.size() == 1) {
+                        	newNewPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
+                            newNewPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
+                        }
+                        
+                        result.setNewPosition(newNewPos);
+                        assignedNew++;
+                        log.debug("INSERT 定位成功: text='{}' page={} x={} y={}", 
+                            abbreviate(realText, 60), pageIdx0 + 1, x, yTop);
+                    }
+                    
+                    compareResults.add(result);
+                    // 推进新文档索引
+                    newCurrentPosition += realText.length();
+                }
+            }
+            
+            log.info("OCR位置信息解析完成，共处理 {} 个比对结果，定位成功：old={}，new={}", results.size(), assignedOld, assignedNew);
+            
+            return compareResults;
+            
+        } catch (Exception e) {
+            log.error("解析OCR位置信息失败", e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * 构建文本位置索引，将OCR结果转换为线性的文本位置序列
+     */
+    private List<TextPositionInfo> buildTextPositionIndex(List<PageTextInfo> pageInfos) {
+        List<TextPositionInfo> positions = new ArrayList<>();
+        
+        for (PageTextInfo pageInfo : pageInfos) {
+            for (TextItemInfo textItem : pageInfo.getTextItems()) {
+                String text = textItem.getText();
+                if (text == null || text.isEmpty()) continue;
+                
+                // 如果有字符级信息，使用字符级信息
+                if (textItem.getCharText() != null && !textItem.getCharText().isEmpty() && 
+                    textItem.getCharXs() != null && textItem.getCharYs() != null) {
+                    
+                    String charText = textItem.getCharText();
+                    for (int i = 0; i < charText.length() && i < textItem.getCharXs().length; i++) {
+                        float x = textItem.getCharXs()[i];
+                        float y = textItem.getCharYs()[i];
+                        float width = 0;
+                        float height = 0;
+                        
+                        // 计算字符宽度
+                        if (textItem.getCharX2s() != null && i < textItem.getCharX2s().length) {
+                            width = textItem.getCharX2s()[i] - x;
+                        }
+                        
+                        // 计算字符高度
+                        if (textItem.getCharBottomYs() != null && i < textItem.getCharBottomYs().length) {
+                            height = textItem.getCharBottomYs()[i] - y;
+                        }
+                        
+                        if (width <= 0) width = 10; // 默认宽度
+                        if (height <= 0) height = textItem.getHeight(); // 使用行高
+                        
+                        TextPositionInfo posInfo = new TextPositionInfo(
+                            String.valueOf(charText.charAt(i)),
+                            pageInfo.getPageIndex(),
+                            x, y, width, height,
+                            pageInfo.getImageWidth(),
+                            pageInfo.getImageHeight()
+                        );
+                        positions.add(posInfo);
+                    }
+                } else {
+                    // 没有字符级信息，使用行级信息
+                    // 将文本拆分为单个字符，每个字符使用相同的行坐标，但水平位置按比例分配
+                    float charWidth = textItem.getWidth() / Math.max(1, text.length());
+                    for (int i = 0; i < text.length(); i++) {
+                        float x = textItem.getX() + (i * charWidth);
+                        TextPositionInfo posInfo = new TextPositionInfo(
+                            String.valueOf(text.charAt(i)),
+                            pageInfo.getPageIndex(),
+                            x, textItem.getY(), charWidth, textItem.getHeight(),
+                            pageInfo.getImageWidth(),
+                            pageInfo.getImageHeight()
+                        );
+                        positions.add(posInfo);
+                    }
+                }
+            }
+        }
+        
+        return positions;
+    }
+    
+    /**
+     * 获取指定索引位置的文本位置信息
+     */
+    private TextPositionInfo getTextPositionAtIndex(List<TextPositionInfo> positions, int index) {
+        if (positions == null || positions.isEmpty() || index < 0 || index >= positions.size()) {
+            return null;
+        }
+        return positions.get(index);
+    }
+    
+    /**
+     * 获取跨多行的文本位置信息
+     */
+    private List<TextPositionInfo> getMultiLinePositions(List<TextPositionInfo> positions, int startIndex, int length) {
+        List<TextPositionInfo> result = new ArrayList<>();
+        if (positions == null || positions.isEmpty() || startIndex < 0 || length <= 0) {
+            return result;
+        }
+        
+        int endIndex = Math.min(startIndex + length - 1, positions.size() - 1);
+        if (endIndex < startIndex) {
+            return result;
+        }
+        
+        // 按行分组（使用y坐标作为行标识，允许小误差）
+        Map<Integer, List<TextPositionInfo>> lineGroups = new HashMap<>();
+        final float tolerance = 8.0f; // 8像素的容差，适应常见字体大小
+        
+        for (int i = startIndex; i <= endIndex; i++) {
+            TextPositionInfo pos = positions.get(i);
+            if (pos == null) continue;
+            
+            // 使用四舍五入而不是截断，避免边界问题
+            int lineKey = Math.round(pos.y / tolerance);
+            if (!lineGroups.containsKey(lineKey)) {
+                lineGroups.put(lineKey, new ArrayList<>());
+            }
+            lineGroups.get(lineKey).add(pos);
+        }
+        
+        // 为每一行创建一个包围盒
+        for (List<TextPositionInfo> line : lineGroups.values()) {
+            if (line.isEmpty()) continue;
+            
+            float minX = Float.MAX_VALUE;
+            float minY = Float.MAX_VALUE;
+            float maxX = -Float.MAX_VALUE;
+            float maxY = -Float.MAX_VALUE;
+            int pageIndex = line.get(0).pageIndex;
+            int imageWidth = line.get(0).imageWidth;
+            int imageHeight = line.get(0).imageHeight;
+            
+            for (TextPositionInfo pos : line) {
+                minX = Math.min(minX, pos.x);
+                minY = Math.min(minY, pos.y);
+                maxX = Math.max(maxX, pos.x + pos.width);
+                maxY = Math.max(maxY, pos.y + pos.height);
+            }
+            
+            TextPositionInfo lineBox = new TextPositionInfo(
+                "", // 不需要文本内容
+                pageIndex,
+                minX, minY, maxX - minX, maxY - minY,
+                imageWidth, imageHeight
+            );
+            result.add(lineBox);
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 文本位置信息类（用于构建文本位置索引）
+     */
+    private static class TextPositionInfo {
+        private final String text;
+        private final int pageIndex; // 1-based
+        private final float x; // 左上角x（px）
+        private final float y; // 左上角y（px）
+        private final float width;
+        private final float height;
+        private final int imageWidth;
+        private final int imageHeight;
+        
+        public TextPositionInfo(String text, int pageIndex, float x, float y, float width, float height,
+                                int imageWidth, int imageHeight) {
+            this.text = text;
+            this.pageIndex = pageIndex;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.imageWidth = imageWidth;
+            this.imageHeight = imageHeight;
+        }
+    }
+    
+    
+    /**
      * 执行OCR比对任务
      */
     private void executeCompareTask(OCRCompareTask task) {
@@ -179,13 +625,13 @@ public class OCRCompareService {
             // 步骤2: OCR识别旧文档
             task.setCurrentStep(2, "OCR识别旧文档");
             task.updateProgress(20.0, "OCR识别旧文档...");
-            String oldOcrTaskId = ocrTaskService.submitOCRTask(oldFilePath);
+            String oldOcrTaskId = ocrTaskService.submitOCRTask(oldFilePath, task.getOptions().isIgnoreSeals());
             task.setOldOcrTaskId(oldOcrTaskId);
             
             // 步骤3: OCR识别新文档
             task.setCurrentStep(3, "OCR识别新文档");
             task.updateProgress(35.0, "OCR识别新文档...");
-            String newOcrTaskId = ocrTaskService.submitOCRTask(newFilePath);
+            String newOcrTaskId = ocrTaskService.submitOCRTask(newFilePath, task.getOptions().isIgnoreSeals());
             task.setNewOcrTaskId(newOcrTaskId);
             
             // 等待OCR任务完成并监控进度
@@ -209,12 +655,11 @@ public class OCRCompareService {
                 return;
             }
             
-            // 执行真正的文本比对
-            List<CompareResult> compareResults = performTextComparison(oldText, newText, task.getOptions());
-            
-            // 解析OCR结果中的位置信息（结合PDF页尺寸进行坐标换算）
-            enrichCompareResultsWithPositionInfo(
-                compareResults,
+            // 执行文本比对并解析OCR结果中的位置信息（结合PDF页尺寸进行坐标换算）
+            List<CompareResult> compareResults = enrichCompareResultsWithPositionInfo(
+                oldText,
+                newText,
+                task.getOptions(),
                 task.getOldOcrTaskId(),
                 task.getNewOcrTaskId(),
                 oldFilePath,
@@ -241,6 +686,10 @@ public class OCRCompareService {
             result.setTaskId(task.getTaskId());
             result.setOldPdfUrl("/api/ocr-compare/files/" + task.getTaskId() + "/old_annotated.pdf");
             result.setNewPdfUrl("/api/ocr-compare/files/" + task.getTaskId() + "/new_annotated.pdf");
+            result.setOldOcrTaskId(task.getOldOcrTaskId());
+            result.setNewOcrTaskId(task.getNewOcrTaskId());
+            result.setOldOcrTaskId(task.getOldOcrTaskId());
+            result.setNewOcrTaskId(task.getNewOcrTaskId());
             
             // 转换比对结果为OCR比对结果格式
             List<Map<String, Object>> differences = convertCompareResultsToDifferences(compareResults);
@@ -295,199 +744,6 @@ public class OCRCompareService {
             task.setStatus(OCRCompareTask.TaskStatus.FAILED);
             task.setErrorMessage("OCR比对执行异常: " + e.getMessage());
             log.error("OCR比对任务执行失败: {}", task.getTaskId(), e);
-        }
-    }
-    
-    /**
-     * 执行文本比对
-     */
-    private List<CompareResult> performTextComparison(String oldText, String newText, OCRCompareOptions options) {
-        try {
-            // 使用DiffUtil进行文本比对
-            DiffUtil dmp = new DiffUtil();
-            
-            // 预处理文本
-            String left = oldText == null ? "" : oldText;
-            String right = newText == null ? "" : newText;
-            
-            // 根据选项进行文本预处理
-            if (options.isIgnoreCase()) {
-                left = left.toLowerCase();
-                right = right.toLowerCase();
-            }
-            
-            // 执行文本比对
-            List<DiffUtil.Diff> diff = dmp.diff_main(left, right);
-            // 转换为LinkedList以匹配方法签名
-            java.util.LinkedList<DiffUtil.Diff> diffList = new java.util.LinkedList<>(diff);
-            dmp.diff_cleanupSemantic(diffList);
-            
-            // 转换为比对结果
-            List<CompareResult> results = new ArrayList<>();
-            for (DiffUtil.Diff d : diffList) {
-                if (d.operation == Operation.INSERT || d.operation == Operation.DELETE) {
-                    // 过滤掉纯符号的差异
-                    String realText = d.text.replaceAll("¶", "").replaceAll("\r", "").replaceAll("\n", "");
-                    if (StrUtil.isNotBlank(realText)) {
-                        // 创建比对结果，使用OCR结果中的真实位置信息
-                        // 这里需要根据OCR结果中的位置信息创建Position对象
-                        // 暂时使用默认值，后续会通过解析OCR结果来填充
-                        Position oldPos = new Position(null, 1);
-                        Position newPos = new Position(null, 1);
-                        CompareResult result = new CompareResult(oldPos, newPos, d);
-                        results.add(result);
-                    }
-                }
-            }
-            
-            return results;
-            
-        } catch (Exception e) {
-            log.error("文本比对失败", e);
-            throw new RuntimeException("文本比对失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 解析OCR结果中的位置信息
-     * 这个方法需要根据OCR结果JSON来解析每个差异项的具体位置
-     */
-    private void enrichCompareResultsWithPositionInfo(List<CompareResult> results, String oldOcrTaskId, String newOcrTaskId,
-                                                      String oldPdfPath, String newPdfPath) {
-        try {
-            // 获取OCR结果的详细信息
-            // 严格通过 HTTP 获取 OCR 结果，兼容远程独立部署
-            com.fasterxml.jackson.databind.JsonNode oldOcrResult = ocrTaskService.getOCRResultViaHttp(oldOcrTaskId);
-            com.fasterxml.jackson.databind.JsonNode newOcrResult = ocrTaskService.getOCRResultViaHttp(newOcrTaskId);
-            
-            if (oldOcrResult != null && newOcrResult != null) {
-                // 解析OCR结果中的页面和位置信息
-                log.info("开始解析OCR结果位置信息... oldTaskId={}, newTaskId={}", oldOcrTaskId, newOcrTaskId);
-                
-                // HTTP 返回结构：{"success":true, "task":{...}, "result": { json_data, text_content, result_path }}
-                // 此处传入的是 ocrTaskService.getOCRResultViaHttp 返回的 result 节点，需要取 json_data
-                com.fasterxml.jackson.databind.JsonNode oldJsonData = oldOcrResult.path("json_data");
-                com.fasterxml.jackson.databind.JsonNode newJsonData = newOcrResult.path("json_data");
-                if (oldJsonData.isMissingNode() || newJsonData.isMissingNode()) {
-                    log.warn("OCR结果缺少 json_data 字段，oldHasJsonData={} newHasJsonData={}", !oldJsonData.isMissingNode(), !newJsonData.isMissingNode());
-                }
-                // 解析旧/新文档的OCR结果
-                List<PageTextInfo> oldPageInfos = parseOCRResultToPageInfos(oldJsonData);
-                List<PageTextInfo> newPageInfos = parseOCRResultToPageInfos(newJsonData);
-                log.info("OCR解析页信息：oldPages={}, newPages={}", oldPageInfos.size(), newPageInfos.size());
-
-                // 读取PDF页尺寸（pt）用于坐标换算
-                float[] oldPageWidths = null, oldPageHeights = null;
-                float[] newPageWidths = null, newPageHeights = null;
-                try (PDDocument oldDoc = PDDocument.load(new File(oldPdfPath));
-                     PDDocument newDoc = PDDocument.load(new File(newPdfPath))) {
-                    int oldN = oldDoc.getNumberOfPages();
-                    oldPageWidths = new float[oldN];
-                    oldPageHeights = new float[oldN];
-                    for (int i = 0; i < oldN; i++) {
-                        PDPage p = oldDoc.getPage(i);
-                        PDRectangle mb = p.getMediaBox();
-                        oldPageWidths[i] = mb.getWidth();
-                        oldPageHeights[i] = mb.getHeight();
-                    }
-                    int newN = newDoc.getNumberOfPages();
-                    newPageWidths = new float[newN];
-                    newPageHeights = new float[newN];
-                    for (int i = 0; i < newN; i++) {
-                        PDPage p = newDoc.getPage(i);
-                        PDRectangle mb = p.getMediaBox();
-                        newPageWidths[i] = mb.getWidth();
-                        newPageHeights[i] = mb.getHeight();
-                    }
-                } catch (Exception ignore) {}
-                
-                // 为每个比对结果分配位置信息
-                int assignedOld = 0;
-                int assignedNew = 0;
-                for (CompareResult result : results) {
-                    String diffText = result.getDiff().text;
-                    Operation operation = result.getDiff().operation;
-                    
-                    if (operation == Operation.DELETE) {
-                        // 在旧文档中查找位置
-                        RawMatchMulti multi = findRawMatchMultiLine(diffText, oldPageInfos);
-                        RawMatch match = null;
-                        if (multi != null && multi.rectsPx != null && !multi.rectsPx.isEmpty()) {
-                            // 用第一段作为主定位，同时把所有段加入 Position.rects 以便分段高亮
-                            float[] r0 = multi.rectsPx.get(0);
-                            match = new RawMatch(multi.pageIndex, r0[0], r0[1], multi.imageWidth, multi.imageHeight, r0[2], r0[3]);
-                        } else {
-                            match = findRawMatchInPages(diffText, oldPageInfos);
-                        }
-                        if (match != null) {
-                            log.debug("DELETE 命中: text='{}' page={} x={} y={} imgW={} imgH={} ",
-                                abbreviate(diffText, 60), match.pageIndex, match.x, match.y, match.imageWidth, match.imageHeight);
-                            int pageIdx0 = Math.max(0, match.pageIndex - 1);
-                            float pageW = (oldPageWidths != null && pageIdx0 < oldPageWidths.length) ? oldPageWidths[pageIdx0] : 595f;
-                            float pageH = (oldPageHeights != null && pageIdx0 < oldPageHeights.length) ? oldPageHeights[pageIdx0] : 842f;
-                            // OCR 坐标是像素，从左上为(0,0)。转换到 PDF：x 线性缩放；y 需转为“自上而下”的 yDirAdj 值
-                            float scaleX = pageW / Math.max(1f, match.imageWidth);
-                            float scaleY = pageH / Math.max(1f, match.imageHeight);
-                            float x = match.x * scaleX;
-                            float yTop = match.y * scaleY; // 顶部Y（自上而下）
-                            Position oldPos = new Position(x, yTop, pageW, pageH, pageIdx0);
-                            // 多段：追加 rects
-                            if (multi != null && multi.rectsPx != null && !multi.rectsPx.isEmpty()) {
-                                for (float[] rp : multi.rectsPx) {
-                                    oldPos.addRect(rp[0] * scaleX, rp[1] * scaleY, rp[2] * scaleX, rp[3] * scaleY);
-                                }
-                            }
-                            if (match.boxWidthPx > 0 && match.boxHeightPx > 0) {
-                                oldPos.setRectWidth(match.boxWidthPx * scaleX);
-                                oldPos.setRectHeight(match.boxHeightPx * scaleY);
-                            }
-                            result.setOldPosition(oldPos);
-                            assignedOld++;
-                        } else {
-                            log.debug("DELETE 未命中: text='{}'", abbreviate(diffText, 60));
-                        }
-                    } else if (operation == Operation.INSERT) {
-                        // 在新文档中查找位置
-                        RawMatchMulti multi = findRawMatchMultiLine(diffText, newPageInfos);
-                        RawMatch match = null;
-                        if (multi != null && multi.rectsPx != null && !multi.rectsPx.isEmpty()) {
-                            float[] r0 = multi.rectsPx.get(0);
-                            match = new RawMatch(multi.pageIndex, r0[0], r0[1], multi.imageWidth, multi.imageHeight, r0[2], r0[3]);
-                        } else {
-                            match = findRawMatchInPages(diffText, newPageInfos);
-                        }
-                        if (match != null) {
-                            log.debug("INSERT 命中: text='{}' page={} x={} y={} imgW={} imgH={} ",
-                                abbreviate(diffText, 60), match.pageIndex, match.x, match.y, match.imageWidth, match.imageHeight);
-                            int pageIdx0 = Math.max(0, match.pageIndex - 1);
-                            float pageW = (newPageWidths != null && pageIdx0 < newPageWidths.length) ? newPageWidths[pageIdx0] : 595f;
-                            float pageH = (newPageHeights != null && pageIdx0 < newPageHeights.length) ? newPageHeights[pageIdx0] : 842f;
-                            float scaleX = pageW / Math.max(1f, match.imageWidth);
-                            float scaleY = pageH / Math.max(1f, match.imageHeight);
-                            float x = match.x * scaleX;
-                            float yTop = match.y * scaleY;
-                            Position newPos = new Position(x, yTop, pageW, pageH, pageIdx0);
-                            if (multi != null && multi.rectsPx != null && !multi.rectsPx.isEmpty()) {
-                                for (float[] rp : multi.rectsPx) {
-                                    newPos.addRect(rp[0] * scaleX, rp[1] * scaleY, rp[2] * scaleX, rp[3] * scaleY);
-                                }
-                            }
-                            if (match.boxWidthPx > 0 && match.boxHeightPx > 0) {
-                                newPos.setRectWidth(match.boxWidthPx * scaleX);
-                                newPos.setRectHeight(match.boxHeightPx * scaleY);
-                            }
-                            result.setNewPosition(newPos);
-                            assignedNew++;
-                        } else {
-                            log.debug("INSERT 未命中: text='{}'", abbreviate(diffText, 60));
-                        }
-                    }
-                }
-                
-                log.info("OCR位置信息解析完成，共处理 {} 个比对结果，定位成功：old={}，new={}", results.size(), assignedOld, assignedNew);
-            }
-        } catch (Exception e) {
-            log.warn("解析OCR位置信息失败，使用默认位置", e);
         }
     }
     
@@ -745,9 +1001,10 @@ public class OCRCompareService {
 
     private String normalize(String s) {
         if (s == null) return "";
+        // 使用TextNormalizer进行标准化处理
         String r = s.replaceAll("¶", "").replaceAll("\r", "").replaceAll("\n", "");
-        // 进一步压缩空白
-        r = r.replaceAll("\\s+", "").trim();
+        // 使用TextNormalizer的标准化方法，排除符号干扰
+        r = TextNormalizer.normalizeForComparison(r, true, true, false);
         return r;
     }
 
@@ -1162,6 +1419,178 @@ public class OCRCompareService {
         File targetFile = new File(uploadDir, fileName);
         file.transferTo(targetFile);
         return targetFile.getAbsolutePath();
+    }
+    
+    /**
+     * 调试接口：使用已有的OCR结果进行比对
+     * 跳过上传和OCR识别过程，直接使用已有的OCR任务ID进行比对
+     */
+    public String debugCompareWithExistingOCR(String oldOcrTaskId, String newOcrTaskId, OCRCompareOptions options) {
+        try {
+            // 验证OCR任务是否存在且已完成
+            OCRTask oldTask = ocrTaskService.getTaskStatus(oldOcrTaskId);
+            OCRTask newTask = ocrTaskService.getTaskStatus(newOcrTaskId);
+            
+            if (oldTask == null || newTask == null) {
+                throw new IllegalArgumentException("OCR任务不存在");
+            }
+            
+            if (!oldTask.isCompleted() || !newTask.isCompleted() || 
+                oldTask.getStatus() != OCRTask.TaskStatus.COMPLETED || 
+                newTask.getStatus() != OCRTask.TaskStatus.COMPLETED) {
+                throw new IllegalArgumentException("OCR任务未完成");
+            }
+            
+            // 获取PDF文件路径
+            String oldFilePath = oldTask.getPdfPath();
+            String newFilePath = newTask.getPdfPath();
+            
+            if (oldFilePath == null || newFilePath == null) {
+                throw new IllegalArgumentException("OCR任务文件路径为空");
+            }
+            
+            // 生成任务ID
+            String taskId = generateTaskId();
+            
+            // 创建比对任务
+            OCRCompareTask task = new OCRCompareTask(
+                taskId,
+                new File(oldFilePath).getName(),
+                new File(newFilePath).getName(),
+                oldFilePath,
+                newFilePath,
+                options
+            );
+            
+            // 设置OCR任务ID
+            task.setOldOcrTaskId(oldOcrTaskId);
+            task.setNewOcrTaskId(newOcrTaskId);
+            
+            // 设置任务状态为OCR已完成
+            task.setStatus(OCRCompareTask.TaskStatus.OCR_PROCESSING);
+            task.setStartTime(LocalDateTime.now());
+            task.setCurrentStep(3, "OCR识别已完成");
+            task.updateProgress(60.0, "OCR识别已完成，准备执行比对...");
+            task.updateOCRProgress("old", 100.0);
+            task.updateOCRProgress("new", 100.0);
+            
+            tasks.put(taskId, task);
+            
+            // 异步执行比对任务（从比对步骤开始）
+            CompletableFuture.runAsync(() -> executeDebugCompareTask(task));
+            
+            return taskId;
+        } catch (Exception e) {
+            log.error("调试比对任务创建失败", e);
+            throw new RuntimeException("调试比对任务创建失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 执行调试比对任务（跳过OCR识别步骤）
+     */
+    private void executeDebugCompareTask(OCRCompareTask task) {
+        try {
+            // 步骤4: 执行文本比对
+            task.setCurrentStep(4, "执行文本比对");
+            task.updateProgress(70.0, "执行文本比对...");
+            
+            // 获取OCR结果
+            String oldText = getOCRResultText(task.getOldOcrTaskId());
+            String newText = getOCRResultText(task.getNewOcrTaskId());
+            
+            if (oldText == null || newText == null) {
+                task.setStatus(OCRCompareTask.TaskStatus.FAILED);
+                task.setErrorMessage("OCR识别结果为空");
+                return;
+            }
+            
+            // 执行文本比对并解析OCR结果中的位置信息（结合PDF页尺寸进行坐标换算）
+            List<CompareResult> compareResults = enrichCompareResultsWithPositionInfo(
+                oldText,
+                newText,
+                task.getOptions(),
+                task.getOldOcrTaskId(),
+                task.getNewOcrTaskId(),
+                task.getOldFilePath(),
+                task.getNewFilePath()
+            );
+            
+            // 步骤5: 将比对结果回写到PDF文件
+            task.setCurrentStep(5, "回写比对结果到PDF");
+            task.updateProgress(85.0, "回写比对结果到PDF...");
+            
+            String resultDir = uploadRootPath + "/ocr-compare/results/" + task.getTaskId();
+            java.nio.file.Path resultDirPath = java.nio.file.Paths.get(resultDir);
+            java.nio.file.Files.createDirectories(resultDirPath);
+            
+            String annotatedOldPdfPath = resultDir + "/old_annotated.pdf";
+            String annotatedNewPdfPath = resultDir + "/new_annotated.pdf";
+            
+            // 回写比对结果到PDF
+            annotatePDFWithResults(task.getOldFilePath(), annotatedOldPdfPath, compareResults, "DELETE");
+            annotatePDFWithResults(task.getNewFilePath(), annotatedNewPdfPath, compareResults, "INSERT");
+            
+            // 创建OCR比对结果
+            OCRCompareResult result = new OCRCompareResult();
+            result.setTaskId(task.getTaskId());
+            result.setOldPdfUrl("/api/ocr-compare/files/" + task.getTaskId() + "/old_annotated.pdf");
+            result.setNewPdfUrl("/api/ocr-compare/files/" + task.getTaskId() + "/new_annotated.pdf");
+            
+            // 转换比对结果为OCR比对结果格式
+            List<Map<String, Object>> differences = convertCompareResultsToDifferences(compareResults);
+            result.setDifferences(differences);
+            
+            // 计算相似度（简化计算，基于差异数量）
+            double similarity = 1.0;
+            if (differences != null && !differences.isEmpty()) {
+                // 这里可以根据实际需求调整相似度计算逻辑
+                similarity = Math.max(0.0, 1.0 - (differences.size() * 0.1));
+            }
+            result.setSimilarity(similarity);
+            
+            // 生成比对摘要
+            result.generateSummary();
+            
+            // 设置前端需要的summary字段
+            Map<String, Object> summary = new HashMap<>();
+            summary.put("totalDifferences", differences != null ? differences.size() : 0);
+            
+            // 统计删除和新增的数量
+            int deletions = 0, insertions = 0;
+            if (differences != null) {
+                for (Map<String, Object> diff : differences) {
+                    String operation = (String) diff.get("operation");
+                    if ("DELETE".equals(operation)) {
+                        deletions++;
+                    } else if ("INSERT".equals(operation)) {
+                        insertions++;
+                    }
+                }
+            }
+            summary.put("deletions", deletions);
+            summary.put("insertions", insertions);
+            
+            result.setSummary(summary);
+            
+            // 步骤6: 保存比对结果
+            task.setCurrentStep(6, "保存比对结果");
+            task.updateProgress(95.0, "保存比对结果...");
+            
+            results.put(task.getTaskId(), result);
+            log.info("调试模式OCR比对结果生成完成：taskId={} diffs={} oldPdf={} newPdf={}", task.getTaskId(),
+                differences == null ? 0 : differences.size(), result.getOldPdfUrl(), result.getNewPdfUrl());
+            task.setStatus(OCRCompareTask.TaskStatus.COMPLETED);
+            task.setCompletedTime(LocalDateTime.now());
+            task.updateProgress(100.0, "比对完成");
+            
+            log.info("调试模式OCR比对任务完成: {}", task.getTaskId());
+            
+        } catch (Exception e) {
+            task.setStatus(OCRCompareTask.TaskStatus.FAILED);
+            task.setErrorMessage("调试模式OCR比对执行异常: " + e.getMessage());
+            log.error("调试模式OCR比对任务执行失败: {}", task.getTaskId(), e);
+        }
     }
     
     /**

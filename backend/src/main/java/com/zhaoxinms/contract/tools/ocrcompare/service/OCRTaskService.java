@@ -24,6 +24,10 @@ public class OCRTaskService {
     private final ConcurrentHashMap<String, OCRTask> tasks = new ConcurrentHashMap<String, OCRTask>();
 
     public String submitOCRTask(String pdfPath) {
+        return submitOCRTask(pdfPath, true); // 默认忽略印章
+    }
+    
+    public String submitOCRTask(String pdfPath, boolean ignoreSeals) {
         if (!ocrHttpClient.healthCheck()) {
             throw new IllegalStateException("OCR服务不可用，请确保Python OCR服务已启动");
         }
@@ -36,7 +40,7 @@ public class OCRTaskService {
         String taskId = generateTaskId();
         OCRTask task = new OCRTask(taskId, pdfPath);
         tasks.put(taskId, task);
-        CompletableFuture.runAsync(() -> executeOCRTask(task));
+        CompletableFuture.runAsync(() -> executeOCRTask(task, ignoreSeals));
         return taskId;
     }
 
@@ -49,6 +53,10 @@ public class OCRTaskService {
     }
 
     private void executeOCRTask(OCRTask task) {
+        executeOCRTask(task, true); // 默认忽略印章
+    }
+    
+    private void executeOCRTask(OCRTask task, boolean ignoreSeals) {
         try {
             task.setStatus(OCRTask.TaskStatus.PROCESSING);
             task.setStartTime(LocalDateTime.now());
@@ -56,6 +64,7 @@ public class OCRTaskService {
             Map<String, Object> options = new HashMap<>();
             options.put("dpi", ocrProperties.getSettings().getDpi());
             options.put("min_score", ocrProperties.getSettings().getMinScore());
+            options.put("ignore_seals", ignoreSeals); // 添加印章忽略参数
 
             String remoteTaskId = ocrHttpClient.submitOCRTask(task.getPdfPath(), "pdf", options);
             task.setRemoteTaskId(remoteTaskId);

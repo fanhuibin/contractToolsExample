@@ -10,6 +10,7 @@ public class OCRCompareOptions {
     private boolean ignorePunctuation = false;   // 是否忽略标点符号
     private boolean ignoreHeaderFooter = true;   // 是否忽略页眉页脚
     private boolean ignoreSpaces = false;        // 是否忽略空格
+    private boolean ignoreSeals = true;          // 是否忽略印章
     private double similarityThreshold = 0.8;    // 相似度阈值
     private int maxDiffLength = 1000;            // 最大差异长度
     private boolean enableHighlight = true;      // 是否启用高亮显示
@@ -41,6 +42,9 @@ public class OCRCompareOptions {
     
     public boolean isIgnoreSpaces() { return ignoreSpaces; }
     public void setIgnoreSpaces(boolean ignoreSpaces) { this.ignoreSpaces = ignoreSpaces; }
+    
+    public boolean isIgnoreSeals() { return ignoreSeals; }
+    public void setIgnoreSeals(boolean ignoreSeals) { this.ignoreSeals = ignoreSeals; }
     
     public double getSimilarityThreshold() { return similarityThreshold; }
     public void setSimilarityThreshold(double similarityThreshold) { this.similarityThreshold = similarityThreshold; }
@@ -96,6 +100,7 @@ public class OCRCompareOptions {
                 ", ignorePunctuation=" + ignorePunctuation +
                 ", ignoreHeaderFooter=" + ignoreHeaderFooter +
                 ", ignoreSpaces=" + ignoreSpaces +
+                ", ignoreSeals=" + ignoreSeals +
                 ", similarityThreshold=" + similarityThreshold +
                 ", maxDiffLength=" + maxDiffLength +
                 ", enableHighlight=" + enableHighlight +

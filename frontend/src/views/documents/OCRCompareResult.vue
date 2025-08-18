@@ -23,6 +23,7 @@
           <el-radio-button label="DELETE">仅删除</el-radio-button>
           <el-radio-button label="INSERT">仅新增</el-radio-button>
         </el-radio-group>
+        <el-button size="small" type="warning" @click="startDebug" :loading="debugLoading">调试模式</el-button>
         <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
     </div>
@@ -76,17 +77,21 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import { getOCRCompareResult, type OCRCompareResult } from '@/api/ocr-compare'
+import { getOCRCompareResult, debugCompareWithExistingOCR, type OCRCompareResult } from '@/api/ocr-compare'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const debugLoading = ref(false)
 const oldPdf = ref('')
 const newPdf = ref('')
 const results = ref<any[]>([])
 const activeIndex = ref(-1)
 const filterMode = ref<'ALL' | 'DELETE' | 'INSERT'>('ALL')
+const taskId = ref('')
+const oldOcrTaskId = ref('')
+const newOcrTaskId = ref('')
 
 const filteredResults = computed(() => {
   if (filterMode.value === 'DELETE') return results.value.filter(r => r?.operation === 'DELETE')
@@ -152,6 +157,11 @@ const fetchResult = async (id: string) => {
       results.value = res.data.differences || []
       activeIndex.value = results.value.length > 0 ? 0 : -1
       sessionStorage.setItem('lastOCRCompareId', id)
+      
+      // 保存任务ID和OCR任务ID，用于调试
+      taskId.value = id
+      oldOcrTaskId.value = res.data.oldOcrTaskId || ''
+      newOcrTaskId.value = res.data.newOcrTaskId || ''
     } else {
       ElMessage.error('加载OCR比对结果失败')
     }
@@ -159,6 +169,47 @@ const fetchResult = async (id: string) => {
     ElMessage.error(e?.message || '加载OCR比对结果失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 开始调试比对
+const startDebug = async () => {
+  if (!oldOcrTaskId.value || !newOcrTaskId.value) {
+    ElMessage.warning('无法获取OCR任务ID，无法进行调试')
+    return
+  }
+  
+  debugLoading.value = true
+  
+  try {
+    const res = await debugCompareWithExistingOCR({
+      oldOcrTaskId: oldOcrTaskId.value,
+      newOcrTaskId: newOcrTaskId.value,
+      options: {
+        ignoreCase: true,
+        ignoreSpaces: false
+      }
+    })
+    
+    console.log('调试比对响应:', res)
+    
+    // 获取任务ID
+    const newTaskId = res.data.taskId
+    
+    if (!newTaskId) {
+      throw new Error('任务ID为空')
+    }
+    
+    ElMessage.success('调试比对任务已提交，正在处理中...')
+    
+    // 跳转到新的比对结果页面
+    router.push({ name: 'OCRCompareResult', params: { taskId: newTaskId } }).catch(() => {})
+    
+  } catch (e: any) {
+    console.error('调试比对失败:', e)
+    ElMessage.error(e?.message || '调试比对任务提交失败')
+  } finally {
+    debugLoading.value = false
   }
 }
 

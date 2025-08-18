@@ -224,6 +224,7 @@ class OCRProcessor:
             
             dpi = options.get('dpi', 150)
             min_score = options.get('min_score', 0.5)
+            ignore_seals = options.get('ignore_seals', True)
             
             for page_number in range(total_pages):
                 current_page = page_number + 1
@@ -236,6 +237,10 @@ class OCRProcessor:
                 
                 page = doc.load_page(page_number)
                 img_bgr = self._render_page_to_bgr_image(page, dpi)
+                
+                # 如果启用了忽略印章，则预处理图像去除红色印章
+                if ignore_seals:
+                    img_bgr = self._remove_red_seals(img_bgr)
                 
                 try:
                     result, _ = self.ocr(img_bgr)
@@ -309,6 +314,11 @@ class OCRProcessor:
             
             dpi = options.get('dpi', 150)
             min_score = options.get('min_score', 0.5)
+            ignore_seals = options.get('ignore_seals', True)
+            
+            # 如果启用了忽略印章，则预处理图像去除红色印章
+            if ignore_seals:
+                img_bgr = self._remove_red_seals(img_bgr)
             
             try:
                 result, _ = self.ocr(img_bgr)
@@ -375,6 +385,39 @@ class OCRProcessor:
         img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         return img_bgr
     
+    def _remove_red_seals(self, img_bgr: np.ndarray) -> np.ndarray:
+        """去除图像中的红色印章"""
+        try:
+            # 转换为HSV颜色空间，更容易处理红色
+            img_hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+            
+            # 定义红色的HSV范围
+            # 红色在HSV中有两个范围：0-10 和 170-180
+            lower_red1 = np.array([0, 50, 50])
+            upper_red1 = np.array([10, 255, 255])
+            lower_red2 = np.array([170, 50, 50])
+            upper_red2 = np.array([180, 255, 255])
+            
+            # 创建红色掩码
+            mask1 = cv2.inRange(img_hsv, lower_red1, upper_red1)
+            mask2 = cv2.inRange(img_hsv, lower_red2, upper_red2)
+            red_mask = cv2.bitwise_or(mask1, mask2)
+            
+            # 形态学操作，去除噪点并连接断开的区域
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+            red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel)
+            
+            # 将红色区域替换为白色背景
+            img_result = img_bgr.copy()
+            img_result[red_mask > 0] = [255, 255, 255]  # 白色背景
+            
+            return img_result
+            
+        except Exception as e:
+            logging.warning(f"去除红色印章失败: {e}，使用原图像")
+            return img_bgr
+    
     def _split_quad_by_equal_chars(self, box, text: str, skip_space: bool = True):
         """分割四边形为字符级坐标"""
         if not isinstance(box, (list, tuple)) or len(box) < 4 or not text:
@@ -423,7 +466,6 @@ class OCRProcessor:
         combined_path = os.path.join(result_dir, "combined.txt")
         with open(combined_path, "w", encoding="utf-8", newline="\n") as f:
             for page_index, lines in enumerate(all_pages_text, start=1):
-                f.write(f"===== Page {page_index} =====\n")
                 f.write("\n".join(lines))
                 if page_index < len(all_pages_text):
                     f.write("\n\n")

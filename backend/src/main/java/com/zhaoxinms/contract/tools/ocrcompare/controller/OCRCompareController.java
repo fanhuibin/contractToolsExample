@@ -33,6 +33,7 @@ public class OCRCompareController {
             @RequestParam(value = "ignoreCase", defaultValue = "false") boolean ignoreCase,
             @RequestParam(value = "ignoreWhitespace", defaultValue = "false") boolean ignoreWhitespace,
             @RequestParam(value = "ignorePunctuation", defaultValue = "false") boolean ignorePunctuation,
+            @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals,
             @RequestParam(value = "similarityThreshold", defaultValue = "0.8") double similarityThreshold) {
         
         try {
@@ -41,6 +42,7 @@ public class OCRCompareController {
             options.setIgnoreCase(ignoreCase);
             options.setIgnoreWhitespace(ignoreWhitespace);
             options.setIgnorePunctuation(ignorePunctuation);
+            options.setIgnoreSeals(ignoreSeals);
             options.setSimilarityThreshold(similarityThreshold);
             
             // 提交比对任务
@@ -186,6 +188,66 @@ public class OCRCompareController {
             response.put("success", false);
             response.put("message", "任务不存在或删除失败");
             return ResponseEntity.notFound().build();
+        }
+    }
+    
+    /**
+     * 调试接口：使用已有的OCR结果进行比对
+     * 跳过上传和OCR识别过程，直接使用已有的OCR任务ID进行比对
+     */
+    @PostMapping("/debug")
+    public ResponseEntity<Map<String, Object>> debugCompareWithExistingOCR(
+            @RequestBody Map<String, Object> request) {
+        
+        String oldOcrTaskId = (String) request.get("oldOcrTaskId");
+        String newOcrTaskId = (String) request.get("newOcrTaskId");
+        
+        if (oldOcrTaskId == null || newOcrTaskId == null) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "OCR任务ID不能为空");
+            return ResponseEntity.badRequest().body(response);
+        }
+        
+        try {
+            // 创建比对选项
+            OCRCompareOptions options = OCRCompareOptions.createDefault();
+            
+            // 从请求中获取比对选项（如果有）
+            Map<String, Object> optionsMap = (Map<String, Object>) request.get("options");
+            if (optionsMap != null) {
+                if (optionsMap.containsKey("ignoreCase")) {
+                    options.setIgnoreCase((Boolean) optionsMap.get("ignoreCase"));
+                }
+                if (optionsMap.containsKey("ignoreWhitespace")) {
+                    options.setIgnoreWhitespace((Boolean) optionsMap.get("ignoreWhitespace"));
+                }
+                if (optionsMap.containsKey("ignorePunctuation")) {
+                    options.setIgnorePunctuation((Boolean) optionsMap.get("ignorePunctuation"));
+                }
+                if (optionsMap.containsKey("ignoreSeals")) {
+                    options.setIgnoreSeals((Boolean) optionsMap.get("ignoreSeals"));
+                }
+                if (optionsMap.containsKey("similarityThreshold")) {
+                    options.setSimilarityThreshold((Double) optionsMap.get("similarityThreshold"));
+                }
+            }
+            
+            // 提交调试比对任务
+            String taskId = ocrCompareService.debugCompareWithExistingOCR(oldOcrTaskId, newOcrTaskId, options);
+            
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("taskId", taskId);
+            response.put("message", "调试比对任务提交成功");
+            
+            return ResponseEntity.ok(response);
+            
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "提交调试比对任务失败: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
         }
     }
 }
