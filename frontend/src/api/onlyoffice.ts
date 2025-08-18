@@ -68,3 +68,21 @@ export function downloadFile(fileId: string | number) {
     responseType: 'blob'
   })
 }
+
+/**
+ * 上传文件以供OnlyOffice使用
+ * @param file 文件对象
+ */
+export function uploadFileForOnlyOffice(file: File) {
+  const formData = new FormData()
+  formData.append('file', file)
+  
+  return request({
+    url: '/onlyoffice/upload',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}

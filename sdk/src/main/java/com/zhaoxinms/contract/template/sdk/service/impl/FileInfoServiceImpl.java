@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 文件信息Service实现类
@@ -34,6 +36,7 @@ public class FileInfoServiceImpl implements FileInfoService {
 
     // 模拟数据存储（实际项目中应该使用数据库）
     private final ConcurrentHashMap<String, FileInfo> fileInfoMap = new ConcurrentHashMap<>();
+    private final AtomicLong idSequence = new AtomicLong(10000);
 
     @PostConstruct
     public void init() {
@@ -136,6 +139,75 @@ public class FileInfoServiceImpl implements FileInfoService {
         } catch (Exception e) {
             log.warn("初始化templateDesign.docx失败: {}", e.getMessage());
         }
+    }
+
+    public FileInfo saveNewFile(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("文件不能为空");
+        }
+
+        long newId = idSequence.incrementAndGet();
+        String idStr = String.valueOf(newId);
+        String originalFilename = file.getOriginalFilename();
+        String fileExtension = "";
+        if (originalFilename != null && originalFilename.contains(".")) {
+            fileExtension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1);
+        }
+
+        java.nio.file.Path targetPath = Paths.get(uploadRootPath, idStr + "." + fileExtension);
+        Files.createDirectories(targetPath.getParent());
+        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        FileInfo fileInfo = new FileInfo();
+        fileInfo.setId(newId);
+        fileInfo.setOriginalName(originalFilename);
+        fileInfo.setFileName(targetPath.getFileName().toString());
+        fileInfo.setFileExtension(fileExtension);
+        fileInfo.setFileSize(file.getSize());
+        fileInfo.setStorePath(targetPath.toAbsolutePath().toString());
+        fileInfo.setStatus(0);
+        fileInfo.setCreateTime(LocalDateTime.now());
+        fileInfo.setUpdateTime(LocalDateTime.now());
+        fileInfo.setOnlyofficeKey(generateOnlyOfficeKeyForFile(idStr));
+        
+        fileInfoMap.put(idStr, fileInfo);
+        log.info("创建新文件记录，文件ID: {}", idStr);
+        return fileInfo;
+    }
+
+    /**
+     * 将已存在的磁盘文件注册为系统文件（复制到 uploads 下并分配新ID）。
+     */
+    public FileInfo registerClonedFile(java.nio.file.Path sourcePath, String originalName) throws IOException {
+        if (sourcePath == null || !java.nio.file.Files.exists(sourcePath)) {
+            throw new IllegalArgumentException("源文件不存在: " + String.valueOf(sourcePath));
+        }
+        String ext = "";
+        String name = sourcePath.getFileName().toString();
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0) ext = name.substring(dot + 1);
+
+        long newId = idSequence.incrementAndGet();
+        String idStr = String.valueOf(newId);
+        java.nio.file.Path targetPath = Paths.get(uploadRootPath, idStr + (ext.isEmpty() ? "" : "." + ext));
+        Files.createDirectories(targetPath.getParent());
+        Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        FileInfo fileInfo = new FileInfo();
+        fileInfo.setId(newId);
+        fileInfo.setOriginalName(originalName != null ? originalName : name);
+        fileInfo.setFileName(targetPath.getFileName().toString());
+        fileInfo.setFileExtension(ext);
+        fileInfo.setFileSize(Files.size(targetPath));
+        fileInfo.setStorePath(targetPath.toAbsolutePath().toString());
+        fileInfo.setStatus(0);
+        fileInfo.setCreateTime(LocalDateTime.now());
+        fileInfo.setUpdateTime(LocalDateTime.now());
+        fileInfo.setOnlyofficeKey(generateOnlyOfficeKeyForFile(idStr));
+
+        fileInfoMap.put(idStr, fileInfo);
+        log.info("注册克隆文件，文件ID: {} -> {}", idStr, targetPath);
+        return fileInfo;
     }
 
     @Override

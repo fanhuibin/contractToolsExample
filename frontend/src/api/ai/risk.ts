@@ -1,5 +1,48 @@
 import baseRequest from '@/utils/request'
 
+// === AI 返回格式（前端强约束）===
+export interface Evidence {
+  text?: string
+  page?: number
+  paragraphIndex?: number
+  startOffset?: number
+  endOffset?: number
+}
+
+export interface RiskItem {
+  clauseType: string
+  pointId: string | number
+  algorithmType: string
+  decisionType: string
+  statusType: 'ERROR' | 'WARNING' | 'INFO' | string
+  message?: string
+  actions?: any[]
+  evidence: Evidence[]
+}
+
+export interface AiReviewResponse {
+  traceId?: string
+  elapsedMs?: number
+  docMeta?: any
+  results: RiskItem[]
+}
+
+// 提示后端/AI：必须返回包含 evidence 的锚点信息，优先 paragraphIndex/startOffset/endOffset
+export const AI_SCHEMA_HINT: string = JSON.stringify({
+  version: '1.0',
+  required: ['traceId', 'elapsedMs', 'docMeta', 'results'],
+  results: {
+    item: {
+      required: ['clauseType', 'pointId', 'algorithmType', 'decisionType', 'statusType', 'evidence'],
+      evidenceItem: {
+        // 建议：提供段内精确定位三元组；text 用作兜底搜索
+        optional: ['text', 'page', 'paragraphIndex', 'startOffset', 'endOffset']
+      }
+    }
+  },
+  anchors: 'Each evidence corresponds to an anchor. Prefer paragraphIndex/startOffset/endOffset; include text as fallback.'
+})
+
 export const riskApi = {
   getClauseTypes(enabled?: boolean) {
     const query = enabled === undefined ? '' : `?enabled=${enabled ? 1 : 0}`
@@ -76,6 +119,22 @@ export const riskApi = {
       form.append('pointIds', new Blob([JSON.stringify(pointIds)], { type: 'application/json' }))
     }
     return baseRequest.post(url, form, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
+
+  /**
+   * 上传文件以供智能审核使用
+   * @param file 文件对象
+   */
+  uploadFileForReview(file: File) {
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    // baseRequest has baseURL '/api', so here MUST NOT prefix with '/api' again
+    return baseRequest.post('/review/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
   }
 }
 

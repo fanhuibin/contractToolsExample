@@ -1,3 +1,102 @@
+### 2025-08-16 智能审核 × OnlyOffice 风险定位联动 v1.0
+
+## 2025-08-16 风险卡片与 OnlyOffice 书签联动完善
+
+### 复用记录
+- 复用前端已有的 `OnlyOfficeEditor` 方法通道（`setAnchors`/`gotoAnchor`/`clearAnchors`）
+- 复用现有 `RiskCardPanel` 的 `goto` 事件对接编辑器定位
+
+### 变更与实现
+- 插件 `public/onlyoffice-plugins/risk-anchors/pluginCode.js`
+  - 新增：使用 `window.Asc.plugin.callCommand` + `Api.GetDocument()` 创建/删除书签
+  - 规则：为每个锚点生成前缀为 `risk_anchor_` 的书签名，优先依据 `paragraphIndex/startOffset/endOffset` 精确选区，缺失则回退 `GetRangeByText` 按文本搜索后加书签
+  - 定位：优先 `GoToBookmark(bookmarkName)`，并保留原文本搜索兜底路径
+  - 清理：批量遍历 `GetBookmarks()`，按前缀删除本插件创建的书签
+
+### 验收标准
+- 点击“开始审核”后，插件能够为返回的所有风险点创建对应书签；
+- 在“风险审核”面板点击任意卡片，文档可跳转至对应位置；
+- 再次审核或点击“清理锚点”（内部命令）后，旧书签被清理并重新创建；
+
+### 注意事项
+- 为保证精确定位，请尽量提供 `paragraphIndex / startOffset / endOffset`；若仅有 `text`，会按文本首次匹配定位；
+- 书签命名使用安全字符集，锚点 ID 会被规范化；
+- 插件消息在 `risk.ready` 后发送更稳妥；
+
+### 工具检测结果
+| 工具       | 问题数 | 修复情况          |
+|------------|--------|-------------------|
+| ESLint/TS  | 1      | 已为隐式 any 补类型 |
+
+### 经验沉淀
+1. 涉及文档结构修改（如书签/内容控件）时，优先使用 `callCommand + Api.*`，较 `executeMethod` 能力更完整；
+2. 设计书签前缀有助于批量清理与幂等重建；
+
+#### 复用记录
+- 复用 `frontend/src/components/onlyoffice/OnlyOfficeEditor.vue` 的 `postMessage` 通道并扩展 `setAnchors/gotoAnchor/clearAnchors`
+- 复用 `riskApi.executeReview()` 返回结构，前端做轻量规范化（空字段容错）
+
+#### 本次任务清单（按开发顺序）
+- TASK001 前端组件：风险卡面板（完成）
+  - 名称: RiskCardPanel
+  - 描述: 渲染 AI 风险结果，筛选/搜索，点击触发定位事件
+  - 版本: v1.0  状态: 完成
+  - 验收: 结果列表可筛选搜索；点击项触发 `emit('goto', anchorId)`
+  - 注意: 大数据量时建议虚拟滚动；空 `message/evidence` 容错展示
+
+- TASK004 `OnlyOfficeEditor.vue` 扩展方法（完成）
+  - 名称: 编辑器对接扩展
+  - 描述: 向父组件暴露 `setAnchors/gotoAnchor/clearAnchors`
+  - 版本: v1.0  状态: 完成
+  - 验收: 可被 `ContractReview.vue` 调用，无报错
+  - 注意: 插件就绪判定与 postMessage 失败容错
+
+- TASK002 前端：结果锚点转换与联动（完成）
+  - 名称: 锚点转换与联动
+  - 描述: 将 `results[].evidence[]` 转 anchors；审核后下发至编辑器；点击卡片定位
+  - 版本: v1.0  状态: 完成
+  - 验收: 审核完成后右侧展示结果，点击即可定位
+  - 注意: 无 evidence 的项仅展示不定位
+
+- TASK003 OnlyOffice 插件：risk-anchors（书签/高亮/定位）（完成 v1 最小可用）
+  - 名称: 风险锚点插件
+  - 描述: 支持三类消息 `risk.setAnchors`/`risk.gotoAnchor`/`risk.clearAnchors`
+  - 版本: v1.0  状态: 完成（基础版）
+  - 验收: 可接收 anchors、点击定位（Search）；清空缓存
+  - 注意: 下一步可升级为“创建书签/内容控件 + 高亮 + 精确清理”
+
+- TASK005 前端 UI 联动（完成）
+  - 名称: 页面联动与切换
+  - 描述: 打开编辑器后左侧切换为“风险审核”区；工具栏含“开始审核”
+  - 版本: v1.0  状态: 完成
+  - 验收: 视图切换正确；审核与定位链路贯通
+  - 注意: 返回后保留审核结果可见
+
+- TASK006 后端（可选）持久化与复用（计划中）
+  - 名称: 风险结果与锚点持久化
+  - 描述: 保存 `traceId/results/evidence` 至 DB；支持历史回溯与继续任务
+  - 版本: v1.0  状态: 计划中
+  - 验收: 新增表结构与查询接口；前端历史面板可读取
+  - 注意: 索引 pointId/decisionType，控制 JSON 体量
+
+#### 变更文件
+- `frontend/src/components/onlyoffice/OnlyOfficeEditor.vue`: 初始化前注入本地插件；暴露 set/goto/clear 方法
+- `frontend/src/views/contracts/ContractReview.vue`: 编辑视图左侧展示“风险审核”；工具栏“开始审核”联动插件
+- `frontend/src/components/ai/RiskCardPanel.vue`: 统一 `anchorId` 规则为 `${pointId}_0`
+- `public/onlyoffice-plugins/risk-anchors/config.json`: 标准化插件配置
+- `public/onlyoffice-plugins/risk-anchors/pluginCode.js`: 实现 set/goto/clear 基础逻辑
+- `public/onlyoffice-plugins/risk-anchors/index.html`: 插件入口与 SDK 引入
+
+#### 工具检测结果
+| 工具 | 问题数 | 修复情况 |
+|------|--------|----------|
+| Lint | 0      | 已通过   |
+
+#### 经验沉淀
+1. 前端在创建编辑器前注入插件 URL，可降低后端配置耦合
+2. 先用 `Search` 落地最小可用定位，再演进到书签/控件与高亮
+3. `anchorId` 与 evidence 索引对齐，UI 点击默认指向首条证据
+
 # 合同履约任务智能识别系统
 
 ## 版本历史
@@ -432,3 +531,322 @@ ai:
   - 保持后续默认模板映射、兜底映射、删除 `contract_type` 唯一约束、添加 `UNIQUE(template_id)` 的逻辑不变
 - 影响：修复启动时 Flyway 报错 “Unknown column 'cr.template_id' in 'where clause'”，确保迁移可重复执行
 - 操作建议：重启应用触发 Flyway 自动迁移；或在数据库中单独执行该脚本后再启动
+
+# 会话总结
+
+## 2024-07-26 合同审核页面集成OnlyOffice
+
+### 会话的主要目的
+将“合同智能审核”页面中的OnlyOffice占位符替换为功能完善的真实OnlyOffice编辑器。
+
+### 完成的主要任务
+1.  **TASK001**: 在合同审核页面成功集成了 `OnlyOfficeEditor` 组件。
+    -   将 `ContractReview.vue` 页面中的占位符替换为真实的编辑器组件。
+    -   实现了文件上传到后端的逻辑，并能正确获取 `fileId`。
+    -   将 `fileId` 传递给编辑器组件以加载相应的文档。
+    -   添加了文件上传和编辑器加载过程中的状态提示与错误处理。
+
+### 关键决策和解决方案
+- **代码复用**: 决定直接复用项目中已有的 `OnlyOfficeEditor.com`，而不是重新开发。这大大加快了开发速度。
+- **真实上传流程**: 重构了 `openInEditor` 方法，将其从一个模拟文件上传的同步函数，改造为调用真实API的异步函数，并添加了完整的 `try...catch` 异常处理流程。
+
+### 使用的技术栈
+- Vue 3 (Composition API)
+- Element Plus
+- TypeScript
+- Axios (封装在 `request.ts` 中)
+
+### 修改了哪些文件
+- `frontend/src/views/contracts/ContractReview.vue`:
+  - 引入并使用了 `OnlyOfficeEditor` 组件。
+  - 修改了 `openInEditor` 方法以处理真实的文件上传。
+  - 添加了 `onEditorReady` 和 `onEditorError` 等事件处理函数。
+
+- `frontend/src/api/onlyoffice.ts`:
+  - 新增了 `uploadFileForOnlyOffice` 函数，用于将文件上传到后端服务器。
+
+## 2024-07-27 cankao文件夹中OnlyOffice实现分析
+
+### 会话的主要目的
+本次会话旨在分析 `cankao` 文件夹中 OnlyOffice 的实现方式，并总结如何在当前项目的合同智能审核组件中进行集成。
+
+### 完成的主要任务
+1.  浏览了 `cankao` 文件夹的整体结构。
+2.  通过关键词搜索定位了与 OnlyOffice 集成相关的核心文件。
+3.  详细分析了前端 Vue 组件 `onlyoffice.vue`，了解了其加载、初始化和与编辑器插件交互的机制。
+4.  详细分析了后端服务 `ChangeFileToPDFService.java`，了解了其文件转换和与 OnlyOffice 服务器交互的逻辑。
+5.  基于分析结果，制定了在合同智能审核组件中集成 OnlyOffice 的详细开发任务（TASK001），包括任务描述、验收标准、技术要点和接口设计等。
+
+### 关键决策和解决方案
+*   **技术选型**: 决定采用前后端分离的方式集成 OnlyOffice。前端负责展示和交互，后端负责生成配置、处理回调和文件转换。
+*   **集成方案**: 前端通过动态加载 `api.js` 和实例化 `DocEditor` 对象来集成；后端通过提供 API 返回 `fileModel` 配置，并利用回调机制处理文件保存。
+*   **安全性**: 强调了使用 JWT 对所有与 OnlyOffice 的通信进行安全验证的重要性。
+
+### 使用的技术栈
+*   前端: Vue.js
+*   后端: Java (Spring Boot)
+*   文档服务: OnlyOffice Document Server
+*   数据库: MySQL (推断)
+*   PDF 处理: iTextPDF
+
+### 修改了哪些文件
+本次会话没有修改任何文件，主要进行的是代码分析和方案设计。
+
+## 2024-07-28 基于现有代码的OnlyOffice集成方案
+
+### 会话的主要目的
+结合对 `cankao`、`sdk` 和 `frontend` 文件夹的分析，制定一个在合同智能审核组件中集成 OnlyOffice 的详细、可执行的方案。
+
+### 完成的主要任务
+1.  分析了 `sdk` 文件夹，确认了 `OnlyOfficeController` 和 `OnlyofficeCallbackController` 的存在和功能。
+2.  分析了 `frontend` 文件夹，确认了 `OnlyOfficeEditor.vue` 组件的存在和功能。
+3.  详细阅读了 `OnlyOfficeController.java` 和 `OnlyOfficeEditor.vue` 的源代码，深入理解了它们的设计和实现。
+4.  基于全面的代码分析，制定了最终的实施方案（TASK001 增强版），明确了开发步骤和验收标准。
+
+### 关键决策和解决方案
+*   **复用优先**: 最终方案的核心是复用项目中已有的、功能完善的 `OnlyOfficeController` 和 `OnlyOfficeEditor.vue` 组件，避免了重复开发，大大提高了效率。
+*   **状态驱动**: 方案采用状态驱动的方式（通过 `fileId` 和 `canEdit` 两个 `ref`），当状态改变时，Vue 的响应式系统会自动触发 `OnlyOfficeEditor` 组件的重新加载和模式切换，代码逻辑清晰简洁。
+
+### 使用的技术栈
+*   前端: Vue 3 (Composition API), Element Plus, TypeScript
+*   后端: Java (Spring Boot)
+*   文档服务: OnlyOffice Document Server
+
+### 修改了哪些文件
+本次会话没有修改任何文件，主要进行的是代码分析和方案设计。
+
+## 2024-07-28 实现合同审核页面内联OnlyOffice编辑器
+
+### 会话的主要目的
+根据用户需求，在“合同智能审核”页面中集成 `OnlyOfficeEditor` 组件，实现点击按钮后在页面内联打开文件预览的功能。
+
+### 完成的主要任务
+1.  **定位文件**: 准确找到了合同智能审核功能对应的 `frontend/src/views/contracts/ContractReview.vue` 文件。
+2.  **代码分析**: 阅读了 `ContractReview.vue` 的源代码，理解了其现有的文件上传、状态管理和 UI 布局。
+3.  **代码修改**:
+    *   将原有的浮层式编辑器布局 (`.editor-overlay`) 移除。
+    *   在主内容区域添加了新的编辑器视图 (`.editor-view`)，并使用 `v-if="showEditor"` 来控制其显示。
+    *   将原有的上传和结果区域也包裹在一个 `div` 中，并使用 `v-else` 与编辑器视图互斥显示。
+    *   修改了 `openInEditor` 方法，在文件上传成功后，设置 `showEditor.value = true` 来显示编辑器。
+    *   修改了 `backToUpload` 方法，通过设置 `showEditor.value = false` 来返回上传视图。
+    *   添加了新的 CSS 样式以支持内联编辑器的布局。
+
+### 关键决策和解决方案
+*   **内联替换浮层**: 放弃了原有的浮层实现，改为在主内容区域内进行视图切换。这种方式用户体验更流畅，且代码结构更易于管理。
+*   **视图状态驱动**: 通过单一的状态变量 `showEditor` 来驱动整个主区域的 UI 变化（显示上传区域 vs 显示编辑器），这是 Vue.js 中管理视图状态的最佳实践，使得逻辑清晰且易于维护。
+*   **复用现有逻辑**: 最大限度地复用了 `openInEditor` 方法中已有的文件上传逻辑，只在其基础上增加了视图切换的功能，减少了代码改动量。
+
+### 使用的技术栈
+*   Vue 3 (Composition API, `<script setup>`)
+*   Element Plus
+*   TypeScript
+
+### 修改了哪些文件
+*   `frontend/src/views/contracts/ContractReview.vue`: 进行了大量的模板、脚本和样式修改，以实现新的内联编辑器功能。
+
+## 2024-07-28 修复OnlyOffice集成404错误并完成实现
+
+### 会话的主要目的
+解决用户在“合同智能审核”页面点击“在编辑器中打开”时遇到的 404 错误，并根据用户反馈调整和实现 OnlyOffice 编辑器的集成方式。
+
+### 完成的主要任务
+1.  **问题诊断**:
+    *   通过分析前端 `frontend/src/api/ai/risk.ts` 文件，确认了文件上传接口指向 `/api/review/upload`。
+    *   通过分析后端 `sdk` 项目的所有控制器，发现不存在 `/api/review/upload` 接口，从而定位了 404 错误的根源。
+    *   进一步分析发现，已有的 `/api/compare/upload` 接口需要接收两个文件，与当前场景不匹配。
+2.  **后端开发**:
+    *   创建了一个新的 `ReviewController.java` 文件。
+    *   在新控制器中实现了一个 `POST /api/review/upload` 接口，专门用于接收单个文件上传，并返回 `fileId`。
+3.  **前端实现**:
+    *   确认了前端 API (`riskApi.uploadFileForReview`) 的调用地址与新建的后端接口一致。
+    *   恢复了之前被用户拒绝的前端 UI 修改，将 `ContractReview.vue` 中的 OnlyOffice 编辑器从浮层改为内联显示，并通过 `showEditor` 状态进行视图切换。
+
+### 关键决策和解决方案
+*   **创建专用接口**: 没有复用功能不匹配的 `/api/compare/upload` 接口，而是为智能审核场景创建了一个新的、职责单一的 `/api/review/upload` 接口。这是更清晰、更健壮的设计，避免了未来因接口功能混杂导致的维护困难。
+*   **根本原因分析**: 通过深入分析前后端代码，准确地定位了 404 错误是由于后端接口缺失造成的，而不是前端组件的集成问题，从而制定了正确的解决方案。
+*   **坚持最佳实践**: 保持了 `OnlyOfficeEditor` 作为独立子组件的结构，同时通过视图状态切换实现了用户期望的内联体验，兼顾了代码质量和用户需求。
+
+### 使用的技术栈
+*   后端: Java (Spring Boot), Swagger
+*   前端: Vue 3 (Composition API), TypeScript
+
+### 修改/创建了哪些文件
+*   `sdk/src/main/java/com/zhaoxinms/contract/template/sdk/controller/ReviewController.java` (新建): 创建了新的后端控制器和上传接口。
+*   `frontend/src/views/contracts/ContractReview.vue` (修改): 恢复并最终应用了 UI 改造，实现了内联编辑器功能。
+
+## 2024-07-28 修复OnlyOffice预览内容不正确的问题
+
+### 会话的主要目的
+解决用户上传文件后，OnlyOffice 预览显示的不是所上传文件的问题。
+
+### 完成的主要任务
+1.  **问题诊断**: 快速定位到问题根源在于后端上传逻辑。无论用户上传什么文件，后端都使用固定的 `fileId ("templateDesign")` 来覆盖保存，导致预览内容不正确。
+2.  **后端服务层增强**:
+    *   在 `FileInfoServiceImpl.java` 中新增了一个 `saveNewFile(MultipartFile file)` 方法。
+    *   该方法负责生成唯一的 UUID 作为新文件的 `fileId`，将文件保存到磁盘，并在内存中注册一个全新的 `FileInfo` 记录。
+3.  **后端控制器重构**:
+    *   修改了 `ReviewController.java` 中的 `/api/review/upload` 接口。
+    *   使其调用新建的 `FileInfoServiceImpl.saveNewFile` 方法，从而确保每次上传都创建新文件记录。
+    *   返回给前端的是新生成的、唯一的 `fileId`。
+4.  **实体类调整推断**:
+    *   根据 `saveNewFile` 方法中使用 UUID 作为 ID 的实现，推断并建议将 `FileInfo` 实体类中的 `id` 字段类型从 `Long` 修改为 `String`。
+
+### 关键决策和解决方案
+*   **创建新文件记录而非覆盖**: 放弃了之前覆盖固定文件记录的临时修复方案，采用了更健壮的方案，即为每个上传的文件创建独立的、唯一的记录。这从根本上解决了文件内容混淆的问题。
+*   **服务层封装**: 将创建新文件的复杂逻辑（生成ID、保存文件、创建记录）封装在 `FileInfoServiceImpl` 中，保持了 `ReviewController` 的简洁和职责单一。
+
+### 使用的技术栈
+*   后端: Java (Spring Boot)
+
+### 修改/创建了哪些文件
+*   `sdk/src/main/java/com/zhaoxinms/contract/template/sdk/service/impl/FileInfoServiceImpl.java` (修改): 新增 `saveNewFile` 方法。
+*   `sdk/src/main/java/com/zhaoxinms/contract/template/sdk/controller/ReviewController.java` (修改): 调用新的服务方法，并返回正确的 `fileId`。
+
+### 2025-08-18 合同智能审核页：自动加书签与定位（OnlyOffice 插件联动）
+
+#### 现状核验
+- 前端 `ContractReview.vue` 与 `OnlyOfficeEditor.vue` 在同一页面联动：已实现。
+  - `ContractReview.vue`：在“开始审核（模拟）/startReview”后组装 `anchors`，调用 `onlyofficeEditorRef.setAnchors(anchors)`；点击风险卡片触发 `goto`，调用 `onlyofficeEditorRef.gotoAnchor(anchorId)`。
+  - `OnlyOfficeEditor.vue`：在初始化时注入本地插件 `public/onlyoffice-plugins/risk-anchors/config.json`；向外暴露 `setAnchors/gotoAnchor/clearAnchors`。
+  - 插件 `risk-anchors/pluginCode.js`：接收 `risk.setAnchors` 创建书签（前缀 `risk_anchor_`），`risk.gotoAnchor` 跳书签，`risk.clearAnchors` 清理。已具备幂等重建与兜底逻辑。
+
+#### 代码复用检查（增强版）
+- 直接复用：
+  - `OnlyOfficeEditor.vue` 的插件注入与方法通道 → 直接调用
+  - `RiskCardPanel.vue` → 复用 `goto` 事件实现卡片点击定位
+  - 插件 `risk-anchors` → 已支持书签创建/定位/清理
+- 扩展复用：
+  - `ContractReview.vue` 替换模拟数据为真实接口 → 仅调整数据来源与锚点映射
+- 重构复用：
+  - 无需，现有结构清晰；后续可抽出 anchors 构建工具函数
+- 全新开发：
+  - 非必需；可新增可视化“书签状态/数量”提示与调试开关
+
+#### 任务清单（按优先顺序）
+- TASK001 现状核验与联通性自检（完成）
+  - 类型：重构/确认  版本：v1.0  状态：完成
+  - 描述：确认编辑器与插件同页、方法通道有效、卡片定位事件连通
+  - 验收：页面内可调用 `setAnchors/gotoAnchor/clearAnchors`，控制台无报错
+  - 注意：OnlyOffice 跨 frame 通讯偶发受限，已内置 localStorage 轮询兜底
+
+- TASK002 审核后自动落书签（完成）
+  - 类型：功能新增  版本：v1.0  状态：完成
+  - 描述：将审核结果 `evidence` 转为 anchors 并下发插件创建书签
+  - 验收：anchors 数量与 evidence 数量一致；再次审核可幂等重建
+  - 注意：优先使用 `paragraphIndex/startOffset/endOffset`，缺失再用 `text` 搜索
+
+- TASK003 风险卡片点击定位（完成）
+  - 类型：功能新增  版本：v1.0  状态：完成
+  - 描述：点击卡片按规则 `anchorId=pointId_0` 跳转对应书签
+  - 验收：点击卡片时光标跳至对应位置
+  - 注意：无 evidence 的项仅展示，不触发定位
+
+- TASK004 接入真实后端审核接口（开发中）
+  - 类型：功能新增  版本：v1.1  状态：开发中
+  - 描述：将 `startReview` 的模拟数据替换为 `riskApi.executeReview(profileId?, pointIds?, file)` 真实返回
+  - 验收：完成后 anchors 仍正确创建；显示 `traceId/elapsedMs/usage`
+  - 注意：后端需保证返回 `evidence` 含精确定位字段；若缺失则仅文本搜索
+
+- TASK005 文件切换与返回时的书签清理（计划中）
+  - 类型：功能新增  版本：v1.1  状态：计划中
+  - 描述：切换文件/返回上传视图时调用 `clearAnchors`
+  - 验收：文件切换后文档不残留旧书签
+  - 注意：考虑未就绪/插件异常的兜底日志与静默失败
+
+- TASK006 插件就绪状态与错误提示（计划中）
+  - 类型：功能新增  版本：v1.1  状态：计划中
+  - 描述：在编辑器 ready 后显示“插件已就绪/锚点已创建(N)”等提示
+  - 验收：`risk.anchorsSet`/`risk.cleared` 回传后有 UI 提示
+  - 注意：跨域受限时退化为轮询状态提示
+
+- TASK007 性能与稳健性（计划中）
+  - 类型：重构  版本：v1.1  状态：计划中
+  - 描述：大文档/大量 anchors 的分批创建与节流；异常书签名过滤
+  - 验收： anchors>200 时仍可在 2s 内完成创建（本地文档）
+  - 注意：限定书签前缀与安全字符，避免冲突
+
+- TASK008 自动化测试（计划中）
+  - 类型：测试  版本：v1.1  状态：计划中
+  - 描述：前端 e2e（Cypress）覆盖“审核→创建书签→定位→清理”主链路
+  - 验收：CI 通过；核心用例稳定
+
+#### 需要的接口/组件/界面变更
+- 接口（已有/复用）：
+  - `/onlyoffice/server/info`、`/onlyoffice/editor/config`（已用）
+  - `/review/upload`（已用）
+  - `/ai/review-lib/review/execute`（接入真实审核）
+- 组件（复用/轻改）：
+  - `OnlyOfficeEditor.vue`（已暴露 set/goto/clear，无需改结构）
+  - `RiskCardPanel.vue`（已发出 goto 事件）
+  - `ContractReview.vue`（替换模拟数据、添加清理与提示）
+- 界面：
+  - 编辑器工具条增加“清理书签”“书签数”提示（可选隐藏调试开关）
+
+#### 注意事项（落地细节）
+- 插件消息桥：优先 `postMessage`，失败使用 localStorage 轮询
+- 书签命名：统一前缀 `risk_anchor_` + 安全化 ID，避免重复与清理困难
+- 幂等：创建前清理已有同前缀书签；文件切换务必清理
+- 兼容：`paragraphIndex` 可能与实际段落存在偏移（被 OnlyOffice 重排时），需保留文本兜底
+
+### 2025-08-18 审核后“克隆并落盘书签”联动（启用编辑模式）
+
+#### 变更
+- 前端
+  - `frontend/src/views/contracts/ContractReview.vue`
+    - 将 `OnlyOfficeEditor` 的 `:can-edit` 改为 `true`
+    - 在 `startAuditInEditor()` 内调用 `/api/review/persist-anchors`，持久化书签到新文件，并将 `uploadedFileId` 切换为新文件
+- 后端（SDK）
+  - `sdk/pom.xml`：新增 `poi-ooxml`
+  - `sdk/src/main/java/.../service/impl/FileInfoServiceImpl.java`：新增 `registerClonedFile(Path, originalName)`
+  - `sdk/src/main/java/.../controller/ReviewController.java`：新增 `POST /api/review/persist-anchors`，克隆源文件并写入 `risk_anchor_*` 书签，返回新 `fileId`
+
+#### 验收
+- 在编辑器视图点击“开始审核”后：
+  - 返回新的 `fileId` 并自动切换
+  - 下载新文件，可在 Word“插入→书签”看到 `risk_anchor_*`
+
+#### 注意
+- 仍保留插件会话级书签到位作为回退（当后端持久化失败时）
+- 后续可将段内字符偏移写入书签范围（当前按段落头尾添加）
+
+
+### 2025-08-18 参考示例：DOCX 自动添加书签小工具
+
+#### 复用记录
+- 采用 Apache POI `poi-ooxml` 处理 DOCX，独立于主后端模块（仅放于 `cankao` 目录）。
+
+#### 变更与实现
+- 新增参考示例项目：`cankao/docx-bookmark-adder`
+  - `pom.xml`：引入 `poi-ooxml`、`commons-lang3`、`slf4j-simple`；配置 `maven-jar-plugin` 与 `maven-dependency-plugin`
+  - `src/main/java/com/zhaoxinms/cankao/BookmarkAdder.java`：遍历段落，按正则识别“第X章/第X条/第X节/附件/附录”等标题并插入 `BookmarkStart/End`，输出 `*-bookmarked.docx`
+
+#### 验收标准
+- 运行后目标 DOCX 中可在书签面板看到新增书签；输出文件命名为 `${原名}-bookmarked.docx` 且可打开。
+
+#### 注意事项
+- 仅支持 DOCX；若为 DOC 请先转换
+- 规则基于段落文本正则，若模板标题风格差异较大需调整正则
+
+#### 使用指南（PowerShell）
+```powershell
+cd D:\git\zhaoxin-contract-tool-set\cankao\docx-bookmark-adder
+mvn -DskipTests package
+# 默认处理内置路径：
+java -jar .\target\docx-bookmark-adder-1.0.0.jar
+# 或指定自定义 DOCX：
+java -jar .\target\docx-bookmark-adder-1.0.0.jar "C:\\Users\\91088\\Desktop\\1.0.肇新合同系统源码销售合同（二次）.docx"
+```
+
+#### 任务清单
+- TASK001 示例项目初始化（完成）
+  - 名称：创建 `cankao/docx-bookmark-adder` 与 Maven 配置
+  - 版本：v1.0  状态：完成
+- TASK002 书签添加实现（完成）
+  - 名称：按合同章节/条款标题自动加书签
+  - 版本：v1.0  状态：完成
+- TASK003 使用说明与沉淀（完成）
+  - 名称：补充 README 与使用指南
+  - 版本：v1.0  状态：完成
+- TASK004 精准范围书签（计划中）
+  - 名称：支持按字符偏移/文本索引范围创建书签
+  - 版本：v1.1  状态：计划中
