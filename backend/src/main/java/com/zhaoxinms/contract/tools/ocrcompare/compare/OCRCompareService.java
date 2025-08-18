@@ -301,19 +301,20 @@ public class OCRCompareService {
                         }
                         
                         // 如果文本跨多行，添加多个矩形
+                        // 如果文本跨多行，添加多个矩形（支持跨页）
                         List<TextPositionInfo> multiLinePositions = getMultiLinePositions(oldTextPositions, oldCurrentPosition, realText.length());
                         if (multiLinePositions.size() > 1) {
                             for (TextPositionInfo linePos : multiLinePositions) {
+                                // 计算该行所在的页面索引（0-based）
+                                int linePageIdx0 = Math.max(0, linePos.pageIndex - 1);
                                 newOldPos.addRect(
                                     linePos.x * scaleX,
                                     linePos.y * scaleY,
                                     linePos.width * scaleX,
-                                    linePos.height * scaleY
+                                    linePos.height * scaleY,
+                                    linePageIdx0
                                 );
                             }
-                        } else if (multiLinePositions.size() == 1) {
-                        	newOldPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
-                        	newOldPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
                         }
                         
                         result.setOldPosition(newOldPos);
@@ -400,19 +401,20 @@ public class OCRCompareService {
                         }
                         
                         // 如果文本跨多行，添加多个矩形
+                        // 如果文本跨多行，添加多个矩形（支持跨页）
                         List<TextPositionInfo> multiLinePositions = getMultiLinePositions(newTextPositions, newCurrentPosition, realText.length());
                         if (multiLinePositions.size() > 1) {
                             for (TextPositionInfo linePos : multiLinePositions) {
+                                // 计算该行所在的页面索引（0-based）
+                                int linePageIdx0 = Math.max(0, linePos.pageIndex - 1);
                                 newNewPos.addRect(
                                     linePos.x * scaleX,
                                     linePos.y * scaleY,
                                     linePos.width * scaleX,
-                                    linePos.height * scaleY
+                                    linePos.height * scaleY,
+                                    linePageIdx0
                                 );
                             }
-                        } else if (multiLinePositions.size() == 1) {
-                        	newNewPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
-                            newNewPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
                         }
                         
                         result.setNewPosition(newNewPos);
@@ -514,7 +516,7 @@ public class OCRCompareService {
     }
     
     /**
-     * 获取跨多行的文本位置信息
+     * 获取跨多行和跨页的文本位置信息
      */
     private List<TextPositionInfo> getMultiLinePositions(List<TextPositionInfo> positions, int startIndex, int length) {
         List<TextPositionInfo> result = new ArrayList<>();
@@ -527,24 +529,27 @@ public class OCRCompareService {
             return result;
         }
         
-        // 按行分组（使用y坐标作为行标识，允许小误差）
-        Map<Integer, List<TextPositionInfo>> lineGroups = new HashMap<>();
-        final float tolerance = 8.0f; // 8像素的容差，适应常见字体大小
+        // 按页面和行分组（同时考虑页面和Y坐标）
+        // 按页面和行分组（同时考虑页面和Y坐标）
+        Map<String, List<TextPositionInfo>> pageLineGroups = new HashMap<>();
+        final float tolerance = 8.0f; // 2像素的容差
         
         for (int i = startIndex; i <= endIndex; i++) {
             TextPositionInfo pos = positions.get(i);
             if (pos == null) continue;
             
-            // 使用四舍五入而不是截断，避免边界问题
-            int lineKey = Math.round(pos.y / tolerance);
-            if (!lineGroups.containsKey(lineKey)) {
-                lineGroups.put(lineKey, new ArrayList<>());
+            // 使用页面索引和y坐标组合作为分组键，确保不同页面的文字块分开处理
+            int lineKey = (int)(pos.y / tolerance);
+            String groupKey = pos.pageIndex + "_" + lineKey; // 页面_行标识
+            
+            if (!pageLineGroups.containsKey(groupKey)) {
+                pageLineGroups.put(groupKey, new ArrayList<>());
             }
-            lineGroups.get(lineKey).add(pos);
+            pageLineGroups.get(groupKey).add(pos);
         }
         
-        // 为每一行创建一个包围盒
-        for (List<TextPositionInfo> line : lineGroups.values()) {
+        // 为每个页面的每一行创建一个包围盒
+        for (List<TextPositionInfo> line : pageLineGroups.values()) {
             if (line.isEmpty()) continue;
             
             float minX = Float.MAX_VALUE;
@@ -1092,17 +1097,10 @@ public class OCRCompareService {
                                       List<CompareResult> results, String operationType) {
         try (PDDocument document = PDDocument.load(new File(sourcePdfPath))) {
             
-            // 根据操作类型过滤结果
-            List<CompareResult> filteredResults = new ArrayList<>();
-            for (CompareResult result : results) {
-                if (operationType.equals(result.getDiff().operation.toString())) {
-                    filteredResults.add(result);
-                }
-            }
+            log.info("开始处理PDF标注，共{}个比对结果", results.size());
             
-            // 为每个差异添加标注
-            for (CompareResult result : filteredResults) {
-                // 使用OCR结果中的真实位置信息进行标注
+            // 为每个比对结果添加标注
+            for (CompareResult result : results) {
                 addAnnotationToPDF(document, result, operationType);
             }
             
