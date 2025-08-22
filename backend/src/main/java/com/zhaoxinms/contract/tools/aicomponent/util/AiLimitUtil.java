@@ -39,7 +39,7 @@ public class AiLimitUtil {
             AtomicInteger userCount = limit.get(userId, false, AtomicInteger::new);
             if (userCount.incrementAndGet() > aiProperties.getUserLimitCount()) {
                 return false;
-            }
+            } 
         }
         // 所有请求限制
         AtomicInteger totalCount = limit.get(TOTAL_KEY, false, aiProperties.getTotalLimitTime().toMillis(), AtomicInteger::new);

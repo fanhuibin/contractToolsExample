@@ -79,6 +79,18 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/contracts/RuleSettings.vue'),
         meta: { title: '提取规则设置' }
       },
+      {
+        path: '/contract-compose',
+        name: 'ContractCompose',
+        component: () => import('@/views/compose/ContractCompose.vue'),
+        meta: { title: '合同合成' }
+      },
+      {
+        path: '/contract-compose/result/:fileId',
+        name: 'ContractComposeResult',
+        component: () => import('@/views/compose/ContractComposeResult.vue'),
+        meta: { title: '合同合成结果' }
+      },
       
     ]
   }

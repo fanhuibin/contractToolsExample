@@ -53,4 +53,14 @@ public interface FileInfoService {
      * @return 文件信息列表
      */
     List<FileInfo> getAllFiles();
+
+    /**
+     * 注册一个已存在于磁盘的文件到文件服务，返回文件信息
+     * @param originalName 原始文件名（用于下载展示）
+     * @param extension 文件扩展名（不含点）
+     * @param absolutePath 磁盘绝对路径
+     * @param fileSize 文件大小（字节）
+     * @return 文件信息（包含生成的ID）
+     */
+    FileInfo registerFile(String originalName, String extension, String absolutePath, long fileSize);
 } 

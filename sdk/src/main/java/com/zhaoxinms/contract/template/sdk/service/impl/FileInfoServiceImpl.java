@@ -352,6 +352,32 @@ public class FileInfoServiceImpl implements FileInfoService {
         return new ArrayList<>(fileInfoMap.values());
     }
 
+    @Override
+    public FileInfo registerFile(String originalName, String extension, String absolutePath, long fileSize) {
+        if (absolutePath == null || absolutePath.trim().isEmpty()) {
+            throw new IllegalArgumentException("absolutePath 不能为空");
+        }
+        try {
+            // 生成简单ID：当前时间戳
+            String id = String.valueOf(System.currentTimeMillis());
+            FileInfo info = new FileInfo();
+            info.setId(Long.parseLong(id));
+            info.setOriginalName(originalName != null ? originalName : new java.io.File(absolutePath).getName());
+            info.setFileName(info.getOriginalName());
+            info.setFileExtension(extension);
+            info.setFileSize(fileSize >= 0 ? fileSize : (new java.io.File(absolutePath).length()));
+            info.setStorePath(absolutePath);
+            info.setStatus(0);
+            info.setCreateTime(LocalDateTime.now());
+            info.setUpdateTime(LocalDateTime.now());
+            info.setOnlyofficeKey("reg_" + id);
+            fileInfoMap.put(id, info);
+            return info;
+        } catch (Exception e) {
+            throw new RuntimeException("注册文件失败: " + e.getMessage(), e);
+        }
+    }
+
     /**
      * 为指定文件ID生成OnlyOffice key，格式为：文件id + 分隔符 + 雪花id
      */
