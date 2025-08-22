@@ -101,25 +101,22 @@ zxcm:
     servlet:
       context-path: ""
 
-# OCR配置
+# OCR配置文件
+# 请根据您的环境修改以下配置
+
 ocr:
-  # Python脚本根目录 - compareScript目录的完整路径
-  python:
-    root: D:\git\zhaoxin-contract-tool-set\compareScript
-  
-  # OCR参数配置
+  service:
+    url: http://192.168.1.12:9898     # Python OCR服务地址
+    timeout: 30000                  # HTTP请求超时时间（毫秒）
   settings:
-    dpi: 150                # 图像DPI设置 (150-300)
-    minScore: 0.5           # 文字识别最低置信度 (0.0-1.0)
-    fastMode: false         # 快速模式 (牺牲精度换取速度)
-    debugMode: true         # 调试模式 (输出详细日志)
-    enableLogging: true     # 启用日志记录
-  
-  # 任务配置
+    dpi: 200                        # 图像DPI设置 (150-300)
+    minScore: 0.4                   # 文字识别最低置信度 (0.0-1.0)
   task:
-    timeout: 20                    # 任务超时时间（分钟）
-    resultRetentionDays: 7         # 结果保存天数
-    statusCheckInterval: 5         # 任务状态检查间隔（秒）
+    timeout: 20                     # 任务超时时间（分钟）
+    resultRetentionDays: 7          # 结果保存天数
+    statusCheckInterval: 5          # 任务状态检查间隔（秒）
+
+  # 注意：仅使用HTTP方式调用Python OCR服务，无需配置本地Python脚本路径。
 
 # 日志配置
 logging:

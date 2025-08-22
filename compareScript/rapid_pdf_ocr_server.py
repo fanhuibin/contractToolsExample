@@ -15,6 +15,10 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path
+try:
+    import yaml  # 用于读取 RapidOCR YAML 配置，若缺失仅影响模型信息日志
+except Exception:
+    yaml = None
 import argparse
 
 # 第三方库导入
@@ -30,30 +34,37 @@ except ImportError as e:
     print("请安装: pip install flask flask-cors requests PyMuPDF opencv-python numpy")
     sys.exit(1)
 
-# OCR相关导入 - 自动检测GPU/CPU版本
+# OCR相关导入（与GPU/CPU无关，由 onnxruntime providers 决定真正使用的执行提供者）
 def import_rapidocr():
-    """自动导入RapidOCR，优先尝试GPU版本，失败则使用CPU版本"""
-    # 首先尝试GPU版本
     try:
         from rapidocr_onnxruntime import RapidOCR
-        print("✓ 成功导入RapidOCR GPU版本")
-        return RapidOCR, "gpu"
+        print("✓ 成功导入 RapidOCR (onnxruntime)")
+        return RapidOCR
     except ImportError:
-        print("⚠ GPU版本导入失败，尝试CPU版本...")
-        
-        # 尝试CPU版本
-        try:
-            from rapidocr_onnxruntime import RapidOCR
-            print("✓ 成功导入RapidOCR CPU版本")
-            return RapidOCR, "cpu"
-        except ImportError:
-            print("✗ 无法导入RapidOCR，请安装依赖:")
-            print("  GPU版本: pip install rapidocr-onnxruntime-gpu")
-            print("  CPU版本: pip install rapidocr-onnxruntime")
-            return None, None
+        print("✗ 无法导入RapidOCR，请安装依赖:")
+        print("  GPU版本: pip install rapidocr-onnxruntime-gpu")
+        print("  CPU版本: pip install rapidocr-onnxruntime")
+        return None
+
+BASE_DIR = Path(__file__).resolve().parent
+YAML_CONFIG_PATH = BASE_DIR / 'config' / 'rapidocr_v5.yml'
+LOG_DIR = BASE_DIR / 'logs'
+SERVER_CONFIG_PATH = BASE_DIR / 'config' / 'ocr_server_config.yml'
+
+# 调试模式（默认关闭，可由配置文件或请求参数覆盖）
+SERVER_DEBUG = False
+SERVER_CFG: Dict[str, Any] = {}
+try:
+    if yaml and os.path.exists(str(SERVER_CONFIG_PATH)):
+        with open(SERVER_CONFIG_PATH, 'r', encoding='utf-8') as f:
+            SERVER_CFG = yaml.safe_load(f) or {}
+        SERVER_DEBUG = bool((SERVER_CFG.get('server') or {}).get('debug', False))
+except Exception:
+    # 保持默认值
+    pass
 
 # 导入OCR引擎
-RapidOCR, ocr_type = import_rapidocr()
+RapidOCR = import_rapidocr()
 if RapidOCR is None:
     sys.exit(1)
 
@@ -66,6 +77,14 @@ class Config:
     TASK_TIMEOUT = 3600  # 1小时超时
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     SUPPORTED_FORMATS = ['.pdf', '.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+
+def _resolve_path(p: Optional[str]) -> Optional[str]:
+    if not p:
+        return None
+    q = Path(p)
+    if not q.is_absolute():
+        q = BASE_DIR / q
+    return str(q)
 
 # 任务管理器
 class TaskManager:
@@ -143,19 +162,123 @@ class OCRProcessor:
         self.task_manager = task_manager
         self.ocr = None
         self.initialized = False
+    
+    def _build_rapidocr_params(self) -> Dict[str, Any]:
+        """构造 RapidOCR 的 params（不再依赖 YAML）。
+        优先从 `SERVER_CFG['rapidocr']` 读取；若缺失，使用合理默认：
+        - 引擎: onnxruntime
+        - 版本: PP-OCRv5
+        - 模型类型: server
+        - 语言: ch
+        """
+        rcfg = (SERVER_CFG.get('rapidocr') or {}) if isinstance(SERVER_CFG, dict) else {}
+        det_engine = rcfg.get('det_engine', 'onnxruntime')
+        rec_engine = rcfg.get('rec_engine', 'onnxruntime')
+        det_version = rcfg.get('det_version', 'PP-OCRv5')
+        rec_version = rcfg.get('rec_version', 'PP-OCRv5')
+        det_model_type = rcfg.get('det_model_type', 'server')
+        rec_model_type = rcfg.get('rec_model_type', 'server')
+        lang = rcfg.get('lang', 'ch')
+
+        # 尝试导入枚举，若失败则直接用字符串
+        EngineType = OCRVersion = ModelType = None
+        try:
+            from rapidocr_onnxruntime import EngineType as _E, OCRVersion as _V, ModelType as _M  # type: ignore
+            EngineType, OCRVersion, ModelType = _E, _V, _M
+        except Exception:
+            try:
+                from rapidocr import EngineType as _E, OCRVersion as _V, ModelType as _M  # type: ignore
+                EngineType, OCRVersion, ModelType = _E, _V, _M
+            except Exception:
+                EngineType = OCRVersion = ModelType = None
+
+        def _enum_or_str(enum_cls, name: str):
+            if enum_cls is None:
+                return name
+            try:
+                # 允许大小写/短横线差异
+                cleaned = name.replace('-', '').replace('_', '').upper()
+                for member in enum_cls:
+                    if member.name.replace('-', '').replace('_', '') == cleaned:
+                        return member
+                return enum_cls[name]  # 可能直接匹配
+            except Exception:
+                return name
+
+        params: Dict[str, Any] = {
+            'Det.engine_type': _enum_or_str(EngineType, det_engine),
+            'Rec.engine_type': _enum_or_str(EngineType, rec_engine),
+            'Det.ocr_version': _enum_or_str(OCRVersion, det_version),
+            'Rec.ocr_version': _enum_or_str(OCRVersion, rec_version),
+            'Det.model_type': _enum_or_str(ModelType, det_model_type),
+            'Rec.model_type': _enum_or_str(ModelType, rec_model_type),
+            'Det.lang_type': lang,
+            'Rec.lang_type': lang,
+        }
+        return params
         
     def initialize_ocr(self, use_gpu: bool = True, gpu_memory_limit: Optional[int] = None):
         """初始化OCR模型"""
         try:
-            # 根据实际导入的OCR类型来配置
-            if use_gpu and ocr_type == "gpu":
-                providers = ['CUDAExecutionProvider', 'ROCMExecutionProvider', 'CPUExecutionProvider']
-                logging.info("使用GPU版本的RapidOCR")
+            # 基于 onnxruntime 的可用 providers 决定
+            try:
+                import onnxruntime as ort
+                available = ort.get_available_providers()
+            except Exception:
+                available = []
+
+            selected_providers: List[str]
+            if use_gpu and ('CUDAExecutionProvider' in available or 'ROCMExecutionProvider' in available):
+                # 优先 CUDA，其次 ROCm，始终包含 CPU 兜底
+                selected_providers = []
+                if 'CUDAExecutionProvider' in available:
+                    selected_providers.append('CUDAExecutionProvider')
+                if 'ROCMExecutionProvider' in available:
+                    selected_providers.append('ROCMExecutionProvider')
+                selected_providers.append('CPUExecutionProvider')
+                logging.info("GPU 请求: True, 可用 providers: %s", available)
             else:
-                providers = ['CPUExecutionProvider']
-                logging.info("使用CPU版本的RapidOCR")
-            
-            self.ocr = RapidOCR(providers=providers)
+                selected_providers = ['CPUExecutionProvider']
+                logging.info("GPU 请求: %s, 未检测到可用 GPU providers(%s)，使用CPU", use_gpu, available)
+
+            # 优先：通过 params 显式指定；若不支持则回退 YAML/默认
+            ocr_inited = False
+            params = self._build_rapidocr_params()
+            try:
+                try:
+                    self.ocr = RapidOCR(params=params, providers=selected_providers)
+                except TypeError:
+                    self.ocr = RapidOCR(params=params)
+                ocr_inited = True
+            except Exception:
+                ocr_inited = False
+
+            if not ocr_inited:
+                # 回退：使用 YAML（如果存在），否则默认
+                yaml_path = str(YAML_CONFIG_PATH)
+                if os.path.exists(yaml_path):
+                    try:
+                        self.ocr = RapidOCR(config_path=yaml_path, providers=selected_providers)
+                        ocr_inited = True
+                    except TypeError:
+                        try:
+                            self.ocr = RapidOCR(config_path=yaml_path)
+                            ocr_inited = True
+                        except Exception:
+                            ocr_inited = False
+                if not ocr_inited:
+                    self.ocr = RapidOCR(providers=selected_providers)
+
+            # 启动时打印使用的模型/配置摘要（基于 params 或 YAML）
+            try:
+                logging.info(
+                    "使用 RapidOCR 参数: Det[engine=%s, lang=%s, type=%s, ver=%s], Rec[engine=%s, lang=%s, type=%s, ver=%s]; providers=%s",
+                    params.get('Det.engine_type'), params.get('Det.lang_type'), params.get('Det.model_type'), params.get('Det.ocr_version'),
+                    params.get('Rec.engine_type'), params.get('Rec.lang_type'), params.get('Rec.model_type'), params.get('Rec.ocr_version'),
+                    selected_providers
+                )
+            except Exception:
+                pass
             self.initialized = True
             logging.info("OCR模型初始化成功")
             
@@ -211,7 +334,7 @@ class OCRProcessor:
     def _process_pdf(self, pdf_path: str, task_id: str, options: Dict) -> Optional[str]:
         """处理PDF文件"""
         try:
-            result_dir = os.path.join(Config.RESULTS_FOLDER, task_id)
+            result_dir = os.path.join(_resolve_path(Config.RESULTS_FOLDER), task_id)
             os.makedirs(result_dir, exist_ok=True)
             
             doc = fitz.open(pdf_path)
@@ -222,7 +345,7 @@ class OCRProcessor:
             all_pages_text = []
             all_pages_data = []
             
-            dpi = options.get('dpi', 150)
+            dpi = options.get('dpi', 300)
             min_score = options.get('min_score', 0.5)
             ignore_seals = options.get('ignore_seals', True)
             
@@ -238,9 +361,22 @@ class OCRProcessor:
                 page = doc.load_page(page_number)
                 img_bgr = self._render_page_to_bgr_image(page, dpi)
                 
-                # 如果启用了忽略印章，则预处理图像去除红色印章
+                # 去印章
                 if ignore_seals:
                     img_bgr = self._remove_red_seals(img_bgr)
+                # 预处理（默认关闭，HTTP 显式开启才执行）
+                if options.get('preprocess', False):
+                    img_bgr = self._preprocess_image(img_bgr, options)
+                
+                # 如启用调试，则保存送入OCR的最终图片（以及后续绘制框的底图）
+                if options.get('debug', False):
+                    try:
+                        debug_dir = os.path.join(result_dir, 'debug')
+                        os.makedirs(debug_dir, exist_ok=True)
+                        debug_img_path = os.path.join(debug_dir, f"page_{current_page:03d}_final.png")
+                        cv2.imwrite(debug_img_path, img_bgr)
+                    except Exception as e:
+                        logging.warning(f"保存调试图片失败(第{current_page}页): {e}")
                 
                 try:
                     result, _ = self.ocr(img_bgr)
@@ -269,6 +405,17 @@ class OCRProcessor:
                                 'chars': self._split_quad_by_equal_chars(box, text)
                             })
                 
+                # 如启用调试，可视化检测框
+                if options.get('debug', False):
+                    try:
+                        debug_dir = os.path.join(result_dir, 'debug')
+                        os.makedirs(debug_dir, exist_ok=True)
+                        boxed = self._annotate_with_boxes(img_bgr, result)
+                        boxed_path = os.path.join(debug_dir, f"page_{current_page:03d}_boxed.png")
+                        cv2.imwrite(boxed_path, boxed)
+                    except Exception as e:
+                        logging.warning(f"保存检测框图片失败(第{current_page}页): {e}")
+
                 all_pages_text.append(page_lines)
                 all_pages_data.append({
                     'page_index': current_page,
@@ -316,9 +463,22 @@ class OCRProcessor:
             min_score = options.get('min_score', 0.5)
             ignore_seals = options.get('ignore_seals', True)
             
-            # 如果启用了忽略印章，则预处理图像去除红色印章
+            # 去印章
             if ignore_seals:
                 img_bgr = self._remove_red_seals(img_bgr)
+            # 预处理（默认关闭，HTTP 显式开启才执行）
+            if options.get('preprocess', False):
+                img_bgr = self._preprocess_image(img_bgr, options)
+            
+            # 如启用调试，则保存送入OCR的最终图片及检测框可视化
+            if options.get('debug', False):
+                try:
+                    debug_dir = os.path.join(result_dir, 'debug')
+                    os.makedirs(debug_dir, exist_ok=True)
+                    debug_img_path = os.path.join(debug_dir, 'final.png')
+                    cv2.imwrite(debug_img_path, img_bgr)
+                except Exception as e:
+                    logging.warning(f"保存调试图片失败(图片): {e}")
             
             try:
                 result, _ = self.ocr(img_bgr)
@@ -347,6 +507,17 @@ class OCRProcessor:
                             'chars': self._split_quad_by_equal_chars(box, text)
                         })
             
+            # 可视化检测框（debug）
+            if options.get('debug', False):
+                try:
+                    debug_dir = os.path.join(result_dir, 'debug')
+                    os.makedirs(debug_dir, exist_ok=True)
+                    boxed = self._annotate_with_boxes(img_bgr, result)
+                    boxed_path = os.path.join(debug_dir, 'boxed.png')
+                    cv2.imwrite(boxed_path, boxed)
+                except Exception as e:
+                    logging.warning(f"保存检测框图片失败(图片): {e}")
+
             self._save_text_results([page_lines], result_dir)
             
             json_result = {
@@ -417,6 +588,65 @@ class OCRProcessor:
         except Exception as e:
             logging.warning(f"去除红色印章失败: {e}，使用原图像")
             return img_bgr
+
+    def _preprocess_image(self, img_bgr: np.ndarray, options: Dict) -> np.ndarray:
+        """通用预处理：灰度 -> 可选CLAHE -> 二值化 -> 形态学去噪 -> 平滑 -> 白底黑字 -> 返回BGR"""
+        try:
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+
+            # 对比度受限自适应直方图均衡（可选）
+            if options.get('clahe', False):
+                try:
+                    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                    gray = clahe.apply(gray)
+                except Exception:
+                    pass
+
+            # 二值化
+            thr_img = gray
+            if options.get('binarize', True):
+                method = str(options.get('binarize_method', 'adaptive')).lower()
+                if method == 'adaptive':
+                    # 自适应阈值适用于光照不均
+                    block = 25
+                    if block % 2 == 0:
+                        block += 1
+                    thr_img = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                                    cv2.THRESH_BINARY, blockSize=block, C=15)
+                else:
+                    # Otsu
+                    blur = cv2.GaussianBlur(gray, (3, 3), 0)
+                    _, thr_img = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+            # 形态学去噪
+            if options.get('denoise_morph', True):
+                k = int(options.get('denoise_ksize', 3) or 3)
+                k = max(1, k)
+                if k % 2 == 0:
+                    k += 1
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (k, k))
+                thr_img = cv2.morphologyEx(thr_img, cv2.MORPH_OPEN, kernel, iterations=1)
+
+            # 平滑
+            smooth = str(options.get('smooth', 'bilateral')).lower()
+            if smooth == 'bilateral':
+                thr_img = cv2.bilateralFilter(thr_img, d=5, sigmaColor=75, sigmaSpace=75)
+            elif smooth == 'gaussian':
+                thr_img = cv2.GaussianBlur(thr_img, (3, 3), 0)
+
+            # 确保白底黑字
+            try:
+                white = int((thr_img == 255).sum())
+                black = int((thr_img == 0).sum())
+                if white < black:
+                    thr_img = cv2.bitwise_not(thr_img)
+            except Exception:
+                pass
+
+            return cv2.cvtColor(thr_img, cv2.COLOR_GRAY2BGR)
+        except Exception as e:
+            logging.warning(f"预处理失败，使用原图像: {e}")
+            return img_bgr
     
     def _split_quad_by_equal_chars(self, box, text: str, skip_space: bool = True):
         """分割四边形为字符级坐标"""
@@ -455,6 +685,88 @@ class OCRProcessor:
         
         return out
     
+    def _annotate_with_boxes(self, img_bgr: np.ndarray, result_list: Any) -> np.ndarray:
+        """在图像上绘制检测框，并标注文本与置信度。
+        优先用 PIL（可更好地显示中文）；若无 PIL，则退化为仅绘制框与分数（cv2）。
+        """
+        boxed = img_bgr.copy()
+        if not isinstance(result_list, list):
+            return boxed
+        # 预处理结构
+        boxes: List[Dict[str, Any]] = []
+        for item in result_list:
+            if not isinstance(item, list) or len(item) < 3:
+                continue
+            box = item[0]
+            text = str(item[1])
+            try:
+                score = float(item[2])
+            except Exception:
+                score = 0.0
+            boxes.append({'box': box, 'text': text, 'score': score})
+
+        if not boxes:
+            return boxed
+
+        # 尝试 PIL
+        use_pil = False
+        try:
+            from PIL import Image, ImageDraw, ImageFont  # type: ignore
+            use_pil = True
+        except Exception:
+            use_pil = False
+
+        if use_pil:
+            try:
+                img_rgb = cv2.cvtColor(boxed, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(img_rgb)
+                draw = ImageDraw.Draw(pil_img)
+                try:
+                    font = ImageFont.truetype("arial.ttf", 16)
+                except Exception:
+                    try:
+                        font = ImageFont.truetype("simhei.ttf", 16)
+                    except Exception:
+                        font = ImageFont.load_default()
+
+                for b in boxes:
+                    pts = np.array(b['box'][:4], dtype=np.int32)
+                    # 多边形框
+                    draw.line([tuple(pts[0]), tuple(pts[1])], fill=(0, 255, 0), width=2)
+                    draw.line([tuple(pts[1]), tuple(pts[2])], fill=(0, 255, 0), width=2)
+                    draw.line([tuple(pts[2]), tuple(pts[3])], fill=(0, 255, 0), width=2)
+                    draw.line([tuple(pts[3]), tuple(pts[0])], fill=(0, 255, 0), width=2)
+                    # 标签
+                    label = f"{b['score']:.2f} {b['text'][:30]}"
+                    x = int(min(p[0] for p in pts))
+                    y = int(min(p[1] for p in pts))
+                    # 背景框
+                    try:
+                        bbox = draw.textbbox((x, y), label, font=font)
+                        draw.rectangle(bbox, fill=(0, 0, 0, 127))
+                    except Exception:
+                        pass
+                    draw.text((x, y), label, fill=(255, 255, 0), font=font)
+
+                boxed = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                return boxed
+            except Exception:
+                # 回退到 cv2
+                pass
+
+        # OpenCV 回退：绘制框 + 分数
+        for b in boxes:
+            try:
+                pts = np.array(b['box'][:4], dtype=np.int32)
+                cv2.polylines(boxed, [pts], isClosed=True, color=(0, 255, 0), thickness=2)
+                x = int(np.min(pts[:, 0]))
+                y = int(np.min(pts[:, 1]))
+                label = f"{b['score']:.2f}"
+                cv2.putText(boxed, label, (x, max(y - 3, 0)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+            except Exception:
+                continue
+        return boxed
+    
     def _save_text_results(self, all_pages_text: List[List[str]], result_dir: str):
         """保存文本结果"""
         for page_index, lines in enumerate(all_pages_text, start=1):
@@ -491,6 +803,11 @@ class FileDownloader:
 # Flask应用
 app = Flask(__name__)
 CORS(app)
+# 允许 /api/xxx 与 /api/xxx/ 都能命中路由，避免因反代或客户端多/少斜杠导致的 404
+try:
+    app.url_map.strict_slashes = False
+except Exception:
+    pass
 
 # 全局对象
 task_manager = TaskManager()
@@ -500,13 +817,14 @@ file_downloader = FileDownloader()
 # 创建必要的目录
 os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(Config.RESULTS_FOLDER, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
 
-# 配置日志
+# 配置日志（固定到文件 + 控制台，INFO 级别，可按需调整）
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('ocr_server.log', encoding='utf-8'),
+        logging.FileHandler(str(LOG_DIR / 'ocr_server.log'), encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -531,7 +849,34 @@ def submit_ocr_task():
         file_source = data.get('file_source')
         file_path = data.get('file_path')
         file_type = data.get('file_type', 'pdf')
-        options = data.get('options', {})
+        # 请求 options（如未提供，采用默认值）
+        req_options = data.get('options', {}) or {}
+
+        # 以请求参数优先，其次配置文件，最后内置默认值
+        cfg_ocr = (SERVER_CFG.get('ocr') or {}) if isinstance(SERVER_CFG, dict) else {}
+        def _opt(key, default_val):
+            v_req = req_options.get(key)
+            if v_req is not None:
+                return v_req
+            v_cfg = cfg_ocr.get(key)
+            return v_cfg if v_cfg is not None else default_val
+
+        options = {
+            'dpi': int(_opt('dpi', 300)),
+            'min_score': float(_opt('min_score', 0.35)),
+            'ignore_seals': bool(_opt('ignore_seals', False)),
+            # 是否启用预处理总开关（默认关闭，避免误伤识别）
+            'preprocess': bool(_opt('preprocess', False)),
+            # 预处理增强（如未传入，采用较保守的默认）
+            'binarize': bool(_opt('binarize', False)),
+            'binarize_method': str(_opt('binarize_method', 'adaptive')),  # 'adaptive' | 'otsu'
+            'denoise_morph': bool(_opt('denoise_morph', False)),
+            'denoise_ksize': int(_opt('denoise_ksize', 3)),
+            'smooth': str(_opt('smooth', 'gaussian')),  # 'none' | 'bilateral' | 'gaussian'
+            'clahe': bool(_opt('clahe', False)),
+            # 调试：仅在调试模式下保存送入OCR的最终图片
+            'debug': bool(req_options.get('debug', SERVER_DEBUG))
+        }
         
         if not file_source or not file_path:
             return jsonify({'error': '缺少必要参数: file_source, file_path'}), 400
@@ -551,7 +896,7 @@ def submit_ocr_task():
                 return jsonify({'error': '无效的HTTP URL'}), 400
             
             file_name = os.path.basename(file_path) or f"download_{int(time.time())}.pdf"
-            local_file_path = os.path.join(Config.UPLOAD_FOLDER, file_name)
+            local_file_path = os.path.join(_resolve_path(Config.UPLOAD_FOLDER), file_name)
             
             if not file_downloader.download_file(file_path, local_file_path):
                 return jsonify({'error': '文件下载失败'}), 500
@@ -804,4 +1149,12 @@ if __name__ == '__main__':
     
     # 启动Flask服务
     logging.info(f"启动RapidOCR HTTP服务，地址: {args.host}:{args.port}")
+    # 启动时打印所有已注册路由，便于排查 404
+    try:
+        routes = []
+        for rule in app.url_map.iter_rules():
+            routes.append(f"{','.join(sorted(rule.methods))} {rule.rule}")
+        logging.info("已注册路由: %s", "; ".join(sorted(routes)))
+    except Exception:
+        pass
     app.run(host=args.host, port=args.port, debug=False, threaded=True)

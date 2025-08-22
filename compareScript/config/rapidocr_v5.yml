@@ -1,0 +1,54 @@
+# RapidOCR YAML 配置（示例：PP-OCRv5 中文 + ONNXRuntime）
+# 用法：
+#   from rapidocr_onnxruntime import RapidOCR
+#   ocr = RapidOCR(config_path='compareScript/config/rapidocr_v5.yml')
+# 参考参数说明：https://rapidai.github.io/RapidOCRDocs/main/install_usage/rapidocr/parameters/
+
+Det:
+  # 引擎类型（可选）：'onnxruntime' | 'openvino' | 'paddle' | 'torch'
+  engine_type: 'onnxruntime'
+  # 语言类型（常用示例）：'ch'（中文）, 'en'（英文）, 'korean', 'japan', 'latin' 等
+  lang_type: 'ch'
+  # 模型类型（可选）：'mobile'（轻量） | 'server'（精度更高）
+  model_type: 'server'
+  # OCR 版本（可选）：'PP-OCRv4' | 'PP-OCRv5'
+  ocr_version: 'PP-OCRv1'
+  # 任务类型（固定）：'det'
+  task_type: 'det'
+  # 自定义模型（可选）
+  model_path: null
+  model_dir: null
+  # 预处理
+  limit_side_len: 736
+  limit_type: 'min'
+  # 归一化
+  std: [0.5, 0.5, 0.5]
+  mean: [0.5, 0.5, 0.5]
+  # 后处理阈值
+  thresh: 0.3
+  box_thresh: 0.5
+  max_candidates: 5
+  unclip_ratio: 1.6
+  use_dilation: true
+  # 分数模式：'fast'|'slow'
+  score_mode: 'fast'
+
+Rec:
+  # 同 Det
+  engine_type: 'onnxruntime'
+  lang_type: 'ch'
+  model_type: 'server'
+  ocr_version: 'PP-OCRv1'
+  task_type: 'rec'
+  # 自定义模型（可选）
+  model_path: null
+  model_dir: null
+  # 字典（自定义模型/字典时指定本地路径）
+  rec_char_dict_path: 'models/ppocr_v5/dict/ppocr_keys_v1.txt'
+
+Cls:
+  # 方向分类模块（可选），用于校正图片中旋转文字
+  engine_type: 'onnxruntime'
+  task_type: 'cls'
+  model_path: null
+  model_dir: null

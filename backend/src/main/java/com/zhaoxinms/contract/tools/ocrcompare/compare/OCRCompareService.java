@@ -315,7 +315,10 @@ public class OCRCompareService {
                                     linePageIdx0
                                 );
                             }
-                        }
+                        } else if (multiLinePositions.size() == 1) {
+                        	newOldPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
+                        	newOldPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
+	                    }
                         
                         result.setOldPosition(newOldPos);
                         assignedOld++;
@@ -398,7 +401,7 @@ public class OCRCompareService {
                         if (posInfo.width > 0 && posInfo.height > 0) {
                             newNewPos.setRectWidth(posInfo.width * scaleX);
                             newNewPos.setRectHeight(posInfo.height * scaleY);
-                        }
+                        } 
                         
                         // 如果文本跨多行，添加多个矩形
                         // 如果文本跨多行，添加多个矩形（支持跨页）
@@ -415,6 +418,9 @@ public class OCRCompareService {
                                     linePageIdx0
                                 );
                             }
+                        } else if (multiLinePositions.size() == 1) {
+                        	 newNewPos.setRectWidth(multiLinePositions.get(0).width * scaleX);
+                             newNewPos.setRectHeight(multiLinePositions.get(0).height * scaleY);
                         }
                         
                         result.setNewPosition(newNewPos);
@@ -532,7 +538,7 @@ public class OCRCompareService {
         // 按页面和行分组（同时考虑页面和Y坐标）
         // 按页面和行分组（同时考虑页面和Y坐标）
         Map<String, List<TextPositionInfo>> pageLineGroups = new HashMap<>();
-        final float tolerance = 8.0f; // 2像素的容差
+        final float tolerance = 8.0f; // 8像素的容差
         
         for (int i = startIndex; i <= endIndex; i++) {
             TextPositionInfo pos = positions.get(i);
@@ -1119,92 +1125,109 @@ public class OCRCompareService {
      */
     private void addAnnotationToPDF(PDDocument document, CompareResult result, String operationType) {
         try {
-            // 按操作选择位置
+        	//如果类型不匹配不处理。
+        	if(!result.getDiff().operation.toString().equals(operationType)) {
+        		return;
+        	}
+        	
+        	// 按操作选择位置
             Position pos = "DELETE".equals(operationType) ? result.getOldPosition() : result.getNewPosition();
             if (pos == null) return;
-            int pageIdx = Math.max(0, pos.getPage()); // Position.page 为0-based
-            if (pageIdx >= document.getNumberOfPages()) pageIdx = document.getNumberOfPages() - 1;
-            if (pageIdx < 0) return;
+            
+            // 设置内容
+            String content = operationType.equals("DELETE") ? "删除：" : "新增：";
+            content += result.getDiff().text;
+            
+            // 设置颜色
+            float[] color;
+            if ("DELETE".equals(operationType)) {
+                color = new float[]{1.0f, 0.0f, 0.0f}; // 红色
+            } else {
+                color = new float[]{0.0f, 1.0f, 0.0f}; // 绿色
+            }
+            PDColor hl = new PDColor(color, PDDeviceRGB.INSTANCE);
 
-            PDPage page = document.getPage(pageIdx);
-                
-                // 创建文本标注
-                PDAnnotationTextMarkup markup = new PDAnnotationTextMarkup(
-                    PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT);
-                
-                // 设置颜色
-                float[] color;
-                if ("DELETE".equals(operationType)) {
-                    color = new float[]{1.0f, 0.0f, 0.0f}; // 红色
-                } else {
-                    color = new float[]{0.0f, 1.0f, 0.0f}; // 绿色
-                }
-                
-                PDColor hl = new PDColor(color, PDDeviceRGB.INSTANCE);
-                markup.setColor(hl);
-                
-                // 根据 Position 构建矩形（将 pos.y 视为“顶部Y”，若有 rectWidth/rectHeight 则精确使用）
-                float px = Math.max(0, pos.getX());
-                float yTop = Math.max(0, pos.getY()); // 顶部Y（自上而下）
-                float pageH = page.getMediaBox().getHeight();
-                float rectW = pos.getRectWidth() > 0 ? pos.getRectWidth() : 140f;
-                float rectH = pos.getRectHeight() > 0 ? pos.getRectHeight() : 22f;
-
-                // 如果有多段矩形，依次绘制多条标注；否则绘制单条
-                java.util.List<float[]> rects = pos.getRects();
-                if (rects != null && !rects.isEmpty()) {
-                    // 设置内容
-                    String content = operationType.equals("DELETE") ? "删除：" : "新增：";
-                    content += result.getDiff().text;
-                    // 添加到页面
+            // 如果有多段矩形，为每个矩形在其对应的页面上添加标注
+            java.util.List<float[]> rects = pos.getRects();
+            java.util.List<Integer> rectPages = pos.getRectPages();
+            
+            if (rects != null && !rects.isEmpty() && rectPages != null && !rectPages.isEmpty()) {
+                // 使用rectPages中存储的页面索引，为每个矩形在对应页面添加标注
+                for (int i = 0; i < rects.size() && i < rectPages.size(); i++) {
+                    float[] r = rects.get(i);
+                    int actualPageIdx = rectPages.get(i); // 使用rectPages中存储的页面索引
+                    
+                    if (actualPageIdx < 0 || actualPageIdx >= document.getNumberOfPages()) {
+                        log.warn("页面索引超出范围: {}, 总页数: {}", actualPageIdx, document.getNumberOfPages());
+                        continue;
+                    }
+                    
+                    PDPage page = document.getPage(actualPageIdx);
+                    float pageH = page.getMediaBox().getHeight();
+                    
+                    float rx = r[0], ryTop = r[1], rw = r[2], rh = r[3];
+                    PDRectangle pr = new PDRectangle();
+                    pr.setLowerLeftX(rx);
+                    pr.setLowerLeftY(Math.max(0, pageH - (ryTop + rh)));
+                    pr.setUpperRightX(rx + rw);
+                    pr.setUpperRightY(Math.max(0, Math.min(pageH, pageH - ryTop)));
+                    
+                    PDAnnotationTextMarkup m = new PDAnnotationTextMarkup(PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT);
+                    m.setColor(hl);
+                    m.setRectangle(pr);
+                    float[] qu = new float[]{pr.getLowerLeftX(), pr.getUpperRightY(), pr.getUpperRightX(), pr.getUpperRightY(), pr.getLowerLeftX(), pr.getLowerLeftY(), pr.getUpperRightX(), pr.getLowerLeftY()};
+                    m.setQuadPoints(qu);
+                    m.setSubtype("Highlight");
+                    m.setModifiedDate(java.util.Calendar.getInstance().getTime().toString());
+                    m.setContents(content);
+                    
                     List<PDAnnotation> annotations = page.getAnnotations();
                     if (annotations == null) {
                         annotations = new ArrayList<>();
                     }
-                    for (float[] r : rects) {
-                        float rx = r[0], ryTop = r[1], rw = r[2], rh = r[3];
-                        PDRectangle pr = new PDRectangle();
-                        pr.setLowerLeftX(rx);
-                        pr.setLowerLeftY(Math.max(0, pageH - (ryTop + rh)));
-                        pr.setUpperRightX(rx + rw);
-                        pr.setUpperRightY(Math.max(0, Math.min(pageH, pageH - ryTop)));
-                        PDAnnotationTextMarkup m = new PDAnnotationTextMarkup(PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT);
-                        m.setColor(hl);
-                        m.setRectangle(pr);
-                        float[] qu = new float[]{pr.getLowerLeftX(), pr.getUpperRightY(), pr.getUpperRightX(), pr.getUpperRightY(), pr.getLowerLeftX(), pr.getLowerLeftY(), pr.getUpperRightX(), pr.getLowerLeftY()};
-                        m.setQuadPoints(qu);
-                        m.setSubtype("Highlight");
-                        m.setModifiedDate(java.util.Calendar.getInstance().getTime().toString());
-                        m.setContents(content);
-                        annotations.add(m);
-                    }
+                    annotations.add(m);
                     page.setAnnotations(annotations);
-                    return;
-                } else {
-                    PDRectangle position = new PDRectangle();
-                    position.setLowerLeftX(px);
-                    position.setLowerLeftY(Math.max(0, pageH - (yTop + rectH)));
-                    position.setUpperRightX(px + rectW);
-                    position.setUpperRightY(Math.max(0, Math.min(pageH, pageH - yTop)));
-                    markup.setRectangle(position);
-                    // 设置 QuadPoints 与矩形一致
-                    float[] quads = new float[8];
-                    quads[0] = position.getLowerLeftX();
-                    quads[1] = position.getUpperRightY();
-                    quads[2] = position.getUpperRightX();
-                    quads[3] = position.getUpperRightY();
-                    quads[4] = position.getLowerLeftX();
-                    quads[5] = position.getLowerLeftY();
-                    quads[6] = position.getUpperRightX();
-                    quads[7] = position.getLowerLeftY();
-                    markup.setQuadPoints(quads);
                 }
+            } else {
+                // 单个矩形的情况，使用Position中的页面索引
+                int pageIdx = Math.max(0, pos.getPage()); // Position.page 为0-based
+                if (pageIdx >= document.getNumberOfPages()) pageIdx = document.getNumberOfPages() - 1;
+                if (pageIdx < 0) return;
+
+                PDPage page = document.getPage(pageIdx);
+                float pageH = page.getMediaBox().getHeight();
+                
+                // 创建文本标注
+                PDAnnotationTextMarkup markup = new PDAnnotationTextMarkup(
+                    PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT);
+                markup.setColor(hl);
+                
+                // 根据 Position 构建矩形（将 pos.y 视为"顶部Y"，若有 rectWidth/rectHeight 则精确使用）
+                float px = Math.max(0, pos.getX());
+                float yTop = Math.max(0, pos.getY()); // 顶部Y（自上而下）
+                float rectW = pos.getRectWidth() > 0 ? pos.getRectWidth() : 140f;
+                float rectH = pos.getRectHeight() > 0 ? pos.getRectHeight() : 22f;
+
+                PDRectangle position = new PDRectangle();
+                position.setLowerLeftX(px);
+                position.setLowerLeftY(Math.max(0, pageH - (yTop + rectH)));
+                position.setUpperRightX(px + rectW);
+                position.setUpperRightY(Math.max(0, Math.min(pageH, pageH - yTop)));
+                markup.setRectangle(position);
+                
+                // 设置 QuadPoints 与矩形一致
+                float[] quads = new float[8];
+                quads[0] = position.getLowerLeftX();
+                quads[1] = position.getUpperRightY();
+                quads[2] = position.getUpperRightX();
+                quads[3] = position.getUpperRightY();
+                quads[4] = position.getLowerLeftX();
+                quads[5] = position.getLowerLeftY();
+                quads[6] = position.getUpperRightX();
+                quads[7] = position.getLowerLeftY();
+                markup.setQuadPoints(quads);
                 markup.setSubtype("Highlight");
                 markup.setModifiedDate(java.util.Calendar.getInstance().getTime().toString());
-                
-                // 设置内容
-                String content = operationType.equals("DELETE") ? "删除：" : "新增：";
-                content += result.getDiff().text;
                 markup.setContents(content);
                 
                 // 添加到页面
@@ -1214,6 +1237,7 @@ public class OCRCompareService {
                 }
                 annotations.add(markup);
                 page.setAnnotations(annotations);
+            }
             
         } catch (Exception e) {
             log.warn("添加PDF标注失败", e);

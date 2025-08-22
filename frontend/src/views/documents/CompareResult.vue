@@ -112,7 +112,8 @@ const markerStyle = computed(() => ({ top: `calc(${markerRatio * 100}% + ${marke
 const alignCorrectionPx = 24
 
 // 注意：这里使用 encodeURI 而不是 encodeURIComponent，以避免将 '?' 编码为 %3F 导致 404
-const viewerUrl = (fileUrl: string) => `/pdfviewer/web/viewer.html?file=${encodeURI(fileUrl)}`
+// 强制从第一页开始显示，避免 PDF.js 恢复历史滚动位置
+const viewerUrl = (fileUrl: string) => `/pdfviewer/web/viewer.html?file=${encodeURI(fileUrl)}#page=1`
 
 const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
   try {
@@ -128,6 +129,17 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
       hasPDFApp: !!w?.PDFViewerApplication,
     })
     frameWin[side] = frame?.contentWindow
+    // 再次兜底：在加载后强制回到第一页顶部，防止历史恢复
+    setTimeout(() => {
+      try {
+        const app = (w && (w as any).PDFViewerApplication) as any
+        if (app && app.pdfViewer) {
+          app.pdfViewer.currentPageNumber = 1
+          const vc = w.document.getElementById('viewerContainer') as HTMLElement | null
+          if (vc) vc.scrollTop = 0
+        }
+      } catch {}
+    }, 100)
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn(`[viewer:${side}] onload inspect failed`, e)
