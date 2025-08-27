@@ -45,6 +45,10 @@
           <el-icon><Document /></el-icon>
           <span>合同合成</span>
         </el-menu-item>
+        <el-menu-item index="/templates">
+          <el-icon><Document /></el-icon>
+          <span>模板管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 

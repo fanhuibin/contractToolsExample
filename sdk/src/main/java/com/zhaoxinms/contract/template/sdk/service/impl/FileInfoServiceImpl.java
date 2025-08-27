@@ -4,17 +4,18 @@ import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.common.exception.FileOperationException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.zhaoxinms.contract.template.sdk.entity.FileInfoRecord;
+import com.zhaoxinms.contract.template.sdk.mapper.FileInfoRecordMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Paths;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,179 +33,39 @@ public class FileInfoServiceImpl implements FileInfoService {
     @Value("${zxcm.file.upload.root-path:./uploads}")
     private String uploadRootPath;
 
-    // 模拟数据存储（实际项目中应该使用数据库）
-    private final ConcurrentHashMap<String, FileInfo> fileInfoMap = new ConcurrentHashMap<>();
+    @Autowired(required = false)
+    private FileInfoRecordMapper fileInfoRecordMapper;
 
     @PostConstruct
     public void init() {
-        // 获取uploads目录的绝对路径
+        // 仅确保目录存在，不再写入模拟数据
         String absUploadPath = Paths.get(uploadRootPath).toAbsolutePath().toString();
         try {
             java.io.File uploadDir = new java.io.File(absUploadPath);
-            if (!uploadDir.exists()) {
-                uploadDir.mkdirs();
-            }
+            if (!uploadDir.exists()) uploadDir.mkdirs();
         } catch (Exception ignore) {}
-        // 文件1
-        FileInfo fileInfo1 = new FileInfo();
-        fileInfo1.setId(1L);
-        fileInfo1.setOriginalName("房屋建筑和市政基础设施项目工程建设全过程咨询服务合同示范文本.docx");
-        fileInfo1.setFileName("房屋建筑和市政基础设施项目工程建设全过程咨询服务合同示范文本.docx");
-        fileInfo1.setFileExtension("docx");
-        fileInfo1.setFileSize(1024L * 1024L); // 1MB
-        fileInfo1.setStorePath(absUploadPath + "/房屋建筑和市政基础设施项目工程建设全过程咨询服务合同示范文本.docx");
-        fileInfo1.setStatus(0);
-        fileInfo1.setCreateTime(LocalDateTime.now());
-        fileInfo1.setUpdateTime(LocalDateTime.now());
-        fileInfo1.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-        fileInfoMap.put("1", fileInfo1);
-        
-        // 文件2
-        FileInfo fileInfo2 = new FileInfo();
-        fileInfo2.setId(2L);
-        fileInfo2.setOriginalName("test_document.docx");
-        fileInfo2.setFileName("test_document.docx");
-        fileInfo2.setFileExtension("docx");
-        fileInfo2.setFileSize(512L * 1024L);
-        fileInfo2.setStorePath(absUploadPath + "/test_document.docx");
-        fileInfo2.setStatus(0);
-        fileInfo2.setCreateTime(LocalDateTime.now());
-        fileInfo2.setUpdateTime(LocalDateTime.now());
-        fileInfo2.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-        fileInfoMap.put("2", fileInfo2);
-        
-        // 文件3
-        FileInfo fileInfo3 = new FileInfo();
-        fileInfo3.setId(3L);
-        fileInfo3.setOriginalName("test_document1.docx");
-        fileInfo3.setFileName("test_document1.docx");
-        fileInfo3.setFileExtension("docx");
-        fileInfo3.setFileSize(256L * 1024L);
-        fileInfo3.setStorePath(absUploadPath + "/test_document1.docx");
-        fileInfo3.setStatus(0);
-        fileInfo3.setCreateTime(LocalDateTime.now());
-        fileInfo3.setUpdateTime(LocalDateTime.now());
-        fileInfo3.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-        fileInfoMap.put("3", fileInfo3);
-        
-        // 文件4
-        FileInfo fileInfo4 = new FileInfo();
-        fileInfo4.setId(4L);
-        fileInfo4.setOriginalName("test_document2.docx");
-        fileInfo4.setFileName("test_document2.docx");
-        fileInfo4.setFileExtension("docx");
-        fileInfo4.setFileSize(1024L * 1024L);
-        fileInfo4.setStorePath(absUploadPath + "/test_document2.docx");
-        fileInfo4.setStatus(0);
-        fileInfo4.setCreateTime(LocalDateTime.now());
-        fileInfo4.setUpdateTime(LocalDateTime.now());
-        fileInfo4.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-        fileInfoMap.put("4", fileInfo4);
-
-        // 保证存在并注册模板设计固定文件 templateDesign.docx
-        try {
-            java.io.File templateFile = new java.io.File(absUploadPath + "/templateDesign.docx");
-            if (!templateFile.exists()) {
-                java.io.File candidate = findFirstExisting(
-                    absUploadPath + "/templateDesign.docx",
-                    absUploadPath + "/test_document.docx",
-                    Paths.get("sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString()
-                );
-                if (candidate != null && candidate.exists()) {
-                    Files.copy(candidate.toPath(), templateFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                }
-            }
-            if (templateFile.exists()) {
-                FileInfo tplInfo = new FileInfo();
-                tplInfo.setId(9999L);
-                tplInfo.setOriginalName("templateDesign.docx");
-                tplInfo.setFileName("templateDesign.docx");
-                tplInfo.setFileExtension("docx");
-                tplInfo.setFileSize(templateFile.length());
-                tplInfo.setStorePath(templateFile.getAbsolutePath());
-                tplInfo.setStatus(0);
-                tplInfo.setCreateTime(LocalDateTime.now());
-                tplInfo.setUpdateTime(LocalDateTime.now());
-                tplInfo.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-                fileInfoMap.put("9999", tplInfo);
-            }
-        } catch (Exception e) {
-            log.warn("初始化templateDesign.docx失败: {}", e.getMessage());
-        }
     }
 
     @Override
     public FileInfo getById(String id) {
-        FileInfo fileInfo = fileInfoMap.get(id);
-        if (fileInfo != null && fileInfo.getStatus() != null && fileInfo.getStatus() == 0) {
-            return fileInfo;
-        }
-        // 动态注册模板设计示例文件
-        if ("templateDesign".equals(id)) {
-            // 优先返回已注册的9999
-            FileInfo tpl = fileInfoMap.get("9999");
-            if (tpl != null && tpl.getStatus() != null && tpl.getStatus() == 0) {
-                return tpl;
-            }
-            String absPath = java.nio.file.Paths.get(uploadRootPath).toAbsolutePath().toString();
-            java.io.File tplFile = new java.io.File(absPath + "/templateDesign.docx");
-            if (!tplFile.exists()) {
-                java.io.File candidate = findFirstExisting(
-                    absPath + "/templateDesign.docx",
-                    absPath + "/test_document.docx",
-                    Paths.get("sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                    Paths.get("..", "..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString()
-                );
-                try {
-                    if (candidate != null && candidate.exists()) {
-                        Files.copy(candidate.toPath(), new java.io.File(absPath + "/templateDesign.docx").toPath(), StandardCopyOption.REPLACE_EXISTING);
-                        tplFile = new java.io.File(absPath + "/templateDesign.docx");
-                    }
-                } catch (Exception copyErr) {
-                    log.warn("复制模板设计文件失败: {}", copyErr.getMessage());
-                }
-            }
-            if (tplFile.exists()) {
-                FileInfo created = new FileInfo();
-                created.setId(9999L);
-                created.setOriginalName("templateDesign.docx");
-                created.setFileName("templateDesign.docx");
-                created.setFileExtension("docx");
-                created.setFileSize(tplFile.length());
-                created.setStorePath(tplFile.getAbsolutePath());
-                created.setStatus(0);
-                created.setCreateTime(LocalDateTime.now());
-                created.setUpdateTime(LocalDateTime.now());
-                created.setOnlyofficeKey("demo_key_" + System.currentTimeMillis());
-                fileInfoMap.put("9999", created);
-                return created;
-            }
-        }
-        return null;
+        if (fileInfoRecordMapper == null) return null;
+        FileInfoRecord rec = fileInfoRecordMapper.selectById(id);
+        if (rec == null) return null;
+        FileInfo info = new FileInfo();
+        info.setId(rec.getId());
+        info.setOriginalName(rec.getOriginalName());
+        info.setFileName(rec.getFileName());
+        info.setFileExtension(rec.getFileExtension());
+        info.setFileSize(rec.getFileSize());
+        info.setStorePath(rec.getStorePath() != null ? rec.getStorePath() : rec.getFilePath());
+        info.setStatus(rec.getStatus());
+        info.setCreateTime(rec.getCreateTime());
+        info.setUpdateTime(rec.getUpdateTime());
+        info.setOnlyofficeKey(rec.getOnlyofficeKey());
+        return info;
     }
 
-    private java.io.File findFirstExisting(String... candidates) {
-        if (candidates == null) return null;
-        for (String p : candidates) {
-            try {
-                if (p == null) continue;
-                java.io.File f = new java.io.File(p);
-                if (f.exists() && f.isFile()) {
-                    return f;
-                }
-            } catch (Exception ignore) {}
-        }
-        return null;
-    }
+    // no-op helper removed
 
     @Override
     public String getFileDownloadUrl(String fileId) {
@@ -297,7 +158,14 @@ public class FileInfoServiceImpl implements FileInfoService {
             // 更新文件信息
             fileInfo.setFileSize(targetFile.length());
             fileInfo.setUpdateTime(LocalDateTime.now());
-            fileInfoMap.put(fileId, fileInfo);
+            if (fileInfoRecordMapper != null) {
+                FileInfoRecord rec = fileInfoRecordMapper.selectById(fileId);
+                if (rec != null) {
+                    rec.setFileSize(targetFile.length());
+                    rec.setUpdateTime(LocalDateTime.now());
+                    fileInfoRecordMapper.updateById(rec);
+                }
+            }
             
             log.info("文件保存成功，文件ID: {}, 路径: {}, 大小: {} bytes", 
                     fileId, filePath, targetFile.length());
@@ -340,8 +208,14 @@ public class FileInfoServiceImpl implements FileInfoService {
         fileInfo.setOnlyofficeKey(onlyofficeKey);
         fileInfo.setUpdateTime(LocalDateTime.now());
         
-        // 保存更新后的文件信息
-        fileInfoMap.put(fileId, fileInfo);
+        if (fileInfoRecordMapper != null) {
+            FileInfoRecord rec = fileInfoRecordMapper.selectById(fileId);
+            if (rec != null) {
+                rec.setOnlyofficeKey(onlyofficeKey);
+                rec.setUpdateTime(LocalDateTime.now());
+                fileInfoRecordMapper.updateById(rec);
+            }
+        }
         
         log.info("为文件生成OnlyOffice key，文件ID: {}, key: {}", fileId, onlyofficeKey);
         return fileInfo;
@@ -349,7 +223,24 @@ public class FileInfoServiceImpl implements FileInfoService {
     
     @Override
     public List<FileInfo> getAllFiles() {
-        return new ArrayList<>(fileInfoMap.values());
+        if (fileInfoRecordMapper == null) return new ArrayList<>();
+        List<FileInfoRecord> list = fileInfoRecordMapper.selectList(new QueryWrapper<>());
+        List<FileInfo> out = new ArrayList<>();
+        for (FileInfoRecord r : list) {
+            FileInfo i = new FileInfo();
+            i.setId(r.getId());
+            i.setOriginalName(r.getOriginalName());
+            i.setFileName(r.getFileName());
+            i.setFileExtension(r.getFileExtension());
+            i.setFileSize(r.getFileSize());
+            i.setStorePath(r.getStorePath() != null ? r.getStorePath() : r.getFilePath());
+            i.setStatus(r.getStatus());
+            i.setCreateTime(r.getCreateTime());
+            i.setUpdateTime(r.getUpdateTime());
+            i.setOnlyofficeKey(r.getOnlyofficeKey());
+            out.add(i);
+        }
+        return out;
     }
 
     @Override
@@ -358,21 +249,30 @@ public class FileInfoServiceImpl implements FileInfoService {
             throw new IllegalArgumentException("absolutePath 不能为空");
         }
         try {
-            // 生成简单ID：当前时间戳
-            String id = String.valueOf(System.currentTimeMillis());
-            FileInfo info = new FileInfo();
-            info.setId(Long.parseLong(id));
-            info.setOriginalName(originalName != null ? originalName : new java.io.File(absolutePath).getName());
-            info.setFileName(info.getOriginalName());
-            info.setFileExtension(extension);
-            info.setFileSize(fileSize >= 0 ? fileSize : (new java.io.File(absolutePath).length()));
-            info.setStorePath(absolutePath);
-            info.setStatus(0);
-            info.setCreateTime(LocalDateTime.now());
-            info.setUpdateTime(LocalDateTime.now());
-            info.setOnlyofficeKey("reg_" + id);
-            fileInfoMap.put(id, info);
-            return info;
+            if (fileInfoRecordMapper == null) throw new IllegalStateException("文件表未配置");
+            FileInfoRecord rec = new FileInfoRecord();
+            rec.setOriginalName(originalName != null ? originalName : new java.io.File(absolutePath).getName());
+            rec.setFileName(rec.getOriginalName());
+            rec.setFileExtension(extension);
+            rec.setFileSize(fileSize >= 0 ? fileSize : (new java.io.File(absolutePath).length()));
+            rec.setStorePath(absolutePath);
+            rec.setStatus(0);
+            rec.setCreateTime(LocalDateTime.now());
+            rec.setUpdateTime(LocalDateTime.now());
+            rec.setOnlyofficeKey("reg_" + System.currentTimeMillis());
+            fileInfoRecordMapper.insert(rec);
+            FileInfo out = new FileInfo();
+            out.setId(rec.getId());
+            out.setOriginalName(rec.getOriginalName());
+            out.setFileName(rec.getFileName());
+            out.setFileExtension(rec.getFileExtension());
+            out.setFileSize(rec.getFileSize());
+            out.setStorePath(rec.getStorePath());
+            out.setStatus(rec.getStatus());
+            out.setCreateTime(rec.getCreateTime());
+            out.setUpdateTime(rec.getUpdateTime());
+            out.setOnlyofficeKey(rec.getOnlyofficeKey());
+            return out;
         } catch (Exception e) {
             throw new RuntimeException("注册文件失败: " + e.getMessage(), e);
         }

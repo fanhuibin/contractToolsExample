@@ -20,6 +20,35 @@
 
 ## 最新更新
 
+### 2025-08-25 Dots.OCR 接入（Java 工具类）
+- 主要目的：接入开源 OCR 库 Dots.OCR（OpenAI 兼容接口），提供 Java 工具类统一调用
+- 技术栈：Spring Boot（AutoConfiguration）、OkHttp、Jackson
+- 修改文件：
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/dotsocr/DotsOcrClient.java`（新增）
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/dotsocr/DotsOcrProperties.java`（新增）
+  - `sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/dotsocr/DotsOcrAutoConfiguration.java`（新增）
+- 使用：
+  ```yaml
+  zxcm:
+    dotsocr:
+      enabled: true
+      base-url: http://localhost:8000
+      model: dots.ocr
+      timeout-seconds: 60
+      # api-key: xxx
+  ```
+  ```java
+  @Autowired DotsOcrClient client;
+  boolean ok = client.health();
+  var models = client.listModels();
+  String text = client.ocrImageByUrl("data:image/png;base64,...", "Extract all text", null, true);
+  ```
+  测试用例：
+  - `sdk/src/test/java/com/zhaoxinms/contract/tools/ocr/dotsocr/DotsOcrQuickTest.java`
+    - `testHealthAndModels` 默认启用
+    - `testOcrLocalImage` 需手动启用（准备本地图片）
+  参考：`https://www.dotsocr.net/blog/2`，`https://github.com/rednote-hilab/dots.ocr`
+
 ### 2025-01-14 合同合成功能完成
 - **主要目的**: 实现合同合成功能，支持基于SDT标签的模板填充
 - **关键方案**: 

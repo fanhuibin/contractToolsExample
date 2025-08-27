@@ -58,4 +58,33 @@ export function getTemplateDesignByTemplateId(templateId: string) {
   })
 }
 
+// 上传模板（仅支持docx）
+export function uploadTemplateDocx(data: { templateId: string; file: File }) {
+  const form = new FormData()
+  form.append('templateId', data.templateId)
+  form.append('file', data.file)
+  return request({
+    url: '/template/design/upload',
+    method: 'post',
+    data: form,
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 模板设计记录列表
+export function listTemplateDesigns() {
+  return request({
+    url: '/template/design/list',
+    method: 'get'
+  })
+}
+
+// 删除模板设计记录
+export function deleteTemplateDesign(id: string) {
+  return request({
+    url: `/template/design/${id}`,
+    method: 'delete'
+  })
+}
+
 

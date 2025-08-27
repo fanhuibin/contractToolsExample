@@ -36,6 +36,26 @@ CREATE TABLE IF NOT EXISTS template_design_record (
   created_at    datetime     NULL,
   updated_at    datetime     NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 文件信息表（用于OnlyOffice预览与文件注册）
+CREATE TABLE IF NOT EXISTS file_info (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  original_name VARCHAR(255) NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  file_path VARCHAR(1024) NULL,
+  store_path VARCHAR(1024) NULL,
+  file_size BIGINT NULL,
+  file_type VARCHAR(64) NULL,
+  file_extension VARCHAR(32) NULL,
+  file_md5 VARCHAR(64) NULL,
+  status TINYINT DEFAULT 0,
+  create_time DATETIME NULL,
+  upload_time DATETIME NULL,
+  update_time DATETIME NULL,
+  onlyoffice_key VARCHAR(128) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 模板ID唯一索引
+CREATE UNIQUE INDEX IF NOT EXISTS uk_template_design_record_template_id ON template_design_record(template_id);
 
 CREATE TABLE IF NOT EXISTS compare_record (
   id BIGINT PRIMARY KEY AUTO_INCREMENT,
