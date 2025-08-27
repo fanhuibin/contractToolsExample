@@ -1,12 +1,14 @@
 import request from '@/utils/request'
 
-export function extractInfo(file: File, prompt?: string, templateId?: number, taskTypes?: string[], keywords?: string[]) {
+export function extractInfo(file: File, prompt?: string, templateId?: number, taskTypes?: string[], keywords?: string[], templateIds?: number[], merge?: boolean) {
   const formData = new FormData()
   formData.append('file', file)
   if (prompt) formData.append('prompt', prompt)
   if (templateId) formData.append('templateId', templateId.toString())
   if (taskTypes && taskTypes.length) formData.append('taskTypes', JSON.stringify(taskTypes))
   if (keywords && keywords.length) formData.append('keywords', JSON.stringify(keywords))
+  if (templateIds && templateIds.length) formData.append('templateIds', JSON.stringify(templateIds))
+  if (typeof merge === 'boolean') formData.append('merge', String(merge))
   return request({ url: '/ai/auto-fulfillment/extract', method: 'post', data: formData, headers: { 'Content-Type': 'multipart/form-data' } })
 }
 
@@ -71,7 +73,17 @@ export default {
   getHistory,
   // dict apis
   getTaskTypesTree: () => request({ url: '/ai/auto-fulfillment/dicts/task-types', method: 'get' }),
-  getKeywordsByTaskTypeIds: (ids: number[]) => request({ url: '/ai/auto-fulfillment/dicts/keywords', method: 'get', params: { taskTypeIds: ids } })
+  getKeywordsByTaskTypeIds: (ids: number[]) => request({
+    url: '/ai/auto-fulfillment/dicts/keywords',
+    method: 'get',
+    params: {},
+    // ensure spring can bind as List<Long>: taskTypeIds=1&taskTypeIds=2
+    paramsSerializer: () => {
+      const usp = new URLSearchParams()
+      for (const id of ids) usp.append('taskTypeIds', String(id))
+      return usp.toString()
+    }
+  })
 }
 
 

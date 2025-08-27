@@ -35,11 +35,11 @@ public class AutoFulfillmentTemplateController {
         }
     }
 
-    @GetMapping("/type/{contractType}")
-    public Result<List<AutoFulfillmentTemplate>> getTemplatesByContractType(@PathVariable String contractType,
-                                                                            @RequestParam(value = "userId", required = false) String userId) {
+    @GetMapping("/type/{categoryCode}")
+    public Result<List<AutoFulfillmentTemplate>> getTemplatesByCategory(@PathVariable String categoryCode,
+                                                                        @RequestParam(value = "userId", required = false) String userId) {
         try {
-            List<AutoFulfillmentTemplate> templates = templateService.getTemplatesByContractTypeAndUser(contractType, userId);
+            List<AutoFulfillmentTemplate> templates = templateService.getTemplatesByCategoryAndUser(categoryCode, userId);
             return Result.success("获取模板列表成功", templates);
         } catch (Exception e) {
             log.error("获取模板列表失败", e);
@@ -50,7 +50,7 @@ public class AutoFulfillmentTemplateController {
     @GetMapping("/contract-types")
     public Result<Map<String, String>> getAllContractTypes() {
         try {
-            return Result.success("获取合同类型列表成功", templateService.getAllContractTypes());
+            return Result.success("获取合同类型列表成功", templateService.getAllCategories());
         } catch (Exception e) {
             return Result.error("获取合同类型列表失败: " + e.getMessage());
         }
@@ -124,9 +124,9 @@ public class AutoFulfillmentTemplateController {
         }
     }
 
-    @GetMapping("/default/{contractType}")
-    public Result<AutoFulfillmentTemplate> getDefaultTemplate(@PathVariable String contractType) {
-        return templateService.getDefaultTemplate(contractType)
+    @GetMapping("/default/{categoryCode}")
+    public Result<AutoFulfillmentTemplate> getDefaultTemplate(@PathVariable String categoryCode) {
+        return templateService.getDefaultTemplate(categoryCode)
                 .map(t -> Result.success("获取默认模板成功", t))
                 .orElse(Result.error("未找到默认模板"));
     }

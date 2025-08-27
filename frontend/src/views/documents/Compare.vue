@@ -94,6 +94,9 @@ const doUploadCompare = async () => {
   const fd = new FormData()
   fd.append('oldFile', f1)
   fd.append('newFile', f2)
+  // 添加原始文件名
+  fd.append('oldFileName', f1.name)
+  fd.append('newFileName', f2.name)
   fd.append('ignoreHeaderFooter', String(settings.ignoreHeaderFooter))
   fd.append('headerHeightMm', String(settings.headerHeightMm))
   fd.append('footerHeightMm', String(settings.footerHeightMm))
@@ -105,7 +108,15 @@ const doUploadCompare = async () => {
     const id = res.data.id || ''
     if (id) {
       sessionStorage.setItem('lastCompareId', id)
-      router.push({ name: 'CompareResult', params: { id } }).catch(() => {})
+      // 将文件名信息传递给结果页面
+      router.push({ 
+        name: 'CompareResult', 
+        params: { id },
+        query: {
+          oldFileName: f1.name,
+          newFileName: f2.name
+        }
+      }).catch(() => {})
     }
     ElMessage.success('比对完成')
   } catch (e: any) {
@@ -134,7 +145,24 @@ const doUrlCompare = async () => {
     const id = res.data.id || ''
     if (id) {
       sessionStorage.setItem('lastCompareId', id)
-      router.push({ name: 'CompareResult', params: { id } }).catch(() => {})
+      // 从URL中提取文件名
+      const getFileNameFromUrl = (url: string) => {
+        try {
+          const fileName = url.split('/').pop()?.split('?')[0] || url
+          return decodeURIComponent(fileName)
+        } catch {
+          return url
+        }
+      }
+      
+      router.push({ 
+        name: 'CompareResult', 
+        params: { id },
+        query: {
+          oldFileName: getFileNameFromUrl(oldUrl.value),
+          newFileName: getFileNameFromUrl(newUrl.value)
+        }
+      }).catch(() => {})
     }
     ElMessage.success('比对完成')
   } catch (e: any) {

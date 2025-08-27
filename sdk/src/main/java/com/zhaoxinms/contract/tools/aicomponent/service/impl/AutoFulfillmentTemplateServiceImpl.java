@@ -28,16 +28,13 @@ public class AutoFulfillmentTemplateServiceImpl
 
     private final ObjectMapper objectMapper;
 
-    private static final Map<String, String> CONTRACT_TYPES = new LinkedHashMap<>();
+    private static final Map<String, String> CATEGORIES = new LinkedHashMap<>();
     static {
-        CONTRACT_TYPES.put("lease", "租赁合同");
-        CONTRACT_TYPES.put("purchase", "购销合同");
-        CONTRACT_TYPES.put("labor", "劳动合同");
-        CONTRACT_TYPES.put("construction", "建筑合同");
-        CONTRACT_TYPES.put("technical", "技术合同");
-        CONTRACT_TYPES.put("intellectual", "知识产权合同");
-        CONTRACT_TYPES.put("operation", "运营服务合同");
-        CONTRACT_TYPES.put("custom", "自定义类型");
+        CATEGORIES.put("invoice_fulfillment", "开票履约");
+        CATEGORIES.put("payment_fulfillment", "付款履约");
+        CATEGORIES.put("collection_fulfillment", "收款履约");
+        // 移除到期提醒与事件触发，将自定义分类开放给用户模板
+        CATEGORIES.put("custom_fulfillment", "自定义");
     }
 
     @Override
@@ -46,19 +43,19 @@ public class AutoFulfillmentTemplateServiceImpl
     }
 
     @Override
-    public List<AutoFulfillmentTemplate> getTemplatesByContractType(String contractType) {
-        return list(new LambdaQueryWrapper<AutoFulfillmentTemplate>().eq(AutoFulfillmentTemplate::getContractType, contractType));
+    public List<AutoFulfillmentTemplate> getTemplatesByCategory(String categoryCode) {
+        return list(new LambdaQueryWrapper<AutoFulfillmentTemplate>().eq(AutoFulfillmentTemplate::getCategoryCode, categoryCode));
     }
 
     @Override
-    public List<AutoFulfillmentTemplate> getTemplatesByContractTypeAndUser(String contractType, String userId) {
+    public List<AutoFulfillmentTemplate> getTemplatesByCategoryAndUser(String categoryCode, String userId) {
         List<AutoFulfillmentTemplate> result = new ArrayList<>();
         result.addAll(list(new LambdaQueryWrapper<AutoFulfillmentTemplate>()
-                .eq(AutoFulfillmentTemplate::getContractType, contractType)
+                .eq(AutoFulfillmentTemplate::getCategoryCode, categoryCode)
                 .eq(AutoFulfillmentTemplate::getType, "system")));
         if (userId != null && !userId.isEmpty()) {
             result.addAll(list(new LambdaQueryWrapper<AutoFulfillmentTemplate>()
-                    .eq(AutoFulfillmentTemplate::getContractType, contractType)
+                    .eq(AutoFulfillmentTemplate::getCategoryCode, categoryCode)
                     .eq(AutoFulfillmentTemplate::getCreatorId, userId)));
         }
         return result;
@@ -88,7 +85,7 @@ public class AutoFulfillmentTemplateServiceImpl
         template.setUpdateTime(LocalDateTime.now());
         if (Boolean.TRUE.equals(template.getIsDefault())) {
             AutoFulfillmentTemplate oldDefault = getOne(new LambdaQueryWrapper<AutoFulfillmentTemplate>()
-                    .eq(AutoFulfillmentTemplate::getContractType, template.getContractType())
+                    .eq(AutoFulfillmentTemplate::getCategoryCode, template.getCategoryCode())
                     .eq(AutoFulfillmentTemplate::getIsDefault, true));
             if (oldDefault != null) {
                 oldDefault.setIsDefault(false);
@@ -107,13 +104,15 @@ public class AutoFulfillmentTemplateServiceImpl
             throw new IllegalArgumentException("Template not found with id: " + id);
         }
         existing.setName(template.getName());
-        existing.setContractType(template.getContractType());
+        existing.setCategoryCode(template.getCategoryCode());
+        existing.setContractType(template.getCategoryCode());
         existing.setFields(template.getFields());
         existing.setDescription(template.getDescription());
+        existing.setTaskTypeId(template.getTaskTypeId());
         existing.setUpdateTime(LocalDateTime.now());
         if (Boolean.TRUE.equals(template.getIsDefault()) && !Boolean.TRUE.equals(existing.getIsDefault())) {
             AutoFulfillmentTemplate oldDefault = getOne(new LambdaQueryWrapper<AutoFulfillmentTemplate>()
-                    .eq(AutoFulfillmentTemplate::getContractType, template.getContractType())
+                    .eq(AutoFulfillmentTemplate::getCategoryCode, template.getCategoryCode())
                     .eq(AutoFulfillmentTemplate::getIsDefault, true));
             if (oldDefault != null) {
                 oldDefault.setIsDefault(false);
@@ -144,8 +143,10 @@ public class AutoFulfillmentTemplateServiceImpl
         n.setName(newName);
         n.setType("user");
         n.setCreatorId(userId);
-        n.setContractType(src.getContractType());
+        n.setCategoryCode(src.getCategoryCode());
+        n.setContractType(src.getCategoryCode());
         n.setFields(src.getFields());
+        n.setTaskTypeId(src.getTaskTypeId());
         n.setIsDefault(false);
         n.setDescription((src.getDescription() == null ? "" : src.getDescription()) + " (复制)");
         n.setCreateTime(LocalDateTime.now());
@@ -156,9 +157,9 @@ public class AutoFulfillmentTemplateServiceImpl
 
     @Override
     @Transactional
-    public AutoFulfillmentTemplate setDefaultTemplate(Long id, String contractType) {
+    public AutoFulfillmentTemplate setDefaultTemplate(Long id, String categoryCode) {
         update(new LambdaUpdateWrapper<AutoFulfillmentTemplate>()
-                .eq(AutoFulfillmentTemplate::getContractType, contractType)
+                .eq(AutoFulfillmentTemplate::getCategoryCode, categoryCode)
                 .set(AutoFulfillmentTemplate::getIsDefault, false));
         AutoFulfillmentTemplate n = getById(id);
         if (n == null) throw new IllegalArgumentException("Template not found with id: " + id);
@@ -168,16 +169,16 @@ public class AutoFulfillmentTemplateServiceImpl
     }
 
     @Override
-    public Optional<AutoFulfillmentTemplate> getDefaultTemplate(String contractType) {
+    public Optional<AutoFulfillmentTemplate> getDefaultTemplate(String categoryCode) {
         AutoFulfillmentTemplate t = getOne(new LambdaQueryWrapper<AutoFulfillmentTemplate>()
-                .eq(AutoFulfillmentTemplate::getContractType, contractType)
+                .eq(AutoFulfillmentTemplate::getCategoryCode, categoryCode)
                 .eq(AutoFulfillmentTemplate::getIsDefault, true));
         return Optional.ofNullable(t);
     }
 
     @Override
-    public Map<String, String> getAllContractTypes() {
-        return CONTRACT_TYPES;
+    public Map<String, String> getAllCategories() {
+        return CATEGORIES;
     }
 
     @Override
@@ -189,24 +190,18 @@ public class AutoFulfillmentTemplateServiceImpl
             log.info("System auto fulfillment templates already initialized");
             return;
         }
-        try {
-            List<String> genericFields = Arrays.asList(
-                    "合同编号", "合同名称", "甲方名称", "乙方名称",
-                    "合同签署日期", "合同有效期", "合同起始时间", "合同终止时间"
-            );
-            createSystemTemplate("自动履约-通用模板", "operation", genericFields, "自动履约通用字段", true);
-        } catch (Exception e) {
-            log.error("Failed to initialize auto fulfillment templates", e);
-        }
+        // Seeded by Flyway V8; nothing to do here
     }
 
-    private void createSystemTemplate(String name, String contractType, List<String> fields,
+    // kept for compatibility if needed in future
+    private void createSystemTemplate(String name, String categoryCode, List<String> fields,
                                       String description, boolean isDefault) throws JsonProcessingException {
         String fieldsJson = objectMapper.writeValueAsString(fields);
         AutoFulfillmentTemplate t = new AutoFulfillmentTemplate();
         t.setName(name);
         t.setType("system");
-        t.setContractType(contractType);
+        t.setCategoryCode(categoryCode);
+        t.setContractType(categoryCode);
         t.setFields(fieldsJson);
         t.setCreatorId("system");
         t.setCreateTime(LocalDateTime.now());

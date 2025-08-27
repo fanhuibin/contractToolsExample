@@ -25,6 +25,11 @@
           <el-icon><Document /></el-icon>
           <span>合同抽取</span>
         </el-menu-item>
+        <el-menu-item index="/contract-review">
+          <el-icon><Document /></el-icon>
+          <span>合同智能审核</span>
+        </el-menu-item>
+        
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
           <span>OnlyOffice预览</span>

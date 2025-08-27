@@ -73,7 +73,7 @@ zxcm:
     port: 8082
     secret: zxcm
     callback:
-      url: http://proxy.zhaoxinms.com:9103/api/onlyoffice/callback
+      url: http://proxy.zhaoxinms.com:9100/api/onlyoffice/callback
     plugins:
       - http://43.143.173.96:8082/plugin/html/config.json
       - http://43.143.173.96:8082/plugin/comment/config.json

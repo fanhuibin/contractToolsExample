@@ -47,13 +47,9 @@ public class AutoFulfillmentDictController {
     @GetMapping("/keywords")
     public Result<List<Map<String, Object>>> keywordsByTaskType(@RequestParam("taskTypeIds") List<Long> taskTypeIds) {
         if (taskTypeIds == null || taskTypeIds.isEmpty()) return Result.success(Collections.emptyList());
-        // Simple join query replaced by two steps for brevity
-        // 1) find mapping rows by raw SQL would be better; here we scan keywords all and filter by mapping via IN subselect
-        // assume small scale; for production, create dedicated mapper XML join
-        List<AutoFulfillmentKeyword> allKeywords = keywordMapper.selectList(null);
-        // Return all keywords now; frontend can filter further if needed (placeholder)
+        List<AutoFulfillmentKeyword> keywords = keywordMapper.selectByTaskTypeIds(taskTypeIds);
         List<Map<String, Object>> data = new ArrayList<>();
-        for (AutoFulfillmentKeyword k : allKeywords) {
+        for (AutoFulfillmentKeyword k : keywords) {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("id", k.getId());
             m.put("name", k.getName());

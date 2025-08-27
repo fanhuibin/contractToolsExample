@@ -40,6 +40,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
+import { watch } from 'vue'
 import { ElLoading, ElButton, ElSpace, ElTag, ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentAdd, View, Refresh } from '@element-plus/icons-vue'
 import { getEditorConfig, getServerInfo } from '@/api/onlyoffice'
@@ -117,14 +118,51 @@ const containerStyle = computed(() => ({
 
 // 生命周期
 onMounted(() => {
+  console.log('[onlyoffice] onMounted')
   initEditor()
   window.addEventListener('message', handleMessage)
 })
 
 onUnmounted(() => {
+  console.log('[onlyoffice] onUnmounted')
   window.removeEventListener('message', handleMessage)
   if (docEditor.value) {
     docEditor.value.destroyEditor()
+  }
+})
+
+// 当 fileId 或可编辑状态变更时，销毁并重建编辑器
+watch(() => props.fileId, async (nv, ov) => {
+  if (nv === ov) return
+  try {
+    if (docEditor.value) {
+      docEditor.value.destroyEditor()
+      docEditor.value = null
+    }
+    editorReady.value = false
+    loading.value = true
+    await nextTick()
+    await initEditor()
+    console.log('[onlyoffice] reloaded editor due to fileId change', nv)
+  } catch (e) {
+    console.error('[onlyoffice] reload on fileId change failed', e)
+  }
+})
+
+watch(() => props.canEdit, async (nv, ov) => {
+  if (nv === ov) return
+  try {
+    if (docEditor.value) {
+      docEditor.value.destroyEditor()
+      docEditor.value = null
+    }
+    editorReady.value = false
+    loading.value = true
+    await nextTick()
+    await initEditor()
+    console.log('[onlyoffice] reloaded editor due to canEdit change', nv)
+  } catch (e) {
+    console.error('[onlyoffice] reload on canEdit change failed', e)
   }
 })
 
@@ -135,6 +173,7 @@ const initEditor = async () => {
     loading.value = true
     editorReady.value = false
     loadingText.value = '获取服务器信息...'
+    console.log('[onlyoffice] initEditor get server & config', { fileId: props.fileId, canEdit: props.canEdit, canReview: props.canReview })
     
 
     
@@ -151,6 +190,8 @@ const initEditor = async () => {
     
     serverInfo.value = serverResponse.data
     const editorConfig = configResponse.data
+    console.log('[onlyoffice] serverInfo', serverInfo.value)
+    console.log('[onlyoffice] editorConfig', editorConfig)
 
     // 保存文件信息
     Object.assign(fileInfo, {
@@ -162,10 +203,12 @@ const initEditor = async () => {
     loadingText.value = '加载OnlyOffice脚本...'
     // 加载OnlyOffice API脚本
     await loadOnlyOfficeScript()
+    console.log('[onlyoffice] api.js loaded')
 
     loadingText.value = '初始化编辑器...'
     // 初始化编辑器
     await initOnlyOfficeEditor(editorConfig)
+    console.log('[onlyoffice] initOnlyOfficeEditor done')
 
   } catch (error) {
     console.error('初始化编辑器失败:', error)
@@ -182,6 +225,7 @@ const loadOnlyOfficeScript = () => {
     // 检查是否已经加载
     if (window.DocsAPI) {
       onlyofficeLoaded.value = true
+      console.log('[onlyoffice] api.js already present')
       resolve()
       return
     }
@@ -208,6 +252,7 @@ const loadOnlyOfficeScript = () => {
 
     script.onload = () => {
       onlyofficeLoaded.value = true
+      console.log('[onlyoffice] api.js onload')
       resolve()
     }
 
@@ -225,6 +270,7 @@ const initOnlyOfficeEditor = (config) => {
       // 清空容器并立即创建编辑器容器
       const container = document.getElementById('onlyoffice-editor-container')
       container.innerHTML = '<div id="onlyoffice-editor" style="height: 100%; width: 100%;"></div>'
+      console.log('[onlyoffice] container prepared')
 
       // 设置超时机制，防止编辑器加载时间过长
       const timeout = setTimeout(() => {
@@ -289,8 +335,27 @@ const initOnlyOfficeEditor = (config) => {
         }
       }
 
+      // 注入风险锚点插件：优先使用 Document Server 同源路径，其次前端静态路径
+      try {
+        const dsPluginUrl = `${serverInfo.value.fullUrl}/sdkjs-plugins/risk-anchors/config.json`
+        const fePluginUrl = `${window.location.origin}/onlyoffice-plugins/risk-anchors/config.json`
+        if (!editorConfig.plugins) editorConfig.plugins = {}
+        if (!editorConfig.plugins.pluginsData) editorConfig.plugins.pluginsData = []
+        const add = (u) => {
+          if (!u) return
+          const exists = editorConfig.plugins.pluginsData.some((it) => (typeof it === 'string' ? it === u : it && it.url === u))
+          if (!exists) {
+            editorConfig.plugins.pluginsData.push({ url: u, enabled: true })
+            console.log('[onlyoffice] inject plugin url', u)
+          }
+        }
+        add(dsPluginUrl)
+        add(fePluginUrl)
+      } catch (_) {}
+
       // 立即创建编辑器实例，不等待
       docEditor.value = new window.DocsAPI.DocEditor('onlyoffice-editor', editorConfig)
+      console.log('[onlyoffice] DocEditor created')
 
     } catch (error) {
       reject(error)
@@ -358,9 +423,18 @@ const getPluginWindow = () => {
 
 const postToPlugin = async (payload) => {
   await waitForPlugin()
-  const win = getPluginWindow()
-  if (!win) throw new Error('编辑器插件窗口未就绪')
-  win.postMessage(JSON.stringify(payload), '*')
+  const root = getPluginWindow()
+  if (!root) throw new Error('编辑器插件窗口未就绪')
+  // 仅使用 postMessage（跨域可达）；向所有子 frame 广播，避免拿不到具体插件 frame 的引用
+  const send = (w) => {
+    try { w.postMessage(JSON.stringify(payload), '*') } catch (_) {}
+    try {
+      const len = (w.frames && w.frames.length) || 0
+      for (let i = 0; i < len; i++) { send(w.frames[i]) }
+    } catch (_) {}
+  }
+  send(root)
+  console.log('[onlyoffice] postToPlugin via postMessage', payload)
 }
 
 // 便捷封装给上层调用
@@ -433,6 +507,21 @@ defineExpose({
   postToPlugin,
   createContentControl,
   createBlockContentControl,
+  // --- Risk Anchor Methods ---
+  setAnchors: async (anchors) => {
+    await postToPlugin({ action: 'risk.setAnchors', payload: anchors });
+  },
+  gotoAnchor: async (anchorId) => {
+    await postToPlugin({ action: 'risk.gotoAnchor', payload: { anchorId } });
+  },
+  clearAnchors: async () => {
+    await postToPlugin({ action: 'risk.clearAnchors' });
+  },
+  // 触发 OnlyOffice 插件强制保存，让 Document Server 回调持久化文件
+  forceSave: async () => {
+    await postToPlugin({ action: 'forceSave' });
+  },
+  // -------------------------
   destroyEditor: () => {
     if (docEditor.value) {
       docEditor.value.destroyEditor()

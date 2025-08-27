@@ -26,6 +26,13 @@ public class AutoFulfillmentTemplate implements Serializable {
     @TableField("type")
     private String type;
 
+    @TableField("category_code")
+    private String categoryCode;
+
+    /**
+     * Legacy column kept for compatibility with NOT NULL constraints.
+     * Always mirror the same value as categoryCode when inserting/updating.
+     */
     @TableField("contract_type")
     private String contractType;
 
@@ -48,6 +55,9 @@ public class AutoFulfillmentTemplate implements Serializable {
 
     @TableField("description")
     private String description;
+
+    @TableField("task_type_id")
+    private Long taskTypeId;
 }
 
 

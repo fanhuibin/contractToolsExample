@@ -1,10 +1,10 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-// 创建axios实例
+// 创建axios实例（将超时时间调大，以适配AI审核长耗时与大文件上传）
 const request = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 990000
 })
 
 // 请求拦截器
