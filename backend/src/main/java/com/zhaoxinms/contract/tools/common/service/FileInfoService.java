@@ -1,9 +1,11 @@
 package com.zhaoxinms.contract.tools.common.service;
 
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Path;
 import java.util.List;
 
 /**
@@ -63,4 +65,21 @@ public interface FileInfoService {
      * @return 文件信息（包含生成的ID）
      */
     FileInfo registerFile(String originalName, String extension, String absolutePath, long fileSize);
+
+    /**
+     * 保存上传的新文件
+     * @param file 上传的文件
+     * @return 文件信息
+     * @throws IOException 文件操作异常
+     */
+    FileInfo saveNewFile(MultipartFile file) throws IOException;
+
+    /**
+     * 注册克隆的文件
+     * @param filePath 文件路径
+     * @param originalName 原始文件名
+     * @return 文件信息
+     * @throws IOException 文件操作异常
+     */
+    FileInfo registerClonedFile(Path filePath, String originalName) throws IOException;
 } 

@@ -1,25 +1,31 @@
 package com.zhaoxinms.contract.template.sdk.service.impl;
 
-import com.zhaoxinms.contract.tools.common.entity.FileInfo;
-import com.zhaoxinms.contract.tools.common.service.FileInfoService;
-import com.zhaoxinms.contract.tools.common.exception.FileOperationException;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.zhaoxinms.contract.template.sdk.entity.FileInfoRecord;
-import com.zhaoxinms.contract.template.sdk.mapper.FileInfoRecordMapper;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
-import javax.annotation.PostConstruct;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.UUID;
+
+import javax.annotation.PostConstruct;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.zhaoxinms.contract.template.sdk.entity.FileInfoRecord;
+import com.zhaoxinms.contract.template.sdk.mapper.FileInfoRecordMapper;
+import com.zhaoxinms.contract.tools.common.entity.FileInfo;
+import com.zhaoxinms.contract.tools.common.exception.FileOperationException;
+import com.zhaoxinms.contract.tools.common.service.FileInfoService;
+
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 文件信息Service实现类
@@ -46,75 +52,6 @@ public class FileInfoServiceImpl implements FileInfoService {
             java.io.File uploadDir = new java.io.File(absUploadPath);
             if (!uploadDir.exists()) uploadDir.mkdirs();
         } catch (Exception ignore) {}
-    }
-
-    public FileInfo saveNewFile(MultipartFile file) throws IOException {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("文件不能为空");
-        }
-
-        long newId = idSequence.incrementAndGet();
-        String idStr = String.valueOf(newId);
-        String originalFilename = file.getOriginalFilename();
-        String fileExtension = "";
-        if (originalFilename != null && originalFilename.contains(".")) {
-            fileExtension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1);
-        }
-
-        java.nio.file.Path targetPath = Paths.get(uploadRootPath, idStr + "." + fileExtension);
-        Files.createDirectories(targetPath.getParent());
-        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-        FileInfo fileInfo = new FileInfo();
-        fileInfo.setId(newId);
-        fileInfo.setOriginalName(originalFilename);
-        fileInfo.setFileName(targetPath.getFileName().toString());
-        fileInfo.setFileExtension(fileExtension);
-        fileInfo.setFileSize(file.getSize());
-        fileInfo.setStorePath(targetPath.toAbsolutePath().toString());
-        fileInfo.setStatus(0);
-        fileInfo.setCreateTime(LocalDateTime.now());
-        fileInfo.setUpdateTime(LocalDateTime.now());
-        fileInfo.setOnlyofficeKey(generateOnlyOfficeKeyForFile(idStr));
-        
-        fileInfoMap.put(idStr, fileInfo);
-        log.info("创建新文件记录，文件ID: {}", idStr);
-        return fileInfo;
-    }
-
-    /**
-     * 将已存在的磁盘文件注册为系统文件（复制到 uploads 下并分配新ID）。
-     */
-    public FileInfo registerClonedFile(java.nio.file.Path sourcePath, String originalName) throws IOException {
-        if (sourcePath == null || !java.nio.file.Files.exists(sourcePath)) {
-            throw new IllegalArgumentException("源文件不存在: " + String.valueOf(sourcePath));
-        }
-        String ext = "";
-        String name = sourcePath.getFileName().toString();
-        int dot = name.lastIndexOf('.');
-        if (dot >= 0) ext = name.substring(dot + 1);
-
-        long newId = idSequence.incrementAndGet();
-        String idStr = String.valueOf(newId);
-        java.nio.file.Path targetPath = Paths.get(uploadRootPath, idStr + (ext.isEmpty() ? "" : "." + ext));
-        Files.createDirectories(targetPath.getParent());
-        Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-        FileInfo fileInfo = new FileInfo();
-        fileInfo.setId(newId);
-        fileInfo.setOriginalName(originalName != null ? originalName : name);
-        fileInfo.setFileName(targetPath.getFileName().toString());
-        fileInfo.setFileExtension(ext);
-        fileInfo.setFileSize(Files.size(targetPath));
-        fileInfo.setStorePath(targetPath.toAbsolutePath().toString());
-        fileInfo.setStatus(0);
-        fileInfo.setCreateTime(LocalDateTime.now());
-        fileInfo.setUpdateTime(LocalDateTime.now());
-        fileInfo.setOnlyofficeKey(generateOnlyOfficeKeyForFile(idStr));
-
-        fileInfoMap.put(idStr, fileInfo);
-        log.info("注册克隆文件，文件ID: {} -> {}", idStr, targetPath);
-        return fileInfo;
     }
 
     @Override
@@ -356,5 +293,98 @@ public class FileInfoServiceImpl implements FileInfoService {
         // 使用当前时间戳作为雪花ID的简化版本
         long snowflakeId = System.currentTimeMillis();
         return fileId + "_" + snowflakeId;
+    }
+
+    /**
+     * 保存上传的新文件
+     */
+    @Override
+    public FileInfo saveNewFile(MultipartFile file) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("上传文件不能为空");
+        }
+
+        String originalName = file.getOriginalFilename();
+        if (originalName == null || originalName.trim().isEmpty()) {
+            originalName = "unknown_file";
+        }
+
+        // 获取文件扩展名
+        String extension = "";
+        int lastDotIndex = originalName.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < originalName.length() - 1) {
+            extension = originalName.substring(lastDotIndex + 1);
+        }
+
+        // 生成唯一的文件名
+        String uniqueFileName = UUID.randomUUID().toString() + "_" + originalName;
+        
+        // 确定存储路径
+        Path uploadDir = Paths.get(uploadRootPath).toAbsolutePath();
+        if (!Files.exists(uploadDir)) {
+            Files.createDirectories(uploadDir);
+        }
+        
+        Path filePath = uploadDir.resolve(uniqueFileName);
+        
+        // 保存文件到磁盘
+        try (InputStream inputStream = file.getInputStream()) {
+            Files.copy(inputStream, filePath, StandardCopyOption.REPLACE_EXISTING);
+        }
+        
+        // 注册文件信息到数据库
+        FileInfo fileInfo = registerFile(originalName, extension, filePath.toString(), file.getSize());
+        
+        log.info("保存新文件成功，文件ID: {}, 原始名称: {}, 存储路径: {}", 
+                fileInfo.getId(), originalName, filePath);
+        
+        return fileInfo;
+    }
+
+    /**
+     * 注册克隆的文件
+     */
+    @Override
+    public FileInfo registerClonedFile(Path filePath, String originalName) throws IOException {
+        if (filePath == null || !Files.exists(filePath)) {
+            throw new IllegalArgumentException("文件路径不存在: " + filePath);
+        }
+
+        if (originalName == null || originalName.trim().isEmpty()) {
+            originalName = filePath.getFileName().toString();
+        }
+
+        // 获取文件扩展名
+        String extension = "";
+        int lastDotIndex = originalName.lastIndexOf('.');
+        if (lastDotIndex > 0 && lastDotIndex < originalName.length() - 1) {
+            extension = originalName.substring(lastDotIndex + 1);
+        }
+
+        // 获取文件大小
+        long fileSize = Files.size(filePath);
+        
+        // 移动文件到上传目录（如果不在上传目录内）
+        Path uploadDir = Paths.get(uploadRootPath).toAbsolutePath();
+        if (!Files.exists(uploadDir)) {
+            Files.createDirectories(uploadDir);
+        }
+        
+        Path targetPath = filePath;
+        if (!filePath.startsWith(uploadDir)) {
+            // 生成唯一的文件名并移动到上传目录
+            String uniqueFileName = UUID.randomUUID().toString() + "_" + originalName;
+            targetPath = uploadDir.resolve(uniqueFileName);
+            Files.move(filePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            log.info("文件已移动到上传目录: {} -> {}", filePath, targetPath);
+        }
+        
+        // 注册文件信息到数据库
+        FileInfo fileInfo = registerFile(originalName, extension, targetPath.toString(), fileSize);
+        
+        log.info("注册克隆文件成功，文件ID: {}, 原始名称: {}, 存储路径: {}", 
+                fileInfo.getId(), originalName, targetPath);
+        
+        return fileInfo;
     }
 } 

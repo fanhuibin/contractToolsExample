@@ -2,8 +2,6 @@ package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
-import com.zhaoxinms.contract.tools.common.service.FileInfoService;
-import lombok.Data;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,12 +12,10 @@ import com.zhaoxinms.contract.template.sdk.service.impl.FileInfoServiceImpl;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination;
 import org.apache.pdfbox.pdmodel.PDPage;
 
@@ -59,7 +55,6 @@ public class ReviewController {
             FileInfo src = fileInfoService.getById(fileId);
             if (src == null) return Result.error("fileId 不存在");
             // 1) 先转 PDF
-            String srcPath = src.getStorePath();
             java.nio.file.Path outPdf = java.nio.file.Files.createTempFile("review_pdf_", ".pdf");
             String downloadUrl = fileInfoService.getFileDownloadUrl(fileId);
             if (changeFileToPDFService == null) return Result.error("PDF转换服务不可用");
