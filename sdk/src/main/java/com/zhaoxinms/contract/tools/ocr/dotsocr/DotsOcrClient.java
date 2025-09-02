@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Semaphore;
 
 /**
  * Dots.OCR OpenAI-compatible client.
@@ -47,6 +48,10 @@ public class DotsOcrClient {
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final boolean verboseLogging;
+    private final Semaphore concurrencyLimiter;
+    // Rendering preferences for PDF→image (used by callers/tests)
+    private final int renderDpi;
+    private final boolean saveRenderedImages;
 
     public static Builder builder() { return new Builder(); }
 
@@ -54,9 +59,12 @@ public class DotsOcrClient {
         private String baseUrl = "http://192.168.0.100:8000";
         private String apiKey = null;
         private String defaultModel = "dots.ocr";
-        private Duration timeout = Duration.ofSeconds(60);
+        private Duration timeout = Duration.ofMinutes(5);
         private OkHttpClient httpClient;
         private boolean verboseLogging = false;
+        private int maxConcurrency = 10;
+        private Integer renderDpi = 150; // default 150 dpi
+        private Boolean saveRenderedImages = false; // default not save
 
         public Builder baseUrl(String baseUrl) { this.baseUrl = baseUrl; return this; }
         public Builder apiKey(String apiKey) { this.apiKey = apiKey; return this; }
@@ -64,6 +72,9 @@ public class DotsOcrClient {
         public Builder timeout(Duration timeout) { this.timeout = timeout; return this; }
         public Builder httpClient(OkHttpClient httpClient) { this.httpClient = httpClient; return this; }
         public Builder verboseLogging(boolean verboseLogging) { this.verboseLogging = verboseLogging; return this; }
+        public Builder maxConcurrency(int maxConcurrency) { this.maxConcurrency = maxConcurrency; return this; }
+        public Builder renderDpi(int renderDpi) { this.renderDpi = renderDpi; return this; }
+        public Builder saveRenderedImages(boolean saveRenderedImages) { this.saveRenderedImages = saveRenderedImages; return this; }
 
         public DotsOcrClient build() {
             OkHttpClient client = this.httpClient != null ? this.httpClient : new OkHttpClient.Builder()
@@ -71,21 +82,33 @@ public class DotsOcrClient {
                     .readTimeout(timeout)
                     .writeTimeout(timeout)
                     .build();
-            return new DotsOcrClient(baseUrl, apiKey, defaultModel, client, new ObjectMapper(), verboseLogging);
+            return new DotsOcrClient(baseUrl, apiKey, defaultModel, client, new ObjectMapper(), verboseLogging, maxConcurrency,
+                    renderDpi == null ? 150 : renderDpi,
+                    saveRenderedImages != null && saveRenderedImages);
         }
     }
 
     public DotsOcrClient(String baseUrl, String apiKey, String defaultModel, OkHttpClient httpClient, ObjectMapper objectMapper, boolean verboseLogging) {
+        this(baseUrl, apiKey, defaultModel, httpClient, objectMapper, verboseLogging, 10, 150, false);
+    }
+
+    public DotsOcrClient(String baseUrl, String apiKey, String defaultModel, OkHttpClient httpClient, ObjectMapper objectMapper, boolean verboseLogging, int maxConcurrency, int renderDpi, boolean saveRenderedImages) {
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
         this.apiKey = apiKey; // can be null
         this.defaultModel = defaultModel == null ? "dots.ocr" : defaultModel;
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.verboseLogging = verboseLogging;
+        int permits = maxConcurrency <= 0 ? 1 : maxConcurrency;
+        this.concurrencyLimiter = new Semaphore(permits);
+        this.renderDpi = renderDpi <= 0 ? 150 : renderDpi;
+        this.saveRenderedImages = saveRenderedImages;
     }
 
     public String getBaseUrl() { return baseUrl; }
     public String getDefaultModel() { return defaultModel; }
+    public int getRenderDpi() { return renderDpi; }
+    public boolean isSaveRenderedImages() { return saveRenderedImages; }
 
     /**
      * GET /health → returns true if 200
@@ -143,6 +166,7 @@ public class DotsOcrClient {
         if (verboseLogging) {
             logRequest("POST", request.url().toString(), request.headers(), json);
         }
+        concurrencyLimiter.acquireUninterruptibly();
         try (Response resp = httpClient.newCall(request).execute()) {
             String body = resp.body() != null ? resp.body().string() : "";
             if (verboseLogging) {
@@ -153,6 +177,8 @@ public class DotsOcrClient {
             }
             String safeBody = body == null || body.isEmpty() ? "{}" : body;
             return objectMapper.readTree(safeBody);
+        } finally {
+            concurrencyLimiter.release();
         }
     }
 
