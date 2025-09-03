@@ -144,7 +144,7 @@ function viewElements(row: any) {
 }
 
 function frontendCompose(row: any) {
-  router.push({ path: '/contract-compose', query: { templateId: row.templateId, fileId: row.fileId } })
+  router.push({ path: '/contract-compose-frontend', query: { templateId: row.templateId, fileId: row.fileId } })
 }
 
 function backendCompose(row: any) {

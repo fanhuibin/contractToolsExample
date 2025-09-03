@@ -23,6 +23,20 @@ import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.merge.mergeImpl.ContentControlMerge;
 import com.zhaoxinms.contract.tools.merge.model.DocContent;
+import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
+import com.zhaoxinms.contract.tools.stamp.PdfStampUtil;
+import com.zhaoxinms.contract.tools.stamp.RidingStampUtil;
+import com.zhaoxinms.contract.tools.stamp.config.StampRule;
+import com.zhaoxinms.contract.tools.stamp.config.StampRulesConfig;
+import com.zhaoxinms.contract.tools.stamp.config.StampRulesLoader;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * 合同合成控制器：根据模板文件与tag->value替换，生成DOCX并转换/注册PDF，返回fileId
@@ -30,12 +44,16 @@ import com.zhaoxinms.contract.tools.merge.model.DocContent;
 @RestController
 @RequestMapping("/api/compose")
 public class ComposeController {
+	private static final Logger logger = LoggerFactory.getLogger(ComposeController.class);
 
     @Value("${file.upload.root-path:./uploads}")
     private String uploadRootPath;
 
     @Autowired(required = false)
     private FileInfoService fileInfoService;
+
+    @Autowired
+    private ChangeFileToPDFService changeFileToPDFService;
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
@@ -62,8 +80,59 @@ public class ComposeController {
             File outDocx = new File(workDir, "compose_" + ts + ".docx");
 
             // 构造DocContent列表（使用SDT的tag作为key）
+            // 平阳原理：对印章元素在合成前注入隐藏标识，确保PDF文本可被关键词精确定位
+            java.util.Map<String, String> mergeValues = new java.util.HashMap<>();
+            if (req.getValues() != null) mergeValues.putAll(req.getValues());
+            java.util.LinkedHashSet<String> sealKeywordPrefixesSet = new java.util.LinkedHashSet<>();
+
+            // 加载规则
+            StampRulesConfig rulesCfg = StampRulesLoader.load();
+            java.util.Map<String,String> codeToMarkerPrefix = new java.util.HashMap<>();
+            java.util.Map<String,String> codeToInsertValue = new java.util.HashMap<>();
+            if (rulesCfg.getRules() != null) {
+                for (StampRule r : rulesCfg.getRules()) {
+                    if (r.getCode() != null && !r.getCode().trim().isEmpty()) {
+                        codeToMarkerPrefix.put(r.getCode().toLowerCase(), ("SEAL_" + r.getCode().toUpperCase() + "_"));
+                        if (r.getInsertValue() != null) codeToInsertValue.put(r.getCode().toLowerCase(), r.getInsertValue());
+                    }
+                }
+            }
+
+            if (req.getValues() != null) {
+                for (Map.Entry<String, String> e : req.getValues().entrySet()) {
+                    String tag = e.getKey();
+                    String val = e.getValue() == null ? "" : e.getValue();
+                    if (tag != null && tag.startsWith("tagElement")) {
+                        String keyFull = tag.substring("tagElement".length());
+                        String[] parts = keyFull.split("_");
+                        if (parts.length >= 3) {
+                            // 取除最后两段（时间戳与随机后缀）之外作为 codePrefix（兼容 company_seal 等）
+                            StringBuilder codePrefixBuilder = new StringBuilder();
+                            for (int i = 0; i < parts.length - 2; i++) {
+                                if (i > 0) codePrefixBuilder.append('_');
+                                codePrefixBuilder.append(parts[i]);
+                            }
+                            String codePrefix = codePrefixBuilder.toString();
+                            String codeKey = codePrefix.toLowerCase();
+                            if (codeKey.contains("seal")) {
+                                // 标识前缀
+                                String markerPrefix = codeToMarkerPrefix.getOrDefault(codeKey, ("SEAL_" + codePrefix.toUpperCase() + "_"));
+                                sealKeywordPrefixesSet.add(markerPrefix + ts);
+                                String markerHtml = "<font style=\"color: white;\">" + markerPrefix + ts + "</font>";
+                                // 若该印章字段为空且规则给了 insertValue，则写入 insertValue；同时追加隐藏标识
+                                String newVal = val;
+                                if ((newVal == null || newVal.trim().isEmpty()) && codeToInsertValue.containsKey(codeKey)) {
+                                    newVal = codeToInsertValue.get(codeKey);
+                                }
+                                mergeValues.put(tag, (newVal == null ? "" : newVal) + markerHtml);
+                            }
+                        }
+                    }
+                }
+            }
+
             List<DocContent> contents = new ArrayList<>();
-            for (Map.Entry<String, String> e : req.getValues().entrySet()) {
+            for (Map.Entry<String, String> e : mergeValues.entrySet()) {
                 contents.add(new DocContent(e.getKey(), e.getValue()));
             }
 
@@ -80,6 +149,50 @@ public class ComposeController {
                 return Result.error("注册合成文件失败");
             }
 
+            // === 新增：自动转换为PDF并按规则执行自动盖章 ===
+            try {
+                String pdfPath = changeFileToPDFService != null ? changeFileToPDFService.covertToPdf(registered) : null;
+                if (pdfPath != null && !pdfPath.trim().isEmpty()) {
+                    String defaultImage = java.nio.file.Paths.get(uploadRootPath, "stamp.png").toString();
+                    java.io.File workDir2 = ensureWorkDir();
+                    String currentPdf = pdfPath;
+                    int normalIdx = 0;
+                    int ridingIdx = 0;
+
+                    if (rulesCfg.getRules() != null && !rulesCfg.getRules().isEmpty()) {
+                        for (StampRule r : rulesCfg.getRules()) {
+                            String type = r.getType() == null ? "" : r.getType().toLowerCase();
+                            if ("normal".equals(type)) {
+                                String imagePath = resolveImagePath(r.getImage(), defaultImage);
+                                java.util.List<String> kws;
+                                if (r.getKeywords() != null && !r.getKeywords().isEmpty()) {
+                                    kws = r.getKeywords();
+                                } else {
+                                    // 优先使用注入的 SEAL_ 前缀
+                                    kws = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
+                                }
+                                String out = new java.io.File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
+                                PdfStampUtil.addAutoStamp(currentPdf, out, imagePath, kws);
+                                currentPdf = out;
+                            } else if ("riding".equals(type)) {
+                                String imagePath = resolveImagePath(r.getImage(), defaultImage);
+                                try { logger.info("使用骑缝章图片: {}", new java.io.File(imagePath).getName()); } catch (Exception ignore) {}
+                                String out = new java.io.File(workDir2, "compose_" + ts + "_riding_" + (++ridingIdx) + ".pdf").getAbsolutePath();
+                                RidingStampUtil.addRidingStamp(currentPdf, out, imagePath);
+                                currentPdf = out;
+                            }
+                        }
+                    } else {
+                        // 无规则时保留与之前相同的默认行为
+                        java.util.List<String> keywords = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
+                        if (new java.io.File(defaultImage).exists() && !keywords.isEmpty()) {
+                            String stampedOut = new java.io.File(workDir2, "compose_" + ts + "_stamped.pdf").getAbsolutePath();
+                            PdfStampUtil.addAutoStamp(currentPdf, stampedOut, defaultImage, keywords);
+                        }
+                    }
+                }
+            } catch (Exception ignore) { }
+
             ComposeResponse resp = new ComposeResponse();
             resp.setFileId(String.valueOf(registered.getId()));
             return Result.success(resp);
@@ -87,6 +200,67 @@ public class ComposeController {
             return Result.error("合成失败: " + e.getMessage());
         }
     }
+
+    @PostMapping(value = "/compose-with-stamp", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Result<ComposeWithStampResponse> composeWithStamp(@RequestBody ComposeRequest req) {
+        try {
+            if (req == null || req.getTemplateFileId() == null || req.getTemplateFileId().trim().isEmpty()) {
+                return Result.error("templateFileId 不能为空");
+            }
+            if (req.getValues() == null || req.getValues().isEmpty()) {
+                return Result.error("values 不能为空");
+            }
+
+            // 1. 合成DOCX
+            String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(req.getTemplateFileId()) : null;
+            if (templatePath == null || templatePath.trim().isEmpty()) {
+                return Result.error("无法获取模板文件路径");
+            }
+
+            String ts = TS.format(LocalDateTime.now());
+            File workDir = ensureWorkDir();
+            File outDocx = new File(workDir, "compose_" + ts + ".docx");
+
+            List<DocContent> contents = new ArrayList<>();
+            for (Map.Entry<String, String> e : req.getValues().entrySet()) {
+                contents.add(new DocContent(e.getKey(), e.getValue()));
+            }
+
+            Merge merger = new ContentControlMerge();
+            merger.doMerge(templatePath, outDocx.getAbsolutePath(), contents);
+
+            // 2. 转换为PDF
+            String pdfPath = changeFileToPDFService.covertToPdf(outDocx);
+            if (pdfPath == null) {
+                return Result.error("DOCX转PDF失败");
+            }
+            File outPdf = new File(pdfPath);
+
+            // 3. 自动识别盖章
+            File stampedPdf = new File(workDir, "compose_" + ts + "_stamped.pdf");
+            // NOTE: stamp.png should exist in uploads directory for this to work.
+            String stampImagePath = Paths.get(uploadRootPath, "stamp.png").toString();
+            List<String> keywords = Arrays.asList("（公章）", "（签章）");
+            PdfStampUtil.addAutoStamp(outPdf.getAbsolutePath(), stampedPdf.getAbsolutePath(), stampImagePath, keywords);
+            
+            // 4. 骑缝章
+            File ridingStampPdf = new File(workDir, "compose_" + ts + "_riding.pdf");
+            try { logger.info("使用骑缝章图片: {}", new java.io.File(stampImagePath).getName()); } catch (Exception ignore) {}
+            RidingStampUtil.addRidingStamp(stampedPdf.getAbsolutePath(), ridingStampPdf.getAbsolutePath(), stampImagePath);
+
+            ComposeWithStampResponse resp = new ComposeWithStampResponse();
+            resp.setDocxPath(getRelativePath(outDocx));
+            resp.setPdfPath(getRelativePath(outPdf)); // Now this is a real PDF
+            resp.setStampedPdfPath(getRelativePath(stampedPdf));
+            resp.setRidingStampPdfPath(getRelativePath(ridingStampPdf));
+            
+            return Result.success(resp);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Result.error("合成或盖章失败: " + e.getMessage());
+        }
+    }
+
 
     private File ensureWorkDir() {
         try {
@@ -132,6 +306,51 @@ public class ComposeController {
         private String fileId;
         public String getFileId() { return fileId; }
         public void setFileId(String fileId) { this.fileId = fileId; }
+    }
+    
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class ComposeWithStampResponse {
+        @JsonProperty("docxPath")
+        private String docxPath;
+        @JsonProperty("pdfPath")
+        private String pdfPath;
+        @JsonProperty("stampedPdfPath")
+        private String stampedPdfPath;
+        @JsonProperty("ridingStampPdfPath")
+        private String ridingStampPdfPath;
+
+        public String getDocxPath() { return docxPath; }
+        public void setDocxPath(String docxPath) { this.docxPath = docxPath; }
+        public String getPdfPath() { return pdfPath; }
+        public void setPdfPath(String pdfPath) { this.pdfPath = pdfPath; }
+        public String getStampedPdfPath() { return stampedPdfPath; }
+        public void setStampedPdfPath(String stampedPdfPath) { this.stampedPdfPath = stampedPdfPath; }
+        public String getRidingStampPdfPath() { return ridingStampPdfPath; }
+        public void setRidingStampPdfPath(String ridingStampPdfPath) { this.ridingStampPdfPath = ridingStampPdfPath; }
+    }
+    
+    private String getRelativePath(File file) {
+        Path rootPath = Paths.get(uploadRootPath).toAbsolutePath();
+        Path filePath = file.toPath().toAbsolutePath();
+        return rootPath.relativize(filePath).toString().replace(File.separator, "/");
+    }
+    
+    // 解析规则中的图片路径；优先使用绝对路径，其次尝试 uploadRoot 下的相对路径，失败回退默认图片
+    private String resolveImagePath(String configuredImage, String defaultImage) {
+        try {
+            if (configuredImage == null || configuredImage.trim().isEmpty()) {
+                return defaultImage;
+            }
+            java.io.File f = new java.io.File(configuredImage);
+            if (f.isAbsolute() && f.exists()) {
+                return f.getAbsolutePath();
+            }
+            java.io.File underUpload = java.nio.file.Paths.get(uploadRootPath, configuredImage).toFile();
+            if (underUpload.exists()) {
+                return underUpload.getAbsolutePath();
+            }
+        } catch (Exception ignore) { }
+        return defaultImage;
     }
 }
 

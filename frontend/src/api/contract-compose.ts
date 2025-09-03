@@ -17,4 +17,10 @@ export function composeContract(data: ComposeRequest): Promise<{
   })
 }
 
+export function downloadTempFile(path: string) {
+  // Use window.open to trigger download for files served from backend
+  const url = `/api/download/temp?path=${encodeURIComponent(path)}`
+  window.open(url, '_blank')
+}
+
 

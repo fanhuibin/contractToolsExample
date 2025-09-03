@@ -6,8 +6,14 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     name: 'Layout',
     component: () => import('@/layout/index.vue'),
-    redirect: '/onlyoffice',
+    redirect: '/home',
     children: [
+      {
+        path: '/home',
+        name: 'HomePage',
+        component: () => import('@/views/home/HomePage.vue'),
+        meta: { title: '首页', hideAside: true }
+      },
       {
         path: '/templates',
         name: 'TemplatesIndex',
@@ -98,6 +104,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '提取规则设置' }
       },
       {
+        path: '/contract-compose-frontend',
+        name: 'ContractComposeFrontend',
+        component: () => import('@/views/compose/ContractComposeFrontend.vue'),
+        meta: { title: '前端合成' }
+      },
+      {
+        path: '/contract-compose-frontend/result/:fileId',
+        name: 'ContractComposeFrontendResult',
+        component: () => import('@/views/compose/ContractComposeFrontendResult.vue'),
+        meta: { title: '前端合成结果' }
+      },
+      {
         path: '/contract-compose',
         name: 'ContractCompose',
         component: () => import('@/views/compose/ContractCompose.vue'),
@@ -108,6 +126,12 @@ const routes: RouteRecordRaw[] = [
         name: 'ContractComposeResult',
         component: () => import('@/views/compose/ContractComposeResult.vue'),
         meta: { title: '合同合成结果' }
+      },
+      {
+        path: '/contract-compose/stamp-result',
+        name: 'ContractComposeStampResult',
+        component: () => import('@/views/compose/ContractComposeStampResult.vue'),
+        meta: { title: '合同合成盖章结果' }
       },
       
     ]

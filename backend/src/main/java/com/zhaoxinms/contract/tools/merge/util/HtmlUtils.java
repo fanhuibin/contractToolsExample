@@ -12,6 +12,7 @@ import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTR;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSdtContentRun;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTText;
 import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr;
+import org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor;
 
 /**
  * HTML内容处理工具类
@@ -104,6 +105,16 @@ public class HtmlUtils {
                 String style = element.attr("style");
                 processInlineStyle(run, style);
                 break;
+            case "font":
+                // 支持 <font style="color: ..."> 与 <font color="...">
+                String fontStyle = element.attr("style");
+                processInlineStyle(run, fontStyle);
+                String fontColorAttr = element.attr("color");
+                if (fontColorAttr != null && !fontColorAttr.trim().isEmpty()) {
+                    String hex = toHexColor(fontColorAttr.trim());
+                    if (hex != null) run.setColor(hex);
+                }
+                break;
             case "p":
                 // 段落标签，在文本前后添加换行
                 if (!paragraph.getRuns().isEmpty()) {
@@ -156,7 +167,8 @@ public class HtmlUtils {
                         }
                         break;
                     case "color":
-                        // 可以根据需要处理颜色
+                        String hex = toHexColor(value);
+                        if (hex != null) run.setColor(hex);
                         break;
                     case "font-size":
                         // 可以根据需要处理字体大小
@@ -259,6 +271,19 @@ public class HtmlUtils {
                 String style = element.attr("style");
                 processInlineStyleToContentControl(runProperties, style);
                 break;
+            case "font":
+                // 支持 <font style="color: ..."> 与 <font color="...">
+                String fontStyle = element.attr("style");
+                processInlineStyleToContentControl(runProperties, fontStyle);
+                String fontColorAttr = element.attr("color");
+                if (fontColorAttr != null && !fontColorAttr.trim().isEmpty()) {
+                    String hex = toHexColor(fontColorAttr.trim());
+                    if (hex != null) {
+                        CTColor color = runProperties.addNewColor();
+                        color.setVal(hex);
+                    }
+                }
+                break;
             case "p":
                 // 段落标签处理 - 可能需要添加换行
                 break;
@@ -308,7 +333,11 @@ public class HtmlUtils {
                         }
                         break;
                     case "color":
-                        // 可以根据需要处理颜色
+                        String hex = toHexColor(value);
+                        if (hex != null) {
+                            CTColor color = runProperties.addNewColor();
+                            color.setVal(hex);
+                        }
                         break;
                     case "font-size":
                         // 可以根据需要处理字体大小
@@ -332,5 +361,47 @@ public class HtmlUtils {
             System.err.println("HTML转换为纯文本异常: " + e.getMessage());
             return htmlContent; // 返回原始内容
         }
+    }
+
+    // 将 CSS/HTML 颜色表示转为 Word 需要的 hex（不含#）。返回null表示无法解析。
+    private static String toHexColor(String color) {
+        if (color == null) return null;
+        String c = color.trim();
+        if (c.startsWith("#")) {
+            String hex = c.substring(1);
+            return hex.length() == 3 ? expandHex3(hex) : hex;
+        }
+        String lc = c.toLowerCase();
+        if (lc.startsWith("rgb(" ) && lc.endsWith(")")) {
+            try {
+                String inner = lc.substring(4, lc.length() - 1);
+                String[] parts = inner.split(",");
+                if (parts.length >= 3) {
+                    int r = Integer.parseInt(parts[0].trim());
+                    int g = Integer.parseInt(parts[1].trim());
+                    int b = Integer.parseInt(parts[2].trim());
+                    return String.format("%02X%02X%02X", clamp(r), clamp(g), clamp(b));
+                }
+            } catch (Exception ignore) {}
+        }
+        // 常用命名色
+        switch (lc) {
+            case "white": return "FFFFFF";
+            case "black": return "000000";
+            case "red": return "FF0000";
+            case "green": return "00FF00";
+            case "blue": return "0000FF";
+        }
+        return null;
+    }
+
+    private static String expandHex3(String hex3) {
+        if (hex3 == null || hex3.length() != 3) return hex3;
+        char r = hex3.charAt(0), g = hex3.charAt(1), b = hex3.charAt(2);
+        return ("" + r + r + g + g + b + b).toUpperCase();
+    }
+
+    private static int clamp(int v) {
+        if (v < 0) return 0; if (v > 255) return 255; return v;
     }
 } 

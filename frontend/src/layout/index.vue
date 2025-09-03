@@ -4,7 +4,7 @@
     <AiChat v-model="showAiChat" />
     
     <!-- 侧边栏 -->
-    <el-aside width="200px" class="aside" v-if="!route.meta?.fullscreen">
+    <el-aside width="200px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
       <div class="logo">
         <h2>合同工具集</h2>
       </div>
@@ -16,6 +16,10 @@
         text-color="#bfcbd9"
         active-text-color="#409EFF"
       >
+        <el-menu-item index="/home">
+          <el-icon><House /></el-icon>
+          <span>首页</span>
+        </el-menu-item>
         <el-menu-item index="/auto-fulfillment">
           <el-icon><Document /></el-icon>
           <span>自动履约任务</span>
@@ -104,7 +108,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { Document, Files, Folder, Monitor, ArrowDown, ChatDotRound } from '@element-plus/icons-vue'
+import { Document, Files, Folder, Monitor, ArrowDown, ChatDotRound, House } from '@element-plus/icons-vue'
 import AiChat from '@/components/ai/AiChat.vue'
 
 const route = useRoute()

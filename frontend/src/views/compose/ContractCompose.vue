@@ -20,16 +20,20 @@
         <div v-else class="empty">请选择模板或传入 templateId 以加载预览</div>
       </div>
       <div class="form">
-        <el-form label-width="120px">
+        <el-form label-width="120px" class="compose-form" :inline="false">
           <template v-for="(el, idx) in formElements" :key="idx">
-            <el-form-item :label="el.customName || el.name || el.tag">
+            <el-form-item :label="el.customName || el.name || el.tag" class="field-card">
               <template v-if="isRich(el)">
-                <el-input
-                  v-model="formValues[el.tag]"
-                  type="textarea"
-                  :rows="6"
-                  placeholder="支持HTML，默认可粘贴‘销售产品清单’表格"
-                />
+                <div class="field-box is-rich">
+                  <el-input
+                    v-model="formValues[el.tag]"
+                    type="textarea"
+                    :rows="6"
+                    placeholder="支持HTML，默认可粘贴‘销售产品清单’表格"
+                    clearable
+                    resize="vertical"
+                  />
+                </div>
                 <div class="mt8" style="display:flex; gap:8px; align-items:center; flex-wrap: wrap;">
                   <el-select v-model="richOptions[el.tag].align" placeholder="对齐" style="width: 120px;">
                     <el-option label="左对齐" value="left" />
@@ -62,7 +66,15 @@
                 </div>
               </template>
               <template v-else>
-                <el-input v-model="formValues[el.tag]" placeholder="请输入" />
+                <div class="field-box">
+                  <el-input
+                    v-model="formValues[el.tag]"
+                    placeholder="请输入"
+                    clearable
+                    size="large"
+                    :prefix-icon="EditPen"
+                  />
+                </div>
               </template>
             </el-form-item>
           </template>
@@ -74,6 +86,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
+import { EditPen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { composeContract } from '@/api/contract-compose'
@@ -261,14 +274,29 @@ async function doCompose() {
 
 <style scoped>
 .compose-page { display: flex; flex-direction: column; height: 100%; }
-.toolbar { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid #eee; }
-.body { display: grid; grid-template-columns: 1fr 420px; gap: 12px; padding: 12px; height: 70vh; }
-.preview { border: 1px solid #eee; background: #fafafa; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #ebeef5; background: #ffffff; }
+.toolbar .left { font-weight: 600; font-size: 16px; color: #303133; }
+.body { display: grid; grid-template-columns: 1fr 440px; gap: 14px; padding: 14px; height: calc(100vh - 56px); background: #f5f7fa; }
+.preview { border: 1px solid #ebeef5; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
 .preview :deep(.onlyoffice-editor),
 .preview :deep(#onlyoffice-editor-container) { width: 100%; height: 100%; }
-.form { border: 1px solid #eee; padding: 12px; overflow: auto; }
+.form { border: 1px solid #ebeef5; padding: 14px; overflow: auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
 .empty { padding: 24px; color: #999; }
 .mt8 { margin-top: 8px; }
+
+/* 表单整体视觉 */
+.compose-form :deep(.el-form-item) { margin-bottom: 14px; }
+.field-card { padding: 8px 10px; border: 1px solid #f0f2f5; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02); }
+.field-card :deep(.el-form-item__label) { color: #606266; font-weight: 600; }
+.field-box { display: flex; flex: 1; }
+.field-box :deep(.el-input__wrapper) { padding: 6px 10px; border-radius: 8px; box-shadow: inset 0 0 0 1px #dcdfe6; }
+.field-box :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 3px rgba(51,112,255,.12), inset 0 0 0 1px #3370ff; }
+.field-box :deep(.el-textarea__inner) { border-radius: 8px; box-shadow: inset 0 0 0 1px #dcdfe6; }
+.field-box.is-rich :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 3px rgba(51,112,255,.12), inset 0 0 0 1px #3370ff; }
+
+/* 调整颜色选择与数值输入组件间距 */
+.form :deep(.el-color-picker) { vertical-align: middle; }
+.form :deep(.el-input-number) { width: 120px; }
 </style>
 
 
