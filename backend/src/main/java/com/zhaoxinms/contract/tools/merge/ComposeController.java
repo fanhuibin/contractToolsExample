@@ -37,6 +37,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 /**
  * 合同合成控制器：根据模板文件与tag->value替换，生成DOCX并转换/注册PDF，返回fileId
@@ -45,6 +49,7 @@ import org.slf4j.LoggerFactory;
 @RequestMapping("/api/compose")
 public class ComposeController {
 	private static final Logger logger = LoggerFactory.getLogger(ComposeController.class);
+    private static final OkHttpClient HTTP = new OkHttpClient();
 
     @Value("${file.upload.root-path:./uploads}")
     private String uploadRootPath;
@@ -84,6 +89,7 @@ public class ComposeController {
             java.util.Map<String, String> mergeValues = new java.util.HashMap<>();
             if (req.getValues() != null) mergeValues.putAll(req.getValues());
             java.util.LinkedHashSet<String> sealKeywordPrefixesSet = new java.util.LinkedHashSet<>();
+            java.util.Map<String, String> tagToMarker = new java.util.HashMap<>();
 
             // 加载规则
             StampRulesConfig rulesCfg = StampRulesLoader.load();
@@ -117,14 +123,22 @@ public class ComposeController {
                             if (codeKey.contains("seal")) {
                                 // 标识前缀
                                 String markerPrefix = codeToMarkerPrefix.getOrDefault(codeKey, ("SEAL_" + codePrefix.toUpperCase() + "_"));
-                                sealKeywordPrefixesSet.add(markerPrefix + ts);
-                                String markerHtml = "<font style=\"color: white;\">" + markerPrefix + ts + "</font>";
+                                String marker = markerPrefix + ts;
+                                sealKeywordPrefixesSet.add(marker);
+                                tagToMarker.put(tag, marker);
+                                String markerHtml = "<font style=\"color: white;\">" + marker + "</font>";
                                 // 若该印章字段为空且规则给了 insertValue，则写入 insertValue；同时追加隐藏标识
                                 String newVal = val;
+                                boolean usedInsertValue = false;
                                 if ((newVal == null || newVal.trim().isEmpty()) && codeToInsertValue.containsKey(codeKey)) {
                                     newVal = codeToInsertValue.get(codeKey);
+                                    usedInsertValue = true;
                                 }
-                                mergeValues.put(tag, (newVal == null ? "" : newVal) + markerHtml);
+                                String visiblePart = (newVal == null ? "" : newVal);
+                                if (usedInsertValue && !visiblePart.isEmpty()) {
+                                    visiblePart = "<font style=\"color: white;\">" + visiblePart + "</font>";
+                                }
+                                mergeValues.put(tag, visiblePart + markerHtml);
                             }
                         }
                     }
@@ -140,54 +154,81 @@ public class ComposeController {
             Merge merger = new ContentControlMerge();
             merger.doMerge(templatePath, outDocx.getAbsolutePath(), contents);
 
-            // 可选：转换为PDF；如果前端使用OnlyOffice在线预览DOCX也可直接注册DOCX。
-            // 此处直接注册DOCX与PDF一致由OnlyOffice预览渲染。
-
             // 注册文件到文件服务，返回fileId
             FileInfo registered = registerComposedFile(outDocx);
             if (registered == null) {
                 return Result.error("注册合成文件失败");
             }
 
-            // === 新增：自动转换为PDF并按规则执行自动盖章 ===
+            // === 转PDF并按用户URL优先执行盖章 ===
             try {
                 String pdfPath = changeFileToPDFService != null ? changeFileToPDFService.covertToPdf(registered) : null;
                 if (pdfPath != null && !pdfPath.trim().isEmpty()) {
-                    String defaultImage = java.nio.file.Paths.get(uploadRootPath, "stamp.png").toString();
-                    java.io.File workDir2 = ensureWorkDir();
+                    File workDir2 = ensureWorkDir();
                     String currentPdf = pdfPath;
                     int normalIdx = 0;
-                    int ridingIdx = 0;
 
-                    if (rulesCfg.getRules() != null && !rulesCfg.getRules().isEmpty()) {
-                        for (StampRule r : rulesCfg.getRules()) {
-                            String type = r.getType() == null ? "" : r.getType().toLowerCase();
-                            if ("normal".equals(type)) {
-                                String imagePath = resolveImagePath(r.getImage(), defaultImage);
-                                java.util.List<String> kws;
-                                if (r.getKeywords() != null && !r.getKeywords().isEmpty()) {
-                                    kws = r.getKeywords();
-                                } else {
-                                    // 优先使用注入的 SEAL_ 前缀
-                                    kws = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
+                    // 1) 若前端提供了URL，则直接按URL执行，不再按规则/默认
+                    boolean usedUserUrl = req.getStampImageUrls() != null && !req.getStampImageUrls().isEmpty();
+                    if (usedUserUrl) {
+                        // 普通章：逐个tag应用对应的normal URL，按该tag注入的marker精准盖章
+                        for (Map.Entry<String, ComposeRequest.StampImagePair> ent : req.getStampImageUrls().entrySet()) {
+                            String tag = ent.getKey();
+                            ComposeRequest.StampImagePair pair = ent.getValue();
+                            if (pair == null) continue;
+                            String normalUrl = pair.getNormal();
+                            String marker = tagToMarker.get(tag);
+                            if (normalUrl != null && !normalUrl.trim().isEmpty() && marker != null) {
+                                String localImg = downloadImageTo(workDir2, normalUrl.trim());
+                                if (localImg != null) {
+                                    String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
+                                    PdfStampUtil.addAutoStamp(currentPdf, out, localImg, java.util.Arrays.asList(marker));
+                                    currentPdf = out;
                                 }
-                                String out = new java.io.File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
-                                PdfStampUtil.addAutoStamp(currentPdf, out, imagePath, kws);
-                                currentPdf = out;
-                            } else if ("riding".equals(type)) {
-                                String imagePath = resolveImagePath(r.getImage(), defaultImage);
-                                try { logger.info("使用骑缝章图片: {}", new java.io.File(imagePath).getName()); } catch (Exception ignore) {}
-                                String out = new java.io.File(workDir2, "compose_" + ts + "_riding_" + (++ridingIdx) + ".pdf").getAbsolutePath();
-                                RidingStampUtil.addRidingStamp(currentPdf, out, imagePath);
+                            }
+                        }
+                        // 骑缝章：取第一个提供的riding URL
+                        String ridingUrl = null;
+                        for (ComposeRequest.StampImagePair pair : req.getStampImageUrls().values()) {
+                            if (pair != null && pair.getRiding() != null && !pair.getRiding().trim().isEmpty()) { ridingUrl = pair.getRiding().trim(); break; }
+                        }
+                        if (ridingUrl != null) {
+                            String localImg = downloadImageTo(workDir2, ridingUrl);
+                            if (localImg != null) {
+                                String out = new File(workDir2, "compose_" + ts + "_riding_1.pdf").getAbsolutePath();
+                                logger.info("使用骑缝章图片(用户URL): {}", new java.io.File(localImg).getName());
+                                RidingStampUtil.addRidingStamp(currentPdf, out, localImg);
                                 currentPdf = out;
                             }
                         }
                     } else {
-                        // 无规则时保留与之前相同的默认行为
-                        java.util.List<String> keywords = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
-                        if (new java.io.File(defaultImage).exists() && !keywords.isEmpty()) {
-                            String stampedOut = new java.io.File(workDir2, "compose_" + ts + "_stamped.pdf").getAbsolutePath();
-                            PdfStampUtil.addAutoStamp(currentPdf, stampedOut, defaultImage, keywords);
+                        // 2) 若未提供URL，保留原有规则/默认逻辑
+                        String defaultImage = java.nio.file.Paths.get(uploadRootPath, "stamp.png").toString();
+                        int ridingIdx = 0;
+                        StampRulesConfig rulesCfg2 = rulesCfg;
+                        if (rulesCfg2.getRules() != null && !rulesCfg2.getRules().isEmpty()) {
+                            for (StampRule r : rulesCfg2.getRules()) {
+                                String type = r.getType() == null ? "" : r.getType().toLowerCase();
+                                if ("normal".equals(type)) {
+                                    String imagePath = resolveImagePath(r.getImage(), defaultImage);
+                                    java.util.List<String> kws;
+                                    if (r.getKeywords() != null && !r.getKeywords().isEmpty()) {
+                                        kws = r.getKeywords();
+                                    } else {
+                                        // 优先使用注入的 SEAL_ 前缀
+                                        kws = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
+                                    }
+                                    String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
+                                    PdfStampUtil.addAutoStamp(currentPdf, out, imagePath, kws);
+                                    currentPdf = out;
+                                } else if ("riding".equals(type)) {
+                                    String imagePath = resolveImagePath(r.getImage(), defaultImage);
+                                    try { logger.info("使用骑缝章图片: {}", new java.io.File(imagePath).getName()); } catch (Exception ignore) {}
+                                    String out = new File(workDir2, "compose_" + ts + "_riding_" + (++ridingIdx) + ".pdf").getAbsolutePath();
+                                    RidingStampUtil.addRidingStamp(currentPdf, out, imagePath);
+                                    currentPdf = out;
+                                }
+                            }
                         }
                     }
                 }
@@ -293,10 +334,27 @@ public class ComposeController {
         /** tag->value 映射 */
         @JsonProperty("values")
         private Map<String, String> values;
+        /** 用户提供的图片URL映射：key为SDT的tag，normal为普通章URL，riding为骑缝章URL */
+        @JsonProperty("stampImageUrls")
+        private Map<String, StampImagePair> stampImageUrls;
         public String getTemplateFileId() { return templateFileId; }
         public void setTemplateFileId(String templateFileId) { this.templateFileId = templateFileId; }
         public Map<String, String> getValues() { return values; }
         public void setValues(Map<String, String> values) { this.values = values; }
+        public Map<String, StampImagePair> getStampImageUrls() { return stampImageUrls; }
+        public void setStampImageUrls(Map<String, StampImagePair> stampImageUrls) { this.stampImageUrls = stampImageUrls; }
+
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        public static class StampImagePair {
+            @JsonProperty("normal")
+            private String normal;
+            @JsonProperty("riding")
+            private String riding;
+            public String getNormal() { return normal; }
+            public void setNormal(String normal) { this.normal = normal; }
+            public String getRiding() { return riding; }
+            public void setRiding(String riding) { this.riding = riding; }
+        }
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -351,6 +409,34 @@ public class ComposeController {
             }
         } catch (Exception ignore) { }
         return defaultImage;
+    }
+
+    private String downloadImageTo(File workDir, String url) {
+        try {
+            Request req = new Request.Builder().url(url).build();
+            try (Response resp = HTTP.newCall(req).execute()) {
+                if (!resp.isSuccessful()) { logger.warn("下载图片失败: {} -> status {}", url, resp.code()); return null; }
+                ResponseBody body = resp.body();
+                if (body == null) return null;
+                byte[] bytes = body.bytes();
+                String ext = guessExtFrom(resp.header("Content-Type"));
+                File out = File.createTempFile("stamp_", ext, workDir);
+                java.nio.file.Files.write(out.toPath(), bytes);
+                return out.getAbsolutePath();
+            }
+        } catch (Exception ex) {
+            logger.warn("下载图片异常: {} -> {}", url, ex.getMessage());
+            return null;
+        }
+    }
+
+    private String guessExtFrom(String contentType) {
+        if (contentType == null) return ".img";
+        String ct = contentType.toLowerCase();
+        if (ct.contains("png")) return ".png";
+        if (ct.contains("jpeg") || ct.contains("jpg")) return ".jpg";
+        if (ct.contains("gif")) return ".gif";
+        return ".img";
     }
 }
 

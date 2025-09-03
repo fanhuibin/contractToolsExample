@@ -3,6 +3,7 @@ import request from '@/utils/request'
 export interface ComposeRequest {
   templateFileId: string
   values: Record<string, string>
+  stampImageUrls?: Record<string, { normal?: string; riding?: string }>
 }
 
 export function composeContract(data: ComposeRequest): Promise<{

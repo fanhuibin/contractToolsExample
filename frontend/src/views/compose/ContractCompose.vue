@@ -66,7 +66,19 @@
                 </div>
               </template>
               <template v-else>
-                <div class="field-box">
+                <div v-if="isSeal(el)" class="field-box" style="flex-direction: column; gap:8px;">
+                  <el-input
+                    v-model="sealUrl.normal[el.tag]"
+                    placeholder="请输入公司公章图片URL（仅用于盖章，不会插入文档）"
+                    clearable
+                  />
+                  <el-input
+                    v-model="sealUrl.riding[el.tag]"
+                    placeholder="请输入骑缝章图片URL（仅用于盖章，不会插入文档）"
+                    clearable
+                  />
+                </div>
+                <div v-else class="field-box">
                   <el-input
                     v-model="formValues[el.tag]"
                     placeholder="请输入"
@@ -89,7 +101,7 @@ import { ref, onMounted, computed } from 'vue'
 import { EditPen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { composeContract } from '@/api/contract-compose'
+import { composeContract, type ComposeRequest } from '@/api/contract-compose'
 import { getTemplateDesignByTemplateId } from '@/api/templateDesign'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 
@@ -104,6 +116,8 @@ const templateFileId = ref<string>('')
 // elements: [{ key, tag, type, name, customName, richText, meta }]
 const formElements = ref<Array<any>>([])
 const formValues = ref<Record<string, string>>({})
+// 用户提供的印章/骑缝章URL（仅提交给后端用于盖章，不插入文档）
+const sealUrl = ref<{ normal: Record<string, string>; riding: Record<string, string> }>({ normal: {}, riding: {} })
 
 // 富文本选项：按字段tag存储
 const richOptions = ref<Record<string, { align: 'left' | 'center' | 'right'; headerBg: string; borderColor: string; textColor: string; fontSize: number; fontUnit: 'px' | 'pt' | 'em' | 'rem' }>>({})
@@ -150,6 +164,11 @@ async function loadTemplateDesign() {
       // 初始化富文本选项
       elements.forEach((el: any) => {
         if (isRich(el)) ensureRichOptions(el.tag)
+        if (isSeal(el)) { if (!sealUrl.value.normal[el.tag]) sealUrl.value.normal[el.tag] = ''; if (!sealUrl.value.riding[el.tag]) sealUrl.value.riding[el.tag] = '' }
+        // 确保印章元素在values中占位，以便后端注入隐藏标识
+        if (isSeal(el) && formValues.value[el.tag] === undefined) {
+          formValues.value[el.tag] = ''
+        }
       })
       console.log('解析后的元素:', elements) // 调试信息
     } catch (e) {
@@ -181,6 +200,12 @@ function isRich(el: any): boolean {
   const r3 = el?.meta?.isRichText
   const toBool = (v: any) => v === true || v === 'true' || v === 'TRUE' || v === 'True'
   return toBool(r1) || toBool(r2) || toBool(r3)
+}
+
+function isSeal(el: any): boolean {
+  const tag: string = el?.tag || ''
+  const name: string = (el?.customName || el?.name || '').toLowerCase()
+  return tag.toLowerCase().includes('seal') || name.includes('公章') || name.includes('骑缝章')
 }
 
 function ensureRichOptions(tag: string) {
@@ -251,9 +276,10 @@ async function doCompose() {
     // 如果是默认模板，使用模板设计页面的默认文件ID
     const actualFileId = isDefaultTemplate.value ? '9999' : templateFileId.value
     
-    const payload = {
+    const payload: ComposeRequest = {
       templateFileId: actualFileId,
-      values: { ...formValues.value }
+      values: { ...formValues.value },
+      stampImageUrls: buildStampImageUrls()
     }
     
     const res = await composeContract(payload)
@@ -269,6 +295,20 @@ async function doCompose() {
   } finally {
     submitting.value = false
   }
+}
+
+function buildStampImageUrls(): Record<string, { normal?: string; riding?: string }> {
+  const map: Record<string, { normal?: string; riding?: string }> = {}
+  Object.keys(sealUrl.value.normal).forEach(tag => {
+    const normal = (sealUrl.value.normal[tag] || '').trim()
+    const riding = (sealUrl.value.riding[tag] || '').trim()
+    if (normal || riding) {
+      map[tag] = {}
+      if (normal) map[tag].normal = normal
+      if (riding) map[tag].riding = riding
+    }
+  })
+  return map
 }
 </script>
 
