@@ -107,6 +107,11 @@ const activeIndex = ref(-1)
 const filterMode = ref<'ALL' | 'DELETE' | 'INSERT'>('ALL')
 const syncScrollEnabled = ref(true) // 默认开启同轴滚动
 let isScrollSyncing = false // 防止循环触发滚动
+// 仅在“鼠标滚轮”触发的滚动时执行同步；拖动滚动条产生的滚动不触发同步
+const wheelActiveSide = ref<null | 'old' | 'new'>(null)
+let wheelClearTimer: number | undefined
+// 记录每侧上一次滚动位置（用于增量同步）
+const lastScrollTop: Record<'old' | 'new', number> = { old: 0, new: 0 }
 const showOutline = ref(false) // 大纲显示状态
 
 // 存储原始文件名
@@ -159,7 +164,7 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
     // 隐藏PDF工具栏按钮
     hidePDFToolbarButtons(side)
     
-    // 设置同轴滚动监听
+    // 设置同轴滚动监听（含 wheel 来源标记）
     setupSyncScrollListener(side)
   } catch (e) {
     // eslint-disable-next-line no-console
@@ -360,15 +365,65 @@ const setupSyncScrollListener = (side: 'old' | 'new') => {
     
     const viewerContainer = w.document.getElementById('viewerContainer')
     if (!viewerContainer) return
+
+    // 防重复绑定
+    if ((viewerContainer as any)._syncAttached) return
+    ;(viewerContainer as any)._syncAttached = true
     
+    // 鼠标滚轮事件：仅当最近一次滚动来源为该侧的 wheel 时，才进行同步
+    const handleWheel = () => {
+      wheelActiveSide.value = side
+      // 记录 wheel 开始时的起点，确保“从当前各自位置继续”
+      try {
+        lastScrollTop[side] = (viewerContainer as HTMLElement).scrollTop
+      } catch {}
+      if (wheelClearTimer) window.clearTimeout(wheelClearTimer)
+      wheelClearTimer = window.setTimeout(() => {
+        wheelActiveSide.value = null
+      }, 150)
+    }
+
     // 添加滚动监听器
     const handleScroll = () => {
       if (!syncScrollEnabled.value || isScrollSyncing) return
+      // 仅在由该侧“鼠标滚轮”引发的滚动时执行同步；
+      // 拖动滚动条/程序性滚动将不会触发同步，从而实现“松开后按当前位置继续”
+      if (wheelActiveSide.value !== side) return
       
       const otherSide = side === 'old' ? 'new' : 'old'
-      syncScrollToOther(side, otherSide)
+      try {
+        const fromWin = frameWin[side] as any
+        const toWin = frameWin[otherSide] as any
+        if (!fromWin || !toWin) return
+        const fromContainer = fromWin.document.getElementById('viewerContainer') as HTMLElement | null
+        const toContainer = toWin.document.getElementById('viewerContainer') as HTMLElement | null
+        if (!fromContainer || !toContainer) return
+
+        const currentTop = fromContainer.scrollTop
+        const delta = currentTop - (lastScrollTop[side] ?? 0)
+        // 无有效位移则不同步
+        if (Math.abs(delta) < 0.5) {
+          lastScrollTop[side] = currentTop
+          return
+        }
+        lastScrollTop[side] = currentTop
+
+        // 依据内容高度比例换算对侧位移，保证不同高度时滚动感一致
+        const fromRange = Math.max(1, fromContainer.scrollHeight - fromContainer.clientHeight)
+        const toRange = Math.max(0, toContainer.scrollHeight - toContainer.clientHeight)
+        const factor = toRange / fromRange
+
+        isScrollSyncing = true
+        toContainer.scrollTop = Math.max(0, Math.min(toRange, toContainer.scrollTop + delta * factor))
+        // 快速释放同步锁，避免卡顿
+        setTimeout(() => { isScrollSyncing = false }, 0)
+      } catch (e) {
+        console.warn('[syncScroll] delta sync failed', e)
+        isScrollSyncing = false
+      }
     }
     
+    viewerContainer.addEventListener('wheel', handleWheel, { passive: true })
     viewerContainer.addEventListener('scroll', handleScroll, { passive: true })
   } catch (e) {
     console.warn(`[syncScroll] setup failed for ${side}`, e)
