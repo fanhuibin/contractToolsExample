@@ -285,10 +285,16 @@ async function doCompose() {
     const res = await composeContract(payload)
     const fileId = res.data.fileId
     ElMessage.success('合成成功')
-    // 跳转到结果预览页（OnlyOffice只读）
     router.push({
       path: `/contract-compose/result/${encodeURIComponent(fileId)}`,
-      query: { templateId: templateId.value, fileId: templateFileId.value }
+      query: {
+        templateId: templateId.value,
+        fileId: templateFileId.value,
+        docxPath: res.data.docxPath || '',
+        pdfPath: res.data.pdfPath || '',
+        stampedPdfPath: res.data.stampedPdfPath || '',
+        ridingStampPdfPath: res.data.ridingStampPdfPath || ''
+      }
     })
   } catch (e: any) {
     ElMessage.error(e?.message || '合成失败')

@@ -161,11 +161,16 @@ public class ComposeController {
             }
 
             // === 转PDF并按用户URL优先执行盖章 ===
+            String docxRelPath = getRelativePath(outDocx);
+            String pdfRelPath = null;
+            String stampedRelPath = null;
+            String ridingRelPath = null;
             try {
                 String pdfPath = changeFileToPDFService != null ? changeFileToPDFService.covertToPdf(registered) : null;
                 if (pdfPath != null && !pdfPath.trim().isEmpty()) {
                     File workDir2 = ensureWorkDir();
                     String currentPdf = pdfPath;
+                    pdfRelPath = getRelativePath(new File(pdfPath));
                     int normalIdx = 0;
 
                     // 1) 若前端提供了URL，则直接按URL执行，不再按规则/默认
@@ -184,6 +189,7 @@ public class ComposeController {
                                     String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
                                     PdfStampUtil.addAutoStamp(currentPdf, out, localImg, java.util.Arrays.asList(marker));
                                     currentPdf = out;
+                                    stampedRelPath = getRelativePath(new File(out));
                                 }
                             }
                         }
@@ -199,6 +205,7 @@ public class ComposeController {
                                 logger.info("使用骑缝章图片(用户URL): {}", new java.io.File(localImg).getName());
                                 RidingStampUtil.addRidingStamp(currentPdf, out, localImg);
                                 currentPdf = out;
+                                ridingRelPath = getRelativePath(new File(out));
                             }
                         }
                     } else {
@@ -221,12 +228,14 @@ public class ComposeController {
                                     String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
                                     PdfStampUtil.addAutoStamp(currentPdf, out, imagePath, kws);
                                     currentPdf = out;
+                                    stampedRelPath = getRelativePath(new File(out));
                                 } else if ("riding".equals(type)) {
                                     String imagePath = resolveImagePath(r.getImage(), defaultImage);
                                     try { logger.info("使用骑缝章图片: {}", new java.io.File(imagePath).getName()); } catch (Exception ignore) {}
                                     String out = new File(workDir2, "compose_" + ts + "_riding_" + (++ridingIdx) + ".pdf").getAbsolutePath();
                                     RidingStampUtil.addRidingStamp(currentPdf, out, imagePath);
                                     currentPdf = out;
+                                    ridingRelPath = getRelativePath(new File(out));
                                 }
                             }
                         }
@@ -236,6 +245,10 @@ public class ComposeController {
 
             ComposeResponse resp = new ComposeResponse();
             resp.setFileId(String.valueOf(registered.getId()));
+            resp.setDocxPath(docxRelPath);
+            resp.setPdfPath(pdfRelPath);
+            resp.setStampedPdfPath(stampedRelPath);
+            resp.setRidingStampPdfPath(ridingRelPath);
             return Result.success(resp);
         } catch (Exception e) {
             return Result.error("合成失败: " + e.getMessage());
@@ -362,8 +375,24 @@ public class ComposeController {
         /** 合成后文件ID（用于OnlyOffice或文件下载预览） */
         @JsonProperty("fileId")
         private String fileId;
+        @JsonProperty("docxPath")
+        private String docxPath;
+        @JsonProperty("pdfPath")
+        private String pdfPath;
+        @JsonProperty("stampedPdfPath")
+        private String stampedPdfPath;
+        @JsonProperty("ridingStampPdfPath")
+        private String ridingStampPdfPath;
         public String getFileId() { return fileId; }
         public void setFileId(String fileId) { this.fileId = fileId; }
+        public String getDocxPath() { return docxPath; }
+        public void setDocxPath(String docxPath) { this.docxPath = docxPath; }
+        public String getPdfPath() { return pdfPath; }
+        public void setPdfPath(String pdfPath) { this.pdfPath = pdfPath; }
+        public String getStampedPdfPath() { return stampedPdfPath; }
+        public void setStampedPdfPath(String stampedPdfPath) { this.stampedPdfPath = stampedPdfPath; }
+        public String getRidingStampPdfPath() { return ridingStampPdfPath; }
+        public void setRidingStampPdfPath(String ridingStampPdfPath) { this.ridingStampPdfPath = ridingStampPdfPath; }
     }
     
     @JsonInclude(JsonInclude.Include.NON_NULL)

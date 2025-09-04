@@ -136,6 +136,15 @@ const loadFields = async () => {
   fields.clauseFields = res.data.clauseFields || []
   fields.counterpartyFields = res.data.counterpartyFields || []
   fields.sealFields = res.data.sealFields || []
+  // 并列新增：二维码公章（仅前端增强展示，不改动后端接口）
+  try {
+    const exists = (fields.sealFields || []).some((s: any) => String(s.code).toLowerCase() === 'seal_qrcode')
+    if (!exists) {
+      // 将其插入到列表前部，便于与公司公章/财务专用章并列展示
+      const qrSeal = { name: '二维码公章', code: 'seal_qrcode' }
+      fields.sealFields = [qrSeal, ...fields.sealFields]
+    }
+  } catch {}
 }
 
 const loadDesignByTemplateId = async () => {

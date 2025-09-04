@@ -6,10 +6,18 @@ export interface ComposeRequest {
   stampImageUrls?: Record<string, { normal?: string; riding?: string }>
 }
 
+export interface ComposeResponseData {
+  fileId: string
+  docxPath?: string
+  pdfPath?: string
+  stampedPdfPath?: string
+  ridingStampPdfPath?: string
+}
+
 export function composeContract(data: ComposeRequest): Promise<{
   code: number
   message: string
-  data: { fileId: string }
+  data: ComposeResponseData
 }> {
   return request({
     url: '/compose/sdt',
