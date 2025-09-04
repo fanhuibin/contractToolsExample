@@ -1,23 +1,30 @@
 package com.zhaoxinms.contract.template.sdk.controller;
 
-import com.zhaoxinms.contract.tools.common.Result;
-import com.zhaoxinms.contract.tools.common.entity.FileInfo;
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-import com.zhaoxinms.contract.template.sdk.service.impl.FileInfoServiceImpl;
-import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
-
 import java.util.HashMap;
 import java.util.Map;
+
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDDocumentOutline;
 import org.apache.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem;
-import org.apache.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageXYZDestination;
-import org.apache.pdfbox.pdmodel.PDPage;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
+
+import com.zhaoxinms.contract.template.sdk.service.impl.FileInfoServiceImpl;
+import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.common.entity.FileInfo;
+import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
+
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
 
 @RestController
 @RequestMapping("/api/review")
