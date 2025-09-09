@@ -22,14 +22,15 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response) => {
     const { data } = response
-    
-    // 如果返回的状态码为200，说明接口请求成功，可以正常拿到数据
+
+    // 支持统一响应格式：{code: 200, message: "...", data: ...}
     if (data.code === 200) {
       return data
     } else {
       // 否则的话抛出错误
-      ElMessage.error(data.message || '请求失败')
-      return Promise.reject(new Error(data.message || '请求失败'))
+      const errorMessage = data.message || '请求失败'
+      ElMessage.error(errorMessage)
+      return Promise.reject(new Error(errorMessage))
     }
   },
   (error) => {

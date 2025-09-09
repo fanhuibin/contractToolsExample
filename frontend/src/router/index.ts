@@ -62,6 +62,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'OCR文档比对结果' }
       },
       {
+        path: '/gpu-ocr-compare',
+        name: 'GPUOCRCompare',
+        component: () => import('@/views/documents/GPUOCRCompare.vue'),
+        meta: { title: 'GPU OCR文档比对' }
+      },
+      {
+        path: '/gpu-ocr-compare/result/:taskId',
+        name: 'GPUOCRCompareResult',
+        component: () => import('@/views/documents/GPUOCRCompareResult.vue'),
+        meta: { title: 'GPU OCR文档比对结果' }
+      },
+      {
         path: '/template-design-demo',
         name: 'TemplateDesignDemo',
         component: () => import('@/views/templates/TemplateDesignDemo.vue'),

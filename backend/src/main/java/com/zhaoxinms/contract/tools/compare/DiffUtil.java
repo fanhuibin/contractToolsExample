@@ -48,7 +48,7 @@ public class DiffUtil {
 	/**
 	 * Cost of an empty edit operation in terms of edit characters.
 	 */
-	public short Diff_EditCost = 8;
+	public short Diff_EditCost = 5;
 	/**
 	 * At what point is no match declared (0.0 = perfection, 1.0 = very loose).
 	 */
@@ -1110,109 +1110,6 @@ public class DiffUtil {
 		if (changes) {
 			diff_cleanupMerge(diffs);
 		}
-	}
-
-	/**
-	 * Custom cleanup for OCR diff results.
-	 * Rules:
-	 * 1) Filter diffs where the differing text is composed entirely of spaces.
-	 * 2) Filter diffs where the differing text is composed entirely of underscores '_'.
-	 * 3) If a single punctuation symbol (one of ',', '、', '.') is inserted and a single
-	 *    punctuation symbol (one of ',', '、', '.') is deleted (order agnostic), filter both.
-	 * Filtered diffs are completely removed from the result, not converted to EQUAL.
-	 * This affects whether diffs are returned as results and marked in documents.
-	 */
-	public void diff_cleanupCustomIgnore(LinkedList<Diff> diffs) {
-		if (diffs == null || diffs.isEmpty()) return;
-
-		// First stage: filter diffs that are composed only of spaces / underscores / newlines (any mix)
-		ArrayList<Diff> stage1 = new ArrayList<>(diffs.size());
-		for (Diff d : diffs) {
-			if (d.operation != Operation.EQUAL) {
-				if (isAllSpaces(d.text) || isAllUnderscores(d.text) || isAllSpacesOrUnderscores(d.text) || isAllSpacesUnderscoresNewlines(d.text)) {
-					continue; // filter out completely
-				}
-			}
-			stage1.add(d);
-		}
-
-		// Second stage: pairwise filter opposite single-punctuation diffs (',', '、', '.')
-		ArrayList<Diff> stage2 = new ArrayList<>(stage1.size());
-		for (int i = 0; i < stage1.size(); i++) {
-			Diff cur = stage1.get(i);
-			if (cur.operation != Operation.EQUAL && isTargetPunct(cur.text)) {
-				int lastIdx = stage2.size() - 1;
-				if (lastIdx >= 0) {
-					Diff prev = stage2.get(lastIdx);
-					if (prev.operation != Operation.EQUAL && isTargetPunct(prev.text)
-							&& prev.operation != cur.operation) {
-						// filter both prev and cur completely
-						stage2.remove(lastIdx);
-						continue; // handled, skip adding cur
-					}
-				}
-			}
-			stage2.add(cur);
-		}
-
-		// Third stage: merge adjacent equalities and drop empty diffs if any
-		LinkedList<Diff> out = new LinkedList<>();
-		for (Diff d : stage2) {
-			if (d.text == null || d.text.isEmpty()) {
-				continue;
-			}
-			if (!out.isEmpty() && out.getLast().operation == Operation.EQUAL && d.operation == Operation.EQUAL) {
-				out.getLast().text += d.text;
-			} else {
-				out.add(d);
-			}
-		}
-
-		diffs.clear();
-		diffs.addAll(out);
-	}
-
-	private boolean isAllSpaces(String s) {
-		if (s == null || s.isEmpty()) return false;
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c != ' ') return false;
-		}
-		return true;
-	}
-
-	private boolean isAllUnderscores(String s) {
-		if (s == null || s.isEmpty()) return false;
-		for (int i = 0; i < s.length(); i++) {
-			if (s.charAt(i) != '_') return false;
-		}
-		return true;
-	}
-
-	// spaces + underscores only
-	private boolean isAllSpacesOrUnderscores(String s) {
-		if (s == null || s.isEmpty()) return false;
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c != ' ' && c != '_') return false;
-		}
-		return true;
-	}
-
-	// spaces + underscores + newlines (\n/\r) only
-	private boolean isAllSpacesUnderscoresNewlines(String s) {
-		if (s == null || s.isEmpty()) return false;
-		for (int i = 0; i < s.length(); i++) {
-			char c = s.charAt(i);
-			if (c != ' ' && c != '_' && c != '\n' && c != '\r') return false;
-		}
-		return true;
-	}
-
-	private boolean isTargetPunct(String s) {
-		if (s == null || s.length() != 1) return false;
-		char c = s.charAt(0);
-		return c == ',' || c == '、' || c == '.';
 	}
 
 	/**

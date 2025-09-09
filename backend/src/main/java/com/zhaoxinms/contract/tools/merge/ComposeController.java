@@ -1,12 +1,17 @@
 package com.zhaoxinms.contract.tools.merge;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -30,13 +35,6 @@ import com.zhaoxinms.contract.tools.stamp.config.StampRule;
 import com.zhaoxinms.contract.tools.stamp.config.StampRulesConfig;
 import com.zhaoxinms.contract.tools.stamp.config.StampRulesLoader;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.Arrays;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -56,7 +54,7 @@ public class ComposeController {
 
     @Autowired(required = false)
     private FileInfoService fileInfoService;
-
+ 
     @Autowired
     private ChangeFileToPDFService changeFileToPDFService;
 

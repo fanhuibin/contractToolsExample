@@ -272,7 +272,7 @@ function alignViewer(side: 'old' | 'new', pos: any) {
     // 先跳到对应页
     app.pdfViewer.currentPageNumber = pageNumber
     // 计算 PDF 空间到视口像素
-    setTimeout(() => {
+    setTimeout(() => { 
       try {
         const pv = app.pdfViewer.getPageView(pageNumber - 1)
         if (!pv || !pv.viewport || !pv.div) return

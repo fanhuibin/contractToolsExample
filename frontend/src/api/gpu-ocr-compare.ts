@@ -1,0 +1,107 @@
+import request from '@/utils/request'
+
+// GPU OCR比对任务状态
+export interface GPUOCRCompareTaskStatus {
+  taskId: string
+  status: 'PENDING' | 'OCR_PROCESSING' | 'COMPARING' | 'ANNOTATING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT'
+  statusDesc: string
+  progress: number
+  totalSteps: number
+  currentStep: number
+  currentStepDesc: string
+  createdTime: string
+  updatedTime: string
+  errorMessage?: string
+  oldFileName: string
+  newFileName: string
+  oldPdfUrl?: string
+  newPdfUrl?: string
+  annotatedOldPdfUrl?: string
+  annotatedNewPdfUrl?: string
+}
+
+// GPU OCR比对结果
+export interface GPUOCRCompareResult {
+  taskId: string
+  oldFileName: string
+  newFileName: string
+  oldPdfUrl: string
+  newPdfUrl: string
+  annotatedOldPdfUrl?: string
+  annotatedNewPdfUrl?: string
+  differences: any[]
+  deleteCount: number
+  insertCount: number
+  ignoreCount: number
+  totalDiffCount: number
+  summary: string
+  processingTimeMs: number
+}
+
+// GPU OCR比对选项
+export interface GPUOCRCompareOptions {
+  ignoreHeaderFooter?: boolean
+  headerHeightMm?: number
+  footerHeightMm?: number
+  ignoreCase?: boolean
+  ignoredSymbols?: string
+  ignoreSpaces?: boolean
+  ignoreSeals?: boolean
+}
+
+// 上传GPU OCR比对任务
+export function uploadGPUOCRCompare(formData: FormData) {
+  return request({
+    url: '/gpu-ocr-compare/submit',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+}
+
+// 获取GPU OCR比对任务状态
+export function getGPUOCRCompareTaskStatus(taskId: string) {
+  return request({
+    url: `/gpu-ocr-compare/task/${taskId}`,
+    method: 'get'
+  })
+}
+
+// 获取GPU OCR比对结果
+export function getGPUOCRCompareResult(taskId: string) {
+  return request({
+    url: `/gpu-ocr-compare/result/${taskId}`,
+    method: 'get'
+  })
+}
+
+// 获取所有GPU OCR比对任务
+export function getAllGPUOCRCompareTasks() {
+  return request({
+    url: '/gpu-ocr-compare/tasks',
+    method: 'get'
+  })
+}
+
+// 删除GPU OCR比对任务
+export function deleteGPUOCRCompareTask(taskId: string) {
+  return request({
+    url: `/gpu-ocr-compare/task/${taskId}`,
+    method: 'delete'
+  })
+}
+
+// 调试模式：使用已有的OCR任务ID进行比对
+export function debugGPUCompareWithExistingOCR(data: {
+  oldOcrTaskId: string
+  newOcrTaskId: string
+  options: GPUOCRCompareOptions
+}) {
+  return request({
+    url: '/gpu-ocr-compare/debug-compare',
+    method: 'post',
+    data
+  })
+}

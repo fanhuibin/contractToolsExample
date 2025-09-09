@@ -98,4 +98,15 @@ onlyoffice:
       review: true  # 是否允许审阅
       fillForms: true  # 是否允许填写表单
       modifyContentControl: true  # 是否允许修改内容控件
-      modifyFilter: true  # 是否允许修改过滤器 
+      modifyFilter: true  # 是否允许修改过滤器
+
+# GPU OCR配置
+gpu:
+  ocr:
+    debug-file-path: "C:\\Users\\范慧斌\\Desktop\\hetong比对前端"  # 调试模式文件路径
+    ocr-base-url: "http://192.168.0.100:8000"  # OCR服务基础URL
+    ocr-model: "dots.ocr"  # OCR模型名称
+    upload-path: "./uploads"  # 文件上传路径
+    result-path: "./uploads/ocr-compare/results"  # 比对结果存储路径
+    save-rendered-images: false  # 是否保存渲染的图像
+    parallel-threads: 4  # 并行处理线程数 

@@ -46,6 +46,10 @@
           <el-icon><Document /></el-icon>
           <span>OCR文档比对</span>
         </el-menu-item>
+        <el-menu-item index="/gpu-ocr-compare">
+          <el-icon><Document /></el-icon>
+          <span>GPU OCR文档比对</span>
+        </el-menu-item>
         <el-menu-item index="/template-design">
           <el-icon><Monitor /></el-icon>
           <span>模板设计</span>

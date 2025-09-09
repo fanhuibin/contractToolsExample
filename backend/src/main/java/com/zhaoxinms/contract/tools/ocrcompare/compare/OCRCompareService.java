@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import com.zhaoxinms.contract.tools.ocrcompare.service.OCRTaskService;
 import com.zhaoxinms.contract.tools.ocrcompare.model.OCRTask;
+import com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareOptions;
 
 import java.io.IOException;
 import java.util.UUID;

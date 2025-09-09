@@ -308,5 +308,3 @@ public class DotsOcrClient {
         return "***";
     }
 }
-
-

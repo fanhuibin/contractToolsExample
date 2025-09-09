@@ -202,16 +202,26 @@ public class PDFComparsionHelper extends PDFTextStripper {
                 }
 
                 // 记录比对结果
+                // 处理空列表的情况
+                if (oldPosition.isEmpty() || newPosition.isEmpty()) {
+                    continue; // 跳过这个差异，因为没有对应的位置信息
+                }
+
                 if (oldCurrentPosition >= oldPosition.size()) {
-                    oldCurrentPosition = oldPosition.size() - 1;
+                    oldCurrentPosition = Math.max(0, oldPosition.size() - 1);
                 }
                 if (newCurrentPosition >= newPosition.size()) {
-                    newCurrentPosition = newPosition.size() - 1;
+                    newCurrentPosition = Math.max(0, newPosition.size() - 1);
                 }
-                TextPosition p1 = oldPosition.get(Math.min(oldCurrentPosition, Math.max(0, oldPosition.size() - 1)));
-                TextPosition p2 = newPosition.get(Math.min(newCurrentPosition, Math.max(0, newPosition.size() - 1)));
-                int page1 = oldPageInfo.get(Math.min(oldCurrentPosition, Math.max(0, oldPageInfo.size() - 1)));
-                int page2 = newPageInfo.get(Math.min(newCurrentPosition, Math.max(0, newPageInfo.size() - 1)));
+
+                // 确保索引不为负数且在有效范围内
+                int oldIndex = Math.max(0, Math.min(oldCurrentPosition, oldPosition.size() - 1));
+                int newIndex = Math.max(0, Math.min(newCurrentPosition, newPosition.size() - 1));
+
+                TextPosition p1 = oldPosition.get(oldIndex);
+                TextPosition p2 = newPosition.get(newIndex);
+                int page1 = oldPageInfo.get(oldIndex);
+                int page2 = newPageInfo.get(newIndex);
                 // 首先做基础的空位前后补偿（原有：向后）
                 if (p1 == null) {
                     int forward = findNearestForward(oldPosition, oldCurrentPosition + 1);
