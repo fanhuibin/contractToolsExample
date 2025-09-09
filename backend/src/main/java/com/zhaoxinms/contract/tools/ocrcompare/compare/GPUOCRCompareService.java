@@ -481,6 +481,28 @@ public class GPUOCRCompareService {
             task.updateProgress(7, "合并差异块");
 
             System.out.println("开始合并差异块，filteredBlocks大小: " + filteredBlocks.size());
+            // 调试输出 filteredBlocks 的关键字段
+            try {
+                int limit = Math.min(50, filteredBlocks.size());
+                for (int bi = 0; bi < limit; bi++) {
+                    DiffBlock b = filteredBlocks.get(bi);
+                    int po = (b.prevOldBboxes == null) ? 0 : b.prevOldBboxes.size();
+                    int pn = (b.prevNewBboxes == null) ? 0 : b.prevNewBboxes.size();
+                    String poFirst = (po > 0) ? String.format("[%.0f,%.0f,%.0f,%.0f]", b.prevOldBboxes.get(0)[0], b.prevOldBboxes.get(0)[1], b.prevOldBboxes.get(0)[2], b.prevOldBboxes.get(0)[3]) : "-";
+                    String pnFirst = (pn > 0) ? String.format("[%.0f,%.0f,%.0f,%.0f]", b.prevNewBboxes.get(0)[0], b.prevNewBboxes.get(0)[1], b.prevNewBboxes.get(0)[2], b.prevNewBboxes.get(0)[3]) : "-";
+                    System.out.println(String.format(
+                        "#%d type=%s pageA=%d pageB=%d prevOld=%d(%s) prevNew=%d(%s)",
+                        bi + 1,
+                        String.valueOf(b.type),
+                        b.pageA,
+                        b.pageB,
+                        po, poFirst,
+                        pn, pnFirst
+                    ));
+                }
+            } catch (Exception logEx) {
+                System.err.println("打印filteredBlocks调试信息失败: " + logEx.getMessage());
+            }
             List<DiffBlock> merged = mergeBlocksByBbox(filteredBlocks);
             System.out.println("合并完成，merged大小: " + merged.size());
 
@@ -853,11 +875,11 @@ public class GPUOCRCompareService {
         List<DiffBlock> result1 = mergeSameBboxBlocks(blocks);
         
         // 2. 应用连续新增/删除合并算法
-        List<DiffBlock> result2 = mergeConsecutiveInsertDelete(result1);
+        //List<DiffBlock> result2 = mergeConsecutiveInsertDelete(result1);
 
         // 最终结果中去掉所有 IGNORED 块
         List<DiffBlock> finalResult = new ArrayList<>();
-        for (DiffBlock b : result2) {
+        for (DiffBlock b : result1) {
             if (b != null && b.type != DiffBlock.DiffType.IGNORED) {
                 finalResult.add(b);
             }
@@ -865,7 +887,7 @@ public class GPUOCRCompareService {
 
         System.out.println("合并前 blocks 数量: " + blocks.size());
         System.out.println("bbox合并后数量: " + result1.size());
-        System.out.println("连续合并后数量: " + result2.size());
+        System.out.println("连续合并后数量: " + result1.size());
         System.out.println("去除IGNORED后数量: " + finalResult.size());
         System.out.println("实际合并的块数: " + (blocks.size() - finalResult.size()));
         
@@ -965,12 +987,20 @@ public class GPUOCRCompareService {
         int currentPosA = 0;
         int currentPosB = 0;
         
+        DiffBlock firstWithPrev = null;
+        DiffBlock firstWithPrev2 = null;
         for (DiffBlock block : group) {
             if (block.oldBboxes != null) {
                 addBboxesUnique(merged.oldBboxes, block.oldBboxes, 0.5);
             }
             if (block.newBboxes != null) {
                 addBboxesUnique(merged.newBboxes, block.newBboxes, 0.5);
+            }
+            if (firstWithPrev2 == null && ((block.prevOldBboxes != null && !block.prevOldBboxes.isEmpty()) || (block.prevNewBboxes != null && !block.prevNewBboxes.isEmpty()))) {
+                firstWithPrev2 = block;
+            }
+            if (firstWithPrev == null && ((block.prevOldBboxes != null && !block.prevOldBboxes.isEmpty()) || (block.prevNewBboxes != null && !block.prevNewBboxes.isEmpty()))) {
+                firstWithPrev = block;
             }
             if (block.oldText != null && !block.oldText.trim().isEmpty()) {
                 if (oldTextBuilder.length() > 0) oldTextBuilder.append(" ");
@@ -981,20 +1011,27 @@ public class GPUOCRCompareService {
                 newTextBuilder.append(block.newText.trim());
             }
             
-            // 合并完整文本和差异范围
-            if (block.allTextA != null) {
-                allTextAList.addAll(block.allTextA);
+            // 合并完整文本，用空格连接不同的块（去重处理）
+            if (block.allTextA != null && !block.allTextA.isEmpty()) {
+                String blockFullTextA = block.allTextA.get(0);
+                if (blockFullTextA != null && !allTextAList.contains(blockFullTextA)) {
+                    allTextAList.add(blockFullTextA);
+                }
             }
-            if (block.allTextB != null) {
-                allTextBList.addAll(block.allTextB);
+            if (block.allTextB != null && !block.allTextB.isEmpty()) {
+                String blockFullTextB = block.allTextB.get(0);
+                if (blockFullTextB != null && !allTextBList.contains(blockFullTextB)) {
+                    allTextBList.add(blockFullTextB);
+                }
             }
             
-            // 调整差异范围的位置偏移
+            // 对于相同bbox合并，差异范围保持原有位置，不进行偏移调整
+            // 因为它们本来就在同一个文本区域内
             if (block.diffRangesA != null) {
                 for (DiffBlock.TextRange range : block.diffRangesA) {
                     diffRangesA.add(new DiffBlock.TextRange(
-                        currentPosA + range.start, 
-                        currentPosA + range.end, 
+                        range.start,  // 保持原有位置，不加偏移
+                        range.end,    // 保持原有位置，不加偏移
                         range.type
                     ));
                 }
@@ -1002,28 +1039,42 @@ public class GPUOCRCompareService {
             if (block.diffRangesB != null) {
                 for (DiffBlock.TextRange range : block.diffRangesB) {
                     diffRangesB.add(new DiffBlock.TextRange(
-                        currentPosB + range.start, 
-                        currentPosB + range.end, 
+                        range.start,  // 保持原有位置，不加偏移
+                        range.end,    // 保持原有位置，不加偏移
                         range.type
                     ));
                 }
             }
             
-            // 更新位置偏移
-            if (block.allTextA != null) {
-                for (String text : block.allTextA) {
-                    currentPosA += text != null ? text.length() : 0;
-                }
-            }
-            if (block.allTextB != null) {
-                for (String text : block.allTextB) {
-                    currentPosB += text != null ? text.length() : 0;
-                }
-            }
+            // 对于相同bbox合并，不更新位置偏移
+            // 因为文本内容是重复的，不需要累加长度
         }
         
         merged.oldText = oldTextBuilder.toString();
         merged.newText = newTextBuilder.toString();
+        
+        // 调试输出：验证bbox合并后的文本和范围
+        System.out.println("DEBUG bbox合并后 - 合并了" + group.size() + "个相同bbox的块");
+        System.out.println("DEBUG bbox合并后 - allTextA数量: " + allTextAList.size() + ", allTextB数量: " + allTextBList.size());
+        if (!allTextAList.isEmpty()) {
+            System.out.println("DEBUG bbox合并后 - allTextA[0]: \"" + allTextAList.get(0) + "\"");
+        }
+        if (!allTextBList.isEmpty()) {
+            System.out.println("DEBUG bbox合并后 - allTextB[0]: \"" + allTextBList.get(0) + "\"");
+        }
+        System.out.println("DEBUG bbox合并后 - diffRangesA: " + diffRangesA);
+        System.out.println("DEBUG bbox合并后 - diffRangesB: " + diffRangesB);
+        System.out.println("DEBUG bbox合并后 - 原始块的diffRanges已保持原有位置（无偏移调整）");
+        
+        if (firstWithPrev2 != null) {
+            merged.prevOldBboxes = firstWithPrev2.prevOldBboxes == null ? null : new ArrayList<>(firstWithPrev2.prevOldBboxes);
+            merged.prevNewBboxes = firstWithPrev2.prevNewBboxes == null ? null : new ArrayList<>(firstWithPrev2.prevNewBboxes);
+        }
+        // 保留第一个带 prev* 的来源，保证前端跳转链
+        if (firstWithPrev != null) {
+            merged.prevOldBboxes = firstWithPrev.prevOldBboxes == null ? null : new ArrayList<>(firstWithPrev.prevOldBboxes);
+            merged.prevNewBboxes = firstWithPrev.prevNewBboxes == null ? null : new ArrayList<>(firstWithPrev.prevNewBboxes);
+        }
         merged.allTextA = allTextAList;
         merged.allTextB = allTextBList;
         merged.diffRangesA = diffRangesA;
@@ -1206,8 +1257,8 @@ public class GPUOCRCompareService {
         // 合并文本内容和范围
         StringBuilder oldTextBuilder = new StringBuilder();
         StringBuilder newTextBuilder = new StringBuilder();
-        List<String> allTextAList = new ArrayList<>();
-        List<String> allTextBList = new ArrayList<>();
+        StringBuilder mergedFullTextA = new StringBuilder();
+        StringBuilder mergedFullTextB = new StringBuilder();
         List<DiffBlock.TextRange> diffRangesA = new ArrayList<>();
         List<DiffBlock.TextRange> diffRangesB = new ArrayList<>();
         
@@ -1230,12 +1281,20 @@ public class GPUOCRCompareService {
                 newTextBuilder.append(block.newText.trim());
             }
             
-            // 合并完整文本和差异范围
-            if (block.allTextA != null) {
-                allTextAList.addAll(block.allTextA);
+            // 合并完整文本，用空格连接不同的块
+            if (block.allTextA != null && !block.allTextA.isEmpty()) {
+                String blockFullTextA = block.allTextA.get(0); // 取第一个（通常只有一个）
+                if (blockFullTextA != null) {
+                    if (mergedFullTextA.length() > 0) mergedFullTextA.append(" ");
+                    mergedFullTextA.append(blockFullTextA);
+                }
             }
-            if (block.allTextB != null) {
-                allTextBList.addAll(block.allTextB);
+            if (block.allTextB != null && !block.allTextB.isEmpty()) {
+                String blockFullTextB = block.allTextB.get(0); // 取第一个（通常只有一个）
+                if (blockFullTextB != null) {
+                    if (mergedFullTextB.length() > 0) mergedFullTextB.append(" ");
+                    mergedFullTextB.append(blockFullTextB);
+                }
             }
             
             // 调整差异范围的位置偏移
@@ -1258,17 +1317,37 @@ public class GPUOCRCompareService {
                 }
             }
             
-            // 更新位置偏移
-            if (block.allTextA != null) {
-                for (String text : block.allTextA) {
-                    currentPosA += text != null ? text.length() : 0;
+            // 更新位置偏移（基于当前块的完整文本长度）
+            if (block.allTextA != null && !block.allTextA.isEmpty()) {
+                String blockFullTextA = block.allTextA.get(0);
+                if (blockFullTextA != null) {
+                    currentPosA += blockFullTextA.length();
+                    // 如果不是最后一个块，加上空格分隔符的长度
+                    if (group.indexOf(block) < group.size() - 1) {
+                        currentPosA += 1; // 空格分隔符
+                    }
                 }
             }
-            if (block.allTextB != null) {
-                for (String text : block.allTextB) {
-                    currentPosB += text != null ? text.length() : 0;
+            if (block.allTextB != null && !block.allTextB.isEmpty()) {
+                String blockFullTextB = block.allTextB.get(0);
+                if (blockFullTextB != null) {
+                    currentPosB += blockFullTextB.length();
+                    // 如果不是最后一个块，加上空格分隔符的长度
+                    if (group.indexOf(block) < group.size() - 1) {
+                        currentPosB += 1; // 空格分隔符
+                    }
                 }
             }
+        }
+        
+        // 设置合并后的完整文本（单个字符串而不是列表）
+        List<String> allTextAList = new ArrayList<>();
+        List<String> allTextBList = new ArrayList<>();
+        if (mergedFullTextA.length() > 0) {
+            allTextAList.add(mergedFullTextA.toString());
+        }
+        if (mergedFullTextB.length() > 0) {
+            allTextBList.add(mergedFullTextB.toString());
         }
         
         merged.oldText = oldTextBuilder.toString();
@@ -1277,6 +1356,17 @@ public class GPUOCRCompareService {
         merged.allTextB = allTextBList;
         merged.diffRangesA = diffRangesA;
         merged.diffRangesB = diffRangesB;
+        
+        // 调试输出：验证合并后的文本和范围
+        System.out.println("DEBUG 连续合并后 - allTextA数量: " + allTextAList.size() + ", allTextB数量: " + allTextBList.size());
+        if (!allTextAList.isEmpty()) {
+            System.out.println("DEBUG 连续合并后 - allTextA[0]: \"" + allTextAList.get(0) + "\"");
+        }
+        if (!allTextBList.isEmpty()) {
+            System.out.println("DEBUG 连续合并后 - allTextB[0]: \"" + allTextBList.get(0) + "\"");
+        }
+        System.out.println("DEBUG 连续合并后 - diffRangesA: " + diffRangesA);
+        System.out.println("DEBUG 连续合并后 - diffRangesB: " + diffRangesB);
         
         System.out.println("合并连续" + (first.type == DiffBlock.DiffType.ADDED ? "新增" : "删除") + "块: " + group.size() + "个块 -> 1个块");
         System.out.println("合并后oldText: " + merged.oldText);
@@ -1588,13 +1678,8 @@ public class GPUOCRCompareService {
      */
     private double[] convertImageCoordsToPdfCoords(double[] imageBbox, double scaleX, double scaleY, double pdfPageHeight) {
         if (imageBbox == null || imageBbox.length < 4) {
-            System.out.println("坐标转换调试: 输入bbox为空或格式不正确");
             return imageBbox;
         }
-
-        // 输入坐标日志
-        System.out.println(String.format("坐标转换调试 - 输入: imageBbox=[%.2f, %.2f, %.2f, %.2f], scaleX=%.4f, scaleY=%.4f, pdfPageHeight=%.2f",
-            imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], scaleX, scaleY, pdfPageHeight));
 
         // 应用缩放比例（图像坐标 → PDF坐标）
         // 注意：scaleX = imageWidth / pdfWidth，所以从图像坐标到PDF坐标应该是除法
@@ -1603,147 +1688,11 @@ public class GPUOCRCompareService {
         double pdfX2 = imageBbox[2] / scaleX;
         double pdfY2 = imageBbox[3] / scaleY;
 
-        System.out.println(String.format("坐标转换调试 - 除法缩放后: pdfCoords=[%.2f, %.2f, %.2f, %.2f] (%.2f/%.4f=%.2f, %.2f/%.4f=%.2f)",
-            pdfX1, pdfY1, pdfX2, pdfY2,
-            imageBbox[0], scaleX, pdfX1,
-            imageBbox[1], scaleY, pdfY1));   
-
         // 不做Y轴翻转，返回顶左原点PDF坐标（供前端统一做翻转）
         double[] topLeftPdfCoords = new double[]{pdfX1, pdfY1, pdfX2, pdfY2};
 
-        System.out.println(String.format("坐标转换调试 - 返回顶左原点PDF坐标: topLeftPdfCoords=[%.2f, %.2f, %.2f, %.2f]",
-            topLeftPdfCoords[0], topLeftPdfCoords[1], topLeftPdfCoords[2], topLeftPdfCoords[3]));
-        System.out.println(String.format("坐标转换调试 - 验证: 原始图像尺寸=%.2f×%.2f, 转换后PDF尺寸=%.2f×%.2f, 缩放比例=%.4f×%.4f",
-            imageBbox[2] - imageBbox[0], imageBbox[3] - imageBbox[1],
-            topLeftPdfCoords[2] - topLeftPdfCoords[0], topLeftPdfCoords[3] - topLeftPdfCoords[1],
-            (imageBbox[2] - imageBbox[0]) / (topLeftPdfCoords[2] - topLeftPdfCoords[0]),
-            (imageBbox[3] - imageBbox[1]) / (topLeftPdfCoords[3] - topLeftPdfCoords[1])));
-
         return topLeftPdfCoords;
     }
-
-    // 辅助方法：判断块类型
-    private boolean isEqualOrEnd(DiffBlock block) {
-        // 依用户要求：用 IGNORED 表示 e（等于/不变段或边界）
-        // 同时允许 block 为空作为边界（列表末尾）
-        return block == null || block.type == DiffBlock.DiffType.IGNORED;
-    }
-
-    private boolean isInsert(DiffBlock block) {
-        return block != null && block.type == DiffBlock.DiffType.ADDED;
-    }
-
-    private boolean isDelete(DiffBlock block) {
-        return block != null && block.type == DiffBlock.DiffType.DELETED;
-    }
-
-    // 创建修改块的方法
-    private DiffBlock createModifiedBlock(DiffBlock insertBlock, DiffBlock deleteBlock) {
-        DiffBlock modified = new DiffBlock();
-        modified.type = DiffBlock.DiffType.MODIFIED;
-        modified.page = insertBlock.page;
-        modified.pageA = deleteBlock.pageA;
-        modified.pageB = insertBlock.pageB;
-        
-        // 合并文本
-        modified.oldText = deleteBlock.oldText != null ? deleteBlock.oldText : "";
-        modified.newText = insertBlock.newText != null ? insertBlock.newText : "";
-        
-        // 合并bbox
-        modified.oldBboxes = deleteBlock.oldBboxes != null ? new ArrayList<>(deleteBlock.oldBboxes) : new ArrayList<>();
-        modified.newBboxes = insertBlock.newBboxes != null ? new ArrayList<>(insertBlock.newBboxes) : new ArrayList<>();
-        
-        // 创建嵌套结构来保存原始信息
-        modified.nestedBlocks = new ArrayList<>();
-        modified.nestedBlocks.add(deleteBlock);
-        modified.nestedBlocks.add(insertBlock);
-        
-        return modified;
-    }
-
-    private DiffBlock createComplexModifiedBlock(List<DiffBlock> inserts, List<DiffBlock> deletes) {
-        DiffBlock modified = new DiffBlock();
-        modified.type = DiffBlock.DiffType.MODIFIED;
-        modified.nestedBlocks = new ArrayList<>();
-        
-        // 设置页面信息（使用第一个块的信息）
-        if (!deletes.isEmpty()) {
-            modified.page = deletes.get(0).page;
-            modified.pageA = deletes.get(0).pageA;
-        }
-        if (!inserts.isEmpty()) {
-            modified.pageB = inserts.get(0).pageB;
-        }
-        
-        modified.oldBboxes = new ArrayList<>();
-        modified.newBboxes = new ArrayList<>();
-        StringBuilder oldTextBuilder = new StringBuilder();
-        StringBuilder newTextBuilder = new StringBuilder();
-        
-        // 合并所有删除块
-        for (DiffBlock delete : deletes) {
-            modified.nestedBlocks.add(delete);
-            if (delete.oldBboxes != null) modified.oldBboxes.addAll(delete.oldBboxes);
-            if (delete.oldText != null) oldTextBuilder.append(delete.oldText);
-        }
-        
-        // 合并所有插入块
-        for (DiffBlock insert : inserts) {
-            modified.nestedBlocks.add(insert);
-            if (insert.newBboxes != null) modified.newBboxes.addAll(insert.newBboxes);
-            if (insert.newText != null) newTextBuilder.append(insert.newText);
-        }
-        
-        modified.oldText = oldTextBuilder.toString();
-        modified.newText = newTextBuilder.toString();
-        
-        return modified;
-    }
-
-    private DiffBlock mergeInsertBlocks(List<DiffBlock> inserts) {
-        if (inserts.isEmpty()) return null;
-        if (inserts.size() == 1) return inserts.get(0);
-        
-        DiffBlock merged = new DiffBlock();
-        merged.type = DiffBlock.DiffType.ADDED;
-        merged.page = inserts.get(0).page;
-        merged.pageA = inserts.get(0).pageA;
-        merged.pageB = inserts.get(0).pageB;
-        merged.newBboxes = new ArrayList<>();
-        merged.nestedBlocks = new ArrayList<>(inserts);
-        
-        StringBuilder textBuilder = new StringBuilder();
-        for (DiffBlock insert : inserts) {
-            if (insert.newBboxes != null) merged.newBboxes.addAll(insert.newBboxes);
-            if (insert.newText != null) textBuilder.append(insert.newText);
-        }
-        merged.newText = textBuilder.toString();
-        
-        return merged;
-    }
-
-    private DiffBlock mergeDeleteBlocks(List<DiffBlock> deletes) {
-        if (deletes.isEmpty()) return null;
-        if (deletes.size() == 1) return deletes.get(0);
-        
-        DiffBlock merged = new DiffBlock();
-        merged.type = DiffBlock.DiffType.DELETED;
-        merged.page = deletes.get(0).page;
-        merged.pageA = deletes.get(0).pageA;
-        merged.pageB = deletes.get(0).pageB;
-        merged.oldBboxes = new ArrayList<>();
-        merged.nestedBlocks = new ArrayList<>(deletes);
-        
-        StringBuilder textBuilder = new StringBuilder();
-        for (DiffBlock delete : deletes) {
-            if (delete.oldBboxes != null) merged.oldBboxes.addAll(delete.oldBboxes);
-            if (delete.oldText != null) textBuilder.append(delete.oldText);
-        }
-        merged.oldText = textBuilder.toString();
-        
-        return merged;
-    }
-
 
     /**
      * 将DiffType转换为前端期望的操作类型
@@ -1799,3 +1748,4 @@ public class GPUOCRCompareService {
         return base.resolve(taskId + ".json");
     }
 }
+
