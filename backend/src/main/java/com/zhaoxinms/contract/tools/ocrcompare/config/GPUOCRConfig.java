@@ -23,7 +23,7 @@ public class GPUOCRConfig {
     /**
      * OCR模型名称
      */
-    private String ocrModel = "dots.ocr";
+    private String ocrModel = "model";
 
     /**
      * 文件上传路径
@@ -44,6 +44,21 @@ public class GPUOCRConfig {
      * 并行处理线程数
      */
     private int parallelThreads = 4;
+
+    /**
+     * 渲染DPI（影响识别清晰度，demo一般较高）
+     */
+    private int renderDpi = 200;
+
+    /**
+     * 最小像素总数（小于则按比例放大，0 表示不启用）
+     */
+    private long minPixels = 3136;
+
+    /**
+     * 最大像素总数（大于则按比例缩小，建议 11289600）
+     */
+    private long maxPixels = 11289600;
 
     public String getDebugFilePath() {
         return debugFilePath;
@@ -99,5 +114,29 @@ public class GPUOCRConfig {
 
     public void setParallelThreads(int parallelThreads) {
         this.parallelThreads = parallelThreads;
+    }
+
+    public int getRenderDpi() {
+        return renderDpi;
+    }
+
+    public void setRenderDpi(int renderDpi) {
+        this.renderDpi = renderDpi;
+    }
+
+    public long getMinPixels() {
+        return minPixels;
+    }
+
+    public void setMinPixels(long minPixels) {
+        this.minPixels = minPixels;
+    }
+
+    public long getMaxPixels() {
+        return maxPixels;
+    }
+
+    public void setMaxPixels(long maxPixels) {
+        this.maxPixels = maxPixels;
     }
 }

@@ -17,6 +17,9 @@ spring:
       max-file-size: 100MB
       max-request-size: 100MB
       enabled: true
+      # 优化文件上传处理
+      file-size-threshold: 0  # 立即写入磁盘，避免内存占用
+      location: ${java.io.tmpdir}  # 临时文件位置
   
   # 数据库配置
   datasource:
@@ -110,3 +113,6 @@ gpu:
     result-path: "./uploads/ocr-compare/results"  # 比对结果存储路径
     save-rendered-images: false  # 是否保存渲染的图像
     parallel-threads: 4  # 并行处理线程数 
+    render-dpi: 200  # 渲染DPI
+    min-pixels: 3136    # 最小像素（0 关闭）
+    max-pixels: 11289600  # 最大像素（与dots.ocr建议一致）

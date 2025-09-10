@@ -25,7 +25,6 @@ import java.util.Objects;
 import java.util.concurrent.Semaphore;
 
 /**
- * Dots.OCR OpenAI-compatible client.
  *
  * Endpoints:
  * - GET /health           → service health
@@ -33,9 +32,6 @@ import java.util.concurrent.Semaphore;
  * - POST /v1/chat/completions → OCR via VLM messages (text + image_url)
  * - GET /metrics         → Prometheus metrics (text/plain)
  *
- * Reference:
- * - https://www.dotsocr.net/blog/2
- * - https://github.com/rednote-hilab/dots.ocr
  */
 public class DotsOcrClient {
 
@@ -58,7 +54,7 @@ public class DotsOcrClient {
     public static class Builder {
         private String baseUrl = "http://192.168.0.100:8000";
         private String apiKey = null;
-        private String defaultModel = "dots.ocr";
+        private String defaultModel = "model";
         private Duration timeout = Duration.ofMinutes(5);
         private OkHttpClient httpClient;
         private boolean verboseLogging = false;
@@ -95,7 +91,7 @@ public class DotsOcrClient {
     public DotsOcrClient(String baseUrl, String apiKey, String defaultModel, OkHttpClient httpClient, ObjectMapper objectMapper, boolean verboseLogging, int maxConcurrency, int renderDpi, boolean saveRenderedImages) {
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl");
         this.apiKey = apiKey; // can be null
-        this.defaultModel = defaultModel == null ? "dots.ocr" : defaultModel;
+        this.defaultModel = defaultModel == null ? "model" : defaultModel;
         this.httpClient = Objects.requireNonNull(httpClient, "httpClient");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.verboseLogging = verboseLogging;
@@ -219,6 +215,8 @@ public class DotsOcrClient {
     private JsonNode buildChatCompletionRequest(String model, String prompt, String imageUrl) throws JsonProcessingException {
         Map<String, Object> root = new HashMap<>();
         root.put("model", model);
+        // 与dots.ocr demo保持一致：放宽生成上限
+        root.put("max_tokens", 24000);
 
         List<Map<String, Object>> content = new ArrayList<>();
         if (prompt != null && !prompt.isBlank()) {

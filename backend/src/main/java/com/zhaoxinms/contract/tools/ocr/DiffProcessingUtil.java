@@ -326,10 +326,6 @@ public class DiffProcessingUtil {
 			blk.diffRangesA = computedRangesA;
 			blk.diffRangesB = computedRangesB;
 
-			if (allNewText.toString().contains("广州市国际会展中心有限公司")) {
-				System.out.println("-----------------------------到了");
-			}
-			
 			// 设置前一个块的bboxes用于同步
 			if (prevBlock != null) {
 				if (d.operation == DiffUtil.Operation.INSERT) {
