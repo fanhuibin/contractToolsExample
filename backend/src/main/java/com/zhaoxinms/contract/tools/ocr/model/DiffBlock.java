@@ -17,9 +17,9 @@ import java.util.List;
  */
 public class DiffBlock {
     public DiffType type;
-    public int pageA; // 原文档A的页面号（1-based）
-    public int pageB; // 新文档B的页面号（1-based）
-    public int page; // 为了向后兼容，保留原有的page字段（主要用于显示）
+    public List<Integer> pageA; // 原文档A的页面号列表（1-based），每个bbox对应一个页码
+    public List<Integer> pageB; // 新文档B的页面号列表（1-based），每个bbox对应一个页码
+    public int page; // 为了向后兼容，保留原有的page字段（主要用于显示，取最后一个页码）
     public List<double[]> oldBboxes; // DELETE操作对应的bbox（来自原文档A）
     public List<double[]> newBboxes; // INSERT操作对应的bbox（来自新文档B）
     public List<double[]> prevOldBboxes; // 上一个block的oldBboxes，用于同步跳转
@@ -78,9 +78,38 @@ public class DiffBlock {
             String category, String oldText, String newText) {
         DiffBlock r = new DiffBlock();
         r.type = type;
-        r.pageA = pageA;
-        r.pageB = pageB;
+        // 将单个页码转换为页码数组
+        r.pageA = new ArrayList<>();
+        r.pageB = new ArrayList<>();
+        if (pageA > 0) r.pageA.add(pageA);
+        if (pageB > 0) r.pageB.add(pageB);
         r.page = pageA; // 向后兼容，使用pageA作为主要页面
+        r.oldBboxes = oldBboxes;
+        r.newBboxes = newBboxes;
+        r.category = category;
+        r.oldText = oldText;
+        r.newText = newText;
+        // 初始化新的索引字段为默认值
+        r.textStartIndexA = -1;
+        r.textStartIndexB = -1;
+        r.originalDiff = null;
+        r.prevOldBboxes = null;
+        r.prevNewBboxes = null;
+        return r;
+    }
+
+    /**
+     * 创建DiffBlock的静态工厂方法（支持页码数组）
+     */
+    public static DiffBlock of(DiffType type, List<Integer> pageA, List<Integer> pageB, List<double[]> oldBboxes, List<double[]> newBboxes,
+            String category, String oldText, String newText) {
+        DiffBlock r = new DiffBlock();
+        r.type = type;
+        r.pageA = pageA != null ? new ArrayList<>(pageA) : new ArrayList<>();
+        r.pageB = pageB != null ? new ArrayList<>(pageB) : new ArrayList<>();
+        // 向后兼容，使用最后一个页码作为主要页面
+        r.page = !r.pageA.isEmpty() ? r.pageA.get(r.pageA.size() - 1) : 
+                 (!r.pageB.isEmpty() ? r.pageB.get(r.pageB.size() - 1) : 1);
         r.oldBboxes = oldBboxes;
         r.newBboxes = newBboxes;
         r.category = category;
@@ -101,6 +130,18 @@ public class DiffBlock {
     public static DiffBlock of(DiffType type, int page, List<double[]> oldBboxes, List<double[]> newBboxes,
             String category, String oldText, String newText) {
         return of(type, page, page, oldBboxes, newBboxes, category, oldText, newText);
+    }
+
+    /**
+     * 支持设置文本起始索引的of方法（页码数组版本）
+     */
+    public static DiffBlock of(DiffType type, List<Integer> pageA, List<Integer> pageB, List<double[]> oldBboxes, List<double[]> newBboxes,
+            String category, String oldText, String newText, int textStartIndexA, int textStartIndexB, DiffUtil.Diff originalDiff) {
+        DiffBlock r = of(type, pageA, pageB, oldBboxes, newBboxes, category, oldText, newText);
+        r.textStartIndexA = textStartIndexA;
+        r.textStartIndexB = textStartIndexB;
+        r.originalDiff = originalDiff;
+        return r;
     }
 
     /**
@@ -186,8 +227,21 @@ public class DiffBlock {
     public JsonNode toJson(ObjectNode n) {
         n.put("type", type.name());
         n.put("page", page);
-        n.put("pageA", pageA);
-        n.put("pageB", pageB);
+        // 页码数组序列化
+        if (pageA != null && !pageA.isEmpty()) {
+            ArrayNode pageAArray = n.arrayNode();
+            for (Integer p : pageA) {
+                pageAArray.add(p);
+            }
+            n.set("pageA", pageAArray);
+        }
+        if (pageB != null && !pageB.isEmpty()) {
+            ArrayNode pageBArray = n.arrayNode();
+            for (Integer p : pageB) {
+                pageBArray.add(p);
+            }
+            n.set("pageB", pageBArray);
+        }
 
         // 处理bbox信息
         if (oldBboxes != null && !oldBboxes.isEmpty()) {

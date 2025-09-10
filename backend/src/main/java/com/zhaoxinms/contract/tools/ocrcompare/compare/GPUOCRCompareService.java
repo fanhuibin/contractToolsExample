@@ -969,8 +969,13 @@ public class GPUOCRCompareService {
         DiffBlock merged = new DiffBlock();
         merged.type = first.type;
         merged.page = first.page;
-        merged.pageA = first.pageA;
-        merged.pageB = first.pageB;
+        // 合并页码数组
+        merged.pageA = new ArrayList<>();
+        merged.pageB = new ArrayList<>();
+        for (DiffBlock block : group) {
+            if (block.pageA != null) merged.pageA.addAll(block.pageA);
+            if (block.pageB != null) merged.pageB.addAll(block.pageB);
+        }
         
         // 合并所有bbox
         merged.oldBboxes = new ArrayList<>();
@@ -1247,8 +1252,13 @@ public class GPUOCRCompareService {
         DiffBlock merged = new DiffBlock();
         merged.type = first.type;
         merged.page = first.page;
-        merged.pageA = first.pageA;
-        merged.pageB = first.pageB;
+        // 合并页码数组
+        merged.pageA = new ArrayList<>();
+        merged.pageB = new ArrayList<>();
+        for (DiffBlock block : group) {
+            if (block.pageA != null) merged.pageA.addAll(block.pageA);
+            if (block.pageB != null) merged.pageB.addAll(block.pageB);
+        }
         
         // 合并所有bbox
         merged.oldBboxes = new ArrayList<>();
@@ -1471,13 +1481,16 @@ public class GPUOCRCompareService {
                 continue; // 没有需要处理的bbox，跳过
             }
 
-            // 直接使用 DiffBlock 自带的 bbox 列表标注（不再依赖 seq 映射）
-            for (double[] bbox : bboxesToProcess) {
+            // 直接使用 DiffBlock 自带的 bbox 列表标注，每个bbox使用对应的页码
+            List<Integer> pageList = (op == DiffUtil.Operation.DELETE) ? block.pageA : block.pageB;
+            for (int i = 0; i < bboxesToProcess.size(); i++) {
+                double[] bbox = bboxesToProcess.get(i);
                 int pageIndex0;
-                if (op == DiffUtil.Operation.DELETE) {
-                    pageIndex0 = Math.max(0, (block.pageA > 0 ? block.pageA : block.page) - 1);
-                } else { // INSERT
-                    pageIndex0 = Math.max(0, (block.pageB > 0 ? block.pageB : block.page) - 1);
+                if (pageList != null && i < pageList.size()) {
+                    pageIndex0 = Math.max(0, pageList.get(i) - 1);
+                } else {
+                    // 兜底：使用最后一个页码或默认页码
+                    pageIndex0 = Math.max(0, (block.page > 0 ? block.page : 1) - 1);
                 }
                 out.add(new RectOnPage(pageIndex0, bbox, op));
             }
@@ -1601,8 +1614,12 @@ public class GPUOCRCompareService {
 
             // 添加页面信息
             diffMap.put("page", block.page);
-            diffMap.put("pageA", block.pageA);
-            diffMap.put("pageB", block.pageB);
+            // 页码数组：前端需要最后一个页码用于显示
+            diffMap.put("pageA", block.pageA != null && !block.pageA.isEmpty() ? block.pageA.get(block.pageA.size() - 1) : block.page);
+            diffMap.put("pageB", block.pageB != null && !block.pageB.isEmpty() ? block.pageB.get(block.pageB.size() - 1) : block.page);
+            // 添加完整的页码数组供前端使用
+            diffMap.put("pageAList", block.pageA);
+            diffMap.put("pageBList", block.pageB);
 
             // 添加bbox信息（保留原始图像坐标）
             if (block.oldBboxes != null && !block.oldBboxes.isEmpty()) {
