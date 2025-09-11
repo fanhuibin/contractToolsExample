@@ -125,3 +125,19 @@ logging:
     com.zhaoxinms.contract.tools: DEBUG
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" 
+
+# GPU OCR配置
+gpu:
+  ocr:
+    debug-file-path: "C:\\Users\\范慧斌\\Desktop\\hetong比对前端"  # 调试模式文件路径
+    ocr-base-url: "http://192.168.0.100:8000"  # OCR服务基础URL
+    ocr-model: "model"  # OCR模型名称
+    upload-path: "./uploads"  # 文件上传路径
+    result-path: "./uploads/ocr-compare/results"  # 比对结果存储路径
+    save-rendered-images: false  # 是否保存渲染的图像
+    parallel-threads: 16  # 并行处理线程数 
+    render-dpi: 200  # 渲染DPI
+    min-pixels: 3136    # 最小像素（0 关闭）
+    max-pixels: 11289600  # 最大像素（与dots.ocr建议一致）
+    use-gradio-queue: false  # 启用Gradio队列
+    gradio-base-url: "http://192.168.0.100:80"

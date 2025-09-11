@@ -5,7 +5,7 @@ package com.zhaoxinms.contract.tools.ocrcompare.compare;
  */
 public class GPUOCRCompareOptions {
 
-    private boolean ignoreHeaderFooter = true;
+    private boolean ignoreHeaderFooter = false;
     private double headerHeightMm = 20;
     private double footerHeightMm = 20;
     private boolean ignoreCase = true;

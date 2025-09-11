@@ -60,26 +60,18 @@ public class DiffProcessingUtil {
 		List<CharBox> aSeg = Collections.emptyList();
 		List<CharBox> bSeg = Collections.emptyList();
 		
-		// 预先计算实际长度，供后续差异范围计算使用
-		int actualLenA = 0;
-		int actualLenB = 0;
-
 		if (d.operation == DiffUtil.Operation.DELETE) {
-			actualLenA = calculateActualLength(seqA, aIdx, len);
-			aSeg = subChars(seqA, aIdx, aIdx + actualLenA);
-			aIdx += actualLenA;
+			aSeg = subChars(seqA, aIdx, aIdx + len);
+			aIdx += len;
 		} else if (d.operation == DiffUtil.Operation.INSERT) {
-			actualLenB = calculateActualLength(seqB, bIdx, len);
-			bSeg = subChars(seqB, bIdx, bIdx + actualLenB);
-			bIdx += actualLenB;
+			bSeg = subChars(seqB, bIdx, bIdx + len);
+			bIdx += len;
 		} else if (d.operation == DiffUtil.Operation.EQUAL) {
 			// EQUAL operation also needs to handle bbox mapping to ensure correct indexing
-			actualLenA = calculateActualLength(seqA, aIdx, len);
-			actualLenB = calculateActualLength(seqB, bIdx, len);
-			aSeg = subChars(seqA, aIdx, aIdx + actualLenA);
-			bSeg = subChars(seqB, bIdx, bIdx + actualLenB);
-			aIdx += actualLenA;
-			bIdx += actualLenB;
+			aSeg = subChars(seqA, aIdx, aIdx + len);
+			bSeg = subChars(seqB, bIdx, bIdx + len);
+			aIdx += len;
+			bIdx += len;
 		}
 
 			// Create DiffBlock containing all related bboxes for this diff
@@ -148,11 +140,11 @@ public class DiffProcessingUtil {
 						
 						// 找到该 bbox 在 seqA 中的文本段起点
 						int textSegmentStart = findBboxStartInSequence(seqA, k);
-						System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + actualLenA);
+						System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + len);
 						if (textSegmentStart >= 0 && aIdx >= textSegmentStart) {
 							// 计算差异在该文本段内的相对偏移和长度
-							int diffStartInText = aIdx - textSegmentStart - actualLenA;  // 差异在文本段内的起始位置
-							int diffLength = actualLenA;  // 差异的长度
+							int diffStartInText = aIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
+							int diffLength = len;  // 差异的长度
 							
 							// 添加范围：prefix + diffStartInText 到 prefix + diffStartInText + diffLength
 							if (diffLength > 0) {
@@ -209,12 +201,12 @@ public class DiffProcessingUtil {
 						
 						// 找到该 bbox 在 seqB 中的文本段起点
 						int textSegmentStart = findBboxStartInSequence(seqB, k);
-						System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + actualLenB);
+						System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + len);
 						
 						if (textSegmentStart >= 0 && bIdx >= textSegmentStart) {
 							// 计算差异在该文本段内的相对偏移和长度
-							int diffStartInText = bIdx - textSegmentStart - actualLenB;  // 差异在文本段内的起始位置
-							int diffLength = actualLenB;  // 差异的长度
+							int diffStartInText = bIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
+							int diffLength = len;  // 差异的长度
 							
 							// 添加范围：prefixB + diffStartInText 到 prefixB + diffStartInText + diffLength
 							if (diffLength > 0) {
@@ -766,53 +758,4 @@ public class DiffProcessingUtil {
 		return true;
 	}
 
-	/**
-	 * 计算CharBox片段的实际长度，包括所有换行符 用于处理diff文本中换行符被移除但CharBox中仍然存在的情况 逐步增加长度，每次只处理新增的换行符
-	 *
-	 * @param fullSequence 完整的CharBox序列
-	 * @param startIndex   起始索引
-	 * @param baseLength   基础长度（移除换行符后的文本长度）
-	 * @return 实际需要的长度
-	 */
-	private static int calculateActualLength(List<CharBox> fullSequence, int startIndex, int baseLength) {
-		int currentLength = baseLength;
-		int maxIterations = 100; // 防止无限循环
-		int iteration = 0;
-
-		while (iteration < maxIterations) {
-			// 基于当前长度获取片段
-			List<CharBox> segment = subChars(fullSequence, startIndex, startIndex + currentLength);
-
-			// 如果片段为空，直接返回当前长度
-			if (segment == null || segment.isEmpty()) {
-				return currentLength;
-			}
-
-			// 检查片段是否包含换行符
-			boolean hasNewlines = segment.stream().anyMatch(cb -> cb.ch == '\n');
-
-			if (!hasNewlines) {
-				// 没有换行符，当前长度就是实际长度
-				return currentLength;
-			}
-
-			if (iteration == 0) {
-				long count = segment.stream().filter(cb -> cb.ch == '\n').count();
-
-				currentLength += count;
-			} else {
-				// 判断增加的是不是'\n'
-				if (segment.get(segment.size() - 1).ch == '\n') {
-					currentLength += 1;
-				} else {
-					return currentLength;
-				}
-			}
-			iteration++;
-		}
-
-		// 如果达到最大迭代次数，返回当前长度
-		System.err.println("Warning: Reached maximum iterations in calculateActualLength, length=" + currentLength);
-		return currentLength;
-	}
 }

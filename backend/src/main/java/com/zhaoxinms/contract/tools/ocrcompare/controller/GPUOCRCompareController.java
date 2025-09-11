@@ -174,8 +174,7 @@ public class GPUOCRCompareController {
     @PostMapping("/debug-compare")
     public ResponseEntity<Result<Map<String, String>>> debugCompare(@RequestBody Map<String, Object> request) {
         try {
-            String oldOcrTaskId = (String) request.get("oldOcrTaskId");
-            String newOcrTaskId = (String) request.get("newOcrTaskId");
+            String taskId = (String) request.get("taskId");
             @SuppressWarnings("unchecked")
             Map<String, Object> optionsMap = (Map<String, Object>) request.get("options");
 
@@ -190,10 +189,14 @@ public class GPUOCRCompareController {
                 options.setIgnoreSeals(Boolean.TRUE.equals(optionsMap.get("ignoreSeals")));
             }
 
-            String taskId = gpuOcrCompareService.debugCompareWithExistingOCR(oldOcrTaskId, newOcrTaskId, options);
+            if (taskId == null || taskId.trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Result.error("taskId不能为空"));
+            }
+
+            String debugTaskId = gpuOcrCompareService.debugCompareWithTaskId(taskId, options);
 
             Map<String, String> data = new HashMap<>();
-            data.put("taskId", taskId);
+            data.put("taskId", debugTaskId);
 
             return ResponseEntity.ok(Result.success("调试比对任务提交成功", data));
 

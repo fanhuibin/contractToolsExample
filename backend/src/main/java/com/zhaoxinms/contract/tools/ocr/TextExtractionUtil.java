@@ -108,7 +108,7 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered) {
-        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.SEQUENTIAL);
+        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.SEQUENTIAL, false);
     }
 
     /**
@@ -118,6 +118,17 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered, ExtractionStrategy strategy) {
+        return parseTextAndPositionsFromResults(ordered, strategy, false);
+    }
+
+    /**
+     * 从PDF识别结果中解析文本和位置信息
+     * @param ordered PDF页面布局数组
+     * @param strategy 抽取策略
+     * @param ignoreHeaderFooter 是否忽略页眉页脚
+     * @return 字符框列表，包含文本和位置信息
+     */
+    public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered, ExtractionStrategy strategy, boolean ignoreHeaderFooter) {
         List<CharBox> out = new ArrayList<>();
 
         List<PageLayout> processedLayouts = prepareLayouts(ordered, strategy);
@@ -129,7 +140,25 @@ public class TextExtractionUtil {
             for (LayoutItem it : pl.items) {
                 if (it.text == null || it.text.isEmpty()) continue;
 
+                // 如果启用忽略页眉页脚功能，则跳过页眉页脚内容
+                if (ignoreHeaderFooter && (it.category != null && 
+                    ("Page-header".equals(it.category) || "Page-footer".equals(it.category)))) {
+                    continue;
+                }
+
                 String s = it.text;
+                
+                // 如果category是Table类型，去掉HTML标签，只保留文本内容
+                if ("Table".equals(it.category)) {
+                    s = removeHtmlTags(s);
+                }
+                
+                // 新规则：忽略每个元素头部的#号（可能有多个），并忽略文本中的换行符
+                // 移除文本开头连续出现的#号及其前置空白
+                s = s.replaceFirst("^\\s*#*\\s*", "");
+                // 移除所有换行符（\\r 和 \\n）
+                s = s.replace("\r", "").replace("\n", "");
+                
                 // 按顺序为每个字符创建CharBox，使用布局项的bbox
                 for (int i = 0; i < s.length(); i++) {
                     char ch = s.charAt(i);
@@ -139,6 +168,28 @@ public class TextExtractionUtil {
         }
 
         return out;
+    }
+
+    /**
+     * 移除HTML标签，只保留文本内容，多个空格替换为单个空格
+     * @param htmlText 包含HTML标签的文本
+     * @return 清理后的纯文本
+     */
+    private static String removeHtmlTags(String htmlText) {
+        if (htmlText == null || htmlText.isEmpty()) {
+            return htmlText;
+        }
+        
+        // 移除HTML标签
+        String textOnly = htmlText.replaceAll("<[^>]+>", " ");
+        
+        // 将多个连续空格替换为单个空格
+        textOnly = textOnly.replaceAll("\\s+", " ");
+        
+        // 去除首尾空格
+        textOnly = textOnly.trim();
+        
+        return textOnly;
     }
 
     /**

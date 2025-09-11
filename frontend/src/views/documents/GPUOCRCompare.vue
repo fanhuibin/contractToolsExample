@@ -156,16 +156,13 @@
 
     <!-- 调试对话框 -->
     <el-dialog v-model="debugDialogVisible" title="GPU OCR比对调试模式" width="500px">
-      <el-form label-width="120px">
-        <el-form-item label="旧文档OCR任务ID">
-          <el-input v-model="debugForm.oldOcrTaskId" placeholder="输入已完成的OCR任务ID"></el-input>
-        </el-form-item>
-        <el-form-item label="新文档OCR任务ID">
-          <el-input v-model="debugForm.newOcrTaskId" placeholder="输入已完成的OCR任务ID"></el-input>
+      <el-form label-width="120px" class="mt20">
+        <el-form-item label="任务ID">
+          <el-input v-model="debugForm.taskId" placeholder="输入已完成的GPU OCR任务ID"></el-input>
         </el-form-item>
         <el-alert
-          title="说明：调试模式将跳过上传和OCR识别过程，直接使用已有的OCR结果进行比对。请确保输入的OCR任务ID已经完成识别。"
-          type="warning"
+          title="说明：调试模式将使用已有任务的结果，重新应用比对参数进行分析。请确保输入的TaskId对应的任务已经完成。"
+          type="info"
           show-icon
           :closable="false"
           class="mb12"
@@ -226,6 +223,7 @@ import {
   getAllGPUOCRCompareTasks,
   deleteGPUOCRCompareTask,
   debugGPUCompareWithExistingOCR,
+  debugGPUCompareLegacy,
   type GPUOCRCompareTaskStatus
 } from '@/api/gpu-ocr-compare'
 
@@ -249,8 +247,7 @@ const progressTimer = ref<number | null>(null)
 const debugDialogVisible = ref(false)
 const debugLoading = ref(false)
 const debugForm = reactive({
-  oldOcrTaskId: '',
-  newOcrTaskId: ''
+  taskId: ''
 })
 
 // 设置相关
@@ -490,8 +487,8 @@ const getProgressStatus = (status: string) => {
 
 // 开始调试比对
 const startDebugCompare = async () => {
-  if (!debugForm.oldOcrTaskId || !debugForm.newOcrTaskId) {
-    ElMessage.warning('请输入完整的OCR任务ID')
+  if (!debugForm.taskId || !debugForm.taskId.trim()) {
+    ElMessage.warning('请输入任务ID')
     return
   }
 
@@ -499,8 +496,7 @@ const startDebugCompare = async () => {
 
   try {
     const res = await debugGPUCompareWithExistingOCR({
-      oldOcrTaskId: debugForm.oldOcrTaskId,
-      newOcrTaskId: debugForm.newOcrTaskId,
+      taskId: debugForm.taskId,
       options: {
         ignoreHeaderFooter: settings.ignoreHeaderFooter,
         headerHeightMm: settings.headerHeightMm,
@@ -520,6 +516,9 @@ const startDebugCompare = async () => {
     if (!taskId) {
       throw new Error('任务ID为空')
     }
+
+    // 清空表单
+    debugForm.taskId = ''
 
     ElMessage.success('调试比对任务已提交，正在处理中...')
 

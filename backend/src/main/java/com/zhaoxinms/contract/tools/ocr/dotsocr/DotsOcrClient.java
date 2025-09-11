@@ -217,6 +217,9 @@ public class DotsOcrClient {
         root.put("model", model);
         // 与dots.ocr demo保持一致：放宽生成上限
         root.put("max_tokens", 24000);
+        // 控制采样参数
+        root.put("temperature", 0.1f);
+        root.put("top_p", 0.8f);
 
         List<Map<String, Object>> content = new ArrayList<>();
         if (prompt != null && !prompt.isBlank()) {

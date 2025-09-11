@@ -68,8 +68,17 @@
               </span>
             </div>
             <div class="content">
-              <div class="text" v-html="r.operation === 'DELETE' ? highlightDiffText(r.allTextA, r.diffRangesA, 'delete') : highlightDiffText(r.allTextB, r.diffRangesB, 'insert')"></div>
-              <div class="meta">第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页</div>
+              <div
+                class="text"
+                :class="{ expanded: isExpanded(indexInAll(i)) }"
+                v-html="r.operation === 'DELETE' ? highlightDiffText(r.allTextA, r.diffRangesA, 'delete') : highlightDiffText(r.allTextB, r.diffRangesB, 'insert')"
+              ></div>
+              <div class="meta">
+                第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+                <el-button text type="primary" class="toggle-btn" @click.stop="toggleExpand(indexInAll(i))">
+                  {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+                </el-button>
+              </div>
             </div>
           </div>
         </div>
@@ -94,6 +103,8 @@ const oldPdf = ref('')
 const newPdf = ref('')
 const results = ref<any[]>([])
 const activeIndex = ref(-1)
+// 展开集合：存储处于展开状态的原始 results 索引
+const expandedSet = ref<Set<number>>(new Set())
 const filterMode = ref<'ALL' | 'DELETE' | 'INSERT'>('ALL')
 const taskId = ref('')
 const oldOcrTaskId = ref('')
@@ -533,6 +544,18 @@ function indexInAll(filteredIdx: number): number {
   const allIdx = results.value.findIndex(r => r === item)
   return allIdx >= 0 ? allIdx : filteredIdx
 }
+
+// 展开/收起：使用原始 results 索引进行记录
+const isExpanded = (idx: number) => expandedSet.value.has(idx)
+const toggleExpand = (idx: number) => {
+  if (expandedSet.value.has(idx)) {
+    expandedSet.value.delete(idx)
+  } else {
+    expandedSet.value.add(idx)
+  }
+  // 触发视图更新（Set为引用类型，需重新赋值）
+  expandedSet.value = new Set(expandedSet.value)
+}
 </script>
 
 <style scoped>
@@ -593,5 +616,15 @@ function indexInAll(filteredIdx: number): number {
   line-height: 1.4;
   max-height: calc(1.4em * 4);
 }
-.result-item .meta { color: #909399; font-size: 12px; margin-top: 4px; }
+.result-item .text.expanded {
+  display: block;
+  -webkit-line-clamp: initial;
+  line-clamp: initial;
+  -webkit-box-orient: initial;
+  overflow: visible;
+  text-overflow: initial;
+  max-height: none;
+}
+.result-item .meta { color: #909399; font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.result-item .meta .toggle-btn { padding: 0 4px; }
 </style>

@@ -60,6 +60,16 @@ public class GPUOCRConfig {
      */
     private long maxPixels = 11289600;
 
+    /**
+     * 是否通过 Gradio 队列服务调用（demo_gradio.py）
+     */
+    private boolean useGradioQueue = false;
+
+    /**
+     * Gradio 基础地址，例如 http://192.168.0.100:80
+     */
+    private String gradioBaseUrl = "http://192.168.0.100:80";
+
     public String getDebugFilePath() {
         return debugFilePath;
     }
@@ -138,5 +148,21 @@ public class GPUOCRConfig {
 
     public void setMaxPixels(long maxPixels) {
         this.maxPixels = maxPixels;
+    }
+
+    public boolean isUseGradioQueue() {
+        return useGradioQueue;
+    }
+
+    public void setUseGradioQueue(boolean useGradioQueue) {
+        this.useGradioQueue = useGradioQueue;
+    }
+
+    public String getGradioBaseUrl() {
+        return gradioBaseUrl;
+    }
+
+    public void setGradioBaseUrl(String gradioBaseUrl) {
+        this.gradioBaseUrl = gradioBaseUrl;
     }
 }

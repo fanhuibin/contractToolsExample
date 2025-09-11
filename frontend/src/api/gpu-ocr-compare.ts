@@ -93,14 +93,26 @@ export function deleteGPUOCRCompareTask(taskId: string) {
   })
 }
 
-// 调试模式：使用已有的OCR任务ID进行比对
+// 调试模式：使用TaskId进行比对
 export function debugGPUCompareWithExistingOCR(data: {
+  taskId: string
+  options: GPUOCRCompareOptions
+}) {
+  return request({
+    url: '/gpu-ocr-compare/debug-compare',
+    method: 'post',
+    data
+  })
+}
+
+// 调试模式：使用传统OCR任务ID进行比对（向后兼容）
+export function debugGPUCompareLegacy(data: {
   oldOcrTaskId: string
   newOcrTaskId: string
   options: GPUOCRCompareOptions
 }) {
   return request({
-    url: '/gpu-ocr-compare/debug-compare',
+    url: '/gpu-ocr-compare/debug-compare-legacy',
     method: 'post',
     data
   })
