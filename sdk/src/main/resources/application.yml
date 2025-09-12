@@ -136,7 +136,7 @@ gpu:
     result-path: "./uploads/ocr-compare/results"  # 比对结果存储路径
     save-rendered-images: false  # 是否保存渲染的图像
     parallel-threads: 16  # 并行处理线程数 
-    render-dpi: 200  # 渲染DPI
+    render-dpi: 160  # 渲染DPI
     min-pixels: 3136    # 最小像素（0 关闭）
     max-pixels: 11289600  # 最大像素（与dots.ocr建议一致）
     use-gradio-queue: false  # 启用Gradio队列

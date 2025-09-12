@@ -199,6 +199,53 @@ public class DotsOcrClient {
         return ocrImageByUrl(dataUrl, prompt, model, extractTextOnly);
     }
 
+    /**
+     * 使用默认的OCR提示词进行图像识别
+     * @param imageBytes 图像字节数组
+     * @param model 模型名称，为null时使用默认模型
+     * @param mimeType MIME类型，为null时使用image/png
+     * @param extractTextOnly 是否只提取文本内容
+     * @return OCR识别结果
+     */
+    public String ocrImageBytesWithDefaultPrompt(byte[] imageBytes, String model, String mimeType, boolean extractTextOnly) throws IOException {
+        String prompt = buildDefaultOCRPrompt();
+        return ocrImageBytes(imageBytes, prompt, model, mimeType, extractTextOnly);
+    }
+
+    /**
+     * 使用默认的OCR提示词进行图像识别（通过URL）
+     * @param imageUrl 图像URL
+     * @param model 模型名称，为null时使用默认模型
+     * @param extractTextOnly 是否只提取文本内容
+     * @return OCR识别结果
+     */
+    public String ocrImageByUrlWithDefaultPrompt(String imageUrl, String model, boolean extractTextOnly) throws IOException {
+        String prompt = buildDefaultOCRPrompt();
+        return ocrImageByUrl(imageUrl, prompt, model, extractTextOnly);
+    }
+
+    /**
+     * 构建默认的OCR提示词
+     * 与 dots.ocr demo 的 prompt_layout_all_en 对齐
+     * @return 默认OCR提示词
+     */
+    public String buildDefaultOCRPrompt() {
+        return "Please output the layout information from the PDF image, including each layout element's bbox, its category, and the corresponding text content within the bbox.\n\n"
+                + "1. Bbox format: [x1, y1, x2, y2]\n\n"
+                + "2. Layout Categories: The possible categories are ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Picture', 'Section-header', 'Table', 'Text', 'Title'].\n\n"
+                + "3. Text Extraction & Formatting Rules:\n"
+                + "    - Picture: For the 'Picture' category, the text field should be omitted.\n"
+                + "    - Formula: Format its text as LaTeX.\n"
+                + "    - Table: Format its text as plain text, structure based on the rows and columns visually present.\n"
+                + "    - All Others (Text, Title, etc.): Format their text as plain text.DO NOT use any Markdown formatting\n\n"
+                + "4. Constraints:\n"
+                + "    - The output text must be the original text from the image, with no translation.\n"
+                + "    - All layout elements must be sorted according to human reading order.\n\n"
+                + "5. Final Output: The entire output must be a single JSON object.\n\n"
+                + "6. CONTENT MUST BE THE EXACT, UNALTERED TEXT FROM THE IMAGE.";
+
+    }
+
     private String extractAssistantText(JsonNode resp) {
         if (resp == null) return "";
         JsonNode choices = resp.get("choices");
@@ -219,7 +266,7 @@ public class DotsOcrClient {
         root.put("max_tokens", 24000);
         // 控制采样参数
         root.put("temperature", 0.1f);
-        root.put("top_p", 0.8f);
+        root.put("top_p", 0.9f);
 
         List<Map<String, Object>> content = new ArrayList<>();
         if (prompt != null && !prompt.isBlank()) {

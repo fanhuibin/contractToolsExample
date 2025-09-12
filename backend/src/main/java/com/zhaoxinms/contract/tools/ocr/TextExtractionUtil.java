@@ -40,7 +40,7 @@ public class TextExtractionUtil {
      * @return 提取的纯文本字符串
      */
     public static String extractTextFromResults(PageLayout[] ordered) {
-        return extractTextFromResults(ordered, ExtractionStrategy.SEQUENTIAL);
+        return extractTextFromResults(ordered, ExtractionStrategy.POSITION_BASED);
     }
 
     /**
@@ -73,7 +73,7 @@ public class TextExtractionUtil {
      * @return 带页码标记的文本字符串
      */
     public static String extractTextWithPageMarkers(PageLayout[] ordered) {
-        return extractTextWithPageMarkers(ordered, ExtractionStrategy.SEQUENTIAL);
+        return extractTextWithPageMarkers(ordered, ExtractionStrategy.POSITION_BASED);
     }
 
     /**
@@ -108,7 +108,7 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered) {
-        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.SEQUENTIAL, false);
+        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.POSITION_BASED, false);
     }
 
     /**
@@ -156,8 +156,28 @@ public class TextExtractionUtil {
                 // 新规则：忽略每个元素头部的#号（可能有多个），并忽略文本中的换行符
                 // 移除文本开头连续出现的#号及其前置空白
                 s = s.replaceFirst("^\\s*#*\\s*", "");
+                
+                // 添加新规则：去掉文本头部的列表标记（- 和 *）
+                // 处理多行情况，每行开头可能有 - 或 * 号
+                s = s.replaceAll("(?m)^\\s*[-*]\\s*", "");
+                
                 // 移除所有换行符（\\r 和 \\n）
                 s = s.replace("\r", "").replace("\n", "");
+                
+                // 添加新规则：去掉文本中间的空格
+                s = s.replace(" ", "");
+                
+                // 添加新规则：去掉markdown格式标记
+                // 1. 去掉 **文本** 格式的加粗标记
+                s = s.replaceAll("\\*\\*([^*]+)\\*\\*", "$1");
+                // 2. 去掉 __*文本*__ 格式的下划线包围斜体标记
+                s = s.replaceAll("__\\*([^*]+)\\*__", "$1");
+                // 3. 去掉 **_文本_** 格式的星号包围加粗标记
+                s = s.replaceAll("\\*\\*_([^_]+)_\\*\\*", "$1");
+                // 4. 去掉单独的 *文本* 格式的斜体标记
+                s = s.replaceAll("\\*([^*]+)\\*", "$1");
+                // 5. 去掉单独的 _文本_ 格式的斜体标记
+                s = s.replaceAll("_([^_]+)_", "$1");
                 
                 // 按顺序为每个字符创建CharBox，使用布局项的bbox
                 for (int i = 0; i < s.length(); i++) {

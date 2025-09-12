@@ -70,6 +70,11 @@ public class GPUOCRConfig {
      */
     private String gradioBaseUrl = "http://192.168.0.100:80";
 
+    /**
+     * 是否保存OCR识别图片（默认关闭）
+     */
+    private boolean saveOcrImages = false;
+
     public String getDebugFilePath() {
         return debugFilePath;
     }
@@ -164,5 +169,13 @@ public class GPUOCRConfig {
 
     public void setGradioBaseUrl(String gradioBaseUrl) {
         this.gradioBaseUrl = gradioBaseUrl;
+    }
+
+    public boolean isSaveOcrImages() {
+        return saveOcrImages;
+    }
+
+    public void setSaveOcrImages(boolean saveOcrImages) {
+        this.saveOcrImages = saveOcrImages;
     }
 }

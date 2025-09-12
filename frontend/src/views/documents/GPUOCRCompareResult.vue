@@ -68,16 +68,25 @@
               </span>
             </div>
             <div class="content">
-              <div
-                class="text"
-                :class="{ expanded: isExpanded(indexInAll(i)) }"
-                v-html="r.operation === 'DELETE' ? highlightDiffText(r.allTextA, r.diffRangesA, 'delete') : highlightDiffText(r.allTextB, r.diffRangesB, 'insert')"
-              ></div>
+              <div class="text">
+                <span
+                  v-html="getTruncatedText(
+                    r.operation === 'DELETE' ? r.allTextA : r.allTextB,
+                    r.operation === 'DELETE' ? r.diffRangesA : r.diffRangesB,
+                    r.operation === 'DELETE' ? 'delete' : 'insert',
+                    isExpanded(indexInAll(i))
+                  )"
+                ></span>
+                <span 
+                  v-if="needsExpand(r.operation === 'DELETE' ? r.allTextA : r.allTextB)"
+                  class="toggle-btn" 
+                  @click.stop="toggleExpand(indexInAll(i))"
+                >
+                  {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+                </span>
+              </div>
               <div class="meta">
                 第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
-                <el-button text type="primary" class="toggle-btn" @click.stop="toggleExpand(indexInAll(i))">
-                  {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
-                </el-button>
               </div>
             </div>
           </div>
@@ -107,9 +116,12 @@ const activeIndex = ref(-1)
 const expandedSet = ref<Set<number>>(new Set())
 const filterMode = ref<'ALL' | 'DELETE' | 'INSERT'>('ALL')
 const taskId = ref('')
-const oldOcrTaskId = ref('')
+const oldOcrTaskId = ref('') 
 const newOcrTaskId = ref('')
 const compareData = ref<any>(null) // 存储完整的比对结果数据
+
+// 文本截断配置
+const TEXT_TRUNCATE_LIMIT = 80 // 文本截断长度，超过此长度显示展开按钮
 
 const filteredResults = computed(() => {
   if (filterMode.value === 'DELETE') return results.value.filter(r => r?.operation === 'DELETE')
@@ -146,51 +158,75 @@ const alignCorrectionPx = 24
 // 强制从第一页开始显示，避免 PDF.js 恢复历史滚动位置
 const viewerUrl = (fileUrl: string) => `/pdfviewer/web/viewer.html?file=${encodeURI(fileUrl)}#page=1`
 
-// 高亮显示差异文本
+// 高亮显示差异文本（拼接所有 allText*，并按范围高亮差异）
 const highlightDiffText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete') => {
-  console.log('highlightDiffText 调试:', { allTextList, diffRanges, type })
-  
   if (!allTextList || allTextList.length === 0) return '无'
-  
-  // 合并所有文本
-  const fullText = allTextList.join('')
+  // 按顺序拼接所有段，多个文本之间用换行符分隔
+  const fullText = allTextList.join('\n')
   if (!fullText) return '无'
-  
-  console.log('合并后完整文本:', fullText)
-  
-  // 如果没有差异范围，直接返回文本
+
   if (!diffRanges || diffRanges.length === 0) {
-    console.log('没有差异范围，返回完整文本')
-    return fullText
+    return escapeHtml(fullText)
   }
-  
-  console.log('差异范围:', diffRanges)
-  
-  // 按位置排序差异范围
-  const sortedRanges = [...diffRanges].sort((a, b) => a.start - b.start)
-  
+
+  // 由于在 allTextList 之间添加了换行符，需要调整 diffRanges 的位置
+  // 计算原始拼接文本（无换行符）的累积长度
+  const originalTextLengths = allTextList.map(text => text.length)
+  const originalCumulativeLengths = [0]
+  for (let i = 0; i < originalTextLengths.length; i++) {
+    originalCumulativeLengths.push(originalCumulativeLengths[i] + originalTextLengths[i])
+  }
+
+  // 调整 diffRanges 的位置，考虑换行符的影响
+  const adjustedRanges = diffRanges
+    .filter(r => r && typeof r.start === 'number' && typeof r.end === 'number' && r.end > r.start)
+    .map(range => {
+      // 找到 range.start 和 range.end 对应的 allText 索引
+      let startTextIndex = 0
+      let endTextIndex = 0
+      
+      for (let i = 0; i < originalCumulativeLengths.length - 1; i++) {
+        if (range.start >= originalCumulativeLengths[i] && range.start < originalCumulativeLengths[i + 1]) {
+          startTextIndex = i
+          break
+        }
+      }
+      
+      for (let i = 0; i < originalCumulativeLengths.length - 1; i++) {
+        if (range.end >= originalCumulativeLengths[i] && range.end < originalCumulativeLengths[i + 1]) {
+          endTextIndex = i
+          break
+        }
+      }
+      
+      // 调整位置：加上前面文本的换行符数量
+      const adjustedStart = range.start + startTextIndex
+      const adjustedEnd = range.end + endTextIndex
+      
+      return {
+        ...range,
+        start: adjustedStart,
+        end: adjustedEnd
+      }
+    })
+    .sort((a, b) => a.start - b.start)
+
   let result = ''
   let lastEnd = 0
-  
-  for (const range of sortedRanges) {
-    // 添加差异前的文本
+  for (const range of adjustedRanges) {
     if (range.start > lastEnd) {
       result += escapeHtml(fullText.substring(lastEnd, range.start))
     }
-    
-    // 添加高亮的差异文本
     const diffText = fullText.substring(range.start, range.end)
     const highlightClass = type === 'insert' ? 'diff-insert' : 'diff-delete'
     result += `<span class="${highlightClass}">${escapeHtml(diffText)}</span>`
-    
     lastEnd = range.end
   }
-  
-  // 添加最后的文本
+
   if (lastEnd < fullText.length) {
     result += escapeHtml(fullText.substring(lastEnd))
   }
-  
+
   return result
 }
 
@@ -556,6 +592,30 @@ const toggleExpand = (idx: number) => {
   // 触发视图更新（Set为引用类型，需重新赋值）
   expandedSet.value = new Set(expandedSet.value)
 }
+
+// 文本截断和展开功能
+const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete', isExpanded: boolean) => {
+  if (!allTextList || allTextList.length === 0) return '无'
+  
+  const fullText = allTextList.join('\n')
+  if (!fullText) return '无'
+  
+  // 如果展开状态或文本长度不超过截断限制，直接返回完整文本
+  if (isExpanded || fullText.length <= TEXT_TRUNCATE_LIMIT) {
+    return highlightDiffText([fullText], diffRanges, type)
+  }
+  
+  // 截断到指定长度
+  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  return highlightDiffText([truncatedText], diffRanges, type)
+}
+
+// 判断文本是否需要展开功能（超过截断限制）
+const needsExpand = (allTextList: string[]) => {
+  if (!allTextList || allTextList.length === 0) return false
+  const fullText = allTextList.join('\n')
+  return fullText && fullText.length > TEXT_TRUNCATE_LIMIT
+}
 </script>
 
 <style scoped>
@@ -607,24 +667,17 @@ const toggleExpand = (idx: number) => {
 .result-item .text { 
   color: #303133; 
   font-size: 13px;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
   line-height: 1.4;
-  max-height: calc(1.4em * 4);
 }
-.result-item .text.expanded {
-  display: block;
-  -webkit-line-clamp: initial;
-  line-clamp: initial;
-  -webkit-box-orient: initial;
-  overflow: visible;
-  text-overflow: initial;
-  max-height: none;
+.result-item .text .toggle-btn {
+  color: #409eff;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 4px;
+  font-size: 12px;
+}
+.result-item .text .toggle-btn:hover {
+  color: #66b1ff;
 }
 .result-item .meta { color: #909399; font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 8px; }
-.result-item .meta .toggle-btn { padding: 0 4px; }
 </style>

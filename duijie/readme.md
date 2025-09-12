@@ -3155,3 +3155,1276 @@ TextNormalizer.normalizeWhitespace() → 大小写处理 → 最终清理
 ✅ **可维护性**: 统一的预处理方法便于维护和扩展  
 
 现在GPU OCR比对的文本预处理更加完善和统一了！🎯
+
+---
+
+## 2025-01-18 GPU OCR前端文本显示优化
+
+### 问题描述
+用户反馈前端文本显示逻辑有bug，要求：
+1. 固定显示200个字符
+2. 超过200字符的添加展开/收起功能
+3. 展开按钮放在文本最后面
+4. 删除不适用的代码
+
+### 解决方案
+
+#### 1. 重新设计文本截断逻辑
+- **删除复杂的DOM测量逻辑**：移除基于行数判断的 `needsExpand` 函数
+- **简化字符数判断**：直接基于200字符长度判断是否需要展开
+- **统一文本处理**：创建 `getTruncatedText` 函数统一处理文本截断和展开
+
+#### 2. 优化前端模板结构
+```vue
+<div class="text-container">
+  <div class="text" v-html="getTruncatedText(...)"></div>
+  <el-button v-if="needsExpand(...)" @click="toggleExpand">展开/收起</el-button>
+</div>
+```
+
+#### 3. 更新CSS样式
+- **移除不适用的样式**：删除基于行数限制的CSS（`-webkit-line-clamp`等）
+- **新增容器样式**：`.text-container` 使用flex布局，展开按钮紧跟文本
+- **简化文本样式**：`.text` 只保留基本样式，移除复杂的截断效果
+
+### 技术实现
+
+#### 核心函数
+```javascript
+// 文本截断和展开功能
+const getTruncatedText = (allTextList, diffRanges, type, isExpanded) => {
+  const fullText = allTextList.join('\n')
+  
+  if (isExpanded || fullText.length <= 200) {
+    return highlightDiffText([fullText], diffRanges, type)
+  }
+  
+  const truncatedText = fullText.substring(0, 200) + '...'
+  return highlightDiffText([truncatedText], diffRanges, type)
+}
+
+// 判断是否需要展开（超过200字符）
+const needsExpand = (allTextList) => {
+  const fullText = allTextList.join('\n')
+  return fullText && fullText.length > 200
+}
+```
+
+#### 样式优化
+```css
+.text-container { 
+  display: flex; 
+  align-items: flex-end; 
+  gap: 8px; 
+  flex-wrap: wrap; 
+}
+.text { 
+  color: #303133; 
+  font-size: 13px;
+  line-height: 1.4;
+  flex: 1;
+  min-width: 0;
+}
+```
+
+### 修改文件
+- `frontend/src/views/documents/GPUOCRCompareResult.vue`
+  - 删除复杂的DOM测量逻辑
+  - 重新实现文本截断功能
+  - 优化模板结构和CSS样式
+
+### 功能效果
+✅ **固定字符数**: 统一显示200个字符，超过部分显示"..."  
+✅ **智能展开**: 只有超过200字符的文本才显示展开按钮  
+✅ **按钮位置**: 展开按钮紧跟在文本后面，布局更自然  
+✅ **代码简化**: 删除复杂的DOM测量和行数计算逻辑  
+✅ **保持高亮**: 文本截断后仍然保持差异高亮功能  
+
+现在前端文本显示更加简洁和用户友好了！🎯
+
+---
+
+## 2025-01-18 GPU OCR前端文本截断参数化
+
+### 问题描述
+用户反馈代码中硬编码了200字符，要求将截断长度改为可配置的参数。
+
+### 解决方案
+
+#### 1. 添加配置参数
+```javascript
+// 文本截断配置
+const TEXT_TRUNCATE_LIMIT = 200 // 文本截断长度，超过此长度显示展开按钮
+```
+
+#### 2. 修改相关函数使用参数
+- **getTruncatedText函数**: 使用 `TEXT_TRUNCATE_LIMIT` 替代硬编码的200
+- **needsExpand函数**: 使用 `TEXT_TRUNCATE_LIMIT` 替代硬编码的200
+
+#### 3. 代码优化
+- 统一使用配置参数，便于后续调整
+- 添加清晰的注释说明参数用途
+- 保持代码的可维护性和可读性
+
+### 技术实现
+
+#### 配置参数
+```javascript
+// 文本截断配置
+const TEXT_TRUNCATE_LIMIT = 200 // 文本截断长度，超过此长度显示展开按钮
+```
+
+#### 函数修改
+```javascript
+// 文本截断和展开功能
+const getTruncatedText = (allTextList, diffRanges, type, isExpanded) => {
+  // 如果展开状态或文本长度不超过截断限制，直接返回完整文本
+  if (isExpanded || fullText.length <= TEXT_TRUNCATE_LIMIT) {
+    return highlightDiffText([fullText], diffRanges, type)
+  }
+  
+  // 截断到指定长度
+  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  return highlightDiffText([truncatedText], diffRanges, type)
+}
+
+// 判断文本是否需要展开功能（超过截断限制）
+const needsExpand = (allTextList) => {
+  const fullText = allTextList.join('\n')
+  return fullText && fullText.length > TEXT_TRUNCATE_LIMIT
+}
+```
+
+### 修改文件
+- `frontend/src/views/documents/GPUOCRCompareResult.vue`
+  - 添加 `TEXT_TRUNCATE_LIMIT` 配置参数
+  - 修改 `getTruncatedText` 函数使用参数
+  - 修改 `needsExpand` 函数使用参数
+
+### 功能效果
+✅ **参数化配置**: 文本截断长度可通过修改 `TEXT_TRUNCATE_LIMIT` 轻松调整  
+✅ **代码可维护性**: 统一使用配置参数，避免硬编码  
+✅ **功能一致性**: 所有相关函数使用相同的截断长度参数  
+✅ **易于扩展**: 后续可以轻松添加更多配置选项  
+
+现在文本截断长度完全参数化了，便于维护和调整！🎯
+
+---
+
+## 2025-01-18 GPU OCR前端展开按钮内联显示优化
+
+### 问题描述
+用户反馈展开按钮单独占了一列，希望将展开按钮以文本形式显示在比对结果的文字后面，不要单独一列。
+
+### 解决方案
+
+#### 1. 修改模板结构
+- **移除容器布局**：删除 `.text-container` 容器，简化结构
+- **内联显示**：将展开按钮改为 `<span>` 元素，与文本内容内联显示
+- **保持功能**：保持点击事件和条件显示逻辑
+
+#### 2. 更新CSS样式
+- **移除flex布局**：删除 `.text-container` 的flex布局样式
+- **内联按钮样式**：为 `.toggle-btn` 添加内联文本样式
+- **悬停效果**：添加鼠标悬停时的颜色变化效果
+
+#### 3. 样式优化
+- **文本样式**：展开按钮使用蓝色文字和下划线
+- **间距调整**：添加左边距，与文本内容保持适当距离
+- **字体大小**：使用稍小的字体大小，与文本内容协调
+
+### 技术实现
+
+#### 模板结构
+```vue
+<div class="text">
+  <span v-html="getTruncatedText(...)"></span>
+  <span 
+    v-if="needsExpand(...)"
+    class="toggle-btn" 
+    @click.stop="toggleExpand(indexInAll(i))"
+  >
+    {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+  </span>
+</div>
+```
+
+#### CSS样式
+```css
+.result-item .text { 
+  color: #303133; 
+  font-size: 13px;
+  line-height: 1.4;
+}
+.result-item .text .toggle-btn {
+  color: #409eff;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 4px;
+  font-size: 12px;
+}
+.result-item .text .toggle-btn:hover {
+  color: #66b1ff;
+}
+```
+
+### 修改文件
+- `frontend/src/views/documents/GPUOCRCompareResult.vue`
+  - 修改模板结构，将展开按钮改为内联显示
+  - 更新CSS样式，移除flex布局
+  - 添加内联按钮的样式和悬停效果
+
+### 功能效果
+✅ **内联显示**: 展开按钮紧跟在文本内容后面，不单独占列  
+✅ **视觉协调**: 按钮样式与文本内容协调，使用蓝色文字和下划线  
+✅ **交互友好**: 保持点击功能，添加悬停效果  
+✅ **布局简洁**: 简化了模板结构，移除了不必要的容器  
+✅ **响应式**: 按钮会根据文本长度自动显示或隐藏  
+
+现在展开按钮完美地内联显示在文本内容后面了！🎯
+
+---
+
+## 2025-01-18 GPU OCR后端图片保存调试功能
+
+### 问题描述
+用户要求修改后端的OCR识别过程，将提交识别的图片在本地保存一份，方便调试。
+
+### 解决方案
+
+#### 1. 修改默认OCR流程
+- **强制保存图片**：在 `renderAllPagesToPng` 方法中强制保存所有OCR识别的图片
+- **调试目录**：创建专门的调试图片保存目录 `uploads/gpu-ocr-compare/debug-images/`
+- **文件命名**：使用时间戳和PDF文件名生成唯一的调试目录
+
+#### 2. 支持Gradio模式
+- **新增方法**：创建 `saveDebugImagesForGradio` 方法专门处理Gradio模式的图片保存
+- **统一流程**：确保Gradio模式和默认模式都能保存调试图片
+- **目录区分**：Gradio模式的图片保存在 `gradio_` 前缀的目录中
+
+#### 3. 图片处理优化
+- **像素缩放**：保持原有的像素缩放逻辑，确保保存的图片与OCR识别的图片一致
+- **格式统一**：统一保存为PNG格式，便于调试查看
+- **日志输出**：添加详细的日志输出，便于跟踪图片保存过程
+
+### 技术实现
+
+#### 默认OCR流程图片保存
+```java
+private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath) throws Exception {
+    // 创建调试图片保存目录
+    String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+    Path debugImagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "debug-images", 
+        pdfPath.getFileName().toString().replaceAll("\\.pdf$", "") + "_" + System.currentTimeMillis());
+    Files.createDirectories(debugImagesDir);
+    
+    // 处理每页图片并保存
+    for (int i = 0; i < doc.getNumberOfPages(); i++) {
+        // ... 图片处理逻辑 ...
+        
+        // 强制保存调试图片
+        Path debugImagePath = debugImagesDir.resolve("page-" + (i + 1) + ".png");
+        Files.write(debugImagePath, bytes);
+        System.out.println("调试图片已保存: " + debugImagePath.toString());
+    }
+}
+```
+
+#### Gradio模式图片保存
+```java
+private void saveDebugImagesForGradio(Path pdfPath) throws Exception {
+    // 创建Gradio调试图片保存目录
+    Path debugImagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "debug-images", 
+        "gradio_" + pdfPath.getFileName().toString().replaceAll("\\.pdf$", "") + "_" + System.currentTimeMillis());
+    Files.createDirectories(debugImagesDir);
+    
+    // 处理并保存每页图片
+    for (int i = 0; i < doc.getNumberOfPages(); i++) {
+        // ... 图片处理逻辑 ...
+        Path debugImagePath = debugImagesDir.resolve("page-" + (i + 1) + ".png");
+        Files.write(debugImagePath, bytes);
+        System.out.println("[Gradio] 调试图片已保存: " + debugImagePath.toString());
+    }
+}
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 修改 `renderAllPagesToPng` 方法，强制保存调试图片
+  - 新增 `saveDebugImagesForGradio` 方法，支持Gradio模式
+  - 在Gradio流程中调用图片保存方法
+
+### 功能效果
+✅ **强制保存**: 所有OCR识别的图片都会自动保存到本地  
+✅ **调试友好**: 图片按PDF文件名和时间戳组织，便于调试  
+✅ **模式支持**: 同时支持默认OCR流程和Gradio模式  
+✅ **格式一致**: 保存的图片与OCR识别的图片完全一致  
+✅ **日志详细**: 提供详细的保存路径日志，便于跟踪  
+
+### 调试目录结构
+```
+uploads/gpu-ocr-compare/debug-images/
+├── document1_1705123456789/
+│   ├── page-1.png
+│   ├── page-2.png
+│   └── ...
+├── gradio_document2_1705123456790/
+│   ├── page-1.png
+│   ├── page-2.png
+│   └── ...
+└── ...
+```
+
+现在OCR识别过程中的所有图片都会自动保存，方便调试和问题排查！🎯
+
+---
+
+## 2025-01-18 GPU OCR图片保存功能重构优化
+
+### 问题描述
+用户要求：
+1. 正常比对和debug模式都生成图片
+2. 图片保存的路径不要带"debug"，重新起个名字
+3. 生成一个公用的方法
+
+### 解决方案
+
+#### 1. 创建公用图片保存方法
+- **统一接口**：创建 `saveOcrImages(Path pdfPath, String mode)` 公用方法
+- **模式标识**：通过mode参数区分不同场景（normal、gradio、debug_old、debug_new）
+- **路径优化**：将目录名从 `debug-images` 改为 `ocr-images`，去掉debug字样
+
+#### 2. 重构现有代码
+- **renderAllPagesToPng**：使用公用方法保存正常比对图片
+- **Gradio模式**：使用公用方法保存Gradio模式图片
+- **Debug模式**：在debug流程中添加图片保存功能
+- **删除冗余**：移除已废弃的 `saveDebugImagesForGradio` 方法
+
+#### 3. 路径命名优化
+- **新目录结构**：`uploads/gpu-ocr-compare/ocr-images/`
+- **文件命名**：`{mode}_{filename}_{timestamp}/page-N.png`
+- **模式区分**：normal、gradio、debug_old、debug_new
+
+### 技术实现
+
+#### 公用图片保存方法
+```java
+/**
+ * 公用的OCR图片保存方法
+ * @param pdfPath PDF文件路径
+ * @param mode 模式标识（如"normal", "gradio", "debug"等）
+ * @return 保存的图片目录路径
+ */
+private Path saveOcrImages(Path pdfPath, String mode) throws Exception {
+    // 创建图片保存目录
+    String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+    String fileName = pdfPath.getFileName().toString().replaceAll("\\.pdf$", "");
+    Path imagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "ocr-images", 
+        mode + "_" + fileName + "_" + System.currentTimeMillis());
+    Files.createDirectories(imagesDir);
+    
+    // 处理并保存每页图片
+    for (int i = 0; i < doc.getNumberOfPages(); i++) {
+        // ... 图片处理逻辑 ...
+        Path imagePath = imagesDir.resolve("page-" + (i + 1) + ".png");
+        Files.write(imagePath, bytes);
+        System.out.println("[" + mode + "] OCR图片已保存: " + imagePath.toString());
+    }
+    
+    return imagesDir;
+}
+```
+
+#### 各模式调用方式
+```java
+// 正常比对模式
+saveOcrImages(pdfPath, "normal");
+
+// Gradio模式
+saveOcrImages(pdfPath, "gradio");
+
+// Debug模式
+saveOcrImages(oldPdfPath, "debug_old");
+saveOcrImages(newPdfPath, "debug_new");
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 新增 `saveOcrImages` 公用方法
+  - 重构 `renderAllPagesToPng` 使用公用方法
+  - 修改Gradio模式使用公用方法
+  - 在debug模式中添加图片保存功能
+  - 删除废弃的 `saveDebugImagesForGradio` 方法
+
+### 功能效果
+✅ **统一管理**: 所有图片保存逻辑统一到公用方法  
+✅ **路径优化**: 去掉debug字样，使用更清晰的命名  
+✅ **全模式支持**: 正常比对、Gradio模式、Debug模式都生成图片  
+✅ **代码简化**: 删除冗余代码，提高可维护性  
+✅ **灵活扩展**: 通过mode参数轻松支持新的图片保存场景  
+
+### 新的目录结构
+```
+uploads/gpu-ocr-compare/ocr-images/
+├── normal_document1_1705123456789/
+│   ├── page-1.png
+│   ├── page-2.png
+│   └── ...
+├── gradio_document2_1705123456790/
+│   ├── page-1.png
+│   ├── page-2.png
+│   └── ...
+├── debug_old_document3_1705123456791/
+│   ├── page-1.png
+│   └── ...
+├── debug_new_document3_1705123456792/
+│   ├── page-1.png
+│   └── ...
+└── ...
+```
+
+现在图片保存功能更加统一和灵活了！🎯
+
+---
+
+## 2025-01-18 GPU OCR图片保存工具类重构
+
+### 问题描述
+用户要求：
+1. 抽离方法到一个工具类中
+2. 图片保存路径放到默认的task+id的目录下新建图片路径
+
+### 解决方案
+
+#### 1. 创建OCR图片保存工具类
+- **独立工具类**：创建 `OcrImageSaver` 工具类，专门负责OCR图片保存
+- **依赖注入**：使用Spring的 `@Component` 和 `@Autowired` 进行依赖管理
+- **配置复用**：复用现有的 `GPUOCRConfig` 和 `ZxcmConfig` 配置
+
+#### 2. 优化保存路径结构
+- **新路径结构**：`uploads/gpu-ocr-compare/tasks/{taskId}/images/{mode}/`
+- **模式区分**：在task目录下按模式（old、new、debug_old、debug_new）分别保存
+- **路径简化**：去掉时间戳，直接使用taskId作为主目录
+
+#### 3. 重构服务类
+- **移除冗余**：删除 `GPUOCRCompareService` 中的 `saveOcrImages` 方法
+- **工具类调用**：在各个流程中调用 `OcrImageSaver` 工具类
+- **异常处理**：保持原有的异常处理逻辑，不中断主流程
+
+### 技术实现
+
+#### OCR图片保存工具类
+```java
+@Component
+public class OcrImageSaver {
+    @Autowired
+    private GPUOCRConfig gpuOcrConfig;
+    
+    @Autowired
+    private ZxcmConfig zxcmConfig;
+    
+    /**
+     * 保存PDF的OCR图片到指定目录
+     * @param pdfPath PDF文件路径
+     * @param taskId 任务ID
+     * @param mode 模式标识（如"old", "new", "debug_old"等）
+     * @return 保存的图片目录路径
+     */
+    public Path saveOcrImages(Path pdfPath, String taskId, String mode) throws Exception {
+        // 创建图片保存目录：task目录下的images子目录
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+        Path imagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", taskId, "images", mode);
+        Files.createDirectories(imagesDir);
+        
+        // 处理并保存每页图片
+        // ... 图片处理逻辑 ...
+    }
+}
+```
+
+#### 服务类调用方式
+```java
+// 正常比对模式
+ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
+ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new");
+
+// Debug模式
+ocrImageSaver.saveOcrImages(oldPdfPath, task.getTaskId(), "debug_old");
+ocrImageSaver.saveOcrImages(newPdfPath, task.getTaskId(), "debug_new");
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/util/OcrImageSaver.java` - 新增工具类
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 添加 `OcrImageSaver` 依赖注入
+  - 删除原有的 `saveOcrImages` 方法
+  - 修改各流程使用工具类保存图片
+
+### 功能效果
+✅ **代码分离**: 图片保存逻辑独立到工具类，职责更清晰  
+✅ **路径优化**: 图片保存到task目录下，结构更合理  
+✅ **配置复用**: 复用现有配置，避免重复代码  
+✅ **易于维护**: 工具类独立，便于测试和维护  
+✅ **灵活扩展**: 通过mode参数支持更多保存场景  
+
+### 新的目录结构
+```
+uploads/gpu-ocr-compare/tasks/
+├── {taskId1}/
+│   ├── images/
+│   │   ├── old/
+│   │   │   ├── page-1.png
+│   │   │   └── page-2.png
+│   │   └── new/
+│   │       ├── page-1.png
+│   │       └── page-2.png
+│   ├── old_file.pdf
+│   ├── new_file.pdf
+│   └── ...
+├── {taskId2}/
+│   ├── images/
+│   │   ├── debug_old/
+│   │   │   └── page-1.png
+│   │   └── debug_new/
+│   │       └── page-1.png
+│   └── ...
+└── ...
+```
+
+现在图片保存功能更加模块化和规范了！🎯
+
+---
+
+## 2025-01-18 GPU OCR任务状态持久化修复
+
+### 问题描述
+用户反映重启服务后提示"任务不存在"，虽然结果数据已经以文件形式保存在后端，但任务状态没有持久化，导致服务重启后无法加载已完成的任务。
+
+### 问题分析
+1. **任务状态只存在内存中**：`ConcurrentHashMap<String, GPUOCRCompareTask> tasks` 只保存在内存中
+2. **结果数据已持久化**：`result.json` 和前端结果文件已经保存到磁盘
+3. **服务重启后丢失**：内存中的任务状态丢失，导致"任务不存在"错误
+
+### 解决方案
+
+#### 1. 实现任务状态从文件加载
+- **修改getTaskStatus方法**：优先从内存获取，如果不存在则从文件加载
+- **添加loadTaskFromFile方法**：从result.json或前端结果文件中重建任务状态
+- **自动缓存**：从文件加载的任务状态自动缓存到内存中
+
+#### 2. 服务启动时自动加载已完成任务
+- **修改@PostConstruct方法**：添加`loadCompletedTasks()`调用
+- **扫描结果目录**：自动扫描`results`和`frontend-results`目录
+- **批量加载**：将已完成的任务状态加载到内存中
+
+#### 3. 优化getCompareResult方法
+- **统一调用**：使用`getTaskStatus(taskId)`替代直接访问`tasks.get(taskId)`
+- **自动加载**：确保能自动从文件加载任务状态
+
+### 技术实现
+
+#### 任务状态加载逻辑
+```java
+public GPUOCRCompareTask getTaskStatus(String taskId) {
+    // 首先从内存中获取
+    GPUOCRCompareTask task = tasks.get(taskId);
+    if (task != null) {
+        return task;
+    }
+    
+    // 如果内存中没有，尝试从文件加载
+    task = loadTaskFromFile(taskId);
+    if (task != null) {
+        // 加载到内存中，避免重复文件读取
+        tasks.put(taskId, task);
+        return task;
+    }
+    
+    return null;
+}
+```
+
+#### 从文件重建任务状态
+```java
+private GPUOCRCompareTask loadTaskFromFile(String taskId) {
+    try {
+        // 检查任务目录是否存在
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+        Path taskDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", taskId);
+        if (!Files.exists(taskDir)) {
+            return null;
+        }
+        
+        // 检查是否有result.json文件（表示任务已完成）
+        Path resultJsonPath = Paths.get(uploadRootPath, "gpu-ocr-compare", "results", taskId + ".json");
+        if (Files.exists(resultJsonPath)) {
+            // 从result.json中提取任务信息
+            byte[] bytes = Files.readAllBytes(resultJsonPath);
+            Map<String, Object> resultData = M.readValue(bytes, Map.class);
+            
+            GPUOCRCompareTask task = new GPUOCRCompareTask(taskId);
+            task.setOldFileName((String) resultData.get("oldFileName"));
+            task.setNewFileName((String) resultData.get("newFileName"));
+            task.setStatus(GPUOCRCompareTask.Status.COMPLETED);
+            // ... 设置其他属性
+            
+            return task;
+        }
+        
+        // 也检查前端结果文件
+        // ... 类似逻辑
+        
+    } catch (Exception e) {
+        System.err.println("从文件加载任务状态失败: taskId=" + taskId + ", error=" + e.getMessage());
+    }
+    
+    return null;
+}
+```
+
+#### 启动时批量加载
+```java
+@PostConstruct
+public void init() {
+    // 使用配置的并行线程数初始化线程池
+    this.executorService = Executors.newFixedThreadPool(gpuOcrConfig.getParallelThreads());
+    System.out.println("GPU OCR比对服务初始化完成，线程池大小: " + gpuOcrConfig.getParallelThreads());
+    
+    // 启动时加载已完成的任务到内存中
+    loadCompletedTasks();
+}
+
+private void loadCompletedTasks() {
+    try {
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+        Path resultsDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "results");
+        
+        if (Files.exists(resultsDir)) {
+            Files.list(resultsDir)
+                .filter(path -> path.toString().endsWith(".json"))
+                .forEach(jsonFile -> {
+                    // 加载每个已完成的任务
+                    String taskId = extractTaskIdFromFileName(jsonFile);
+                    GPUOCRCompareTask task = loadTaskFromFile(taskId);
+                    if (task != null) {
+                        tasks.put(taskId, task);
+                        System.out.println("启动时加载任务: " + taskId);
+                    }
+                });
+        }
+        
+        System.out.println("启动时共加载了 " + tasks.size() + " 个已完成的任务");
+        
+    } catch (Exception e) {
+        System.err.println("启动时加载任务失败: " + e.getMessage());
+    }
+}
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 修改 `getTaskStatus` 方法支持从文件加载
+  - 添加 `loadTaskFromFile` 方法从文件重建任务状态
+  - 修改 `@PostConstruct` 方法添加启动时加载逻辑
+  - 添加 `loadCompletedTasks` 方法批量加载已完成任务
+  - 修改 `getCompareResult` 方法使用统一的 `getTaskStatus` 调用
+
+### 功能效果
+✅ **任务持久化**: 服务重启后能自动加载已完成的任务状态  
+✅ **自动恢复**: 无需手动操作，自动从文件重建任务状态  
+✅ **性能优化**: 加载到内存中，避免重复文件读取  
+✅ **向后兼容**: 支持从result.json和前端结果文件加载  
+✅ **错误处理**: 完善的异常处理，不影响服务启动  
+
+### 解决的问题
+- ❌ **重启前**: 服务重启后提示"任务不存在"
+- ✅ **重启后**: 服务重启后自动加载已完成任务，正常显示结果
+
+现在服务重启后可以正常访问已完成的任务了！🎯
+
+---
+
+## 2025-01-18 DotsOcrClient Prompt功能整合
+
+### 问题描述
+用户要求将prompt等提示词也整合到DotsOcrClient的代码中，避免在GPUOCRCompareService中重复定义prompt构建逻辑。
+
+### 解决方案
+
+#### 1. 在DotsOcrClient中添加Prompt功能
+- **添加默认prompt构建方法**：`buildDefaultOCRPrompt()` 方法
+- **添加便捷OCR方法**：`ocrImageBytesWithDefaultPrompt()` 和 `ocrImageByUrlWithDefaultPrompt()` 方法
+- **保持向后兼容**：原有的`ocrImageBytes()` 和 `ocrImageByUrl()` 方法保持不变
+
+#### 2. 修改GPUOCRCompareService使用整合后的功能
+- **移除重复代码**：删除`buildOCRPrompt()` 方法
+- **修改调用方式**：在`parseOnePage()` 方法中使用DotsOcrClient的默认prompt
+- **简化参数传递**：将prompt参数设为null，自动使用默认prompt
+
+### 技术实现
+
+#### DotsOcrClient新增方法
+```java
+/**
+ * 使用默认的OCR提示词进行图像识别
+ * @param imageBytes 图像字节数组
+ * @param model 模型名称，为null时使用默认模型
+ * @param mimeType MIME类型，为null时使用image/png
+ * @param extractTextOnly 是否只提取文本内容
+ * @return OCR识别结果
+ */
+public String ocrImageBytesWithDefaultPrompt(byte[] imageBytes, String model, String mimeType, boolean extractTextOnly) throws IOException {
+    String prompt = buildDefaultOCRPrompt();
+    return ocrImageBytes(imageBytes, prompt, model, mimeType, extractTextOnly);
+}
+
+/**
+ * 构建默认的OCR提示词
+ * 与 dots.ocr demo 的 prompt_layout_all_en 对齐
+ * @return 默认OCR提示词
+ */
+public String buildDefaultOCRPrompt() {
+    return "Please output the layout information from the PDF image, including each layout element's bbox, its category, and the corresponding text content within the bbox.\n\n"
+            + "1. Bbox format: [x1, y1, x2, y2]\n\n"
+            + "2. Layout Categories: The possible categories are ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Picture', 'Section-header', 'Table', 'Text', 'Title'].\n\n"
+            + "3. Text Extraction & Formatting Rules:\n"
+            + "    - Picture: For the 'Picture' category, the text field should be omitted.\n"
+            + "    - Formula: Format its text as LaTeX.\n"
+            + "    - Table: Format its text as HTML.\n"
+            + "    - All Others (Text, Title, etc.): Format their text as Markdown.\n\n"
+            + "4. Constraints:\n"
+            + "    - The output text must be the original text from the image, with no translation.\n"
+            + "    - All layout elements must be sorted according to human reading order.\n\n"
+            + "5. Final Output: The entire output must be a single JSON object.";
+}
+```
+
+#### GPUOCRCompareService修改
+```java
+// 修改前：需要手动构建prompt
+String prompt = buildOCRPrompt(options);
+List<CharBox> seqA = recognizePdfAsCharSeq(client, oldPath, prompt, false, options);
+
+// 修改后：直接传递null，使用默认prompt
+List<CharBox> seqA = recognizePdfAsCharSeq(client, oldPath, null, false, options);
+
+// parseOnePage方法中的修改
+private TextExtractionUtil.PageLayout parseOnePage(DotsOcrClient client, byte[] pngBytes, int page, String prompt, Path pdfPath) {
+    String raw;
+    if (prompt == null) {
+        // 使用DotsOcrClient的默认prompt
+        raw = client.ocrImageBytesWithDefaultPrompt(pngBytes, null, "image/png", false);
+    } else {
+        raw = client.ocrImageBytes(pngBytes, prompt, null, "image/png", false);
+    }
+    // ... 其他处理逻辑
+}
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocr/dotsocr/DotsOcrClient.java`
+  - 添加 `buildDefaultOCRPrompt()` 方法
+  - 添加 `ocrImageBytesWithDefaultPrompt()` 方法
+  - 添加 `ocrImageByUrlWithDefaultPrompt()` 方法
+
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 删除 `buildOCRPrompt()` 方法
+  - 修改 `parseOnePage()` 方法支持使用默认prompt
+  - 修改调用方式，传递null作为prompt参数
+
+### 功能效果
+✅ **代码整合**: Prompt构建逻辑统一到DotsOcrClient中  
+✅ **减少重复**: 避免在多个地方重复定义相同的prompt  
+✅ **向后兼容**: 保持原有API不变，新增便捷方法  
+✅ **易于维护**: Prompt修改只需在一个地方进行  
+✅ **使用简便**: 调用方可以传递null自动使用默认prompt  
+
+### 架构优化
+- **职责分离**: DotsOcrClient负责OCR相关功能，包括prompt构建
+- **代码复用**: 其他服务也可以直接使用DotsOcrClient的默认prompt
+- **配置集中**: Prompt相关的配置和逻辑集中在DotsOcrClient中
+
+现在Prompt功能已经完全整合到DotsOcrClient中了！🎯
+
+---
+
+## 2025-01-18 文本处理规则增强
+
+### 问题描述
+用户要求添加两个新的文本处理规则：
+1. 去掉文本中间的空格
+2. 去掉连续的`**文本**`格式的markdown加粗标记
+
+### 解决方案
+
+#### 1. 添加空格去除规则
+- **规则位置**：在`TextExtractionUtil.parseTextAndPositionsFromResults`方法中
+- **处理逻辑**：使用`replace(" ", "")`去除所有空格
+- **应用范围**：所有文本内容，包括普通文本和表格文本
+
+#### 2. 添加Markdown加粗标记去除规则
+- **规则位置**：在`TextExtractionUtil.parseTextAndPositionsFromResults`方法中
+- **处理逻辑**：使用正则表达式`\\*\\*([^*]+)\\*\\*`匹配并替换`**文本**`格式
+- **替换结果**：`**文本**` → `文本`（保留内部文本，去除星号）
+
+### 技术实现
+
+#### 文本处理规则顺序
+```java
+// 1. 移除文本开头连续出现的#号及其前置空白
+s = s.replaceFirst("^\\s*#*\\s*", "");
+
+// 2. 移除所有换行符（\\r 和 \\n）
+s = s.replace("\r", "").replace("\n", "");
+
+// 3. 添加新规则：去掉文本中间的空格
+s = s.replace(" ", "");
+
+// 4. 添加新规则：去掉markdown加粗标记 **文本**
+s = s.replaceAll("\\*\\*([^*]+)\\*\\*", "$1");
+```
+
+#### 正则表达式说明
+- `\\*\\*([^*]+)\\*\\*`：
+  - `\\*\\*`：匹配开头的两个星号
+  - `([^*]+)`：捕获组，匹配一个或多个非星号字符
+  - `\\*\\*`：匹配结尾的两个星号
+  - `$1`：替换为第一个捕获组的内容（即星号之间的文本）
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocr/TextExtractionUtil.java`
+  - 在`parseTextAndPositionsFromResults`方法中添加空格去除规则
+  - 添加markdown加粗标记去除规则
+
+### 功能效果
+✅ **空格清理**: 去除文本中的所有空格，提高比对准确性  
+✅ **格式清理**: 去除markdown加粗标记，保留纯文本内容  
+✅ **规则顺序**: 按照合理的顺序应用文本处理规则  
+✅ **向后兼容**: 不影响现有的文本处理逻辑  
+
+### 处理示例
+```
+原始文本: "**重要** 内容 说明"
+处理后: "重要内容说明"
+
+原始文本: "## 标题\n内容 文本"
+处理后: "标题内容文本"
+
+原始文本: "表格 数据\n**加粗** 文本"
+处理后: "表格数据加粗文本"
+```
+
+### 规则优先级
+1. **头部#号清理** - 去除标题标记
+2. **换行符清理** - 去除换行符
+3. **空格清理** - 去除所有空格
+4. **Markdown清理** - 去除加粗标记
+
+现在文本处理规则更加完善了！🎯
+
+---
+
+## 2025-01-18 Markdown格式处理规则增强
+
+### 问题描述
+用户要求完善规则，能够去掉两种情况下的星号：
+1. `__*really important*__` - 下划线包围的斜体标记
+2. `**_really important_**` - 星号包围的加粗标记
+
+### 解决方案
+
+#### 1. 扩展Markdown格式处理规则
+- **原有规则**：只处理`**文本**`格式的加粗标记
+- **新增规则**：处理多种markdown格式组合
+- **处理顺序**：按照从复杂到简单的顺序处理，避免重复匹配
+
+#### 2. 新增的正则表达式规则
+1. `**文本**` - 加粗标记
+2. `__*文本*__` - 下划线包围的斜体标记
+3. `**_文本_**` - 星号包围的加粗标记
+4. `*文本*` - 单独的斜体标记
+5. `_文本_` - 单独的斜体标记
+
+### 技术实现
+
+#### 完整的Markdown处理规则
+```java
+// 添加新规则：去掉markdown格式标记
+// 1. 去掉 **文本** 格式的加粗标记
+s = s.replaceAll("\\*\\*([^*]+)\\*\\*", "$1");
+// 2. 去掉 __*文本*__ 格式的下划线包围斜体标记
+s = s.replaceAll("__\\*([^*]+)\\*__", "$1");
+// 3. 去掉 **_文本_** 格式的星号包围加粗标记
+s = s.replaceAll("\\*\\*_([^_]+)_\\*\\*", "$1");
+// 4. 去掉单独的 *文本* 格式的斜体标记
+s = s.replaceAll("\\*([^*]+)\\*", "$1");
+// 5. 去掉单独的 _文本_ 格式的斜体标记
+s = s.replaceAll("_([^_]+)_", "$1");
+```
+
+#### 正则表达式说明
+1. `\\*\\*([^*]+)\\*\\*` - 匹配`**文本**`格式
+2. `__\\*([^*]+)\\*__` - 匹配`__*文本*__`格式
+3. `\\*\\*_([^_]+)_\\*\\*` - 匹配`**_文本_**`格式
+4. `\\*([^*]+)\\*` - 匹配`*文本*`格式
+5. `_([^_]+)_` - 匹配`_文本_`格式
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocr/TextExtractionUtil.java`
+  - 扩展markdown格式处理规则
+  - 添加多种markdown格式的正则表达式匹配
+
+### 功能效果
+✅ **格式覆盖**: 支持多种markdown格式组合  
+✅ **处理顺序**: 按照从复杂到简单的顺序处理  
+✅ **避免冲突**: 防止不同格式之间的匹配冲突  
+✅ **向后兼容**: 保持原有功能不变  
+
+### 处理示例
+```
+原始文本: "This text is __*really important*__."
+处理后: "This text is really important."
+
+原始文本: "This text is **_really important_**."
+处理后: "This text is really important."
+
+原始文本: "**Bold** and *italic* text"
+处理后: "Bold and italic text"
+
+原始文本: "___Complex___ formatting"
+处理后: "Complex formatting"
+```
+
+### 规则优先级
+1. **复杂格式优先** - 先处理嵌套格式
+2. **简单格式后处理** - 再处理单独格式
+3. **避免重复匹配** - 确保每种格式只被处理一次
+
+现在markdown格式处理规则更加完善了！🎯
+
+---
+
+## 2025-01-18 列表格式处理规则添加
+
+### 问题描述
+用户要求添加规则，去掉文本头部的`-`和`*`号，匹配列表格式：
+```
+* First item
+* Second item
+* Third item
+* Fourth item
+```
+
+### 解决方案
+
+#### 1. 添加列表格式处理规则
+- **规则位置**：在头部#号处理规则之后，换行符处理之前
+- **处理逻辑**：使用多行正则表达式匹配每行开头的列表标记
+- **匹配格式**：`-` 和 `*` 号，可能前面有空格，后面有空格
+
+#### 2. 正则表达式设计
+- **模式**：`(?m)^\\s*[-*]\\s*`
+- **说明**：
+  - `(?m)` - 多行模式，使`^`匹配每行的开始
+  - `^` - 行首
+  - `\\s*` - 零个或多个空白字符
+  - `[-*]` - 匹配`-`或`*`号
+  - `\\s*` - 零个或多个空白字符
+
+### 技术实现
+
+#### 完整的文本处理规则顺序
+```java
+// 1. 移除文本开头连续出现的#号及其前置空白
+s = s.replaceFirst("^\\s*#*\\s*", "");
+
+// 2. 添加新规则：去掉文本头部的列表标记（- 和 *）
+// 处理多行情况，每行开头可能有 - 或 * 号
+s = s.replaceAll("(?m)^\\s*[-*]\\s*", "");
+
+// 3. 移除所有换行符（\\r 和 \\n）
+s = s.replace("\r", "").replace("\n", "");
+
+// 4. 添加新规则：去掉文本中间的空格
+s = s.replace(" ", "");
+
+// 5. 添加新规则：去掉markdown格式标记
+// ... 其他markdown处理规则
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocr/TextExtractionUtil.java`
+  - 在头部#号处理规则之后添加列表格式处理规则
+  - 使用多行正则表达式处理每行的列表标记
+
+### 功能效果
+✅ **列表清理**: 去除文本中的列表标记符号  
+✅ **多行支持**: 支持处理多行列表格式  
+✅ **空格处理**: 同时处理列表标记前后的空格  
+✅ **规则顺序**: 在换行符处理之前应用，确保正确匹配  
+
+### 处理示例
+```
+原始文本: "* First item\n* Second item\n* Third item"
+处理后: "First itemSecond itemThird item"
+
+原始文本: "- Item one\n- Item two\n- Item three"
+处理后: "Item oneItem twoItem three"
+
+原始文本: "  * Indented item\n  * Another item"
+处理后: "Indented itemAnother item"
+
+原始文本: "## Title\n* List item\n**Bold** text"
+处理后: "TitleList itemBoldtext"
+```
+
+### 规则优先级
+1. **头部#号清理** - 去除标题标记
+2. **列表标记清理** - 去除列表符号（新增）
+3. **换行符清理** - 去除换行符
+4. **空格清理** - 去除所有空格
+5. **Markdown清理** - 去除其他格式标记
+
+现在列表格式处理规则已经添加完成！🎯
+
+---
+
+## 2025-01-18 OCR图片保存功能开关设置
+
+### 问题描述
+用户要求为保存识别文件为图片的功能设置开关，默认关闭。这样可以控制是否保存OCR识别过程中的图片文件，避免不必要的磁盘空间占用。
+
+### 解决方案
+
+#### 1. 添加配置开关
+- **配置项**：在`GPUOCRConfig`中添加`saveOcrImages`配置项
+- **默认值**：设置为`false`（默认关闭）
+- **配置路径**：通过`gpu.ocr.save-ocr-images`配置项控制
+
+#### 2. 修改图片保存逻辑
+- **OcrImageSaver**：在保存方法开头添加开关检查
+- **GPUOCRCompareService**：在所有图片保存调用处添加开关检查
+- **Debug模式**：同样添加开关检查
+
+### 技术实现
+
+#### 配置类修改
+```java
+/**
+ * 是否保存OCR识别图片（默认关闭）
+ */
+private boolean saveOcrImages = false;
+
+public boolean isSaveOcrImages() {
+    return saveOcrImages;
+}
+
+public void setSaveOcrImages(boolean saveOcrImages) {
+    this.saveOcrImages = saveOcrImages;
+}
+```
+
+#### OcrImageSaver修改
+```java
+public Path saveOcrImages(Path pdfPath, String taskId, String mode) throws Exception {
+    // 检查是否启用图片保存功能
+    if (!gpuOcrConfig.isSaveOcrImages()) {
+        System.out.println("[" + mode + "] OCR图片保存功能已关闭，跳过保存");
+        return null;
+    }
+    // ... 原有的图片保存逻辑
+}
+```
+
+#### GPUOCRCompareService修改
+```java
+// 正常比对模式
+if (gpuOcrConfig.isSaveOcrImages()) {
+    try {
+        ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
+    } catch (Exception e) {
+        System.err.println("保存第一个文档OCR图片失败: " + e.getMessage());
+    }
+}
+
+// Debug模式
+if (gpuOcrConfig.isSaveOcrImages()) {
+    try {
+        ocrImageSaver.saveOcrImages(oldPdfPath, task.getTaskId(), "debug_old");
+        ocrImageSaver.saveOcrImages(newPdfPath, task.getTaskId(), "debug_new");
+    } catch (Exception e) {
+        System.err.println("Debug模式保存OCR图片失败: " + e.getMessage());
+    }
+}
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/config/GPUOCRConfig.java`
+  - 添加 `saveOcrImages` 配置项（默认false）
+  - 添加对应的getter和setter方法
+
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/util/OcrImageSaver.java`
+  - 在 `saveOcrImages` 方法开头添加开关检查
+  - 如果开关关闭，直接返回null并输出提示信息
+
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 在正常比对模式的图片保存调用处添加开关检查
+  - 在Debug模式的图片保存调用处添加开关检查
+
+### 功能效果
+✅ **开关控制**: 通过配置项控制图片保存功能  
+✅ **默认关闭**: 默认不保存图片，节省磁盘空间  
+✅ **灵活配置**: 可通过配置文件或环境变量控制  
+✅ **性能优化**: 关闭时跳过图片处理，提高性能  
+✅ **统一管理**: 所有图片保存功能统一受开关控制  
+
+### 配置方式
+```yaml
+# application.yml
+gpu:
+  ocr:
+    save-ocr-images: false  # 默认关闭
+    # 其他配置...
+```
+
+### 使用场景
+- **开发环境**: 可以开启图片保存，便于调试
+- **生产环境**: 建议关闭图片保存，节省存储空间
+- **调试需要**: 临时开启图片保存功能
+
+### 开关状态说明
+- **开启时**: 正常保存OCR识别图片到`uploads/gpu-ocr-compare/tasks/{taskId}/images/`目录
+- **关闭时**: 跳过图片保存，输出提示信息，返回null
+
+现在OCR图片保存功能有了完整的开关控制！🎯
+
+---
+
+## 2025-01-18 PDF标注bbox去重功能
+
+### 问题描述
+用户反映PDF标注时存在重复的标注问题，同一个bbox被多次标注。这会导致PDF上出现重叠的标注，影响视觉效果和用户体验。
+
+### 问题分析
+
+#### 1. bbox重复的原因
+- **多个DiffBlock包含相同bbox**：在差异块合并过程中，可能产生包含相同bbox的多个块
+- **collectRectsForDiffBlocks方法**：直接遍历所有DiffBlock的bbox列表，没有进行去重
+- **没有在标注前进行去重**：直接使用收集到的矩形列表进行PDF标注
+
+#### 2. 影响范围
+- **正常比对模式**：PDF A和PDF B的标注都可能出现重复
+- **Debug模式**：同样存在重复标注问题
+- **视觉效果**：重叠的标注影响阅读体验
+
+### 解决方案
+
+#### 1. 实现bbox去重算法
+- **去重时机**：在`collectRectsForDiffBlocks`方法中，收集完所有矩形后进行去重
+- **去重策略**：基于页面索引、坐标和操作类型生成唯一键
+- **坐标容差**：使用1像素容差处理坐标的微小差异
+
+#### 2. 去重算法设计
+```java
+/**
+ * 对矩形列表进行去重，基于页面、坐标和操作类型
+ */
+private static List<RectOnPage> deduplicateRects(List<RectOnPage> rects) {
+    if (rects == null || rects.isEmpty()) {
+        return rects;
+    }
+
+    List<RectOnPage> result = new ArrayList<>();
+    Set<String> seenKeys = new HashSet<>();
+
+    for (RectOnPage rect : rects) {
+        // 生成唯一键：页面索引 + 坐标 + 操作类型
+        String key = generateRectKey(rect);
+        
+        if (!seenKeys.contains(key)) {
+            seenKeys.add(key);
+            result.add(rect);
+        }
+    }
+
+    return result;
+}
+```
+
+#### 3. 唯一键生成策略
+```java
+/**
+ * 为矩形生成唯一键，用于去重判断
+ */
+private static String generateRectKey(RectOnPage rect) {
+    if (rect == null || rect.bbox == null || rect.bbox.length < 4) {
+        return "";
+    }
+
+    // 使用坐标容差进行近似匹配（1像素容差）
+    final double TOLERANCE = 1.0;
+    double x1 = Math.round(rect.bbox[0] / TOLERANCE) * TOLERANCE;
+    double y1 = Math.round(rect.bbox[1] / TOLERANCE) * TOLERANCE;
+    double x2 = Math.round(rect.bbox[2] / TOLERANCE) * TOLERANCE;
+    double y2 = Math.round(rect.bbox[3] / TOLERANCE) * TOLERANCE;
+
+    return String.format("%d_%.1f_%.1f_%.1f_%.1f_%s", 
+        rect.pageIndex0, x1, y1, x2, y2, rect.op.toString());
+}
+```
+
+### 技术实现
+
+#### 修改collectRectsForDiffBlocks方法
+```java
+private static List<RectOnPage> collectRectsForDiffBlocks(List<DiffBlock> blocks, IndexMap map, List<CharBox> seq,
+        boolean isLeft) {
+    List<RectOnPage> out = new ArrayList<>();
+
+    // ... 原有的矩形收集逻辑 ...
+
+    // 对收集到的矩形进行去重
+    List<RectOnPage> deduplicatedRects = deduplicateRects(out);
+    System.out.println("矩形去重完成，原始数量: " + out.size() + ", 去重后数量: " + deduplicatedRects.size());
+    
+    return deduplicatedRects;
+}
+```
+
+#### 添加必要的import
+```java
+import java.util.HashSet;
+import java.util.Set;
+```
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocrcompare/compare/GPUOCRCompareService.java`
+  - 修改 `collectRectsForDiffBlocks` 方法，添加去重逻辑
+  - 添加 `deduplicateRects` 方法实现去重算法
+  - 添加 `generateRectKey` 方法生成唯一键
+  - 添加必要的import语句
+
+### 功能效果
+✅ **去重处理**: 自动去除重复的bbox标注  
+✅ **坐标容差**: 使用1像素容差处理坐标微小差异  
+✅ **性能优化**: 使用HashSet提高去重效率  
+✅ **日志输出**: 显示去重前后的数量统计  
+✅ **兼容性**: 不影响现有的标注逻辑  
+
+### 去重策略说明
+- **唯一键组成**: 页面索引 + 坐标(容差处理) + 操作类型
+- **坐标容差**: 1像素容差，处理OCR坐标的微小差异
+- **操作类型**: 区分DELETE和INSERT操作，避免误删
+- **页面索引**: 确保不同页面的相同坐标不会冲突
+
+### 使用场景
+- **正常比对**: 自动去除重复的差异标注
+- **Debug模式**: 同样应用去重逻辑
+- **大文档**: 特别适用于包含大量差异的文档
+
+### 去重效果
+- **原始数量**: 显示收集到的矩形总数
+- **去重后数量**: 显示去重后的矩形数量
+- **重复率**: 通过日志可以了解重复情况
+
+现在PDF标注功能有了完整的bbox去重处理！🎯
