@@ -77,18 +77,26 @@
       <div class="result-list">
         <div class="head">比对结果 <span class="em">{{ filteredResults.length }}</span> 处（删 {{ deleteCount }} / 增 {{ insertCount }}）</div>
         <div class="list">
-          <div
-            v-for="(r, i) in filteredResults"
-            :key="i"
-            class="result-item"
-            :class="{ active: indexInAll(i) === activeIndex }"
-            @click="jumpTo(indexInAll(i))"
-          >
-            <div class="line">
-              <span class="badge" :class="r.diff.operation === 'DELETE' ? 'del' : 'ins'">{{ r.diff.operation === 'DELETE' ? '删' : '增' }}</span>
-              <span class="text">{{ r.diff.text }}</span>
+          <!-- 加载状态显示 -->
+          <div v-if="viewerLoading" class="list-loading">
+            <ConcentricLoader color="#1677ff" :size="52" text="比对中...16%" class="list-loader" />
+            <div class="loading-text-sub">任务预计处理3分钟，期间您可自由使用其他功能</div>
+          </div>
+          <!-- 正常结果列表 -->
+          <div v-else>
+            <div
+              v-for="(r, i) in filteredResults"
+              :key="i"
+              class="result-item"
+              :class="{ active: indexInAll(i) === activeIndex }"
+              @click="jumpTo(indexInAll(i))"
+            >
+              <div class="line">
+                <span class="badge" :class="r.diff.operation === 'DELETE' ? 'del' : 'ins'">{{ r.diff.operation === 'DELETE' ? '删' : '增' }}</span>
+                <span class="text">{{ r.diff.text }}</span>
+              </div>
+              <div class="meta">旧文档第 {{ r.oldPosition?.page ?? 0 }} 页 / 新文档第 {{ r.newPosition?.page ?? 0 }} 页</div>
             </div>
-            <div class="meta">旧文档第 {{ r.oldPosition?.page ?? 0 }} 页 / 新文档第 {{ r.newPosition?.page ?? 0 }} 页</div>
           </div>
         </div>
       </div>
@@ -756,6 +764,31 @@ function indexInAll(filteredIdx: number): number {
 
 .right-loader {
   /* 右侧PDF加载特效 */
+}
+
+/* 结果列表加载状态样式 */
+.list-loading {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+}
+
+.list-loader {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.loading-text-sub {
+  color: #666;
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.8;
+  line-height: 1.4;
+  margin-top: 8px;
 }
 </style>
 
