@@ -90,8 +90,8 @@ const menuItems = [
   { key: '/contract-review', icon: () => h(ProfileOutlined), label: '合同智能审核' },
   { key: '/onlyoffice', icon: () => h(ApartmentOutlined), label: 'OnlyOffice预览' },
   { key: '/compare', icon: () => h(SnippetsOutlined), label: 'PDF合同比对' },
-  { key: '/ocr-compare', icon: () => h(FileSearchOutlined), label: 'OCR文档比对' },
-  // 用单一入口“智能合同合成”替换三项：模板管理/模板设计/合同合成
+  { key: '/gpu-ocr-compare', icon: () => h(FileSearchOutlined), label: 'GPU合同比对' },
+  // 用单一入口"智能合同合成"替换三项：模板管理/模板设计/合同合成
   { key: '/compose/start', icon: () => h(SnippetsOutlined), label: '智能合同合成' }
 ]
 

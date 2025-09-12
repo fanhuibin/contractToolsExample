@@ -4428,3 +4428,279 @@ import java.util.Set;
 - **重复率**: 通过日志可以了解重复情况
 
 现在PDF标注功能有了完整的bbox去重处理！🎯
+
+---
+
+## 2025-01-18 前端菜单更新
+
+### 问题描述
+用户要求去掉OCR合同比对的菜单，添加GPU合同比对的菜单。需要更新前端的菜单配置和路由配置。
+
+### 解决方案
+
+#### 1. 菜单配置更新
+- **移除OCR合同比对菜单**：从侧边栏菜单中移除OCR文档比对选项
+- **添加GPU合同比对菜单**：添加GPU合同比对选项到侧边栏菜单
+- **更新首页卡片**：将首页的OCR文档比对卡片替换为GPU合同比对卡片
+
+#### 2. 路由配置更新
+- **移除OCR路由**：删除OCR合同比对相关的路由配置
+- **保留GPU路由**：确保GPU合同比对路由正常工作
+
+### 技术实现
+
+#### 修改侧边栏菜单配置
+```javascript
+// frontend/src/layout/index.vue
+const menuItems = [
+  { key: '/home', icon: () => h(HomeOutlined), label: '首页' },
+  { key: '/auto-fulfillment', icon: () => h(FileSearchOutlined), label: '自动履约任务' },
+  { key: '/contract-extract', icon: () => h(FileTextOutlined), label: '合同抽取' },
+  { key: '/contract-review', icon: () => h(ProfileOutlined), label: '合同智能审核' },
+  { key: '/onlyoffice', icon: () => h(ApartmentOutlined), label: 'OnlyOffice预览' },
+  { key: '/compare', icon: () => h(SnippetsOutlined), label: 'PDF合同比对' },
+  { key: '/gpu-ocr-compare', icon: () => h(FileSearchOutlined), label: 'GPU合同比对' }, // 新增
+  { key: '/compose/start', icon: () => h(SnippetsOutlined), label: '智能合同合成' }
+]
+```
+
+#### 移除OCR路由配置
+```javascript
+// frontend/src/router/index.ts
+// 移除以下路由配置：
+// {
+//   path: '/ocr-compare',
+//   name: 'OCRCompare',
+//   component: () => import('@/views/documents/OCRCompare.vue'),
+//   meta: { title: 'OCR文档比对' }
+// },
+// {
+//   path: '/ocr-compare/result/:taskId',
+//   name: 'OCRCompareResult',
+//   component: () => import('@/views/documents/OCRCompareResult.vue'),
+//   meta: { title: 'OCR文档比对结果' }
+// },
+```
+
+#### 更新首页卡片
+```javascript
+// frontend/src/views/home/HomePage.vue
+{
+  title: 'GPU合同比对',
+  description: '基于GPU加速的OCR识别和智能比对，提供更快的处理速度和更高的准确率。',
+  image: '/images/ocr-compare.webp',
+  button_text: '进入功能',
+  link: '/gpu-ocr-compare'
+}
+```
+
+### 修改文件
+- `frontend/src/layout/index.vue`
+  - 移除OCR合同比对菜单项
+  - 添加GPU合同比对菜单项
+
+- `frontend/src/router/index.ts`
+  - 移除OCR合同比对相关路由配置
+  - 保留GPU合同比对路由配置
+
+- `frontend/src/views/home/HomePage.vue`
+  - 更新首页卡片，将OCR文档比对替换为GPU合同比对
+  - 更新描述文字，突出GPU加速特性
+
+### 功能效果
+✅ **菜单更新**: 侧边栏显示GPU合同比对菜单  
+✅ **路由清理**: 移除不再使用的OCR路由  
+✅ **首页更新**: 首页卡片显示GPU合同比对功能  
+✅ **用户体验**: 用户可以直接访问GPU合同比对功能  
+✅ **功能完整**: GPU合同比对功能完全可用  
+
+### 菜单结构
+- **首页**: 系统首页
+- **自动履约任务**: 履约事项管理
+- **合同抽取**: 合同信息提取
+- **合同智能审核**: 合同审核功能
+- **OnlyOffice预览**: 文档预览
+- **PDF合同比对**: 传统PDF比对
+- **GPU合同比对**: GPU加速的OCR比对（新增）
+- **智能合同合成**: 合同模板合成
+
+### 使用说明
+- **访问方式**: 通过侧边栏菜单或首页卡片访问GPU合同比对
+- **功能特性**: 基于GPU加速，提供更快的处理速度和更高的准确率
+- **兼容性**: 支持PDF、Word、Excel等多种文档格式
+
+现在前端菜单已经更新，用户可以直接访问GPU合同比对功能！🎯
+
+---
+
+## 2025-01-18 前端文本重复显示问题修复
+
+### 问题描述
+用户反映在GPU合同比对结果页面中，文字出现了重复显示的问题。虽然后端返回的数据是正确的，但前端在显示时出现了重复的文本内容。
+
+### 问题分析
+
+#### 1. 问题现象
+用户提供的后端数据是正确的：
+```json
+"allTextB": [
+    "第十七条其他约定事项：",
+    "1、租赁期间,因不可抗力导致合同无法履行的,本合同自动终止,甲乙双方互不承担责任。",
+    "2、乙方在租赁合同期内,因经济条件改善、收入水平提高而不符合公共租赁住房享受条件的,或购买(含购买经济适用住房)、受赠、继承其他住房的,应在三个月内退出公共租赁住房保障。"
+]
+```
+
+但前端显示时出现了重复：
+"第十七条其他约定事项： 1、租赁期间,因不可抗力导致合同无法履行的,本合同自动终止,甲乙双方互不承担责任。 2、乙方在租赁合同期内,因经济条件改善、收入水平提高而不符合公共租赁住房享受条件的,或购买(含购买经济适用住房)、受赠、继承其他住房的,应其他约定事项： 1、租赁期间,因不可抗力导致合同无法履行的,本合同自动终止,甲乙双方互不承担责任。 2、乙方在租赁合同期内,因经济条件改善、收入水平提高而不符合公共租赁住房享受条件的,或购买(含购买经济适用住房)、受赠、继承其他住房的,应其他约定事项： 1、租赁期间,因不可抗力导致合同无法履行的,本合同自动终止,甲乙双方互不承担责任。 2、乙方在租赁合同期内,因经济条件改善、收入水平提高而不符合公共租赁住房享受条件的,或购买(含购买经济适用住房)、受赠、继承其他住房的,应在三个月内退出公共租赁住房保障"
+
+#### 2. 问题根源
+- **多个差异块包含相同的文本内容**：不同的差异块可能包含相同的`allTextB`数组内容
+- **前端没有进行去重处理**：在拼接和显示文本时，没有移除重复的文本片段
+- **Set去重机制缺失**：`allTextList.join('\n')`直接拼接，没有去重
+
+### 解决方案
+
+#### 1. 前端去重处理
+在`getTruncatedText`和`needsExpand`函数中添加去重逻辑，使用`Set`来移除重复的文本片段。
+
+#### 2. 技术实现
+```javascript
+// 文本截断和展开功能
+const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete', isExpanded: boolean) => {
+  if (!allTextList || allTextList.length === 0) return '无'
+  
+  // 去重处理：移除重复的文本片段
+  const uniqueTextList = [...new Set(allTextList)]
+  const fullText = uniqueTextList.join('\n')
+  if (!fullText) return '无'
+  
+  // 如果展开状态或文本长度不超过截断限制，直接返回完整文本
+  if (isExpanded || fullText.length <= TEXT_TRUNCATE_LIMIT) {
+    return highlightDiffText([fullText], diffRanges, type)
+  }
+  
+  // 截断到指定长度
+  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  return highlightDiffText([truncatedText], diffRanges, type)
+}
+
+// 判断文本是否需要展开功能（超过截断限制）
+const needsExpand = (allTextList: string[]) => {
+  if (!allTextList || allTextList.length === 0) return false
+  // 去重处理：移除重复的文本片段
+  const uniqueTextList = [...new Set(allTextList)]
+  const fullText = uniqueTextList.join('\n')
+  return fullText && fullText.length > TEXT_TRUNCATE_LIMIT
+}
+```
+
+### 修改文件
+- `frontend/src/views/documents/GPUOCRCompareResult.vue`
+  - 修改 `getTruncatedText` 函数，添加去重处理
+  - 修改 `needsExpand` 函数，添加去重处理
+
+### 功能效果
+✅ **去重显示**: 自动移除重复的文本片段  
+✅ **保持功能**: 不影响高亮和展开/收起功能  
+✅ **性能优化**: 使用Set进行高效去重  
+✅ **兼容性**: 不影响现有的显示逻辑  
+
+### 去重策略说明
+- **去重时机**: 在文本拼接之前进行去重
+- **去重方法**: 使用`[...new Set(allTextList)]`移除重复元素
+- **保持顺序**: Set会保持第一次出现的元素顺序
+- **适用范围**: 同时应用于显示和展开判断逻辑
+
+### 使用场景
+- **正常比对**: 自动去除重复的文本显示
+- **Debug模式**: 同样应用去重逻辑
+- **大文档**: 特别适用于包含大量重复内容的文档
+
+### 修复效果
+- **原始问题**: 文本重复显示多次
+- **修复后**: 每个文本片段只显示一次
+- **用户体验**: 清晰、简洁的差异显示
+
+现在前端文本重复显示问题已经修复！🎯
+
+---
+
+## 2025-01-18 diffRangesB重复问题修复
+
+### 问题描述
+用户发现文本重复显示的问题根源在于`diffRangesB`出现了重复的内容，导致前端在渲染时重复高亮相同的文本片段。
+
+### 问题分析
+
+#### 1. 问题根源
+在`DiffProcessingUtil.splitDiffsByBounding`方法中，INSERT操作和DELETE操作的差异范围计算逻辑存在重复添加问题：
+
+```java
+// 原始问题代码
+for (String k : bGroups.keySet()) {
+    // ... 处理每个bbox
+    if (textSegmentStart >= 0 && bIdx >= textSegmentStart) {
+        // 为每个bbox都添加相同的差异范围 ← 问题所在！
+        rangesB.add(new DiffBlock.TextRange(prefixB + diffStartInText, prefixB + diffStartInText + diffLength, "DIFF"));
+    }
+    prefixB += full.length();
+}
+```
+
+#### 2. 重复原因
+- **循环遍历所有bbox**：INSERT操作涉及多个bbox时，会遍历每个bbox
+- **每个bbox都添加相同的差异范围**：`bIdx`和`len`在整个操作中是固定的，但循环会为每个bbox都计算一次
+- **结果**：多个bbox产生相同的差异范围，导致前端重复高亮
+
+#### 3. 具体示例
+假设INSERT操作涉及3个bbox：
+- 第1个bbox：添加范围[bIdx-len, bIdx]
+- 第2个bbox：添加范围[bIdx-len, bIdx] ← **重复！**
+- 第3个bbox：添加范围[bIdx-len, bIdx] ← **重复！**
+
+### 解决方案
+
+#### 1. 添加去重标记
+使用`boolean rangeAdded`标记来确保每个差异操作只添加一次差异范围：
+
+```java
+// 修复后的代码
+boolean rangeAdded = false; // 标记是否已经添加过范围
+
+for (String k : bGroups.keySet()) {
+    // ... 处理每个bbox
+    if (textSegmentStart >= 0 && bIdx >= textSegmentStart && !rangeAdded) {
+        // 只添加一次差异范围
+        rangesB.add(new DiffBlock.TextRange(prefixB + diffStartInText, prefixB + diffStartInText + diffLength, "DIFF"));
+        rangeAdded = true; // 标记已添加，避免重复
+    }
+    prefixB += full.length();
+}
+```
+
+#### 2. 同时修复A侧和B侧
+- **DELETE操作**：修复`diffRangesA`的重复问题
+- **INSERT操作**：修复`diffRangesB`的重复问题
+
+### 修改文件
+- `backend/src/main/java/com/zhaoxinms/contract/tools/ocr/DiffProcessingUtil.java`
+  - 修改DELETE操作中`diffRangesA`的计算逻辑，添加`rangeAdded`标记
+  - 修改INSERT操作中`diffRangesB`的计算逻辑，添加`rangeAdded`标记
+
+### 功能效果
+✅ **消除重复范围**: 每个差异操作只添加一次差异范围  
+✅ **正确高亮**: 前端不再重复高亮相同的文本片段  
+✅ **保持功能**: 不影响其他差异检测和高亮功能  
+✅ **性能优化**: 减少不必要的重复计算  
+
+### 技术细节
+- **去重策略**: 使用`boolean rangeAdded`标记确保只添加一次
+- **适用范围**: 同时修复A侧和B侧的差异范围计算
+- **保持逻辑**: 不影响bbox处理和文本拼接逻辑
+
+### 修复效果
+- **原始问题**: `diffRangesB`包含重复的差异范围
+- **修复后**: 每个差异操作只包含一个差异范围
+- **前端显示**: 文本不再重复高亮，显示正常
+
+现在diffRangesB重复问题已经修复！🎯

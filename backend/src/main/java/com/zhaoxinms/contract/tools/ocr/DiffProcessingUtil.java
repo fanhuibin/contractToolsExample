@@ -130,10 +130,12 @@ public class DiffProcessingUtil {
 					}
 				}
 
-				// 计算 A 侧差异范围：基于你的逻辑（先缓存，后写入）
+				// 计算 A 侧差异范围：只添加一次，不重复
 				{
 					java.util.List<DiffBlock.TextRange> rangesA = new java.util.ArrayList<>();
 					int prefix = 0;
+					boolean rangeAdded = false; // 标记是否已经添加过范围
+					
 					for (String k : aGroups.keySet()) {
 						java.util.List<CharBox> aa = aGroups.get(k);
 						String full = aAllText.get(k) == null ? "" : aAllText.get(k).toString();
@@ -141,7 +143,7 @@ public class DiffProcessingUtil {
 						// 找到该 bbox 在 seqA 中的文本段起点
 						int textSegmentStart = findBboxStartInSequence(seqA, k);
 						System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + len);
-						if (textSegmentStart >= 0 && aIdx >= textSegmentStart) {
+						if (textSegmentStart >= 0 && aIdx >= textSegmentStart && !rangeAdded) {
 							// 计算差异在该文本段内的相对偏移和长度
 							int diffStartInText = aIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
 							int diffLength = len;  // 差异的长度
@@ -150,6 +152,7 @@ public class DiffProcessingUtil {
 							if (diffLength > 0) {
 								rangesA.add(new DiffBlock.TextRange(prefix + diffStartInText, prefix + diffStartInText + diffLength, "DIFF"));
 								System.out.println("DEBUG A侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefix + diffStartInText) + ", " + (prefix + diffStartInText + diffLength) + "]");
+								rangeAdded = true; // 标记已添加，避免重复
 							}
 						}
 						prefix += full.length();
@@ -191,10 +194,12 @@ public class DiffProcessingUtil {
 					}
 				}
 
-				// 计算 B 侧差异范围：基于你的逻辑（先缓存，后写入）
+				// 计算 B 侧差异范围：只添加一次，不重复
 				{
 					java.util.List<DiffBlock.TextRange> rangesB = new java.util.ArrayList<>();
 					int prefixB = 0;
+					boolean rangeAdded = false; // 标记是否已经添加过范围
+					
 					for (String k : bGroups.keySet()) {
 						java.util.List<CharBox> bb = bGroups.get(k);
 						String full = bAllText.get(k) == null ? "" : bAllText.get(k).toString();
@@ -203,7 +208,7 @@ public class DiffProcessingUtil {
 						int textSegmentStart = findBboxStartInSequence(seqB, k);
 						System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + len);
 						
-						if (textSegmentStart >= 0 && bIdx >= textSegmentStart) {
+						if (textSegmentStart >= 0 && bIdx >= textSegmentStart && !rangeAdded) {
 							// 计算差异在该文本段内的相对偏移和长度
 							int diffStartInText = bIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
 							int diffLength = len;  // 差异的长度
@@ -212,6 +217,7 @@ public class DiffProcessingUtil {
 							if (diffLength > 0) {
 								rangesB.add(new DiffBlock.TextRange(prefixB + diffStartInText, prefixB + diffStartInText + diffLength, "DIFF"));
 								System.out.println("DEBUG B侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefixB + diffStartInText) + ", " + (prefixB + diffStartInText + diffLength) + "]");
+								rangeAdded = true; // 标记已添加，避免重复
 							}
 						}
 						prefixB += full.length();

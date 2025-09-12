@@ -59,11 +59,11 @@ const services = ref([
     link: '/contract-compose'
   },
   {
-    title: 'OCR文档比对',
-    description: '对扫描件/图片进行识别后智能比对，定位差异。',
+    title: 'GPU合同比对',
+    description: '基于GPU加速的OCR识别和智能比对，提供更快的处理速度和更高的准确率。',
     image: '/images/ocr-compare.webp',
     button_text: '进入功能',
-    link: '/ocr-compare'
+    link: '/gpu-ocr-compare'
   },
   {
     title: '合同信息提取',

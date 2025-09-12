@@ -68,18 +68,6 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'PDF合同比对结果' }
       },
       {
-        path: '/ocr-compare',
-        name: 'OCRCompare',
-        component: () => import('@/views/documents/OCRCompare.vue'),
-        meta: { title: 'OCR文档比对' }
-      },
-      {
-        path: '/ocr-compare/result/:taskId',
-        name: 'OCRCompareResult',
-        component: () => import('@/views/documents/OCRCompareResult.vue'),
-        meta: { title: 'OCR文档比对结果' }
-      },
-      {
         path: '/gpu-ocr-compare',
         name: 'GPUOCRCompare',
         component: () => import('@/views/documents/GPUOCRCompare.vue'),
