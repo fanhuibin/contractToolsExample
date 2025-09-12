@@ -1,7 +1,7 @@
 <template>
   <div class="concentric-loader" ref="wrap">
     <canvas ref="canvas" :width="size" :height="size"></canvas>
-    <div class="loading-text">文件解析中...</div>
+    <div class="loading-text">{{ props.text || '文件解析中...' }}</div>
   </div>
 </template>
 
@@ -12,6 +12,7 @@ const props = defineProps<{
   size?: number
   speed?: number
   color?: string
+  text?: string
 }>()
 
 const size = props.size ?? 180
