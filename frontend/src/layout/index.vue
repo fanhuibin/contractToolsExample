@@ -3,62 +3,18 @@
     <!-- AI组件 -->
     <AiChat v-model="showAiChat" />
     
-    <!-- 侧边栏 -->
-    <el-aside width="200px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
+    <!-- 侧边栏（改为 Ant Design Vue 菜单） -->
+    <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
       <div class="logo">
         <h2>合同工具集</h2>
       </div>
-      <el-menu
-        :default-active="activeMenu"
-        class="menu"
-        router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
-      >
-        <el-menu-item index="/home">
-          <el-icon><House /></el-icon>
-          <span>首页</span>
-        </el-menu-item>
-        <el-menu-item index="/auto-fulfillment">
-          <el-icon><Document /></el-icon>
-          <span>自动履约任务</span>
-        </el-menu-item>
-        
-         <el-menu-item index="/contract-extract">
-          <el-icon><Document /></el-icon>
-          <span>合同抽取</span>
-        </el-menu-item>
-        <el-menu-item index="/contract-review">
-          <el-icon><Document /></el-icon>
-          <span>合同智能审核</span>
-        </el-menu-item>
-        
-        <el-menu-item index="/onlyoffice">
-          <el-icon><Monitor /></el-icon>
-          <span>OnlyOffice预览</span>
-        </el-menu-item>
-        <el-menu-item index="/compare">
-          <el-icon><Document /></el-icon>
-          <span>PDF合同比对</span>
-        </el-menu-item>
-        <el-menu-item index="/ocr-compare">
-          <el-icon><Document /></el-icon>
-          <span>OCR文档比对</span>
-        </el-menu-item>
-        <el-menu-item index="/template-design">
-          <el-icon><Monitor /></el-icon>
-          <span>模板设计</span>
-        </el-menu-item>
-        <el-menu-item index="/contract-compose">
-          <el-icon><Document /></el-icon>
-          <span>合同合成</span>
-        </el-menu-item>
-        <el-menu-item index="/templates">
-          <el-icon><Document /></el-icon>
-          <span>模板管理</span>
-        </el-menu-item>
-      </el-menu>
+      <a-menu
+        mode="inline"
+        :selectedKeys="[activeMenu]"
+        :items="menuItems"
+        @click="onMenuClick"
+        style="height: calc(100vh - 60px); overflow: auto;"
+      />
     </el-aside>
 
     <!-- 主内容区 -->
@@ -106,12 +62,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, computed, h } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Document, Files, Folder, Monitor, ArrowDown, ChatDotRound, House } from '@element-plus/icons-vue'
 import AiChat from '@/components/ai/AiChat.vue'
+import { HomeOutlined, FileTextOutlined, FileSearchOutlined, ApartmentOutlined, ProfileOutlined, SnippetsOutlined } from '@ant-design/icons-vue'
 
 const route = useRoute()
+const router = useRouter()
 
 // AI组件状态
 const showAiChat = ref(false)
@@ -123,6 +81,26 @@ const activeMenu = computed(() => route.path)
 const currentTitle = computed(() => {
   return route.meta?.title || '首页'
 })
+
+// AntD 菜单数据
+const menuItems = [
+  { key: '/home', icon: () => h(HomeOutlined), label: '首页' },
+  { key: '/auto-fulfillment', icon: () => h(FileSearchOutlined), label: '自动履约任务' },
+  { key: '/contract-extract', icon: () => h(FileTextOutlined), label: '合同抽取' },
+  { key: '/contract-review', icon: () => h(ProfileOutlined), label: '合同智能审核' },
+  { key: '/onlyoffice', icon: () => h(ApartmentOutlined), label: 'OnlyOffice预览' },
+  { key: '/compare', icon: () => h(SnippetsOutlined), label: 'PDF合同比对' },
+  { key: '/ocr-compare', icon: () => h(FileSearchOutlined), label: 'OCR文档比对' },
+  // 用单一入口“智能合同合成”替换三项：模板管理/模板设计/合同合成
+  { key: '/compose/start', icon: () => h(SnippetsOutlined), label: '智能合同合成' }
+]
+
+function onMenuClick(info: any) {
+  const key = info?.key
+  if (typeof key === 'string') {
+    router.push(key)
+  }
+}
 </script>
 
 <style scoped>
@@ -131,8 +109,8 @@ const currentTitle = computed(() => {
 }
 
 .aside {
-  background-color: #304156;
-  color: #bfcbd9;
+  background-color: #fff;
+  color: rgba(0, 0, 0, 0.88);
 }
 
 .logo {
@@ -140,8 +118,9 @@ const currentTitle = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #2b2f3a;
-  color: #fff;
+  background-color: #fff;
+  color: rgba(0, 0, 0, 0.88);
+  border-bottom: 1px solid #f0f0f0;
 }
 
 .logo h2 {
@@ -196,5 +175,10 @@ const currentTitle = computed(() => {
 
 .no-padding {
   padding: 0;
+}
+
+/* AntD 菜单风格微调：去掉右侧分割线 */
+:deep(.ant-menu-inline) {
+  border-right: 0;
 }
 </style> 

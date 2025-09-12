@@ -1,5 +1,10 @@
 <template>
   <div class="template-design-page">
+    <div class="design-actions">
+      <el-button size="small" @click="$router.push('/compose/start')">结束并返回主页</el-button>
+      <el-button size="small" type="success" @click="goFrontendCompose">前端合成</el-button>
+      <el-button size="small" type="primary" @click="goBackendCompose">后端合成</el-button>
+    </div>
     <div class="design-body" :style="{ gridTemplateColumns: gridColumns }">
       <div class="left-panel">
         <template v-if="!leftCollapsed">
@@ -70,7 +75,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, Tickets, User, Stamp, Search, Edit, Delete, CaretLeft, CaretRight } from '@element-plus/icons-vue'
 import InsertableElementsPanel from '@/components/template-design/InsertableElementsPanel.vue'
@@ -79,6 +84,7 @@ import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignByTemplateId } from '@/api/templateDesign'
 
 const route = useRoute()
+const router = useRouter()
 const templateId = computed(() => (route.query.id as string) || '')
 const fileId = computed(() => (route.query.fileId as string) || '')
 const designId = ref<string>('')
@@ -98,6 +104,21 @@ const insertForm = reactive<{ customName: string; partyIndex: string }>({ custom
 const elementsKeyword = ref('')
 const elements = ref<Array<{ key: string; tag: string; type: string; name: string; customName?: string; meta?: any }>>([])
 const editorRef = ref<any>(null)
+function goFrontendCompose() {
+  const tid = templateId.value
+  const fid = fileId.value
+  if (tid && fid) {
+    router.push({ path: '/contract-compose-frontend', query: { templateId: tid, fileId: fid } })
+  }
+}
+
+function goBackendCompose() {
+  const tid = templateId.value
+  const fid = fileId.value
+  if (tid && fid) {
+    router.push({ path: '/contract-compose', query: { templateId: tid, fileId: fid } })
+  }
+}
 
 const elementsCount = computed(() => (fields.baseFields?.length || 0) + (fields.clauseFields?.length || 0) + (fields.sealFields?.length || 0) + (fields.counterpartyFields?.length || 0))
 const filteredBaseFields = computed(() => (fields.baseFields || []).filter((f: any) => !keyword.value || f.name.includes(keyword.value) || f.code.includes(keyword.value)))
@@ -340,6 +361,19 @@ const resolveClauseHtml = (raw: string) => {
   width: 100vw;
   overflow: hidden;
   background: #f5f7fa;
+}
+.design-actions {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  background: rgba(255,255,255,.9);
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.08);
 }
 .design-body {
   display: grid;

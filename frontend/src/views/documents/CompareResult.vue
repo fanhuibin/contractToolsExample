@@ -46,6 +46,8 @@
       </div>
     </div>
     <div class="compare-body" v-loading="loading">
+      <!-- 调试：显示加载状态与路由参数 -->
+      <div v-if="viewerLoading" class="loader-debug">loading=true; routeId={{ route.params.id }}</div>
       <div class="pdf-pane">
         <div class="pdf-wrapper">
           <iframe
@@ -55,6 +57,8 @@
             @load="onFrameLoad('old', $event)"
           />
           <div class="marker-line" :style="markerStyle"></div>
+          <!-- 左侧PDF加载特效 -->
+          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="pdf-loader left-loader" />
         </div>
       </div>
       <div class="pdf-pane">
@@ -66,6 +70,8 @@
             @load="onFrameLoad('new', $event)"
           />
           <div class="marker-line" :style="markerStyle"></div>
+          <!-- 右侧PDF加载特效 -->
+          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="pdf-loader right-loader" />
         </div>
       </div>
       <div class="result-list">
@@ -95,11 +101,14 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight, List } from '@element-plus/icons-vue'
+import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
+const viewerLoading = ref(true)
+const loadedStatus: Record<'old' | 'new', boolean> = { old: false, new: false }
 const oldPdf = ref('')
 const newPdf = ref('')
 const results = ref<any[]>([])
@@ -166,6 +175,10 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
     
     // 设置同轴滚动监听（含 wheel 来源标记）
     setupSyncScrollListener(side)
+    // 标记该侧已加载
+    if (side === 'old') loadedStatus.old = true
+    if (side === 'new') loadedStatus.new = true
+    if (loadedStatus.old && loadedStatus.new) viewerLoading.value = false
   } catch (e) {
     // eslint-disable-next-line no-console
     console.warn(`[viewer:${side}] onload inspect failed`, e)
@@ -512,10 +525,23 @@ const fetchResult = async (id: string) => {
 
 onMounted(() => {
   const id = route.params.id as string
+  // eslint-disable-next-line no-console
+  console.log('[CompareResult] mounted with id =', id)
   if (id) {
-    fetchResult(id)
+    if (id === 'pending') {
+      // 占位状态：仅显示加载动画，等待真正的 id 替换
+      viewerLoading.value = true
+      // eslint-disable-next-line no-console
+      console.log('[CompareResult] pending mode, waiting for real id')
+    } else {
+      // eslint-disable-next-line no-console
+      console.log('[CompareResult] fetch result for id =', id)
+      fetchResult(id)
+    }
   } else {
     const lastId = sessionStorage.getItem('lastCompareId')
+    // eslint-disable-next-line no-console
+    console.log('[CompareResult] no id, lastId =', lastId)
     if (lastId) {
       router.replace({ name: 'CompareResult', params: { id: lastId } }).catch(() => {})
     }
@@ -523,8 +549,10 @@ onMounted(() => {
 })
 
 watch(() => route.params.id, (newId) => {
+  // eslint-disable-next-line no-console
+  console.log('[CompareResult] route id changed =>', newId)
   if (typeof newId === 'string' && newId) {
-    fetchResult(newId)
+    if (newId !== 'pending') fetchResult(newId)
   }
 })
 
@@ -590,6 +618,11 @@ const goBack = () => {
   router.push({ name: 'CompareUpload' }).catch(() => {})
 }
 
+// 切换大纲显示状态
+const toggleOutline = () => {
+  showOutline.value = !showOutline.value
+}
+
 // 将 filtered 索引映射回原始 results 索引
 function indexInAll(filteredIdx: number): number {
   const item = filteredResults.value[filteredIdx]
@@ -612,9 +645,6 @@ function indexInAll(filteredIdx: number): number {
 .filter-group :deep(.el-radio-button__inner) { padding: 6px 10px; }
 
 /* 隐藏PDF查看器工具栏按钮，但保留工具栏容器 */
-.pdf-frame :deep(iframe) {
-  /* 通过CSS隐藏PDF.js工具栏中的特定按钮，但保留工具栏结构 */
-}
 
 /* 隐藏具体的工具按钮，但不隐藏工具栏容器 */
 :global(#findbar),
@@ -689,7 +719,7 @@ function indexInAll(filteredIdx: number): number {
   visibility: visible !important;
   min-height: 32px;
 }
-.compare-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr 320px; gap: 12px; padding: 12px; overflow: hidden; }
+.compare-body { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr 320px; gap: 12px; padding: 12px; overflow: hidden; }
 .pdf-pane { background: #fff; border: 1px solid #ebeef5; border-radius: 6px; overflow: hidden; display: flex; min-height: 0; }
 .pdf-wrapper { position: relative; flex: 1; min-height: 0; }
 .pdf-pane iframe { width: 100%; height: 100%; border: none; display: block; }
@@ -706,6 +736,27 @@ function indexInAll(filteredIdx: number): number {
 .result-item .badge.ins { background: #67C23A; }
 .result-item .text { color: #303133; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .result-item .meta { color: #909399; font-size: 12px; margin-top: 4px; }
+
+.loader-debug { position: absolute; bottom: 8px; left: 12px; color: rgba(0,0,0,0.45); font-size: 12px; pointer-events: none; }
+
+/* PDF加载特效样式 */
+.pdf-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.left-loader {
+  /* 左侧PDF加载特效 */
+}
+
+.right-loader {
+  /* 右侧PDF加载特效 */
+}
 </style>
 
 

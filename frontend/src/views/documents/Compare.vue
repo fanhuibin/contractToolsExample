@@ -1,5 +1,14 @@
 <template>
   <div class="compare-page">
+    <el-card class="page-header-card mb12">
+      <div class="page-header">
+        <div class="header-content">
+          <h2><i class="el-icon header-icon"></i>PDF合同比对</h2>
+          <p>上传两个版本或提供两个URL，系统将对比差异并给出结果。</p>
+        </div>
+        <div class="header-decoration"></div>
+      </div>
+    </el-card>
     <el-card class="mb12">
       <template #header>上传文件比对</template>
       <el-form :inline="true" class="form-inline">
@@ -104,12 +113,19 @@ const doUploadCompare = async () => {
   fd.append('ignoredSymbols', settings.ignoredSymbols || '')
   loading.value = true
   try {
+    // 先进入结果页占位，显示等待动效
+    router.push({ 
+      name: 'CompareResult', 
+      params: { id: 'pending' },
+      query: { oldFileName: f1.name, newFileName: f2.name }
+    }).catch(() => {})
+
     const res = await uploadCompare(fd)
     const id = res.data.id || ''
     if (id) {
       sessionStorage.setItem('lastCompareId', id)
-      // 将文件名信息传递给结果页面
-      router.push({ 
+      // 使用 replace 替换为真实 id，避免历史多一条
+      router.replace({ 
         name: 'CompareResult', 
         params: { id },
         query: {
@@ -133,6 +149,16 @@ const doUrlCompare = async () => {
   }
   loading.value = true
   try {
+    // 先进入结果页占位，显示等待动效
+    router.push({ 
+      name: 'CompareResult', 
+      params: { id: 'pending' },
+      query: { 
+        oldFileName: oldUrl.value,
+        newFileName: newUrl.value
+      }
+    }).catch(() => {})
+
     const res = await compareByUrls({
       oldUrl: oldUrl.value,
       newUrl: newUrl.value,
@@ -155,7 +181,7 @@ const doUrlCompare = async () => {
         }
       }
       
-      router.push({ 
+      router.replace({ 
         name: 'CompareResult', 
         params: { id },
         query: {
@@ -176,6 +202,49 @@ const doUrlCompare = async () => {
 <style scoped>
 .compare-page { padding: 16px; }
 .mb12 { margin-bottom: 12px; }
+/* 统一头部样式 */
+.page-header-card { 
+  border-radius: 8px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
+.page-header { 
+  padding: 16px 20px; 
+  position: relative; 
+  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
+}
+.header-content { position: relative; z-index: 2; }
+.header-decoration { 
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 150px; 
+  height: 100%; 
+  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
+  opacity: 0.5;
+  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
+}
+.page-header h2 { 
+  margin: 0; 
+  font-size: 26px; 
+  color: var(--el-color-primary-dark-2); 
+  display: flex; 
+  align-items: center;
+  font-weight: 600;
+}
+.header-icon { 
+  margin-right: 10px; 
+  font-size: 24px; 
+  color: var(--el-color-primary);
+}
+.page-header p { 
+  margin: 10px 0 0; 
+  color: #606266; 
+  font-size: 15px; 
+  max-width: 80%;
+}
 </style>
 
 

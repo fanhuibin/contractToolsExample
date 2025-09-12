@@ -1,0 +1,15 @@
+/* Ant Design 字体栈（尽量与 AntD 保持一致，仅设置字体相关） */
+:root {
+  --antd-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+html, body, #app {
+  font-family: var(--antd-font-family);
+}
+
+/* 保持基础字号，避免与现有样式冲突 */
+body {
+  font-size: 14px;
+}
+
+
