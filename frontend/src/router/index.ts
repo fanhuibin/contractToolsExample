@@ -15,9 +15,27 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '首页', hideAside: true }
       },
       {
+        path: '/smart-compose',
+        name: 'SmartContractCompose',
+        redirect: '/compose/start',
+        meta: { title: '智能合同合成' }
+      },
+      {
+        path: '/compose/start',
+        name: 'ComposeStart',
+        component: () => import('@/views/compose/ComposeStart.vue'),
+        meta: { title: '智能合同合成' }
+      },
+      {
+        path: '/templates/new',
+        name: 'NewTemplate',
+        component: () => import('@/views/templates/NewTemplate.vue'),
+        meta: { title: '新建模板' }
+      },
+      {
         path: '/templates',
         name: 'TemplatesIndex',
-        component: () => import('@/views/templates/index.vue'),
+        component: () => import('@/views/templates/TemplatesLibrary.vue'),
         meta: { title: '模板管理' }
       },
       {

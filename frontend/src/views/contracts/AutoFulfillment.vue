@@ -1,5 +1,18 @@
 <template>
   <div class="auto-fulfillment">
+    <el-row :gutter="20" style="margin-bottom: 20px;">
+      <el-col :span="24">
+        <el-card class="page-header-card">
+          <div class="page-header">
+            <div class="header-content">
+              <h2><el-icon class="header-icon"><Document /></el-icon>自动履约任务</h2>
+              <p>上传合同文件，选择识别模板，系统将执行自动履约任务并输出结果。</p>
+            </div>
+            <div class="header-decoration"></div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
     <el-row :gutter="20">
       <el-col :span="16">
         <el-card class="main-content-card">
@@ -488,6 +501,48 @@ function formatSize(size: number) {
 
 <style scoped>
 .auto-fulfillment { padding: 20px; }
+.page-header-card { 
+  border-radius: 8px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
+.page-header { 
+  padding: 16px 20px; 
+  position: relative; 
+  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
+}
+.header-content { position: relative; z-index: 2; }
+.header-decoration { 
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 150px; 
+  height: 100%; 
+  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
+  opacity: 0.5;
+  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
+}
+.page-header h2 { 
+  margin: 0; 
+  font-size: 26px; 
+  color: var(--el-color-primary-dark-2); 
+  display: flex; 
+  align-items: center;
+  font-weight: 600;
+}
+.header-icon { 
+  margin-right: 10px; 
+  font-size: 24px; 
+  color: var(--el-color-primary);
+}
+.page-header p { 
+  margin: 10px 0 0; 
+  color: #606266; 
+  font-size: 15px; 
+  max-width: 80%;
+}
 .main-content-card, .template-selector-card { height: 100%; }
 .card-header { display: flex; justify-content: space-between; align-items: center; }
 .card-header-left h3 { margin: 0; }

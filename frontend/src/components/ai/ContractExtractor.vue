@@ -530,129 +530,66 @@ watch(selectedTemplateId, (newId) => {
 </script>
 
 <style scoped>
-.contract-extractor {
-  padding: 20px;
-}
-.main-content-card, .template-selector-card {
-  height: 100%;
-}
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.card-header-left h3 {
-  margin: 0;
-}
-.subtitle {
-  font-size: 14px;
-  color: #909399;
-  margin-top: 5px;
-}
-.upload-area {
-  margin-bottom: 20px;
-}
-.file-info-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 20px 0;
-  padding: 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-}
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #606266;
-}
-.fields-display-area {
-  margin-top: 20px;
-}
-.field-tag {
-  margin: 4px;
-}
-.dynamic-prompts {
-  margin-top: 10px;
-}
-.prompt-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.save-as-template {
-  margin-top: 20px;
-}
-.save-template-form {
-  display: flex;
-  align-items: center;
-  margin-top: 10px;
-}
-.extracting-status, .result-area, .error-message {
-  margin-top: 20px;
-}
-.status-text {
-  margin-top: 10px;
-  text-align: center;
-  color: #606266;
-}
-.result-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-.result-text {
-  background-color: #f5f5f5;
-  padding: 15px;
-  border-radius: 4px;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: monospace;
-}
-.template-radio-group {
-  display: flex;
-  flex-direction: column;
-}
-.template-radio-item {
-  display: flex;
-  height: 32px;
-  align-items: center;
-}
-.template-radio-item {
-  flex-grow: 1;
-}
+.contract-extractor { padding: 0; }
 
-.template-item-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
+/* 对齐审核页卡片与阴影风格 */
+.main-content-card, .template-selector-card { 
+  height: 100%; 
+  border-radius: 8px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+  transition: all 0.3s ease;
 }
+.main-content-card:hover, .template-selector-card:hover { 
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); 
+}
+.card-header { display: flex; justify-content: space-between; align-items: center; }
+.card-header-left h3 { margin: 0; font-weight: 600; color: var(--el-color-primary-dark-2); }
+.subtitle { font-size: 14px; color: #909399; margin-top: 5px; }
 
-.copy-button {
-  margin-left: 10px;
-  flex-shrink: 0;
+/* 上传区域对齐审核页 */
+.upload-area { 
+  margin-bottom: 20px; 
+  border: 2px dashed var(--el-color-primary-light-5); 
+  border-radius: 8px; 
+  transition: all 0.3s ease; 
+  background-color: var(--el-color-primary-light-9);
 }
+.upload-area:hover { border-color: var(--el-color-primary); background-color: var(--el-color-primary-light-8); }
 
-.template-tag {
-  margin-left: 8px;
+.file-info-actions { 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  margin: 20px 0; 
+  padding: 15px; 
+  border: 1px solid var(--el-color-primary-light-7); 
+  border-radius: 8px; 
+  background-color: var(--el-color-primary-light-9); 
+  transition: all 0.3s ease;
 }
-.custom-radio {
-  margin-top: 10px;
-}
-.no-template-tip {
-  color: #909399;
-  font-size: 14px;
-  padding: 10px;
-}
-:deep(.el-collapse-item__header) {
-  font-size: 16px;
-  font-weight: 500;
-}
-:deep(.el-collapse-item__content) {
-  padding-bottom: 0;
-}
+.file-info-actions:hover { border-color: var(--el-color-primary-light-3); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); }
+.file-info { display: flex; align-items: center; gap: 12px; color: #606266; }
+
+.fields-display-area { margin-top: 20px; }
+.field-tag { margin: 4px; }
+.dynamic-prompts { margin-top: 10px; }
+.prompt-item { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.save-as-template { margin-top: 20px; }
+.save-template-form { display: flex; align-items: center; margin-top: 10px; }
+.extracting-status, .result-area, .error-message { margin-top: 20px; }
+.status-text { margin-top: 10px; text-align: center; color: #606266; }
+.result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.result-text { background-color: #f8f9fa; padding: 15px; border-radius: 4px; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; border: 1px solid #ebeef5; }
+
+/* 右侧模板选择器对齐审核页 */
+.template-radio-group { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+.template-radio-item { display: flex; height: 32px; align-items: center; }
+.template-radio-item { flex-grow: 1; }
+.template-item-wrapper { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.copy-button { margin-left: 10px; flex-shrink: 0; }
+.template-tag { margin-left: 8px; }
+.custom-radio { margin-top: 10px; }
+.no-template-tip { color: #909399; font-size: 14px; padding: 10px; }
+::deep(.el-collapse-item__header) { font-size: 16px; font-weight: 500; }
+::deep(.el-collapse-item__content) { padding-bottom: 0; }
 </style>

@@ -4,11 +4,14 @@
       <el-col :span="24">
         <el-card class="page-header-card">
           <div class="page-header">
-            <h2>合同信息提取</h2>
-            <p>上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。</p>
+            <div class="header-content">
+              <h2><el-icon class="header-icon"><Document /></el-icon>合同信息提取</h2>
+              <p>上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。</p>
+            </div>
             <div class="actions">
               <el-button type="primary" @click="goRuleSettings">提取规则设置</el-button>
             </div>
+            <div class="header-decoration"></div>
           </div>
         </el-card>
       </el-col>
@@ -55,7 +58,7 @@
 <script lang="ts" setup>
 import { ref } from 'vue';
 import ContractExtractor from '@/components/ai/ContractExtractor.vue';
-import { InfoFilled } from '@element-plus/icons-vue';
+import { InfoFilled, Document } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus'
 
 const activeCollapse = ref('');
@@ -72,64 +75,60 @@ function goRuleSettings() {
 </script>
 
 <style scoped>
-.contract-extract-page {
-  padding: 20px;
-}
+.contract-extract-page { padding: 20px; background-color: #f5f7fa; min-height: calc(100vh - 60px); }
 
-.page-header-card {
-  margin-bottom: 20px;
-  border-left: 5px solid var(--el-color-primary);
+/* 页面头部：与审核页保持一致 */
+.page-header-card { 
+  margin-bottom: 20px; 
+  border-radius: 8px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+  overflow: hidden;
+  transition: all 0.3s ease;
 }
-
-.page-header {
-  padding: 5px 0;
+.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
+.page-header { 
+  padding: 16px 20px; 
+  position: relative; 
+  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
 }
-
-.page-header h2 {
-  margin: 0;
-  font-size: 24px;
-  color: #303133;
+.header-content { position: relative; z-index: 2; }
+.header-decoration { 
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 150px; 
+  height: 100%; 
+  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
+  opacity: 0.5;
+  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
 }
-
-.page-header p {
-  margin: 10px 0 0;
-  color: #606266;
-  font-size: 14px;
-}
-
-.main-content {
-  margin-bottom: 20px;
-}
-
-.collapse-title {
-  display: flex;
+.page-header h2 { 
+  margin: 0; 
+  font-size: 26px; 
+  color: var(--el-color-primary-dark-2); 
+  display: flex; 
   align-items: center;
-  font-size: 16px;
-  color: #303133;
+  font-weight: 600;
 }
+.header-icon { 
+  margin-right: 10px; 
+  font-size: 24px; 
+  color: var(--el-color-primary);
+}
+.page-header p { 
+  margin: 10px 0 0; 
+  color: #606266; 
+  font-size: 15px; 
+  max-width: 80%;
+}
+.actions { position: absolute; right: 20px; top: 16px; z-index: 3; }
 
-.info-content {
-  padding: 0 15px;
-}
-
-.info-content h4 {
-  margin: 15px 0 10px;
-  font-size: 16px;
-  color: #303133;
-}
-
-.info-content p {
-  margin: 5px 0;
-  color: #606266;
-}
-
-.info-content ul {
-  margin: 5px 0;
-  padding-left: 20px;
-  color: #606266;
-}
-
-.info-content li {
-  margin: 5px 0;
-}
+/* 主内容区间距与说明折叠样式延用 */
+.main-content { margin-bottom: 20px; }
+.collapse-title { display: flex; align-items: center; font-size: 16px; color: #303133; }
+.info-content { padding: 0 15px; }
+.info-content h4 { margin: 15px 0 10px; font-size: 16px; color: #303133; }
+.info-content p { margin: 5px 0; color: #606266; }
+.info-content ul { margin: 5px 0; padding-left: 20px; color: #606266; }
+.info-content li { margin: 5px 0; }
 </style>

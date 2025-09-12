@@ -22,7 +22,7 @@
       <div class="form">
         <el-form label-width="120px" class="compose-form" :inline="false">
           <template v-for="(el, idx) in formElements" :key="idx">
-            <el-form-item :label="el.customName || el.name || el.tag" class="field-card">
+            <el-form-item :label="displayName(el)" class="field-card">
               <template v-if="isRich(el)">
                 <div class="field-box is-rich">
                   <el-input
@@ -222,6 +222,16 @@ function ensureRichOptions(tag: string) {
   return richOptions.value[tag]
 }
 
+function displayName(el: any): string {
+  // 优先: 自定义显示名 → 元信息可能的别名 → 退化为 name → 最后 tag
+  const n1 = el?.customName
+  const n2 = el?.meta?.customName
+  const n3 = el?.meta?.displayName
+  const n4 = el?.name
+  const n5 = el?.tag
+  return String(n1 || n2 || n3 || n4 || n5 || '')
+}
+
 function insertDefaultTable(tag: string) {
   const opts = ensureRichOptions(tag)
   const align = opts.align
@@ -333,7 +343,8 @@ function buildStampImageUrls(): Record<string, { normal?: string; riding?: strin
 /* 表单整体视觉 */
 .compose-form :deep(.el-form-item) { margin-bottom: 14px; }
 .field-card { padding: 8px 10px; border: 1px solid #f0f2f5; border-radius: 10px; background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%); box-shadow: inset 0 0 0 1px rgba(0,0,0,0.02); }
-.field-card :deep(.el-form-item__label) { color: #606266; font-weight: 600; }
+.field-card :deep(.el-form-item__label) { color: #606266; font-weight: 600; font-size: 16px; line-height: 40px; display: flex; align-items: center; }
+.compose-form :deep(.el-form-item) { align-items: center; }
 .field-box { display: flex; flex: 1; }
 .field-box :deep(.el-input__wrapper) { padding: 6px 10px; border-radius: 8px; box-shadow: inset 0 0 0 1px #dcdfe6; }
 .field-box :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 3px rgba(51,112,255,.12), inset 0 0 0 1px #3370ff; }
