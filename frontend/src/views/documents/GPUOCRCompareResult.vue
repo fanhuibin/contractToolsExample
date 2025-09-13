@@ -120,7 +120,7 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import { getGPUOCRCompareResult, debugGPUCompareWithExistingOCR, debugGPUCompareLegacy, type GPUOCRCompareResult } from '@/api/gpu-ocr-compare'
+import { getGPUOCRCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareWithExistingOCR, debugGPUCompareLegacy, type GPUOCRCompareResult } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
 const route = useRoute()
@@ -140,6 +140,10 @@ const taskId = ref('')
 const oldOcrTaskId = ref('') 
 const newOcrTaskId = ref('')
 const compareData = ref<any>(null) // 存储完整的比对结果数据
+// 轮询控制
+const pollTimer = ref<number | null>(null)
+const isPolling = ref(false)
+const hasShownProcessingTip = ref(false)
 
 // 文本截断配置
 const TEXT_TRUNCATE_LIMIT = 80 // 文本截断长度，超过此长度显示展开按钮
@@ -323,6 +327,56 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
   }
 }
 
+const clearPoll = () => {
+  if (pollTimer.value) {
+    clearTimeout(pollTimer.value)
+    pollTimer.value = null
+  }
+}
+
+const schedulePoll = (id: string, delayMs = 1500) => {
+  clearPoll()
+  isPolling.value = true
+  pollTimer.value = window.setTimeout(() => {
+    checkStatusAndMaybePoll(id)
+  }, delayMs)
+}
+
+const checkStatusAndMaybePoll = async (id: string) => {
+  try {
+    const res = await getGPUOCRCompareTaskStatus(id)
+    const code = (res as any)?.code
+    const data = (res as any)?.data
+    if (code !== 200 || !data) {
+      // 异常或暂不可用，继续轮询
+      viewerLoading.value = true
+      schedulePoll(id)
+      return
+    }
+
+    const status = data.status
+    if (status === 'FAILED' || status === 'TIMEOUT') {
+      isPolling.value = false
+      clearPoll()
+      ElMessage.error(data?.statusDesc || '比对任务失败或超时')
+      return
+    }
+
+    if (status !== 'COMPLETED') {
+      viewerLoading.value = true
+      // 可选：根据进度刷新 UI 文案（此处保持静态文案以满足 1:1 要求）
+      schedulePoll(id)
+      return
+    }
+
+    // 已完成，拉取结果
+    fetchResult(id)
+  } catch (e) {
+    // 网络/服务波动，继续轮询
+    schedulePoll(id)
+  }
+}
+
 const fetchResult = async (id: string) => {
   if (!id) return
   
@@ -340,9 +394,14 @@ const fetchResult = async (id: string) => {
 
     // 检查API响应状态
     if ((res as any)?.code === 202) {
-      // 任务尚未完成
-      const statusData = (res as any)?.data
-      ElMessage.warning(statusData?.message || '比对任务尚未完成')
+      // 任务尚未完成，继续轮询
+      viewerLoading.value = true
+      if (!hasShownProcessingTip.value) {
+        const statusData = (res as any)?.data
+        ElMessage.info(statusData?.message || '比对任务处理中，请稍候...')
+        hasShownProcessingTip.value = true
+      }
+      schedulePoll(id)
       return
     } else if ((res as any)?.code !== 200) {
       ElMessage.error((res as any)?.message || '获取比对结果失败')
@@ -383,6 +442,11 @@ const fetchResult = async (id: string) => {
     ElMessage.error(e?.message || '加载GPU OCR比对结果失败')
   } finally {
     loading.value = false
+    if ((results.value?.length || 0) > 0) {
+      // 拿到结果后停止轮询
+      isPolling.value = false
+      clearPoll()
+    }
   }
 }
 
@@ -439,7 +503,13 @@ onMounted(() => {
   
   const id = route.params.taskId as string
   if (id) {
-    fetchResult(id)
+    clearPoll()
+    if (id === 'pending') {
+      viewerLoading.value = true
+      loading.value = false
+    } else {
+      checkStatusAndMaybePoll(id)
+    }
   } else {
     const lastId = sessionStorage.getItem('lastGPUOCRCompareId')
     if (lastId) {
@@ -450,7 +520,13 @@ onMounted(() => {
 
 watch(() => route.params.taskId, (newId) => {
   if (typeof newId === 'string' && newId) {
-    fetchResult(newId)
+    clearPoll()
+    if (newId === 'pending') {
+      viewerLoading.value = true
+      loading.value = false
+    } else {
+      checkStatusAndMaybePoll(newId)
+    }
   }
 })
 
@@ -540,6 +616,27 @@ const jumpTo = (i: number) => {
   // 双侧联动：分页 + 坐标定位
   alignViewer('old', oldPos)
   alignViewer('new', newPos)
+  
+  // 更新同轴滚动的基准位置，避免累积误差
+  setTimeout(() => {
+    try {
+      const oldW = frameWin['old'] as any
+      const newW = frameWin['new'] as any
+      const oldVc = oldW?.document?.getElementById('viewerContainer') as HTMLElement | null
+      const newVc = newW?.document?.getElementById('viewerContainer') as HTMLElement | null
+      
+      if (oldVc && newVc) {
+        lastScrollTop.value.old = oldVc.scrollTop
+        lastScrollTop.value.new = newVc.scrollTop
+        console.log('同轴滚动基准位置已更新:', {
+          old: lastScrollTop.value.old,
+          new: lastScrollTop.value.new
+        })
+      }
+    } catch (e) {
+      console.warn('更新同轴滚动基准位置失败:', e)
+    }
+  }, 100) // 等待 alignViewer 完成
 }
 
 function alignViewer(side: 'old' | 'new', pos: any) {
@@ -649,6 +746,15 @@ function setupScrollSync() {
 
       const currentTop = oldVc.scrollTop
       const delta = currentTop - lastScrollTop.value.old
+      
+      // 检查 delta 是否异常大（可能是程序性滚动导致的）
+      if (Math.abs(delta) > 500) {
+        console.warn('检测到异常大的滚动增量，重新同步基准位置:', delta)
+        lastScrollTop.value.old = currentTop
+        lastScrollTop.value.new = newVc.scrollTop
+        return
+      }
+      
       lastScrollTop.value.old = currentTop
 
       if (Math.abs(delta) < 1) return
@@ -676,6 +782,15 @@ function setupScrollSync() {
 
       const currentTop = newVc.scrollTop
       const delta = currentTop - lastScrollTop.value.new
+      
+      // 检查 delta 是否异常大（可能是程序性滚动导致的）
+      if (Math.abs(delta) > 500) {
+        console.warn('检测到异常大的滚动增量，重新同步基准位置:', delta)
+        lastScrollTop.value.new = currentTop
+        lastScrollTop.value.old = oldVc.scrollTop
+        return
+      }
+      
       lastScrollTop.value.new = currentTop
 
       if (Math.abs(delta) < 1) return
