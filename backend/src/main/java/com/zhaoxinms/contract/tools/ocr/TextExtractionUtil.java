@@ -40,7 +40,7 @@ public class TextExtractionUtil {
      * @return 提取的纯文本字符串
      */
     public static String extractTextFromResults(PageLayout[] ordered) {
-        return extractTextFromResults(ordered, ExtractionStrategy.POSITION_BASED);
+        return extractTextFromResults(ordered, ExtractionStrategy.SEQUENTIAL);
     }
 
     /**
@@ -73,7 +73,7 @@ public class TextExtractionUtil {
      * @return 带页码标记的文本字符串
      */
     public static String extractTextWithPageMarkers(PageLayout[] ordered) {
-        return extractTextWithPageMarkers(ordered, ExtractionStrategy.POSITION_BASED);
+        return extractTextWithPageMarkers(ordered, ExtractionStrategy.SEQUENTIAL);
     }
 
     /**
@@ -108,7 +108,7 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered) {
-        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.POSITION_BASED, false);
+        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.SEQUENTIAL, false);
     }
 
     /**
@@ -178,6 +178,14 @@ public class TextExtractionUtil {
                 s = s.replaceAll("\\*([^*]+)\\*", "$1");
                 // 5. 去掉单独的 _文本_ 格式的斜体标记
                 s = s.replaceAll("_([^_]+)_", "$1");
+                
+                // 6. 将任意长度的连续下划线统一为三个下划线
+                // 说明：把一段中出现的 1 个或多个连续下划线都规范为 "___"
+                s = s.replaceAll("_+", "___");
+
+                // 7. 将括号内的小于100的正整数视为编号，去掉括号，仅保留数字
+                // 支持中文括号（（ ））与英文括号 ( )，匹配(1)~(99)与（1）~（99）
+                s = s.replaceAll("[\\(（]([1-9][0-9]?)[\\)）]", "$1");
                 
                 // 按顺序为每个字符创建CharBox，使用布局项的bbox
                 for (int i = 0; i < s.length(); i++) {
@@ -465,7 +473,7 @@ public class TextExtractionUtil {
         System.out.println();
 
         // 4. 解析文本和位置信息（按位置排序）
-        List<CharBox> charBoxesPositioned = parseTextAndPositionsFromResults(layouts, ExtractionStrategy.POSITION_BASED);
+        List<CharBox> charBoxesPositioned = parseTextAndPositionsFromResults(layouts, ExtractionStrategy.SEQUENTIAL);
         System.out.println("4. 文本和位置解析（按位置排序）:");
         for (CharBox cb : charBoxesPositioned) {
             System.out.println(String.format("  页%d: '%c' at [%.1f,%.1f,%.1f,%.1f]",

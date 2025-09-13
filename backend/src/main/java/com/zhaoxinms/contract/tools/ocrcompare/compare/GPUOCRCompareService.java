@@ -1044,7 +1044,7 @@ public class GPUOCRCompareService {
             }
             
             // 使用现有的解析方法提取CharBox
-            charBoxes = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.POSITION_BASED, options.isIgnoreHeaderFooter());
+            charBoxes = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, options.isIgnoreHeaderFooter());
             
             System.out.println("从保存的JSON文件中解析出" + charBoxes.size() + "个字符");
             
@@ -1279,7 +1279,7 @@ public class GPUOCRCompareService {
         } catch (Exception ignore) {}
 
         // 使用新的按顺序读取方法解析文本和位置
-        List<CharBox> out = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.POSITION_BASED, options.isIgnoreHeaderFooter());
+        List<CharBox> out = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, options.isIgnoreHeaderFooter());
 
         // Step 3: 保存提取的纯文本（含/不含页标记），便于开发调试
         try {

@@ -444,17 +444,10 @@ public class DiffProcessingUtil {
 			if (shouldIgnore) {
 				block.type = DiffBlock.DiffType.IGNORED;
 				ignoredCount++;
-//				System.out.println(String.format("Ignored block: Operation=%s, Text='%s' (Length=%d) -> Reason: %s",
-//						block.originalDiff.operation.name(), block.originalDiff.text.replace("\n", "\\n"),
-//						block.originalDiff.text.length(), ignoreReason));
 			} else {
 				retainedCount++;
 			}
 		}
-
-		// Output final filtering statistics
-//		System.out.println("Filtering completed: Retained=" + retainedCount + ", Ignored=" + ignoredCount + ", Total="
-//				+ blocks.size());
 
 		return blocks;
 	}
@@ -583,6 +576,11 @@ public class DiffProcessingUtil {
 
 		if (isAllSpacesUnderscoresNewlines(diff.text)) {
 			return "包含空格、下划线和换行符";
+		}
+
+		// 新增规则：多个下划线+一个符号(, ; : . 。) 视为忽略
+		if (isUnderscoresPlusOnePunct(diff.text)) {
+			return "下划线与单符号组合";
 		}
 
 		// 第二阶段：检查是否为目标标点符号（可能与相邻差异配对过滤）
@@ -760,6 +758,22 @@ public class DiffProcessingUtil {
 			char c = s.charAt(i);
 			if (c != '#' && c != '.')
 				return false;
+		}
+		return true;
+	}
+
+	/**
+	 * 检查是否为“多个下划线 + 一个符号(, ; : . 。)”的模式
+	 */
+	private static boolean isUnderscoresPlusOnePunct(String s) {
+		if (s == null || s.length() < 2) return false;
+		// 允许的单个符号集合：英文逗号、分号、冒号、点；中文句号。
+		char last = s.charAt(s.length() - 1);
+		boolean isAllowedPunct = (last == ',' || last == ';' || last == ':' || last == '.' || last == '。');
+		if (!isAllowedPunct) return false;
+		// 前面必须全部为下划线
+		for (int i = 0; i < s.length() - 1; i++) {
+			if (s.charAt(i) != '_') return false;
 		}
 		return true;
 	}
