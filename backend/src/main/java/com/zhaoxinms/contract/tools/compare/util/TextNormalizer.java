@@ -79,6 +79,14 @@ public class TextNormalizer {
         PUNCTUATION_MAP.put("８", "8");
         PUNCTUATION_MAP.put("９", "9");
         
+        //金额常见识别错误
+        PUNCTUATION_MAP.put("貳", "贰");
+        PUNCTUATION_MAP.put("參", "叁");
+        PUNCTUATION_MAP.put("陸", "陆");
+        PUNCTUATION_MAP.put("陌", "佰");
+        PUNCTUATION_MAP.put("萬", "万");
+        PUNCTUATION_MAP.put("億", "亿");
+        
         // 更多常见错误项
         PUNCTUATION_MAP.put("经营商", "经营者");
         PUNCTUATION_MAP.put("購", "购");
