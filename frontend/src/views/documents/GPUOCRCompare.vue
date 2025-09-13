@@ -1,5 +1,16 @@
 <template>
   <div class="gpu-ocr-compare-page">
+    <!-- 1:1 复刻 Compare 页的页眉卡片 -->
+    <el-card class="page-header-card mb12">
+      <div class="page-header">
+        <div class="header-content">
+          <h2><el-icon class="header-icon"><Search /></el-icon>GPU OCR合同比对</h2>
+          <p>通过视觉大模型进行ocr比对，支持pdf、word、excel格式文档。</p>
+        </div>
+        <div class="header-decoration"></div>
+      </div>
+    </el-card>
+
     <el-card class="mb12">
       <template #header>
         <div class="card-header">
@@ -136,11 +147,12 @@
               查看结果
             </el-button>
             <el-button
-              v-if="scope.row.status === 'OCR_PROCESSING' || scope.row.status === 'COMPARING' || scope.row.status === 'ANNOTATING'"
+              v-if="scope.row.status === 'COMPLETED'"
               size="small"
-              @click="monitorTask(scope.row.taskId)"
+              type="primary"
+              @click="goToResult(scope.row.taskId)"
             >
-              监控
+              查看结果
             </el-button>
             <el-button
               size="small"
@@ -217,6 +229,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -310,6 +323,16 @@ const doUploadGPUOCRCompare = async () => {
   uploading.value = true
 
   try {
+    // 先进入结果页占位，显示等待动效
+    router.push({ 
+      name: 'GPUOCRCompareResult', 
+      params: { taskId: 'pending' },
+      query: { 
+        oldFileName: oldFile.value.name, 
+        newFileName: newFile.value.name 
+      }
+    }).catch(() => {})
+
     const res = await uploadGPUOCRCompare(formData)
     console.log('GPU OCR比对响应:', res) // 添加调试日志
 
@@ -321,10 +344,17 @@ const doUploadGPUOCRCompare = async () => {
 
     console.log('获取到的任务ID:', taskId) // 添加调试日志
 
-    ElMessage.success('GPU OCR比对任务已提交，正在处理中...')
+    // 使用 replace 替换为真实 taskId，避免历史多一条
+    router.replace({ 
+      name: 'GPUOCRCompareResult', 
+      params: { taskId },
+      query: {
+        oldFileName: oldFile.value.name,
+        newFileName: newFile.value.name
+      }
+    }).catch(() => {})
 
-    // 开始监控任务进度
-    monitorTask(taskId)
+    ElMessage.success('GPU OCR比对任务已提交，正在处理中...')
 
   } catch (e: any) {
     console.error('GPU OCR比对失败:', e) // 添加调试日志
@@ -334,29 +364,12 @@ const doUploadGPUOCRCompare = async () => {
   }
 }
 
-// 监控任务进度
-const monitorTask = (taskId: string) => {
-  // 验证taskId参数
-  if (!taskId || taskId === 'undefined' || taskId.trim() === '') {
-    console.error('无效的任务ID:', taskId)
-    ElMessage.error('无效的任务ID，无法监控进度')
-    return
-  }
-
-  console.log('开始监控任务:', taskId) // 添加调试日志
-
-  // 清除之前的定时器
-  if (progressTimer.value) {
-    clearInterval(progressTimer.value)
-  }
-
-  // 立即查询一次
-  updateTaskStatus(taskId)
-
-  // 设置定时器每2秒查询一次
-  progressTimer.value = window.setInterval(() => {
-    updateTaskStatus(taskId)
-  }, 2000)
+// 跳转到结果页面
+const goToResult = (taskId: string) => {
+  router.push({ 
+    name: 'GPUOCRCompareResult', 
+    params: { taskId }
+  }).catch(() => {})
 }
 
 // 更新任务状态
@@ -399,8 +412,9 @@ const refreshTasks = async () => {
   try {
     const res = await getAllGPUOCRCompareTasks()
     // 后端返回格式：{code: 200, message: "...", data: [...]}
-    taskHistory.value = (res.data || []).sort((a, b) =>
-      new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
+    taskHistory.value = ((res.data || []) as GPUOCRCompareTaskStatus[]).sort(
+      (a: GPUOCRCompareTaskStatus, b: GPUOCRCompareTaskStatus) =>
+        new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
     )
   } catch (e: any) {
     console.error('获取任务历史失败:', e)
@@ -525,8 +539,11 @@ const startDebugCompare = async () => {
     // 关闭对话框
     debugDialogVisible.value = false
 
-    // 开始监控任务进度
-    monitorTask(taskId)
+    // 跳转到结果页面
+    router.push({ 
+      name: 'GPUOCRCompareResult', 
+      params: { taskId }
+    }).catch(() => {})
 
   } catch (e: any) {
     console.error('调试比对失败:', e)
@@ -603,5 +620,49 @@ const formatTime = (timeStr: string) => {
       margin-left: 12px;
     }
   }
+}
+
+/* 1:1 复刻 Compare 页的页眉样式 */
+.page-header-card { 
+  border-radius: 8px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
+.page-header { 
+  padding: 16px 20px; 
+  position: relative; 
+  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
+}
+.header-content { position: relative; z-index: 2; }
+.header-decoration { 
+  position: absolute; 
+  top: 0; 
+  right: 0; 
+  width: 150px; 
+  height: 100%; 
+  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
+  opacity: 0.5;
+  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
+}
+.page-header h2 { 
+  margin: 0; 
+  font-size: 26px; 
+  color: var(--el-color-primary-dark-2); 
+  display: flex; 
+  align-items: center;
+  font-weight: 600;
+}
+.header-icon { 
+  margin-right: 10px; 
+  font-size: 24px; 
+  color: var(--el-color-primary);
+}
+.page-header p { 
+  margin: 10px 0 0; 
+  color: #606266; 
+  font-size: 15px; 
+  max-width: 80%;
 }
 </style>
