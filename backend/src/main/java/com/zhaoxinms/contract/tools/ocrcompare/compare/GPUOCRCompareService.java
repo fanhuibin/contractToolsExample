@@ -1215,39 +1215,6 @@ public class GPUOCRCompareService {
                 ordered[pageNo - 1] = p;
             }
         } else {
-            // 如果开启Gradio队列，直接走demo_gradio流程生成每页JSON
-            if (gpuOcrConfig.isUseGradioQueue()) {
-                // 为Gradio模式也保存OCR图片（需要从外部传入taskId）
-                // 这里暂时跳过，因为Gradio模式在recognizePdfAsCharSeq内部处理
-                
-                GradioWorkflowClient gw = new GradioWorkflowClient(gpuOcrConfig.getGradioBaseUrl());
-                System.out.println("[Gradio] upload ... " + pdf);
-                String serverPath = gw.uploadFile(pdf); // 直接返回 /tmp/gradio/.../xxx.pdf
-                System.out.println("[Gradio] join queue ... serverPath=" + serverPath);
-                GradioWorkflowClient.JoinInfo join = gw.joinQueue(
-                        serverPath,
-                        "prompt_layout_all_en",
-                        "127.0.0.1",
-                        8000,
-                        gpuOcrConfig.getMinPixels(),
-                        gpuOcrConfig.getMaxPixels(),
-                        true
-                );
-                System.out.println("[Gradio] eventId=" + join.eventId + ", sessionHash=" + join.sessionHash);
-                String result = gw.pollResult(join);
-                System.out.println("[Gradio] data length=" + (result==null?0:result.length()));
-                // 解析结果并保存为 .page-N.ocr.json
-                int pagesSaved = saveGradioPagesFromResult(gw, result, pdf);
-                if (pagesSaved <= 0) throw new RuntimeException("Gradio data 无可用页面JSON");
-                // 装载
-                int total = countPdfPages(pdf);
-                ordered = new TextExtractionUtil.PageLayout[total];
-                for (int i = 0; i < total; i++) {
-                    final int pageNo = i + 1;
-                    TextExtractionUtil.PageLayout p = parseOnePageFromSavedJson(pdf, pageNo);
-                    ordered[pageNo - 1] = p;
-                }
-            } else {
                 // Step 1: render PDF to images（默认旧流程）
                 List<byte[]> pages = renderAllPagesToPng(client, pdf);
                 int total = pages.size();
@@ -1267,7 +1234,6 @@ public class GPUOCRCompareService {
                     ordered[p.page - 1] = p;
                 }
                 pool.shutdownNow();
-            }
         }
 
         long ocrAllCost = System.currentTimeMillis() - ocrAllStartAt;
