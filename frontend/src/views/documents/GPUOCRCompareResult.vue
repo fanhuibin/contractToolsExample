@@ -3,6 +3,11 @@
     <div class="compare-toolbar">
       <div class="left">
         <div class="title">GPU OCR合同比对</div>
+        <div v-if="displayFileNames" class="file-names">
+          <span class="file-name old">{{ oldFileName }}</span>
+          <span class="vs">VS</span>
+          <span class="file-name new">{{ newFileName }}</span>
+        </div>
       </div>
       <div class="center">
         <el-button-group>
@@ -18,6 +23,8 @@
         <span class="counter">第 {{ displayActiveNumber }} / {{ totalCount }} 处</span>
       </div>
       <div class="right">
+        <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
+          style="margin-right: 8px;" />
         <el-radio-group v-model="filterMode" size="small" class="filter-group">
           <el-radio-button label="ALL">全部</el-radio-button>
           <el-radio-button label="DELETE">仅删除</el-radio-button>
@@ -38,6 +45,8 @@
             @load="onFrameLoad('old', $event)"
           />
           <div class="marker-line" :style="markerStyle"></div>
+          <!-- 左侧PDF加载特效（与PDF比对页一致） -->
+          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="pdf-loader left-loader" />
         </div>
       </div>
       <div class="pdf-pane">
@@ -49,44 +58,54 @@
             @load="onFrameLoad('new', $event)"
           />
           <div class="marker-line" :style="markerStyle"></div>
+          <!-- 右侧PDF加载特效（与PDF比对页一致） -->
+          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="pdf-loader right-loader" />
         </div>
       </div>
       <div class="result-list">
         <div class="head">GPU OCR比对结果 <span class="em">{{ filteredResults.length }}</span> 处（删 {{ deleteCount }} / 增 {{ insertCount }}）</div>
         <div class="list">
-          <div
-            v-for="(r, i) in filteredResults"
-            :key="i"
-            class="result-item"
-            :class="{ active: indexInAll(i) === activeIndex }"
-            @click="jumpTo(indexInAll(i))"
-          >
-            <div class="headline">
-              <span class="index">{{ i + 1 }}</span>
-              <span class="badge" :class="r.operation === 'DELETE' ? 'del' : (r.operation === 'INSERT' ? 'ins' : 'mod')">
-                {{ r.operation === 'DELETE' ? '删除' : (r.operation === 'INSERT' ? '新增' : '改') }}
-              </span>
-            </div>
-            <div class="content">
-              <div class="text">
-                <span
-                  v-html="getTruncatedText(
-                    r.operation === 'DELETE' ? r.allTextA : r.allTextB,
-                    r.operation === 'DELETE' ? r.diffRangesA : r.diffRangesB,
-                    r.operation === 'DELETE' ? 'delete' : 'insert',
-                    isExpanded(indexInAll(i))
-                  )"
-                ></span>
-                <span 
-                  v-if="needsExpand(r.operation === 'DELETE' ? r.allTextA : r.allTextB)"
-                  class="toggle-btn" 
-                  @click.stop="toggleExpand(indexInAll(i))"
-                >
-                  {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+          <!-- 加载状态显示（与PDF比对页一致） -->
+          <div v-if="viewerLoading" class="list-loading">
+            <ConcentricLoader color="#1677ff" :size="52" text="比对中...16%" class="list-loader" />
+            <div class="loading-text-sub">任务预计处理3分钟，期间您可自由使用其他功能</div>
+          </div>
+          <!-- 正常结果列表 -->
+          <div v-else>
+            <div
+              v-for="(r, i) in filteredResults"
+              :key="i"
+              class="result-item"
+              :class="{ active: indexInAll(i) === activeIndex }"
+              @click="jumpTo(indexInAll(i))"
+            >
+              <div class="headline">
+                <span class="index">{{ i + 1 }}</span>
+                <span class="badge" :class="r.operation === 'DELETE' ? 'del' : (r.operation === 'INSERT' ? 'ins' : 'mod')">
+                  {{ r.operation === 'DELETE' ? '删除' : '新增' }}
                 </span>
               </div>
-              <div class="meta">
-                第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+              <div class="content">
+                <div class="text">
+                  <span
+                    v-html="getTruncatedText(
+                      r.operation === 'DELETE' ? r.allTextA : r.allTextB,
+                      r.operation === 'DELETE' ? r.diffRangesA : r.diffRangesB,
+                      r.operation === 'DELETE' ? 'delete' : 'insert',
+                      isExpanded(indexInAll(i))
+                    )"
+                  ></span>
+                  <span 
+                    v-if="needsExpand(r.operation === 'DELETE' ? r.allTextA : r.allTextB)"
+                    class="toggle-btn" 
+                    @click.stop="toggleExpand(indexInAll(i))"
+                  >
+                    {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+                  </span>
+                </div>
+                <div class="meta">
+                  第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+                </div>
               </div>
             </div>
           </div>
@@ -101,7 +120,8 @@ import { ref, onMounted, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
-import { getGPUOCRCompareResult, debugGPUCompareWithExistingOCR, type GPUOCRCompareResult } from '@/api/gpu-ocr-compare'
+import { getGPUOCRCompareResult, debugGPUCompareWithExistingOCR, debugGPUCompareLegacy, type GPUOCRCompareResult } from '@/api/gpu-ocr-compare'
+import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -110,6 +130,7 @@ const loading = ref(false)
 const debugLoading = ref(false)
 const oldPdf = ref('')
 const newPdf = ref('')
+const viewerLoading = ref(true)
 const results = ref<any[]>([])
 const activeIndex = ref(-1)
 // 展开集合：存储处于展开状态的原始 results 索引
@@ -144,6 +165,31 @@ const nextDisabled = computed(() => totalCount.value === 0 || activeFilteredInde
 const displayActiveNumber = computed(() => (activeFilteredIndex.value >= 0 ? activeFilteredIndex.value + 1 : 0))
 
 const frameWin: Record<'old' | 'new', Window | null> = { old: null, new: null }
+const frameReady = ref<{ old: boolean; new: boolean }>({ old: false, new: false })
+const listenersAttached = ref(false)
+const syncingFrom = ref<null | 'old' | 'new'>(null)
+const syncEnabled = ref(true)
+
+// 文件名显示
+const oldFileName = ref('')
+const newFileName = ref('')
+const displayFileNames = computed(() => oldFileName.value && newFileName.value)
+
+// 增量同步相关变量（按照 Compare 页逻辑）
+const lastScrollTop = ref({ old: 0, new: 0 })
+const wheelActiveSide = ref<'old' | 'new' | null>(null)
+const wheelTimer = ref<number | null>(null)
+const isScrollSyncing = ref(false)
+const _syncAttached = ref(false)
+
+// wheel 事件处理（按照 Compare 页逻辑）
+const onWheel = (side: 'old' | 'new') => {
+  wheelActiveSide.value = side
+  if (wheelTimer.value) clearTimeout(wheelTimer.value)
+  wheelTimer.value = window.setTimeout(() => {
+    wheelActiveSide.value = null
+  }, 150)
+}
 
 // 参考线（仅视觉）：位置占比 + 视觉偏移（提高到更靠上位置）
 const markerRatio = 0.25
@@ -251,6 +297,15 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
       hasPDFApp: !!w?.PDFViewerApplication,
     })
     frameWin[side] = frame?.contentWindow
+    frameReady.value[side] = true
+    // 两侧都准备好后，绑定同轴滚动
+    if (frameReady.value.old && frameReady.value.new && !listenersAttached.value) {
+      setupScrollSync()
+      listenersAttached.value = true
+    }
+    if (frameReady.value.old && frameReady.value.new) {
+      viewerLoading.value = false
+    }
     // 再次兜底：在加载后强制回到第一页顶部，防止历史恢复
     setTimeout(() => {
       try {
@@ -270,6 +325,15 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
 
 const fetchResult = async (id: string) => {
   if (!id) return
+  
+  // 处理 pending 状态：不使用全局遮罩，只显示列表内加载效果
+  if (id === 'pending') {
+    viewerLoading.value = true
+    loading.value = false
+    ElMessage.info('正在处理比对任务，请稍候...')
+    return
+  }
+  
   loading.value = true
   try {
     const res = await getGPUOCRCompareResult(id)
@@ -332,7 +396,7 @@ const startDebug = async () => {
   debugLoading.value = true
 
   try {
-    const res = await debugGPUCompareWithExistingOCR({
+    const res = await debugGPUCompareLegacy({
       oldOcrTaskId: oldOcrTaskId.value,
       newOcrTaskId: newOcrTaskId.value,
       options: {
@@ -369,6 +433,10 @@ const startDebug = async () => {
 }
 
 onMounted(() => {
+  // 从 query 参数获取文件名
+  oldFileName.value = (route.query.oldFileName as string) || ''
+  newFileName.value = (route.query.newFileName as string) || ''
+  
   const id = route.params.taskId as string
   if (id) {
     fetchResult(id)
@@ -557,6 +625,118 @@ function alignViewer(side: 'old' | 'new', pos: any) {
   }
 }
 
+function setupScrollSync() {
+  try {
+    const oldW = frameWin['old'] as any
+    const newW = frameWin['new'] as any
+    const oldVc = oldW?.document?.getElementById('viewerContainer') as HTMLElement | null
+    const newVc = newW?.document?.getElementById('viewerContainer') as HTMLElement | null
+    if (!oldVc || !newVc) return
+
+    // 防止重复绑定
+    if (_syncAttached.value) return
+    _syncAttached.value = true
+
+    // 初始化滚动位置
+    lastScrollTop.value.old = oldVc.scrollTop
+    lastScrollTop.value.new = newVc.scrollTop
+
+    // 增量同步滚动处理（按照 Compare 页逻辑）
+    const onOldScroll = () => {
+      if (!syncEnabled.value || isScrollSyncing.value) return
+      // 只有 wheel 触发的滚动才同步
+      if (wheelActiveSide.value !== 'old') return
+
+      const currentTop = oldVc.scrollTop
+      const delta = currentTop - lastScrollTop.value.old
+      lastScrollTop.value.old = currentTop
+
+      if (Math.abs(delta) < 1) return
+
+      // 计算同步因子
+      const fromRange = Math.max(1, oldVc.scrollHeight - oldVc.clientHeight)
+      const toRange = Math.max(1, newVc.scrollHeight - newVc.clientHeight)
+      const factor = toRange / fromRange
+
+      // 应用增量同步
+      isScrollSyncing.value = true
+      newVc.scrollTop = Math.max(0, Math.min(newVc.scrollHeight - newVc.clientHeight, newVc.scrollTop + delta * factor))
+      lastScrollTop.value.new = newVc.scrollTop
+      
+      // 快速释放锁
+      setTimeout(() => {
+        isScrollSyncing.value = false
+      }, 0)
+    }
+
+    const onNewScroll = () => {
+      if (!syncEnabled.value || isScrollSyncing.value) return
+      // 只有 wheel 触发的滚动才同步
+      if (wheelActiveSide.value !== 'new') return
+
+      const currentTop = newVc.scrollTop
+      const delta = currentTop - lastScrollTop.value.new
+      lastScrollTop.value.new = currentTop
+
+      if (Math.abs(delta) < 1) return
+
+      // 计算同步因子
+      const fromRange = Math.max(1, newVc.scrollHeight - newVc.clientHeight)
+      const toRange = Math.max(1, oldVc.scrollHeight - oldVc.clientHeight)
+      const factor = toRange / fromRange
+
+      // 应用增量同步
+      isScrollSyncing.value = true
+      oldVc.scrollTop = Math.max(0, Math.min(oldVc.scrollHeight - oldVc.clientHeight, oldVc.scrollTop + delta * factor))
+      lastScrollTop.value.old = oldVc.scrollTop
+      
+      // 快速释放锁
+      setTimeout(() => {
+        isScrollSyncing.value = false
+      }, 0)
+    }
+
+    // wheel 事件监听
+    const onOldWheel = () => onWheel('old')
+    const onNewWheel = () => onWheel('new')
+
+    oldVc.addEventListener('scroll', onOldScroll, { passive: true })
+    newVc.addEventListener('scroll', onNewScroll, { passive: true })
+    oldVc.addEventListener('wheel', onOldWheel, { passive: true })
+    newVc.addEventListener('wheel', onNewWheel, { passive: true })
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[scroll-sync] setup failed', e)
+  }
+}
+
+// 开关切换处理（按照 Compare 页逻辑）
+const onSyncScrollToggle = () => {
+  if (syncEnabled.value) {
+    // 重新设置监听器
+    _syncAttached.value = false
+    setupScrollSync()
+  } else {
+    // 清理定时器
+    if (wheelTimer.value) {
+      clearTimeout(wheelTimer.value)
+      wheelTimer.value = null
+    }
+    wheelActiveSide.value = null
+    isScrollSyncing.value = false
+  }
+}
+
+function computeScrollRatio(vc: HTMLElement): number {
+  const max = Math.max(1, vc.scrollHeight - vc.clientHeight)
+  return Math.min(1, Math.max(0, vc.scrollTop / max))
+}
+
+function applyScrollRatio(vc: HTMLElement, ratio: number) {
+  const max = Math.max(0, vc.scrollHeight - vc.clientHeight)
+  vc.scrollTop = Math.round(max * ratio)
+}
+
 const prevResult = () => {
   if (totalCount.value === 0) return
   const i = activeFilteredIndex.value
@@ -621,8 +801,13 @@ const needsExpand = (allTextList: string[]) => {
 <style scoped>
 .gpu-compare-fullscreen { position: fixed; inset: 0; height: 100vh; width: 100vw; background: #f5f6f8; display: flex; flex-direction: column; overflow: hidden; }
 .compare-toolbar { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; border-bottom: 1px solid #e6e8eb; background: #fff; }
-.compare-toolbar .left { display: flex; align-items: center; gap: 8px; }
+.compare-toolbar .left { display: flex; align-items: center; gap: 8px; flex-direction: column; align-items: flex-start; }
 .compare-toolbar .title { font-weight: 600; color: #303133; font-size: 14px; }
+.file-names { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #606266; margin-top: 2px; }
+.file-name { padding: 2px 6px; border-radius: 4px; background: #f5f7fa; }
+.file-name.old { color: #e6a23c; }
+.file-name.new { color: #67c23a; }
+.vs { font-weight: 600; color: #909399; }
 .compare-toolbar .center { display: flex; align-items: center; gap: 12px; }
 .compare-toolbar .center .counter { color: #909399; font-size: 12px; }
 .compare-toolbar .right { display: flex; align-items: center; gap: 8px; }
@@ -636,6 +821,9 @@ const needsExpand = (allTextList: string[]) => {
 .result-list .head { padding: 12px; border-bottom: 1px solid #ebeef5; font-weight: 600; display: flex; align-items: center; justify-content: space-between; }
 .result-list .head .em { color: #f56c6c; }
 .result-list .list { flex: 1; overflow: auto; padding: 10px; }
+.list-loading { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; min-height: 300px; }
+.list-loader { position: relative; margin-bottom: 20px; }
+.loading-text-sub { color: #666; font-size: 10px; text-align: center; opacity: 0.8; line-height: 1.4; margin-top: 8px; }
 .result-item { border: 1px solid #ebeef5; border-radius: 8px; padding: 10px; margin-bottom: 10px; cursor: pointer; background: #fff; transition: box-shadow .2s ease, border-color .2s ease; }
 .result-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.06); border-color: #dcdfe6; }
 .result-item.active { border-color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,.15); }
