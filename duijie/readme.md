@@ -4704,3 +4704,111 @@ for (String k : bGroups.keySet()) {
 - **前端显示**: 文本不再重复高亮，显示正常
 
 现在diffRangesB重复问题已经修复！🎯
+
+---
+
+## 2025-01-18 文本截断功能修复
+
+### 问题描述
+用户设置`TEXT_TRUNCATE_LIMIT = 80`，但合同比对结果页面中很多结果项显示的内容超过了80个字符，有好几百字符。
+
+### 问题分析
+
+#### 1. 问题现象
+- 设置了`TEXT_TRUNCATE_LIMIT = 80`
+- 但显示的内容仍然有几百个字符
+- 截断功能没有生效
+
+#### 2. 问题根源
+在`getTruncatedText`函数中，截断逻辑存在问题：
+
+```javascript
+// 原始问题代码
+const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete', isExpanded: boolean) => {
+  // ... 截断逻辑
+  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  return highlightDiffText([truncatedText], diffRanges, type) // ← 问题所在！
+}
+```
+
+**问题**：
+- `diffRanges`是基于完整文本计算的
+- 截断后传入`highlightDiffText`的是`[truncatedText]`，但`diffRanges`的范围仍然基于完整文本
+- `highlightDiffText`函数中的范围调整逻辑假设`allTextList`是原始的多个文本片段，但实际传入的是截断后的单个文本
+- 导致范围计算错误，可能显示超出截断长度的内容
+
+#### 3. 具体问题
+1. **范围不匹配**：`diffRanges`的范围基于完整文本，但传入的是截断文本
+2. **范围调整错误**：`highlightDiffText`函数中的范围调整逻辑不适合截断后的文本
+3. **显示超长内容**：由于范围计算错误，可能显示超出截断长度的内容
+
+### 解决方案
+
+#### 1. 修复截断逻辑
+在截断时同时调整`diffRanges`的范围，确保范围不超出截断后的文本长度：
+
+```javascript
+// 修复后的代码
+const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete', isExpanded: boolean) => {
+  if (!allTextList || allTextList.length === 0) return '无'
+  
+  const fullText = allTextList.join('\n')
+  if (!fullText) return '无'
+  
+  // 如果展开状态或文本长度不超过截断限制，直接返回完整文本
+  if (isExpanded || fullText.length <= TEXT_TRUNCATE_LIMIT) {
+    return highlightDiffText(allTextList, diffRanges, type)
+  }
+  
+  // 截断到指定长度
+  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  
+  // 调整diffRanges的范围，确保不超出截断后的文本长度
+  const adjustedRanges = (diffRanges || [])
+    .filter(r => r && typeof r.start === 'number' && typeof r.end === 'number' && r.end > r.start)
+    .map(range => {
+      // 如果范围超出截断长度，则调整到截断长度内
+      const maxEnd = Math.min(range.end, TEXT_TRUNCATE_LIMIT)
+      const maxStart = Math.min(range.start, TEXT_TRUNCATE_LIMIT)
+      
+      return {
+        ...range,
+        start: maxStart,
+        end: maxEnd
+      }
+    })
+    .filter(range => range.start < range.end) // 过滤掉无效的范围
+  
+  return highlightDiffText([truncatedText], adjustedRanges, type)
+}
+```
+
+#### 2. 关键改进
+- **范围调整**：在截断时同时调整`diffRanges`的范围
+- **边界检查**：确保范围不超出截断后的文本长度
+- **无效范围过滤**：过滤掉调整后无效的范围
+- **保持原始逻辑**：展开状态时仍然使用原始的`allTextList`和`diffRanges`
+
+### 修改文件
+- `frontend/src/views/documents/GPUOCRCompareResult.vue`
+  - 修改 `getTruncatedText` 函数，添加范围调整逻辑
+  - 确保截断后的文本长度不超过 `TEXT_TRUNCATE_LIMIT`
+
+### 功能效果
+✅ **正确截断**: 文本长度严格控制在80个字符以内  
+✅ **范围匹配**: `diffRanges`范围与截断后的文本匹配  
+✅ **高亮正常**: 截断后的文本仍然可以正确高亮差异  
+✅ **展开功能**: 展开时显示完整文本和原始范围  
+
+### 技术细节
+- **范围调整策略**: 将超出截断长度的范围调整到截断长度内
+- **边界处理**: 使用`Math.min`确保范围不超出文本长度
+- **无效过滤**: 过滤掉调整后无效的范围（start >= end）
+- **保持兼容**: 展开状态时保持原始逻辑不变
+
+### 修复效果
+- **原始问题**: 截断功能失效，显示超长文本
+- **修复后**: 文本严格控制在80个字符以内
+- **用户体验**: 简洁的文本显示，支持展开查看完整内容
+
+现在文本截断功能已经修复！🎯
