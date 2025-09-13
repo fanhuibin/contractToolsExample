@@ -40,7 +40,7 @@ public class TextExtractionUtil {
      * @return 提取的纯文本字符串
      */
     public static String extractTextFromResults(PageLayout[] ordered) {
-        return extractTextFromResults(ordered, ExtractionStrategy.POSITION_BASED);
+        return extractTextFromResults(ordered, ExtractionStrategy.SEQUENTIAL);
     }
 
     /**
@@ -73,7 +73,7 @@ public class TextExtractionUtil {
      * @return 带页码标记的文本字符串
      */
     public static String extractTextWithPageMarkers(PageLayout[] ordered) {
-        return extractTextWithPageMarkers(ordered, ExtractionStrategy.POSITION_BASED);
+        return extractTextWithPageMarkers(ordered, ExtractionStrategy.SEQUENTIAL);
     }
 
     /**
@@ -108,7 +108,7 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered) {
-        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.POSITION_BASED, false);
+        return parseTextAndPositionsFromResults(ordered, ExtractionStrategy.SEQUENTIAL, false);
     }
 
     /**
@@ -473,7 +473,7 @@ public class TextExtractionUtil {
         System.out.println();
 
         // 4. 解析文本和位置信息（按位置排序）
-        List<CharBox> charBoxesPositioned = parseTextAndPositionsFromResults(layouts, ExtractionStrategy.POSITION_BASED);
+        List<CharBox> charBoxesPositioned = parseTextAndPositionsFromResults(layouts, ExtractionStrategy.SEQUENTIAL);
         System.out.println("4. 文本和位置解析（按位置排序）:");
         for (CharBox cb : charBoxesPositioned) {
             System.out.println(String.format("  页%d: '%c' at [%.1f,%.1f,%.1f,%.1f]",
