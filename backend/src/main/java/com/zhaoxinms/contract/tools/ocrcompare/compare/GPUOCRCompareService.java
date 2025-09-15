@@ -1271,9 +1271,9 @@ public class GPUOCRCompareService {
         try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
             int pageCount = doc.getNumberOfPages();
             
-            // 基于页数动态计算DPI
-            int dpi = calculateDynamicDpi(pageCount);
-            System.out.println("文档页数: " + pageCount + ", 动态计算DPI: " + dpi);
+            // 使用固定DPI（来自配置）
+            int dpi = gpuOcrConfig.getRenderDpi();
+            System.out.println("文档页数: " + pageCount + ", 使用固定DPI: " + dpi);
             
             boolean saveImages = client.isSaveRenderedImages();
             PDFRenderer renderer = new PDFRenderer(doc);
@@ -1321,28 +1321,9 @@ public class GPUOCRCompareService {
         }
     }
 
-    /**
-     * 基于页数动态计算DPI，避免Canvas像素限制问题
-     * @param pageCount 文档页数
-     * @return 动态调整后的DPI值
-     */
+    // 保留方法签名（如有调用），但改为固定DPI返回
     private int calculateDynamicDpi(int pageCount) {
-        int baseDpi = gpuOcrConfig.getRenderDpi(); // 基础DPI (默认200)
-        
-        // 根据页数动态调整DPI
-        if (pageCount <= 20) {
-            // 小文档，保持高DPI
-            return baseDpi;
-        } else if (pageCount <= 50) {
-            // 中等文档，适度降低DPI
-            return (int) (baseDpi * 0.8); // 160 DPI
-        } else if (pageCount <= 100) {
-            // 大文档，显著降低DPI
-            return (int) (baseDpi * 0.6); // 120 DPI
-        } else {
-            // 超大文档，大幅降低DPI
-            return (int) (baseDpi * 0.4); // 80 DPI
-        }
+        return gpuOcrConfig.getRenderDpi();
     }
 
     private List<TextExtractionUtil.LayoutItem> extractLayoutItems(JsonNode root) {
@@ -1952,9 +1933,9 @@ public class GPUOCRCompareService {
 
         try (PDDocument doc = PDDocument.load(pdf.toFile())) {
             int pageCount = doc.getNumberOfPages();
-            // 使用动态DPI计算页面尺寸
-            int dynamicDpi = calculateDynamicDpi(pageCount);
-            System.out.println("计算页面尺寸使用动态DPI: " + dynamicDpi + " (页数: " + pageCount + ")");
+            // 使用固定DPI计算页面尺寸
+            int dynamicDpi = gpuOcrConfig.getRenderDpi();
+            System.out.println("计算页面尺寸使用固定DPI: " + dynamicDpi + " (页数: " + pageCount + ")");
             
             PDFRenderer r = new PDFRenderer(doc);
             int n = doc.getNumberOfPages();
