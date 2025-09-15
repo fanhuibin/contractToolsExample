@@ -45,13 +45,9 @@ public class OcrImageSaver {
             return null;
         }
         
-        // 计算动态DPI
-        int dpi;
-        try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
-            int pageCount = doc.getNumberOfPages();
-            dpi = calculateDynamicDpi(pageCount);
-            System.out.println("[" + mode + "] 文档页数: " + pageCount + ", 使用动态DPI: " + dpi);
-        }
+        // 使用固定DPI
+        int dpi = gpuOcrConfig.getRenderDpi();
+        System.out.println("[" + mode + "] 使用固定DPI: " + dpi);
         
         // 创建图片保存目录：task目录下的images子目录
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
@@ -111,29 +107,5 @@ public class OcrImageSaver {
      */
     public Path saveOcrImages(Path pdfPath, String taskId) throws Exception {
         return saveOcrImages(pdfPath, taskId, "default");
-    }
-
-    /**
-     * 基于页数动态计算DPI，避免Canvas像素限制问题
-     * @param pageCount 文档页数
-     * @return 动态调整后的DPI值
-     */
-    private int calculateDynamicDpi(int pageCount) {
-        int baseDpi = gpuOcrConfig.getRenderDpi(); // 基础DPI (默认200)
-        
-        // 根据页数动态调整DPI
-        if (pageCount <= 20) {
-            // 小文档，保持高DPI
-            return baseDpi;
-        } else if (pageCount <= 50) {
-            // 中等文档，适度降低DPI
-            return (int) (baseDpi * 0.8); // 160 DPI
-        } else if (pageCount <= 100) {
-            // 大文档，显著降低DPI
-            return (int) (baseDpi * 0.6); // 120 DPI
-        } else {
-            // 超大文档，大幅降低DPI
-            return (int) (baseDpi * 0.4); // 80 DPI
-        }
     }
 }

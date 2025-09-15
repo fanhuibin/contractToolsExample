@@ -1308,12 +1308,7 @@ public class GPUOCRCompareService {
                     byte[] bytes = baos.toByteArray();
                     list.add(bytes);
                     
-                    // 原有的保存逻辑（如果启用）
-                    if (saveImages) {
-                        Path out = pdfPath.getParent()
-                                .resolve(pdfPath.getFileName().toString() + ".page-" + (i + 1) + ".png");
-                        Files.write(out, bytes);
-                    }
+                    // 不再在识别阶段重复保存图片，统一使用 OcrImageSaver 预先保存的图片
                 }
             }
             
