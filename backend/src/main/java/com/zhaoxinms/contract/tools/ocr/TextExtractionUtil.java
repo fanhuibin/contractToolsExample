@@ -129,6 +129,26 @@ public class TextExtractionUtil {
      * @return 字符框列表，包含文本和位置信息
      */
     public static List<CharBox> parseTextAndPositionsFromResults(PageLayout[] ordered, ExtractionStrategy strategy, boolean ignoreHeaderFooter) {
+        return parseTextAndPositionsFromResults(ordered, strategy, ignoreHeaderFooter, 5.0, 5.0, null);
+    }
+
+    /**
+     * 从PDF识别结果中解析文本和位置信息（支持基于位置的页眉页脚检测）
+     * @param ordered PDF页面布局数组
+     * @param strategy 抽取策略
+     * @param ignoreHeaderFooter 是否忽略页眉页脚
+     * @param headerHeightPercent 页眉高度百分比（页面顶部）
+     * @param footerHeightPercent 页脚高度百分比（页面底部）
+     * @param pageHeights 每页的高度信息（用于百分比计算），如果为null则回退到category检测
+     * @return 字符框列表，包含文本和位置信息
+     */
+    public static List<CharBox> parseTextAndPositionsFromResults(
+            PageLayout[] ordered, 
+            ExtractionStrategy strategy, 
+            boolean ignoreHeaderFooter, 
+            double headerHeightPercent, 
+            double footerHeightPercent, 
+            double[] pageHeights) {
         List<CharBox> out = new ArrayList<>();
 
         List<PageLayout> processedLayouts = prepareLayouts(ordered, strategy);
@@ -136,14 +156,70 @@ public class TextExtractionUtil {
         for (PageLayout pl : processedLayouts) {
             if (pl == null) continue;
 
+            // 获取当前页面的高度信息（优先使用图片高度，回退到PDF高度）
+            double currentPageHeight = 0;
+            if (pl.imageHeight > 0) {
+                // 使用OCR结果中的实际图片高度
+                currentPageHeight = pl.imageHeight;
+                System.out.println("使用图片高度进行页眉页脚检测 - 页面" + pl.page + 
+                    ", 图片尺寸: " + pl.imageWidth + "x" + pl.imageHeight + "像素");
+            } else if (pageHeights != null && pl.page >= 1 && pl.page <= pageHeights.length) {
+                // 回退到PDF页面高度
+                currentPageHeight = pageHeights[pl.page - 1]; // 页面索引从1开始，数组从0开始
+                System.out.println("回退使用PDF高度进行页眉页脚检测 - 页面" + pl.page + 
+                    ", PDF高度: " + currentPageHeight + "点");
+            } else {
+                System.out.println("无法获取页面高度信息 - 页面" + pl.page + 
+                    ", 跳过位置检测，使用category检测");
+            }
+
             // 按顺序遍历每一页中的布局项
             for (LayoutItem it : pl.items) {
                 if (it.text == null || it.text.isEmpty()) continue;
 
-                // 如果启用忽略页眉页脚功能，则跳过页眉页脚内容
-                if (ignoreHeaderFooter && (it.category != null && 
-                    ("Page-header".equals(it.category) || "Page-footer".equals(it.category)))) {
-                    continue;
+                // 如果启用忽略页眉页脚功能，进行检测
+                if (ignoreHeaderFooter) {
+                    boolean isHeaderOrFooter = false;
+                    
+                    if (currentPageHeight > 0 && it.bbox != null && it.bbox.length >= 4) {
+                        // 基于位置的页眉页脚检测（新算法）
+                        double bboxMinY = it.bbox[1]; // bbox的顶部Y坐标
+                        double bboxMaxY = it.bbox[3]; // bbox的底部Y坐标
+                        
+                        // 计算位置百分比
+                        double topPercent = (bboxMinY / currentPageHeight) * 100;
+                        double bottomPercent = (bboxMaxY / currentPageHeight) * 100;
+                        
+                        // 页眉检测：bbox的顶部在页眉区域内
+                        if (topPercent <= headerHeightPercent) {
+                            isHeaderOrFooter = true;
+                            System.out.println("检测到页眉内容 - 页面" + pl.page + 
+                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
+                                ", 顶部百分比: " + String.format("%.2f", topPercent) + "%" +
+                                ", 页眉阈值: " + headerHeightPercent + "%");
+                        }
+                        // 页脚检测：bbox的底部在页脚区域内
+                        else if (bottomPercent >= (100 - footerHeightPercent)) {
+                            isHeaderOrFooter = true;
+                            System.out.println("检测到页脚内容 - 页面" + pl.page + 
+                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
+                                ", 底部百分比: " + String.format("%.2f", bottomPercent) + "%" +
+                                ", 页脚阈值: " + (100 - footerHeightPercent) + "%");
+                        }
+                    } else {
+                        // 回退到基于category的检测（旧算法）
+                        if (it.category != null && 
+                            ("Page-header".equals(it.category) || "Page-footer".equals(it.category))) {
+                            isHeaderOrFooter = true;
+                            System.out.println("基于category检测到页眉页脚 - 页面" + pl.page + 
+                                ", category: " + it.category + 
+                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'");
+                        }
+                    }
+                    
+                    if (isHeaderOrFooter) {
+                        continue; // 跳过页眉页脚内容
+                    }
                 }
 
                 String s = it.text;
@@ -415,10 +491,18 @@ public class TextExtractionUtil {
     public static class PageLayout {
         public final int page;
         public final List<LayoutItem> items;
+        public final int imageWidth;  // 实际图片宽度
+        public final int imageHeight; // 实际图片高度
 
         public PageLayout(int page, List<LayoutItem> items) {
+            this(page, items, 0, 0);
+        }
+
+        public PageLayout(int page, List<LayoutItem> items, int imageWidth, int imageHeight) {
             this.page = page;
             this.items = items;
+            this.imageWidth = imageWidth;
+            this.imageHeight = imageHeight;
         }
     }
 

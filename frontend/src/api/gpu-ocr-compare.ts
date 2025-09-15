@@ -41,8 +41,8 @@ export interface GPUOCRCompareResult {
 // GPU OCR比对选项
 export interface GPUOCRCompareOptions {
   ignoreHeaderFooter?: boolean
-  headerHeightMm?: number
-  footerHeightMm?: number
+  headerHeightPercent?: number
+  footerHeightPercent?: number
   ignoreCase?: boolean
   ignoredSymbols?: string
   ignoreSpaces?: boolean

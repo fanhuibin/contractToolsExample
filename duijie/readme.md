@@ -1,5 +1,60 @@
 ## 会话总结 - 2025-01-15
 
+### 页眉页脚检测算法升级 (2024-12-15)
+**会话主要目的**: 优化页眉页脚检测算法，从基于OCR category改为基于bbox位置百分比的精确检测
+
+**升级成果**:
+- **前端界面优化**：页眉/页脚高度设置从毫米改为百分比输入，更直观易用
+- **算法精度提升**：基于bbox位置的精确检测，不再依赖不准确的OCR category
+- **智能检测逻辑**：
+  - 页眉检测：`bbox顶部Y / 页面高度 <= 页眉百分比`
+  - 页脚检测：`bbox底部Y / 页面高度 >= (100% - 页脚百分比)`
+- **兼容性保证**：当页面高度不可用时自动回退到category检测
+- **调试友好**：添加详细的检测日志输出
+
+**技术改进**:
+- 新增`calculatePageHeights`方法获取PDF页面尺寸信息
+- 扩展`parseTextAndPositionsFromResults`方法支持位置参数
+- 更新前后端API参数从`headerHeightMm`/`footerHeightMm`改为`headerHeightPercent`/`footerHeightPercent`
+- 实现精确的百分比位置计算逻辑
+
+**文件更新清单**:
+1. `frontend/src/views/documents/GPUOCRCompare.vue` - 设置界面百分比化
+2. `frontend/src/api/gpu-ocr-compare.ts` - API接口类型更新
+3. `backend/.../GPUOCRCompareOptions.java` - 参数类型更新
+4. `backend/.../GPUOCRCompareController.java` - 控制器参数更新
+5. `backend/.../TextExtractionUtil.java` - 核心检测算法实现
+6. `backend/.../GPUOCRCompareService.java` - 页面高度计算和调用更新
+
+---
+
+### 代码重构优化 (2024-12-15)
+**会话主要目的**: 抽离GPU OCR Canvas比对组件的公共代码，提高代码可维护性和可读性
+
+**重构成果**:
+- **模块化架构**：创建 `gpu-ocr-canvas/` 目录，包含6个专用模块
+  - `types.ts`：统一类型定义（PageLayout、DifferenceItem、CanvasMode等）
+  - `constants.ts`：配置常量集中管理（Canvas配置、颜色、尺寸等）
+  - `layout.ts`：布局计算和虚拟滚动逻辑
+  - `image-manager.ts`：图片加载和缓存管理（ImageManager类）
+  - `canvas-renderer.ts`：Canvas绘制和渲染函数
+  - `scroll-handler.ts`：滚动处理和跳转逻辑
+  - `index.ts`：统一导出模块
+- **代码复用性**：主组件代码量减少，逻辑更清晰
+- **类型安全**：完善TypeScript类型定义，修复所有编译错误
+- **性能优化**：优化图片管理（单例模式）和常量引用
+- **维护性提升**：模块化结构便于后期功能扩展和bug修复
+
+**技术改进**:
+- 使用常量替代硬编码值（CANVAS_CONFIG、COLORS等）
+- 统一图片管理器替代分散的加载逻辑
+- 模块化Canvas渲染函数，支持复用
+- 类型化差异项和位置信息，减少运行时错误
+
+---
+
+## 历史会话总结 - 2025-01-15
+
 ### GPU OCR比对系统分层Canvas虚拟滚动优化
 
 **会话主要目的**: 解决100页大文档Canvas渲染空白问题，实现分层Canvas + 虚拟滚动渲染架构

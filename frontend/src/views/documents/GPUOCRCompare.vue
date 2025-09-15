@@ -197,11 +197,27 @@
         <el-form-item label="忽略页眉页脚">
           <el-switch v-model="settings.ignoreHeaderFooter" />
         </el-form-item>
-        <el-form-item label="页眉高度(mm)">
-          <el-input-number v-model="settings.headerHeightMm" :min="0" :max="100" />
+        <el-form-item label="页眉高度(%)">
+          <el-input-number 
+            v-model="settings.headerHeightPercent" 
+            :min="0" 
+            :max="50" 
+            :precision="1"
+            :step="0.5"
+            placeholder="页面顶部百分比"
+          />
+          <div class="setting-hint">文档顶部多少百分比的区域视为页眉</div>
         </el-form-item>
-        <el-form-item label="页脚高度(mm)">
-          <el-input-number v-model="settings.footerHeightMm" :min="0" :max="100" />
+        <el-form-item label="页脚高度(%)">
+          <el-input-number 
+            v-model="settings.footerHeightPercent" 
+            :min="0" 
+            :max="50" 
+            :precision="1"
+            :step="0.5"
+            placeholder="页面底部百分比"
+          />
+          <div class="setting-hint">文档底部多少百分比的区域视为页脚</div>
         </el-form-item>
         <el-form-item label="忽略大小写">
           <el-switch v-model="settings.ignoreCase" />
@@ -268,8 +284,8 @@ const debugForm = reactive({
 const settingsOpen = ref(false)
 const settings = reactive({
   ignoreHeaderFooter: true,
-  headerHeightMm: 20,
-  footerHeightMm: 20,
+  headerHeightPercent: 8.0,
+  footerHeightPercent: 8.0,
   ignoreCase: true,
   ignoredSymbols: '_＿',
   ignoreSpaces: false,
@@ -314,8 +330,8 @@ const doUploadGPUOCRCompare = async () => {
   formData.append('oldFile', oldFile.value)
   formData.append('newFile', newFile.value)
   formData.append('ignoreHeaderFooter', String(settings.ignoreHeaderFooter))
-  formData.append('headerHeightMm', String(settings.headerHeightMm))
-  formData.append('footerHeightMm', String(settings.footerHeightMm))
+  formData.append('headerHeightPercent', String(settings.headerHeightPercent))
+  formData.append('footerHeightPercent', String(settings.footerHeightPercent))
   formData.append('ignoreCase', String(settings.ignoreCase))
   formData.append('ignoredSymbols', settings.ignoredSymbols || '')
   formData.append('ignoreSpaces', String(settings.ignoreSpaces))
@@ -517,8 +533,8 @@ const startDebugCompare = async () => {
       taskId: debugForm.taskId,
       options: {
         ignoreHeaderFooter: settings.ignoreHeaderFooter,
-        headerHeightMm: settings.headerHeightMm,
-        footerHeightMm: settings.footerHeightMm,
+        headerHeightPercent: settings.headerHeightPercent,
+        footerHeightPercent: settings.footerHeightPercent,
         ignoreCase: settings.ignoreCase,
         ignoredSymbols: settings.ignoredSymbols || '',
         ignoreSpaces: settings.ignoreSpaces,
@@ -669,5 +685,12 @@ const formatTime = (timeStr: string) => {
   color: #606266; 
   font-size: 15px; 
   max-width: 80%;
+}
+
+.setting-hint {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 4px;
+  line-height: 1.4;
 }
 </style>

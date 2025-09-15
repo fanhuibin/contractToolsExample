@@ -39,8 +39,8 @@ public class GPUOCRCompareController {
             @RequestParam("oldFile") MultipartFile oldFile,
             @RequestParam("newFile") MultipartFile newFile,
             @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") boolean ignoreHeaderFooter,
-            @RequestParam(value = "headerHeightMm", defaultValue = "20") double headerHeightMm,
-            @RequestParam(value = "footerHeightMm", defaultValue = "20") double footerHeightMm,
+            @RequestParam(value = "headerHeightPercent", defaultValue = "5.0") double headerHeightPercent,
+            @RequestParam(value = "footerHeightPercent", defaultValue = "5.0") double footerHeightPercent,
             @RequestParam(value = "ignoreCase", defaultValue = "true") boolean ignoreCase,
             @RequestParam(value = "ignoredSymbols", defaultValue = "_＿") String ignoredSymbols,
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
@@ -50,8 +50,8 @@ public class GPUOCRCompareController {
             // 创建比对选项
             GPUOCRCompareOptions options = new GPUOCRCompareOptions();
             options.setIgnoreHeaderFooter(ignoreHeaderFooter);
-            options.setHeaderHeightMm(headerHeightMm);
-            options.setFooterHeightMm(footerHeightMm);
+            options.setHeaderHeightPercent(headerHeightPercent);
+            options.setFooterHeightPercent(footerHeightPercent);
             options.setIgnoreCase(ignoreCase);
             options.setIgnoredSymbols(ignoredSymbols);
             options.setIgnoreSpaces(ignoreSpaces);
@@ -130,8 +130,8 @@ public class GPUOCRCompareController {
             GPUOCRCompareOptions options = new GPUOCRCompareOptions();
             if (optionsMap != null) {
                 options.setIgnoreHeaderFooter(Boolean.TRUE.equals(optionsMap.get("ignoreHeaderFooter")));
-                options.setHeaderHeightMm(((Number) optionsMap.getOrDefault("headerHeightMm", 20)).doubleValue());
-                options.setFooterHeightMm(((Number) optionsMap.getOrDefault("footerHeightMm", 20)).doubleValue());
+                options.setHeaderHeightPercent(((Number) optionsMap.getOrDefault("headerHeightPercent", 5.0)).doubleValue());
+                options.setFooterHeightPercent(((Number) optionsMap.getOrDefault("footerHeightPercent", 5.0)).doubleValue());
                 options.setIgnoreCase(Boolean.TRUE.equals(optionsMap.get("ignoreCase")));
                 options.setIgnoredSymbols((String) optionsMap.getOrDefault("ignoredSymbols", "_＿"));
                 options.setIgnoreSpaces(Boolean.TRUE.equals(optionsMap.get("ignoreSpaces")));

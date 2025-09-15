@@ -111,14 +111,14 @@
                 <div class="text">
                   <span
                     v-html="getTruncatedText(
-                      r.operation === 'DELETE' ? r.allTextA : r.allTextB,
-                      r.operation === 'DELETE' ? r.diffRangesA : r.diffRangesB,
+                      r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []),
+                      r.operation === 'DELETE' ? (r.diffRangesA || []) : (r.diffRangesB || []),
                       r.operation === 'DELETE' ? 'delete' : 'insert',
                       isExpanded(indexInAll(i))
                     )"
                   ></span>
                   <span 
-                    v-if="needsExpand(r.operation === 'DELETE' ? r.allTextA : r.allTextB)"
+                    v-if="needsExpand(r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []))"
                     class="toggle-btn" 
                     @click.stop="toggleExpand(indexInAll(i))"
                   >
@@ -145,6 +145,45 @@ import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
+// 导入GPU OCR Canvas模块
+import {
+  // 类型
+  type PageLayout,
+  type DocumentImageInfo,
+  type DifferenceItem,
+  type Position,
+  type ClickableArea,
+  type VisibleRange,
+  type CanvasMode,
+  type ScrollSide,
+  type FilterMode,
+  
+  // 常量
+  CANVAS_CONFIG,
+  SCROLL_CONFIG,
+  MARKER_CONFIG,
+  TEXT_CONFIG,
+  COLORS,
+  
+  // 布局计算
+  calculatePageLayout,
+  updateVisibleCanvases,
+  calculateTotalHeight,
+  getCanvasWidth,
+  
+  // 图片管理
+  imageManager,
+  
+  // Canvas渲染
+  createCanvasPool,
+  renderPageToCanvas,
+  
+  // 滚动处理
+  alignCanvasViewerContinuous,
+  jumpToPage as jumpToPageHelper,
+  createPosition
+} from './gpu-ocr-canvas'
+
 const route = useRoute()
 const router = useRouter()
 
@@ -152,10 +191,10 @@ const router = useRouter()
 const loading = ref(false)
 const debugLoading = ref(false)
 const viewerLoading = ref(true)
-const results = ref<any[]>([])
+const results = ref<DifferenceItem[]>([])
 const activeIndex = ref(-1)
 const expandedSet = ref<Set<number>>(new Set())
-const filterMode = ref<'ALL' | 'DELETE' | 'INSERT'>('ALL')
+const filterMode = ref<FilterMode>('ALL')
 const taskId = ref('')
 const compareData = ref<any>(null)
 
@@ -166,8 +205,8 @@ const oldCanvasWrapper = ref<HTMLElement>()
 const newCanvasWrapper = ref<HTMLElement>()
 const oldCanvasContainer = ref<HTMLElement>()
 const newCanvasContainer = ref<HTMLElement>()
-const oldImageInfo = ref<any>(null)
-const newImageInfo = ref<any>(null)
+const oldImageInfo = ref<DocumentImageInfo | null>(null)
+const newImageInfo = ref<DocumentImageInfo | null>(null)
 // 后端返回的图片基路径，避免前端手动拼接导致taskId缺失
 const oldImageBaseUrl = ref<string>('')
 const newImageBaseUrl = ref<string>('')
@@ -176,127 +215,24 @@ const totalPages = ref(1)
 
 // 连续滚动相关状态
 const continuousMode = ref(true) // 启用连续滚动模式
-const pageSpacing = ref(20) // 页面间距
-
-// 动态宽度配置
-const getCanvasWidth = (container: HTMLElement | null) => {
-  return container ? container.clientWidth : 800 // 默认800px作为后备
-}
 
 // 记录实际Canvas宽度，用于坐标计算
 const actualCanvasWidth = ref({ old: 0, new: 0 })
 
 // 分层Canvas管理
 const canvasLayers = ref<{old: HTMLCanvasElement[], new: HTMLCanvasElement[]}>({ old: [], new: [] })
-const visibleCanvasRange = ref({ start: 0, end: 0 })
-const maxVisibleCanvases = 12 // 最大同时显示的Canvas数量
+const visibleCanvasRange = ref<VisibleRange>({ start: 0, end: 0, visiblePages: [] })
 
-// 图片管理器
-const imageCache = new Map<string, HTMLImageElement>()
-const loadingImages = new Set<string>()
-
-// 创建Canvas池
-const createCanvasPool = (count: number) => {
-  const canvases: HTMLCanvasElement[] = []
-  for (let i = 0; i < count; i++) {
-    const canvas = document.createElement('canvas')
-    canvas.style.position = 'absolute'
-    canvas.style.left = '0'
-    canvas.style.pointerEvents = 'none'
-    canvases.push(canvas)
-  }
-  return canvases
-}
-
-// 计算页面在容器中的位置
-const calculatePageLayout = (imageInfo: any, containerWidth: number) => {
-  const layout: Array<{y: number, height: number, scale: number, visible: boolean}> = []
-  let currentY = 0
-  
-  for (let i = 0; i < imageInfo.pages.length; i++) {
-    const pageInfo = imageInfo.pages[i]
-    if (pageInfo) {
-      const scale = containerWidth / pageInfo.width
-      const scaledHeight = pageInfo.height * scale
-      
-      layout.push({
-        y: currentY,
-        height: scaledHeight,
-        scale: scale,
-        visible: false
-      })
-      
-      currentY += scaledHeight + pageSpacing.value
-    }
-  }
-  
-  return layout
-}
-
-// 更新可见Canvas范围
-const updateVisibleCanvases = (scrollTop: number, containerHeight: number, pageLayout: Array<{y: number, height: number, scale: number, visible: boolean}>) => {
-  const buffer = 1500 // 增大缓冲区高度，避免空白页面
-  const startY = Math.max(0, scrollTop - buffer)
-  const endY = scrollTop + containerHeight + buffer
-  
-  let visiblePages: number[] = []
-  
-  for (let i = 0; i < pageLayout.length; i++) {
-    const page = pageLayout[i]
-    const pageBottom = page.y + page.height
-    
-    if (pageBottom >= startY && page.y <= endY) {
-      visiblePages.push(i)
-    }
-  }
-  
-  // 确保至少渲染8页
-  const minPages = 8
-  if (visiblePages.length < minPages && pageLayout.length >= minPages) {
-    // 找到当前视口中心页面
-    const viewportCenter = scrollTop + containerHeight / 2
-    let centerPageIndex = 0
-    for (let i = 0; i < pageLayout.length; i++) {
-      const page = pageLayout[i]
-      if (page.y + page.height / 2 > viewportCenter) {
-        centerPageIndex = i
-        break
-      }
-    }
-    
-    // 以中心页面为基准，向前后扩展到8页
-    const halfMinPages = Math.floor(minPages / 2)
-    const start = Math.max(0, centerPageIndex - halfMinPages)
-    const end = Math.min(pageLayout.length - 1, start + minPages - 1)
-    
-    visiblePages = []
-    for (let i = start; i <= end; i++) {
-      visiblePages.push(i)
-    }
-  }
-  
-  // 限制同时显示的Canvas数量
-  if (visiblePages.length > maxVisibleCanvases) {
-    const middle = Math.floor(visiblePages.length / 2)
-    const start = Math.max(0, middle - Math.floor(maxVisibleCanvases / 2))
-    visiblePages = visiblePages.slice(start, start + maxVisibleCanvases)
-  }
-  
-  return {
-    start: visiblePages[0] || 0,
-    end: visiblePages[visiblePages.length - 1] || 0,
-    visiblePages
-  }
-}
+// 这些函数现在从模块中导入，移除本地定义
 
 // 点击区域管理
-const oldCanvasClickableAreas = new Map<string, any>()
-const newCanvasClickableAreas = new Map<string, any>()
+const oldCanvasClickableAreas = new Map<string, ClickableArea>()
+const newCanvasClickableAreas = new Map<string, ClickableArea>()
 
 // 同轴滚动相关
 const syncEnabled = ref(true)
 const lastScrollTop = ref({ old: 0, new: 0 })
-const wheelActiveSide = ref<'old' | 'new' | null>(null)
+const wheelActiveSide = ref<ScrollSide | null>(null)
 const wheelTimer = ref<number | null>(null)
 const isScrollSyncing = ref(false)
 const isJumping = ref(false)
@@ -315,13 +251,10 @@ const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
-// 文本截断配置
-const TEXT_TRUNCATE_LIMIT = 80
-
-// 参考线配置
-const markerRatio = 0.25
-const markerVisualOffsetPx = 20
-const markerStyle = computed(() => ({ top: `calc(${markerRatio * 100}% + ${markerVisualOffsetPx}px)` }))
+// 参考线样式配置
+const markerStyle = computed(() => ({ 
+  top: `calc(${MARKER_CONFIG.RATIO * 100}% + ${MARKER_CONFIG.VISUAL_OFFSET_PX}px)` 
+}))
 
 // 计算属性
 const filteredResults = computed(() => {
@@ -344,47 +277,7 @@ const prevDisabled = computed(() => totalCount.value === 0 || activeFilteredInde
 const nextDisabled = computed(() => totalCount.value === 0 || activeFilteredIndex.value >= totalCount.value - 1)
 const displayActiveNumber = computed(() => (activeFilteredIndex.value >= 0 ? activeFilteredIndex.value + 1 : 0))
 
-// 图片加载函数
-const loadImage = (url: string): Promise<HTMLImageElement> => {
-  return new Promise((resolve, reject) => {
-    if (imageCache.has(url)) {
-      resolve(imageCache.get(url)!)
-      return
-    }
-
-    if (loadingImages.has(url)) {
-      // 如果正在加载，等待加载完成
-      const checkLoaded = () => {
-        if (imageCache.has(url)) {
-          resolve(imageCache.get(url)!)
-        } else if (loadingImages.has(url)) {
-          setTimeout(checkLoaded, 100)
-        } else {
-          reject(new Error('Image loading failed'))
-        }
-      }
-      checkLoaded()
-      return
-    }
-
-    loadingImages.add(url)
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    
-    img.onload = () => {
-      imageCache.set(url, img)
-      loadingImages.delete(url)
-      resolve(img)
-    }
-    
-    img.onerror = () => {
-      loadingImages.delete(url)
-      reject(new Error(`Failed to load image: ${url}`))
-    }
-    
-    img.src = url
-  })
-}
+// 图片加载现在由 imageManager 处理
 
 // Canvas渲染函数 - 连续滚动版本
 const renderCanvas = async (canvas: HTMLCanvasElement, imageInfo: any, mode: 'old' | 'new', differences: any[] = []) => {
@@ -420,7 +313,7 @@ const renderCanvas = async (canvas: HTMLCanvasElement, imageInfo: any, mode: 'ol
       
       totalHeight += scaledHeight
       if (i < imageInfo.pages.length - 1) {
-        totalHeight += pageSpacing.value // 页面间距
+        totalHeight += CANVAS_CONFIG.PAGE_SPACING // 页面间距
       }
     }
     
@@ -456,7 +349,7 @@ const renderCanvas = async (canvas: HTMLCanvasElement, imageInfo: any, mode: 'ol
       
       try {
         // 加载图片
-        const img = await loadImage(pageInfo.imageUrl)
+        const img = await imageManager.loadImage(pageInfo.imageUrl!)
         
         // 绘制图片
         ctx.drawImage(img, 0, position.y, canvasWidth, position.height)
@@ -575,7 +468,7 @@ const drawPageNumber = (ctx: CanvasRenderingContext2D, pageNum: number, yOffset:
 
 // 绘制页面分隔线
 const drawPageSeparator = (ctx: CanvasRenderingContext2D, yPosition: number, canvasWidth: number) => {
-  const separatorHeight = pageSpacing.value
+  const separatorHeight = CANVAS_CONFIG.PAGE_SPACING
   const centerY = yPosition + separatorHeight / 2
   
   // 绘制分隔区域背景 - 使用浅灰色区分白色文档
@@ -631,16 +524,48 @@ const initLayeredCanvasSystem = () => {
   newCanvasContainer.value.innerHTML = ''
   
   // 创建Canvas池
-  canvasLayers.value.old = createCanvasPool(maxVisibleCanvases)
-  canvasLayers.value.new = createCanvasPool(maxVisibleCanvases)
+  canvasLayers.value.old = createCanvasPool(CANVAS_CONFIG.MAX_VISIBLE_CANVASES)
+  canvasLayers.value.new = createCanvasPool(CANVAS_CONFIG.MAX_VISIBLE_CANVASES)
   
   // 添加到容器
   canvasLayers.value.old.forEach(canvas => oldCanvasContainer.value!.appendChild(canvas))
   canvasLayers.value.new.forEach(canvas => newCanvasContainer.value!.appendChild(canvas))
 }
 
-// 渲染指定页面到指定Canvas
-const renderPageToCanvas = async (
+// 渲染页面分隔带（仅针对第1、2页的分隔做特殊样式）
+const renderPageSeparators = (container: HTMLElement, layout: Array<{ y: number; height: number }>) => {
+  if (!container || !layout || layout.length === 0) return
+
+  // 清除旧的分隔带
+  const olds = container.querySelectorAll('.page-separator')
+  olds.forEach(el => el.remove())
+
+  // 为每个分页间隙创建分隔带（i 表示上一页索引，分隔发生在 i 与 i+1 之间）
+  for (let i = 0; i < layout.length - 1; i++) {
+    const sep = document.createElement('div')
+    sep.className = 'page-separator'
+    sep.style.position = 'absolute'
+    sep.style.left = '0'
+    sep.style.width = '100%'
+    sep.style.pointerEvents = 'none'
+    sep.style.zIndex = '0'
+
+    // 分隔带位置：第i页底部 + 间距区域
+    const top = layout[i].y + layout[i].height
+    sep.style.top = `${top}px`
+    sep.style.height = `${CANVAS_CONFIG.PAGE_SPACING}px`
+
+    // 样式规则（统一）：所有页间使用浅灰背景，不画线
+    sep.style.background = '#f5f6f8'
+    sep.style.borderTop = ''
+    sep.style.borderBottom = ''
+
+    container.appendChild(sep)
+  }
+}
+
+// 本地渲染函数（暂时保留，稍后统一到模块）
+const renderPageToCanvasLocal = async (
   canvas: HTMLCanvasElement, 
   imageInfo: any, 
   pageIndex: number, 
@@ -652,17 +577,30 @@ const renderPageToCanvas = async (
   
   const pageInfo = imageInfo.pages[pageIndex]
   const wrapper = mode === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
-  const canvasWidth = getCanvasWidth(wrapper || null)
-  const scale = canvasWidth / pageInfo.width
-  const scaledHeight = pageInfo.height * scale
+  // 使用预先计算好的布局参数，避免与分隔高度不一致导致的偏差
+  const layoutItem = layout[pageIndex]
+  const scale = layoutItem.scale
+  const scaledHeight = layoutItem.height
+  const canvasWidth = Math.round(pageInfo.width * scale)
+  
+  // 计算Canvas高度：页面高度 + 分隔空间（如果不是最后一页）
+  const isLastPage = pageIndex === imageInfo.pages.length - 1
+  const canvasHeight = isLastPage ? scaledHeight : scaledHeight + CANVAS_CONFIG.PAGE_SPACING
   
   // 设置Canvas尺寸和位置
   canvas.width = canvasWidth
-  canvas.height = scaledHeight
+  canvas.height = canvasHeight
   canvas.style.width = `${canvasWidth}px`
-  canvas.style.height = `${scaledHeight}px`
-  canvas.style.top = `${layout[pageIndex].y}px`
+  canvas.style.height = `${canvasHeight}px`
+  canvas.style.top = `${layoutItem.y}px`
   canvas.style.display = 'block'
+  
+  // 调试信息：记录Canvas定位
+  console.log(`Canvas ${mode} 第${pageIndex + 1}页定位: top=${layoutItem.y}px, height=${canvasHeight}px (页面=${scaledHeight}px + 分隔=${isLastPage ? 0 : CANVAS_CONFIG.PAGE_SPACING}px)`)
+  
+  // 为该canvas设置渲染标识，避免异步加载完成后写入到已复用的canvas上
+  const renderKey = `${mode}-${pageIndex}-${Date.now()}-${Math.random()}`
+  ;(canvas as any).__renderKey = renderKey
   
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -670,13 +608,23 @@ const renderPageToCanvas = async (
   // 清除Canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height)
   
+  // 如果不是最后一页，在分隔区域绘制背景色
+  if (!isLastPage) {
+    ctx.fillStyle = '#f5f6f8'
+    ctx.fillRect(0, scaledHeight, canvasWidth, CANVAS_CONFIG.PAGE_SPACING)
+  }
+  
   // 加载并绘制图片
   // 优先使用后端返回的基路径，避免taskId为空导致的路径错误
   const baseUrl = mode === 'old' ? oldImageBaseUrl.value : newImageBaseUrl.value
   const imageUrl = baseUrl
     ? `${baseUrl}/page-${pageIndex + 1}.png`
     : `/api/gpu-ocr/files/tasks/${taskId.value}/images/${mode}/page-${pageIndex + 1}.png`
-  const image = await loadImage(imageUrl)
+    const image = await imageManager.loadImage(imageUrl)
+  // 渲染期间若canvas已被复用，放弃本次绘制
+  if ((canvas as any).__renderKey !== renderKey) {
+    return
+  }
   
   if (image) {
     ctx.drawImage(image, 0, 0, canvasWidth, scaledHeight)
@@ -689,6 +637,7 @@ const renderPageToCanvas = async (
     
     // 绘制差异标记（使用现有的绘制函数）
     for (const diff of pageDifferences) {
+      if ((canvas as any).__renderKey !== renderKey) return
       const bbox = mode === 'old' ? diff.oldBbox : diff.newBbox
       if (bbox && bbox.length >= 4) {
         const x = bbox[0] * scale
@@ -707,6 +656,43 @@ const renderPageToCanvas = async (
       }
     }
   }
+
+  // 右上角页码信息（分层Canvas每页）- 相对本页Canvas坐标，不受分隔影响
+  try {
+    if ((canvas as any).__renderKey !== renderKey) return
+    const labelPaddingX = 8
+    const labelPaddingY = 6
+    const labelText = `${mode === 'old' ? '旧' : '新'} 第 ${pageIndex + 1} / ${imageInfo.pages.length} 页`
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif'
+    const textMetrics = ctx.measureText(labelText)
+    const labelWidth = Math.ceil(textMetrics.width) + labelPaddingX * 2
+    const labelHeight = 24
+    const labelX = canvasWidth - labelWidth - 10
+    const labelY = 10 // 相对于本页canvas起点
+    
+    // 背景（圆角矩形）
+    ctx.save()
+    const radius = 6
+    ctx.beginPath()
+    ctx.moveTo(labelX + radius, labelY)
+    ctx.lineTo(labelX + labelWidth - radius, labelY)
+    ctx.quadraticCurveTo(labelX + labelWidth, labelY, labelX + labelWidth, labelY + radius)
+    ctx.lineTo(labelX + labelWidth, labelY + labelHeight - radius)
+    ctx.quadraticCurveTo(labelX + labelWidth, labelY + labelHeight, labelX + labelWidth - radius, labelY + labelHeight)
+    ctx.lineTo(labelX + radius, labelY + labelHeight)
+    ctx.quadraticCurveTo(labelX, labelY + labelHeight, labelX, labelY + labelHeight - radius)
+    ctx.lineTo(labelX, labelY + radius)
+    ctx.quadraticCurveTo(labelX, labelY, labelX + radius, labelY)
+    ctx.closePath()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+    ctx.fill()
+    
+    // 文本
+    ctx.fillStyle = '#fff'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(labelText, labelX + labelPaddingX, labelY + labelHeight / 2)
+    ctx.restore()
+  } catch (_) {}
 }
 
 // 渲染所有页面（使用分层Canvas）
@@ -729,9 +715,19 @@ const renderAllPages = async () => {
   actualCanvasWidth.value.old = containerWidth
   actualCanvasWidth.value.new = containerWidth
   
-  // 设置容器总高度
-  const oldTotalHeight = oldLayout[oldLayout.length - 1]?.y + oldLayout[oldLayout.length - 1]?.height || 0
-  const newTotalHeight = newLayout[newLayout.length - 1]?.y + newLayout[newLayout.length - 1]?.height || 0
+  // 设置容器总高度（需要包含最后一页的pageSpacing，因为分隔带占用了空间）
+  const oldLastPage = oldLayout[oldLayout.length - 1]
+  const newLastPage = newLayout[newLayout.length - 1]
+  const oldTotalHeight = oldLastPage ? (oldLastPage.y + oldLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
+  const newTotalHeight = newLastPage ? (newLastPage.y + newLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
+  
+  console.log('容器总高度计算:', {
+    oldTotalHeight,
+    newTotalHeight,
+    oldLastPageY: oldLastPage?.y,
+    oldLastPageHeight: oldLastPage?.height,
+    pageSpacing: CANVAS_CONFIG.PAGE_SPACING
+  })
   
   if (oldCanvasContainer.value) {
     oldCanvasContainer.value.style.height = `${oldTotalHeight}px`
@@ -742,6 +738,16 @@ const renderAllPages = async () => {
     newCanvasContainer.value.style.position = 'relative'
   }
   
+  // 清除DOM分隔带（现在在Canvas中绘制分隔）
+  if (oldCanvasContainer.value) {
+    const olds = oldCanvasContainer.value.querySelectorAll('.page-separator')
+    olds.forEach(el => el.remove())
+  }
+  if (newCanvasContainer.value) {
+    const olds = newCanvasContainer.value.querySelectorAll('.page-separator')
+    olds.forEach(el => el.remove())
+  }
+
   // 初始渲染可见页面
   updateVisiblePagesRender(oldLayout, newLayout, oldDifferences, newDifferences)
   
@@ -769,11 +775,11 @@ const updateVisiblePagesRender = async (
   
   // 渲染可见页面
   const visiblePages = visibleRange.visiblePages
-  for (let i = 0; i < visiblePages.length && i < maxVisibleCanvases; i++) {
+  for (let i = 0; i < visiblePages.length && i < CANVAS_CONFIG.MAX_VISIBLE_CANVASES; i++) {
     const pageIndex = visiblePages[i]
     
     if (pageIndex < oldLayout.length && canvasLayers.value.old[i]) {
-      await renderPageToCanvas(
+      await renderPageToCanvasLocal(
         canvasLayers.value.old[i], 
         oldImageInfo.value, 
         pageIndex, 
@@ -784,7 +790,7 @@ const updateVisiblePagesRender = async (
     }
     
     if (pageIndex < newLayout.length && canvasLayers.value.new[i]) {
-      await renderPageToCanvas(
+      await renderPageToCanvasLocal(
         canvasLayers.value.new[i], 
         newImageInfo.value, 
         pageIndex, 
@@ -834,7 +840,7 @@ const jumpToPage = (pageNum: number) => {
     if (pageInfo) {
       const scale = actualWidth / pageInfo.width
       const scaledHeight = pageInfo.height * scale
-      targetY += scaledHeight + pageSpacing.value
+      targetY += scaledHeight + CANVAS_CONFIG.PAGE_SPACING
     }
   }
   
@@ -1028,8 +1034,8 @@ const jumpTo = (i: number) => {
 
   console.log(`前端跳转调试 - 差异项 ${i + 1}:`, r)
 
-  // 计算跳转位置
-  const createPosition = (bbox: number[] | undefined, page: number, description: string) => {
+  // 计算跳转位置（本地函数）
+  const createPositionLocal = (bbox: number[] | undefined, page: number, description: string) => {
     if (!bbox || bbox.length < 4) {
       console.log(`前端跳转调试 - ${description}位置创建失败: bbox无效`, bbox)
       return null
@@ -1049,17 +1055,17 @@ const jumpTo = (i: number) => {
 
   // 根据操作类型确定跳转位置
   if (r.operation === 'INSERT') {
-    oldPos = createPosition(r.prevOldBbox, r.pageA || r.page, 'INSERT-old(prevOldBbox)')
-    newPos = createPosition(r.newBbox, r.pageB || r.page, 'INSERT-new(newBbox)')
+    oldPos = createPositionLocal(r.prevOldBbox, r.pageA || r.page || 0, 'INSERT-old(prevOldBbox)')
+    newPos = createPositionLocal(r.newBbox, r.pageB || r.page || 0, 'INSERT-new(newBbox)')
   } else if (r.operation === 'DELETE') {
-    oldPos = createPosition(r.oldBbox, r.pageA || r.page, 'DELETE-old(oldBbox)')
-    newPos = createPosition(r.prevNewBbox, r.pageB || r.page, 'DELETE-new(prevNewBbox)')
+    oldPos = createPositionLocal(r.oldBbox, r.pageA || r.page || 0, 'DELETE-old(oldBbox)')
+    newPos = createPositionLocal(r.prevNewBbox, r.pageB || r.page || 0, 'DELETE-new(prevNewBbox)')
   }
 
   // 执行Canvas滚动定位
   isJumping.value = true
-  alignCanvasViewerContinuous('old', oldPos)
-  alignCanvasViewerContinuous('new', newPos)
+    alignCanvasViewerContinuousLocal('old', oldPos)
+    alignCanvasViewerContinuousLocal('new', newPos)
   
   // 跳转后重新渲染Canvas确保页面正确显示
   setTimeout(() => {
@@ -1072,63 +1078,46 @@ const jumpTo = (i: number) => {
 }
 
 // Canvas定位函数 - 连续滚动版本
-const alignCanvasViewerContinuous = (side: 'old' | 'new', pos: any) => {
+const alignCanvasViewerContinuousLocal = (side: 'old' | 'new', pos: any) => {
   if (!pos || !pos.page) return
 
   const wrapper = side === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
-  const canvas = side === 'old' ? oldCanvas.value : newCanvas.value
   const imageInfo = side === 'old' ? oldImageInfo.value : newImageInfo.value
   
-  if (!wrapper || !canvas || !imageInfo) return
+  if (!wrapper || !imageInfo) return
 
   try {
-    // 使用记录的Canvas宽度，确保与渲染时一致
-    const canvasWidth = side === 'old' ? actualCanvasWidth.value.old : actualCanvasWidth.value.new
-    if (canvasWidth === 0) {
-      console.warn(`Canvas宽度未记录，使用容器宽度: ${side}`)
-      const containerWidth = getCanvasWidth(wrapper)
-      actualCanvasWidth.value[side] = containerWidth
+    // 使用预计算的布局，确保与渲染一致
+    const containerWidth = getCanvasWidth(wrapper)
+    const layout = calculatePageLayout(imageInfo, containerWidth)
+    
+    const pageIndex = pos.page - 1 // 转换为0-based索引
+    if (pageIndex < 0 || pageIndex >= layout.length) {
+      console.error(`页面索引超出范围: ${pos.page}, 总页数: ${layout.length}`)
+      return
     }
     
-    const actualWidth = canvasWidth || getCanvasWidth(wrapper)
+    const pageLayout = layout[pageIndex]
     
-    // 计算目标页面在连续滚动中的Y偏移（使用实际Canvas宽度）
-    let pageYOffset = 0
-    for (let i = 0; i < pos.page - 1; i++) {
-      const pageInfo = imageInfo.pages[i]
-      if (pageInfo) {
-        const scale = actualWidth / pageInfo.width
-        const scaledHeight = pageInfo.height * scale
-        pageYOffset += scaledHeight + pageSpacing.value
-      }
-    }
-    
-    // 获取目标页面信息
-    const pageInfo = imageInfo.pages[pos.page - 1]
-    if (!pageInfo) return
-
-    // 计算缩放比例（使用实际Canvas宽度）
-    const scale = actualWidth / pageInfo.width
-
     // 计算目标位置（图像坐标转换为显示坐标）
-    const targetX = pos.x * scale
-    const targetY = pageYOffset + pos.y * scale + (pos.height || 0) * scale / 2 // 垂直居中
+    const targetX = pos.x * pageLayout.scale
+    const targetY = pageLayout.y + pos.y * pageLayout.scale + (pos.height || 0) * pageLayout.scale / 2 // 垂直居中
 
     // 计算滚动位置
-    const markerY = wrapper.clientHeight * markerRatio + markerVisualOffsetPx
+    const markerY = wrapper.clientHeight * MARKER_CONFIG.RATIO + MARKER_CONFIG.VISUAL_OFFSET_PX
     const newScrollTop = Math.max(0, targetY - markerY)
 
     wrapper.scrollTop = newScrollTop
 
     console.log(`Canvas连续滚动定位完成: ${side}`, {
       页面: pos.page,
-      页面偏移: pageYOffset,
+      页面布局Y: pageLayout.y,
+      页面高度: pageLayout.height,
+      缩放比例: pageLayout.scale,
       原始坐标: [pos.x, pos.y],
-      缩放比例: scale,
       目标坐标: [targetX, targetY],
       滚动位置: newScrollTop,
-      实际Canvas宽度: actualWidth,
-      容器宽度: getCanvasWidth(wrapper)
+      markerY: markerY
     })
 
   } catch (error) {
@@ -1142,7 +1131,11 @@ const alignCanvasViewer = (side: 'old' | 'new', pos: any) => {
   if (pos && !pos.page) {
     pos.page = currentPage.value
   }
-  alignCanvasViewerContinuous(side, pos)
+  if (side === 'old' && oldCanvasWrapper.value && oldImageInfo.value) {
+    alignCanvasViewerContinuous(side, pos, oldCanvasWrapper.value, oldImageInfo.value)
+  } else if (side === 'new' && newCanvasWrapper.value && newImageInfo.value) {
+    alignCanvasViewerContinuous(side, pos, newCanvasWrapper.value, newImageInfo.value)
+  }
 }
 
 // 导航函数
@@ -1188,18 +1181,18 @@ const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'inser
   const fullText = allTextList.join('\n')
   if (!fullText) return '无'
   
-  if (isExpanded || fullText.length <= TEXT_TRUNCATE_LIMIT) {
+  if (isExpanded || fullText.length <= TEXT_CONFIG.TRUNCATE_LIMIT) {
     return highlightDiffText([fullText], diffRanges, type)
   }
   
-  const truncatedText = fullText.substring(0, TEXT_TRUNCATE_LIMIT) + '...'
+  const truncatedText = fullText.substring(0, TEXT_CONFIG.TRUNCATE_LIMIT) + '...'
   return highlightDiffText([truncatedText], diffRanges, type)
 }
 
 const needsExpand = (allTextList: string[]) => {
   if (!allTextList || allTextList.length === 0) return false
   const fullText = allTextList.join('\n')
-  return fullText && fullText.length > TEXT_TRUNCATE_LIMIT
+  return fullText && fullText.length > TEXT_CONFIG.TRUNCATE_LIMIT
 }
 
 // 高亮文本函数（复用原有逻辑）
@@ -1699,6 +1692,7 @@ onUnmounted(() => {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   margin-bottom: 20px;
   pointer-events: none; /* Canvas不接收点击，由容器处理 */
+  z-index: 1; /* 确保在分隔带之上 */
 }
 
 .marker-line { 

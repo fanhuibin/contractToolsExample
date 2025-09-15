@@ -6,8 +6,8 @@ package com.zhaoxinms.contract.tools.ocrcompare.compare;
 public class GPUOCRCompareOptions {
 
     private boolean ignoreHeaderFooter = false;
-    private double headerHeightMm = 20;
-    private double footerHeightMm = 20;
+    private double headerHeightPercent = 8.0;
+    private double footerHeightPercent = 8.0;
     private boolean ignoreCase = true;
     private String ignoredSymbols = "_＿";
     private boolean ignoreSpaces = false;
@@ -28,20 +28,20 @@ public class GPUOCRCompareOptions {
         this.ignoreHeaderFooter = ignoreHeaderFooter;
     }
 
-    public double getHeaderHeightMm() {
-        return headerHeightMm;
+    public double getHeaderHeightPercent() {
+        return headerHeightPercent;
     }
 
-    public void setHeaderHeightMm(double headerHeightMm) {
-        this.headerHeightMm = headerHeightMm;
+    public void setHeaderHeightPercent(double headerHeightPercent) {
+        this.headerHeightPercent = headerHeightPercent;
     }
 
-    public double getFooterHeightMm() {
-        return footerHeightMm;
+    public double getFooterHeightPercent() {
+        return footerHeightPercent;
     }
 
-    public void setFooterHeightMm(double footerHeightMm) {
-        this.footerHeightMm = footerHeightMm;
+    public void setFooterHeightPercent(double footerHeightPercent) {
+        this.footerHeightPercent = footerHeightPercent;
     }
 
     public boolean isIgnoreCase() {

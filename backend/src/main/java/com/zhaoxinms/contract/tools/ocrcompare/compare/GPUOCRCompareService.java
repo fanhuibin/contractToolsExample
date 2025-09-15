@@ -3,6 +3,7 @@ package com.zhaoxinms.contract.tools.ocrcompare.compare;
 import java.awt.image.BufferedImage;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -1100,8 +1101,16 @@ public class GPUOCRCompareService {
                 }
             }
             
-            // 使用现有的解析方法提取CharBox
-            charBoxes = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, options.isIgnoreHeaderFooter());
+            // 计算页面高度信息用于页眉页脚检测
+            double[] pageHeights = calculatePageHeights(pdfPath);
+            
+            // 使用新的解析方法提取CharBox，支持基于位置的页眉页脚检测
+            charBoxes = TextExtractionUtil.parseTextAndPositionsFromResults(ordered, 
+                TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, 
+                options.isIgnoreHeaderFooter(),
+                options.getHeaderHeightPercent(),
+                options.getFooterHeightPercent(),
+                pageHeights);
             
             System.out.println("从保存的JSON文件中解析出" + charBoxes.size() + "个字符");
             
@@ -1124,12 +1133,57 @@ public class GPUOCRCompareService {
         }
     }
 
+    /**
+     * 计算PDF每页的高度（用于页眉页脚百分比计算）
+     * @param pdfPath PDF文件路径
+     * @return 每页的高度数组（单位：点，72 DPI）
+     */
+    private double[] calculatePageHeights(Path pdfPath) {
+        if (pdfPath == null) {
+            return new double[0];
+        }
+        
+        try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
+            int pageCount = doc.getNumberOfPages();
+            double[] heights = new double[pageCount];
+            
+            for (int i = 0; i < pageCount; i++) {
+                PDPage page = doc.getPage(i);
+                PDRectangle mediaBox = page.getMediaBox();
+                heights[i] = mediaBox.getHeight(); // 页面高度（点单位）
+            }
+            
+            System.out.println("计算PDF页面高度完成: " + pdfPath.getFileName() + 
+                ", 页数: " + pageCount + 
+                ", 首页高度: " + (heights.length > 0 ? heights[0] : 0) + "点");
+            
+            return heights;
+            
+        } catch (Exception e) {
+            System.err.println("计算PDF页面高度失败: " + e.getMessage());
+            return new double[0];
+        }
+    }
+
     private TextExtractionUtil.PageLayout parseOnePageFromSavedJson(Path pdfPath, int page) throws Exception {
         String pageJsonPath = pdfPath.toAbsolutePath().toString() + ".page-" + page + ".ocr.json";
         byte[] bytes = Files.readAllBytes(Path.of(pageJsonPath));
         JsonNode root = M.readTree(bytes);
         List<TextExtractionUtil.LayoutItem> items = extractLayoutItems(root);
-        return new TextExtractionUtil.PageLayout(page, items);
+        // 从已保存的PNG读取图片尺寸（如果存在同名PNG）
+        int imgW = 0;
+        int imgH = 0;
+        try {
+            Path pngPath = pdfPath.getParent().resolve(pdfPath.getFileName().toString() + ".page-" + page + ".png");
+            if (Files.exists(pngPath)) {
+                BufferedImage img = ImageIO.read(pngPath.toFile());
+                if (img != null) {
+                    imgW = img.getWidth();
+                    imgH = img.getHeight();
+                }
+            }
+        } catch (Exception ignore) {}
+        return new TextExtractionUtil.PageLayout(page, items, imgW, imgH);
     }
 
     private TextExtractionUtil.PageLayout parseOnePage(DotsOcrClient client, byte[] pngBytes, int page, String prompt, Path pdfPath)
@@ -1178,6 +1232,21 @@ public class GPUOCRCompareService {
                 throw new RuntimeException("JSON解析失败 (页面=" + page + "): " + e.getMessage(), e);
             }
         }
+        // 获取图片尺寸信息（不修改OCR JSON，直接用于PageLayout）
+        int imgW = 0;
+        int imgH = 0;
+        try {
+            ByteArrayInputStream bais = new ByteArrayInputStream(pngBytes);
+            BufferedImage image = ImageIO.read(bais);
+            if (image != null) {
+                imgW = image.getWidth();
+                imgH = image.getHeight();
+                System.out.println("第" + page + "页图片尺寸: " + imgW + "x" + imgH);
+            }
+        } catch (Exception e) {
+            System.err.println("获取第" + page + "页图片尺寸失败: " + e.getMessage());
+        }
+        
         // 保存每页识别的 JSON 结果，便于后续从第4步直接开始
         try {
             String pageJsonPath = pdfPath.toAbsolutePath().toString() + ".page-" + page + ".ocr.json";
@@ -1192,7 +1261,7 @@ public class GPUOCRCompareService {
             System.out.println(String.format("OCR单页完成: file=%s, page=%d, 用时=%dms", 
                 pdfPath == null ? "-" : pdfPath.getFileName().toString(), page, pageCost));
         } catch (Exception ignore) {}
-        return new TextExtractionUtil.PageLayout(page, items);
+        return new TextExtractionUtil.PageLayout(page, items, imgW, imgH);
     }
 
 
@@ -1330,8 +1399,16 @@ public class GPUOCRCompareService {
                 pdf == null ? "-" : pdf.getFileName().toString(), pages, ocrAllCost, avg));
         } catch (Exception ignore) {}
 
-        // 使用新的按顺序读取方法解析文本和位置
-        List<CharBox> out = parseTextAndPositionsFromResults(ordered, TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, options.isIgnoreHeaderFooter());
+        // 计算页面高度信息用于页眉页脚检测
+        double[] pageHeights = calculatePageHeights(pdf);
+        
+        // 使用新的按顺序读取方法解析文本和位置，支持基于位置的页眉页脚检测
+        List<CharBox> out = TextExtractionUtil.parseTextAndPositionsFromResults(ordered, 
+            TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, 
+            options.isIgnoreHeaderFooter(),
+            options.getHeaderHeightPercent(),
+            options.getFooterHeightPercent(),
+            pageHeights);
 
         // Step 3: 保存提取的纯文本（含/不含页标记），便于开发调试
         try {
