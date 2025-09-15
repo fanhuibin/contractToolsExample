@@ -11,7 +11,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
@@ -28,14 +27,9 @@ import javax.imageio.ImageIO;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.graphics.color.PDColor;
-import org.apache.pdfbox.pdmodel.graphics.color.PDDeviceRGB;
-import org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotationTextMarkup;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.util.HashSet;
-import java.util.Set;
 import javax.annotation.PostConstruct;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -368,117 +362,188 @@ public class GPUOCRCompareService {
         return null;
     }
 
+    
     /**
-     * 获取前端格式的比对结果（在接口层进行坐标转换）
+     * 获取Canvas版本的前端比对结果（包含图片列表和原始坐标）
      */
-    public Map<String, Object> getFrontendResult(String taskId) {
-
-        Map<String, Object> originalFrontendResult = getRawFrontendResult(taskId);
-        if (originalFrontendResult == null) {
+    public Map<String, Object> getCanvasFrontendResult(String taskId) {
+        Map<String, Object> originalResult = getRawFrontendResult(taskId);
+        if (originalResult == null) {
             return null;
         }
 
-        // 获取对应的GPUOCRCompareResult以获取缩放参数
-        GPUOCRCompareResult result = results.get(taskId);
-        if (result == null) {
-            return originalFrontendResult; // 如果没有result对象，直接返回原始数据
+        // 获取任务信息
+        GPUOCRCompareTask task = getTaskStatus(taskId);
+        if (task == null) {
+            return originalResult;
         }
 
-        // 输出缩放参数信息
-//        System.out.println(String.format("坐标转换调试 - 缩放参数: old[%.4f, %.4f, height=%.2f], new[%.4f, %.4f, height=%.2f]",
-//            result.getOldPdfScaleX(), result.getOldPdfScaleY(), result.getOldPdfPageHeight(),
-//            result.getNewPdfScaleX(), result.getNewPdfScaleY(), result.getNewPdfPageHeight()));
-
-        // 对differences中的bbox坐标进行转换
-        // 深拷贝，避免修改缓存/文件中的原始数据
-        Map<String, Object> convertedFrontendResult = new HashMap<>(originalFrontendResult);
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> differences = (List<Map<String, Object>>) convertedFrontendResult.get("differences");
-        if (differences != null && !differences.isEmpty()) {
-
-            List<Map<String, Object>> convertedDifferences = convertDifferencesToPdfCoords(differences, result);
-            convertedFrontendResult.put("differences", convertedDifferences);
-        } else {
-            //System.out.println("坐标转换调试 - differences为空或没有差异项");
+        // 创建Canvas版本的结果
+        Map<String, Object> canvasResult = new HashMap<>(originalResult);
+        
+        try {
+            // 获取图片信息
+            DocumentImageInfo oldImageInfo = getDocumentImageInfo(taskId, "old");
+            DocumentImageInfo newImageInfo = getDocumentImageInfo(taskId, "new");
+            
+            // 添加图片信息
+            canvasResult.put("oldImageInfo", oldImageInfo);
+            canvasResult.put("newImageInfo", newImageInfo);
+            
+            // 更新文件URL为图片列表
+            String baseUploadPath = "/api/gpu-ocr/files";
+            canvasResult.put("oldImageBaseUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + taskId + "/images/old");
+            canvasResult.put("newImageBaseUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + taskId + "/images/new");
+            
+            // 保持原有的PDF URL作为备用
+            canvasResult.put("oldPdfUrl", originalResult.get("oldPdfUrl"));
+            canvasResult.put("newPdfUrl", originalResult.get("newPdfUrl"));
+            
+            System.out.println("Canvas前端结果创建成功，包含图片信息");
+            
+        } catch (Exception e) {
+            System.err.println("获取Canvas前端结果失败: " + e.getMessage());
+            // 出错时返回原始结果
+            return originalResult;
         }
-
-        return convertedFrontendResult;
+        
+        return canvasResult;
     }
 
+
     /**
-     * 将differences中的图像坐标转换为PDF坐标
+     * 文档图片信息类
      */
-    private List<Map<String, Object>> convertDifferencesToPdfCoords(List<Map<String, Object>> differences, GPUOCRCompareResult result) {
-
-        List<Map<String, Object>> converted = new ArrayList<>();
-
-        for (int i = 0; i < differences.size(); i++) {
-            Map<String, Object> diff = differences.get(i);
-            Map<String, Object> convertedDiff = new HashMap<>(diff);
-
-            // 转换oldBbox坐标
-            if (diff.containsKey("oldBbox")) {
-                Object oldBboxObj = diff.get("oldBbox");
-                if (oldBboxObj instanceof double[]) {
-                    double[] originalBbox = (double[]) oldBboxObj;
-                    double[] pdfBbox = convertImageCoordsToPdfCoords(originalBbox,
-                        result.getOldPdfScaleX(), result.getOldPdfScaleY(), result.getOldPdfPageHeight());
-                    convertedDiff.put("oldBbox", pdfBbox);
-
-                } else {
-                    //System.out.println("坐标转换调试 - oldBbox不是double[]类型: " + oldBboxObj.getClass());
-                }
-            }
-
-            // 转换newBbox坐标
-            if (diff.containsKey("newBbox")) {
-                Object newBboxObj = diff.get("newBbox");
-                if (newBboxObj instanceof double[]) {
-                    double[] originalBbox = (double[]) newBboxObj;
-
-                    double[] pdfBbox = convertImageCoordsToPdfCoords(originalBbox,
-                        result.getNewPdfScaleX(), result.getNewPdfScaleY(), result.getNewPdfPageHeight());
-                    convertedDiff.put("newBbox", pdfBbox);
-
-                } else {
-                    //System.out.println("坐标转换调试 - newBbox不是double[]类型: " + newBboxObj.getClass());
-                }
-            }
-
-            // 转换prevOldBbox坐标
-            if (diff.containsKey("prevOldBbox")) {
-                Object prevOldBboxObj = diff.get("prevOldBbox");
-                if (prevOldBboxObj instanceof double[]) {
-                    double[] originalBbox = (double[]) prevOldBboxObj;
-
-                    double[] pdfBbox = convertImageCoordsToPdfCoords(originalBbox,
-                        result.getOldPdfScaleX(), result.getOldPdfScaleY(), result.getOldPdfPageHeight());
-                    convertedDiff.put("prevOldBbox", pdfBbox);
-
-                } else {
-                    //System.out.println("坐标转换调试 - prevOldBbox不是double[]类型: " + prevOldBboxObj.getClass());
-                }
-            }
-
-            // 转换prevNewBbox坐标
-            if (diff.containsKey("prevNewBbox")) {
-                Object prevNewBboxObj = diff.get("prevNewBbox");
-                if (prevNewBboxObj instanceof double[]) {
-                    double[] originalBbox = (double[]) prevNewBboxObj;
-
-                    double[] pdfBbox = convertImageCoordsToPdfCoords((double[]) prevNewBboxObj,
-                        result.getNewPdfScaleX(), result.getNewPdfScaleY(), result.getNewPdfPageHeight());
-                    convertedDiff.put("prevNewBbox", pdfBbox);
-
-                } else {
-                    //System.out.println("坐标转换调试 - prevNewBbox不是double[]类型: " + prevNewBboxObj.getClass());
-                }
-            }
-
-            converted.add(convertedDiff);
+    public static class DocumentImageInfo {
+        private int totalPages;
+        private List<PageImageInfo> pages;
+        
+        public DocumentImageInfo(int totalPages) {
+            this.totalPages = totalPages;
+            this.pages = new ArrayList<>();
         }
-        //System.out.println("坐标转换调试 - differences坐标转换完成，共处理" + converted.size() + "个差异项");
-        return converted;
+        
+        public int getTotalPages() { return totalPages; }
+        public void setTotalPages(int totalPages) { this.totalPages = totalPages; }
+        public List<PageImageInfo> getPages() { return pages; }
+        public void setPages(List<PageImageInfo> pages) { this.pages = pages; }
+        
+        public void addPage(PageImageInfo page) {
+            this.pages.add(page);
+        }
+    }
+    
+    /**
+     * 页面图片信息类
+     */
+    public static class PageImageInfo {
+        private int pageNumber;
+        private String imageUrl;
+        private int width;
+        private int height;
+        
+        public PageImageInfo(int pageNumber, String imageUrl, int width, int height) {
+            this.pageNumber = pageNumber;
+            this.imageUrl = imageUrl;
+            this.width = width;
+            this.height = height;
+        }
+        
+        public int getPageNumber() { return pageNumber; }
+        public void setPageNumber(int pageNumber) { this.pageNumber = pageNumber; }
+        public String getImageUrl() { return imageUrl; }
+        public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
+        public int getWidth() { return width; }
+        public void setWidth(int width) { this.width = width; }
+        public int getHeight() { return height; }
+        public void setHeight(int height) { this.height = height; }
+    }
+    
+    /**
+     * 获取文档图片信息
+     */
+    public DocumentImageInfo getDocumentImageInfo(String taskId, String mode) throws Exception {
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+        Path imagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", taskId, "images", mode);
+        
+        System.out.println("获取文档图片信息 - 任务ID: " + taskId + ", 模式: " + mode);
+        System.out.println("上传根路径: " + uploadRootPath);
+        System.out.println("图片目录路径: " + imagesDir);
+        System.out.println("图片目录是否存在: " + Files.exists(imagesDir));
+        
+        if (!Files.exists(imagesDir)) {
+            // 列出父目录内容，帮助调试
+            Path parentDir = imagesDir.getParent();
+            if (Files.exists(parentDir)) {
+                System.out.println("父目录存在，内容如下:");
+                try (var stream = Files.list(parentDir)) {
+                    stream.forEach(path -> System.out.println("  - " + path.getFileName()));
+                }
+                } else {
+                System.out.println("父目录也不存在: " + parentDir);
+            }
+            throw new RuntimeException("图片目录不存在: " + imagesDir);
+        }
+        
+        // 获取所有页面图片
+        List<Path> imageFiles = new ArrayList<>();
+        try (var stream = Files.list(imagesDir)) {
+            stream.filter(path -> path.toString().toLowerCase().endsWith(".png"))
+                  .filter(path -> path.getFileName().toString().startsWith("page-"))
+                  .sorted((a, b) -> {
+                      // 按页码排序
+                      String aName = a.getFileName().toString();
+                      String bName = b.getFileName().toString();
+                      int aPage = extractPageNumber(aName);
+                      int bPage = extractPageNumber(bName);
+                      return Integer.compare(aPage, bPage);
+                  })
+                  .forEach(imageFiles::add);
+        }
+        
+        DocumentImageInfo docInfo = new DocumentImageInfo(imageFiles.size());
+        
+        String baseUploadPath = "/api/gpu-ocr/files";
+        String baseUrl = baseUploadPath + "/gpu-ocr-compare/tasks/" + taskId + "/images/" + mode;
+        
+        for (Path imagePath : imageFiles) {
+            String fileName = imagePath.getFileName().toString();
+            int pageNumber = extractPageNumber(fileName);
+            
+            try {
+                // 读取图片尺寸
+                BufferedImage image = ImageIO.read(imagePath.toFile());
+                int width = image.getWidth();
+                int height = image.getHeight();
+                
+                String imageUrl = baseUrl + "/" + fileName;
+                PageImageInfo pageInfo = new PageImageInfo(pageNumber, imageUrl, width, height);
+                docInfo.addPage(pageInfo);
+                
+            } catch (Exception e) {
+                System.err.println("读取图片尺寸失败: " + imagePath + ", error=" + e.getMessage());
+                // 使用默认尺寸
+                String imageUrl = baseUrl + "/" + fileName;
+                PageImageInfo pageInfo = new PageImageInfo(pageNumber, imageUrl, 1000, 1400);
+                docInfo.addPage(pageInfo);
+            }
+        }
+        
+        System.out.println("获取文档图片信息完成: " + mode + ", 共" + docInfo.getTotalPages() + "页");
+        return docInfo;
+    }
+    
+    /**
+     * 从文件名中提取页码
+     */
+    private int extractPageNumber(String fileName) {
+        try {
+            // 文件名格式: page-1.png, page-2.png, etc.
+            String numberPart = fileName.substring(5, fileName.lastIndexOf('.'));
+            return Integer.parseInt(numberPart);
+        } catch (Exception e) {
+            return 1; // 默认页码
+        }
     }
 
     /**
@@ -522,10 +587,15 @@ public class GPUOCRCompareService {
             // 保存第一个文档的OCR图片
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
-                    ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
+                    System.out.println("开始保存第一个文档OCR图片，任务ID: " + task.getTaskId());
+                    Path savedPath = ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
+                    System.out.println("第一个文档OCR图片保存成功，路径: " + savedPath);
                 } catch (Exception e) {
                     System.err.println("保存第一个文档OCR图片失败: " + e.getMessage());
+                    e.printStackTrace();
                 }
+            } else {
+                System.out.println("OCR图片保存功能已关闭，跳过保存第一个文档");
             }
             
             List<CharBox> seqA = recognizePdfAsCharSeq(client, oldPath, null, false, options);
@@ -538,10 +608,15 @@ public class GPUOCRCompareService {
             // 保存第二个文档的OCR图片
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
-                    ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new");
+                    System.out.println("开始保存第二个文档OCR图片，任务ID: " + task.getTaskId());
+                    Path savedPath = ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new");
+                    System.out.println("第二个文档OCR图片保存成功，路径: " + savedPath);
                 } catch (Exception e) {
                     System.err.println("保存第二个文档OCR图片失败: " + e.getMessage());
+                    e.printStackTrace();
                 }
+            } else {
+                System.out.println("OCR图片保存功能已关闭，跳过保存第二个文档");
             }
             
             List<CharBox> seqB = recognizePdfAsCharSeq(client, newPath, null, false, options);
@@ -616,25 +691,7 @@ public class GPUOCRCompareService {
             String outPdfB = annotatedDir.resolve("new_annotated.pdf").toString();
             System.out.println("Start annotation. rectsA=" + rectsA.size() + ", rectsB=" + rectsB.size());
 
-            task.updateProgress(10, "标注PDF A");
-
-            try {
-                annotatePDF(oldPath, outPdfA, rectsA, sizeA);
-                System.out.println("PDF A标注完成: " + outPdfA);
-            } catch (Exception e) {
-                System.err.println("PDF A标注失败: " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            task.updateProgress(11, "标注PDF B");
-
-            try {
-                annotatePDF(newPath, outPdfB, rectsB, sizeB);
-                System.out.println("PDF B标注完成: " + outPdfB);
-            } catch (Exception e) {
-                System.err.println("PDF B标注失败: " + e.getMessage());
-                e.printStackTrace();
-            }
+            // PDF标注功能已移除，Canvas版本不需要PDF标注
 
             System.out.println("开始执行保存比对结果步骤...");
             task.updateProgress(12, "保存比对结果");
@@ -1141,10 +1198,15 @@ public class GPUOCRCompareService {
 
 
     private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath) throws Exception {
-        int dpi = gpuOcrConfig.getRenderDpi();
-        boolean saveImages = client.isSaveRenderedImages();
-        
+        // 加载PDF文档并计算页数
         try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
+            int pageCount = doc.getNumberOfPages();
+            
+            // 基于页数动态计算DPI
+            int dpi = calculateDynamicDpi(pageCount);
+            System.out.println("文档页数: " + pageCount + ", 动态计算DPI: " + dpi);
+            
+            boolean saveImages = client.isSaveRenderedImages();
             PDFRenderer renderer = new PDFRenderer(doc);
             List<byte[]> list = new ArrayList<>();
             long minPixels = gpuOcrConfig.getMinPixels();
@@ -1187,6 +1249,30 @@ public class GPUOCRCompareService {
             }
             
             return list;
+        }
+    }
+
+    /**
+     * 基于页数动态计算DPI，避免Canvas像素限制问题
+     * @param pageCount 文档页数
+     * @return 动态调整后的DPI值
+     */
+    private int calculateDynamicDpi(int pageCount) {
+        int baseDpi = gpuOcrConfig.getRenderDpi(); // 基础DPI (默认200)
+        
+        // 根据页数动态调整DPI
+        if (pageCount <= 20) {
+            // 小文档，保持高DPI
+            return baseDpi;
+        } else if (pageCount <= 50) {
+            // 中等文档，适度降低DPI
+            return (int) (baseDpi * 0.8); // 160 DPI
+        } else if (pageCount <= 100) {
+            // 大文档，显著降低DPI
+            return (int) (baseDpi * 0.6); // 120 DPI
+        } else {
+            // 超大文档，大幅降低DPI
+            return (int) (baseDpi * 0.4); // 80 DPI
         }
     }
 
@@ -1788,12 +1874,17 @@ public class GPUOCRCompareService {
                 .build();
 
         try (PDDocument doc = PDDocument.load(pdf.toFile())) {
+            int pageCount = doc.getNumberOfPages();
+            // 使用动态DPI计算页面尺寸
+            int dynamicDpi = calculateDynamicDpi(pageCount);
+            System.out.println("计算页面尺寸使用动态DPI: " + dynamicDpi + " (页数: " + pageCount + ")");
+            
             PDFRenderer r = new PDFRenderer(doc);
             int n = doc.getNumberOfPages();
             int[] ws = new int[n];
             int[] hs = new int[n];
             for (int i = 0; i < n; i++) {
-                BufferedImage img = r.renderImageWithDPI(i, dpi);
+                BufferedImage img = r.renderImageWithDPI(i, dynamicDpi);
                 ws[i] = img.getWidth();
                 hs[i] = img.getHeight();
             }
@@ -1801,65 +1892,6 @@ public class GPUOCRCompareService {
         }
     }
 
-    private static void annotatePDF(Path sourcePdf, String outPath, List<RectOnPage> rects, PageImageSizeProvider sizes)
-            throws Exception {
-        try (PDDocument doc = PDDocument.load(sourcePdf.toFile())) {
-            for (RectOnPage rp : rects) {
-                int p = Math.max(0, Math.min(rp.pageIndex0, doc.getNumberOfPages() - 1));
-                PDPage page = doc.getPage(p);
-                PDRectangle mediaBox = page.getMediaBox();
-                float pageW = mediaBox.getWidth();
-                float pageH = mediaBox.getHeight();
-
-                int imgW = (sizes != null && p < sizes.pageCount) ? sizes.widths[p] : (int) pageW;
-                int imgH = (sizes != null && p < sizes.pageCount) ? sizes.heights[p] : (int) pageH;
-                float scaleX = pageW / Math.max(1f, imgW);
-                float scaleY = pageH / Math.max(1f, imgH);
-
-                double[] b = rp.bbox; // [x1,y1,x2,y2] 顶点像素坐标（左上为原点）
-                float x1 = (float) b[0] * scaleX;
-                float y1Top = (float) b[1] * scaleY;
-                float x2 = (float) b[2] * scaleX;
-                float y2Top = (float) b[3] * scaleY;
-                float rx = Math.min(x1, x2);
-                float ryTop = Math.min(y1Top, y2Top);
-                float rw = Math.abs(x2 - x1);
-                float rh = Math.abs(y2Top - y1Top);
-
-                PDAnnotationTextMarkup m = new PDAnnotationTextMarkup(PDAnnotationTextMarkup.SUB_TYPE_HIGHLIGHT);
-                float[] color = rp.op == DiffUtil.Operation.DELETE ? new float[] { 1f, 0f, 0f }
-                        : (rp.op == DiffUtil.Operation.INSERT ? new float[] { 0f, 1f, 0f }
-                                : new float[] { 1f, 1f, 0f });
-                m.setColor(new PDColor(color, PDDeviceRGB.INSTANCE));
-                // 设置透明度（0=完全透明，1=不透明）。为适配不同 PDFBox 版本，直接写 COS 字典 CA 条目。
-                try {
-                    m.getCOSObject().setFloat(org.apache.pdfbox.cos.COSName.CA, 0.25f);
-                } catch (Throwable ignore) {
-                    // 忽略
-                }
-
-                PDRectangle pr = new PDRectangle();
-                pr.setLowerLeftX(rx);
-                pr.setLowerLeftY(Math.max(0, pageH - (ryTop + rh)));
-                pr.setUpperRightX(rx + rw);
-                pr.setUpperRightY(Math.max(0, Math.min(pageH, pageH - ryTop)));
-                m.setRectangle(pr);
-                float[] qu = new float[] { pr.getLowerLeftX(), pr.getUpperRightY(), pr.getUpperRightX(),
-                        pr.getUpperRightY(), pr.getLowerLeftX(), pr.getLowerLeftY(), pr.getUpperRightX(),
-                        pr.getLowerLeftY() };
-                m.setQuadPoints(qu);
-                m.setSubtype("Highlight");
-
-                java.util.List<org.apache.pdfbox.pdmodel.interactive.annotation.PDAnnotation> anns = page
-                        .getAnnotations();
-                if (anns == null)
-                    anns = new ArrayList<>();
-                anns.add(m);
-                page.setAnnotations(anns);
-            }
-            doc.save(outPath);
-        }
-    }
 
     /**
      * 将DiffBlock列表转换为前端期望的Map格式（保留原始图像坐标）
@@ -1943,31 +1975,6 @@ public class GPUOCRCompareService {
         return mapResult;
     }
 
-    /**
-     * 将图像坐标转换为PDF坐标系
-     * @param imageBbox 图像坐标系的bbox [x1, y1, x2, y2]
-     * @param scaleX X轴缩放比例
-     * @param scaleY Y轴缩放比例
-     * @param pdfPageHeight PDF页面高度
-     * @return PDF坐标系的bbox [x1, y1, x2, y2]
-     */
-    private double[] convertImageCoordsToPdfCoords(double[] imageBbox, double scaleX, double scaleY, double pdfPageHeight) {
-        if (imageBbox == null || imageBbox.length < 4) {
-            return imageBbox;
-        }
-
-        // 应用缩放比例（图像坐标 → PDF坐标）
-        // 注意：scaleX = imageWidth / pdfWidth，所以从图像坐标到PDF坐标应该是除法
-        double pdfX1 = imageBbox[0] / scaleX;
-        double pdfY1 = imageBbox[1] / scaleY;
-        double pdfX2 = imageBbox[2] / scaleX;
-        double pdfY2 = imageBbox[3] / scaleY;
-
-        // 不做Y轴翻转，返回顶左原点PDF坐标（供前端统一做翻转）
-        double[] topLeftPdfCoords = new double[]{pdfX1, pdfY1, pdfX2, pdfY2};
-
-        return topLeftPdfCoords;
-    }
 
     /**
      * 将DiffType转换为前端期望的操作类型

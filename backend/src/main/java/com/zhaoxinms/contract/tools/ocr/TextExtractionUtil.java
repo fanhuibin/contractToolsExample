@@ -164,8 +164,8 @@ public class TextExtractionUtil {
                 // 移除所有换行符（\\r 和 \\n）
                 s = s.replace("\r", "").replace("\n", "");
                 
-                // 添加新规则：去掉文本中间的空格
-                s = s.replace(" ", "");
+                // 添加新规则：去掉文本中间的空格,该规则禁用，因为英文需要空格。
+                //s = s.replace(" ", "");
                 
                 // 添加新规则：去掉markdown格式标记
                 // 1. 去掉 **文本** 格式的加粗标记
@@ -186,6 +186,12 @@ public class TextExtractionUtil {
                 // 7. 将括号内的小于100的正整数视为编号，去掉括号，仅保留数字
                 // 支持中文括号（（ ））与英文括号 ( )，匹配(1)~(99)与（1）~（99）
                 s = s.replaceAll("[\\(（]([1-9][0-9]?)[\\)）]", "$1");
+                
+                // 8. 忽略以 "Thisimagedoesnotcontainanytext." 开头的文本
+                // 去掉空格后检查是否以此字符串开头，如果是则跳过该文本
+                if (s.replaceAll("\\s+", "").startsWith("Thisimagedoesnotcontainanytext.")) {
+                    continue;
+                }
                 
                 // 按顺序为每个字符创建CharBox，使用布局项的bbox
                 for (int i = 0; i < s.length(); i++) {

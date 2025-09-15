@@ -1,6 +1,5 @@
 package com.zhaoxinms.contract.tools.ocrcompare.controller;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,7 +18,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareOptions;
-import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareResult;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareService;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareTask;
 
@@ -86,55 +84,6 @@ public class GPUOCRCompareController {
         }
     }
 
-    /**
-     * 获取比对结果
-     */
-    @GetMapping("/result/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getCompareResult(@PathVariable String taskId) {
-        try {
-            GPUOCRCompareTask task = gpuOcrCompareService.getTaskStatus(taskId);
-
-            if (task == null) {
-                return ResponseEntity.ok(Result.error(404, "任务不存在"));
-            } 
-
-            if (task.getStatus() != GPUOCRCompareTask.Status.COMPLETED) {
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", false);
-                responseData.put("message", "比对任务尚未完成，当前状态: " + task.getStatus().getDescription());
-                responseData.put("status", task.getStatus().name());
-                return ResponseEntity.ok(new Result<>(202, "任务尚未完成", responseData));
-            }
-
-            GPUOCRCompareResult result = gpuOcrCompareService.getCompareResult(taskId);
-            if (result == null) {
-                return ResponseEntity.ok(Result.error("比对结果不存在"));
-            }
-
-            // 返回前端期望的格式
-            Map<String, Object> frontendResult = gpuOcrCompareService.getFrontendResult(taskId);
-            if (frontendResult != null) {
-                return ResponseEntity.ok(Result.success("获取比对结果成功", frontendResult));
-            }
-
-            // 如果前端格式不存在，返回基本格式
-            Map<String, Object> basicResult = new HashMap<>();
-            basicResult.put("taskId", result.getTaskId());
-            basicResult.put("oldFileName", result.getOldFileName());
-            basicResult.put("newFileName", result.getNewFileName());
-            basicResult.put("oldPdfUrl", result.getOldPdfUrl());
-            basicResult.put("newPdfUrl", result.getNewPdfUrl());
-            basicResult.put("annotatedOldPdfUrl", result.getAnnotatedOldPdfUrl());
-            basicResult.put("annotatedNewPdfUrl", result.getAnnotatedNewPdfUrl());
-            basicResult.put("differences", new ArrayList<>()); // 空列表
-            basicResult.put("totalDiffCount", 0);
-
-            return ResponseEntity.ok(Result.success("获取比对结果成功", basicResult));
-
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取比对结果失败: " + e.getMessage()));
-        }
-    }
 
     /**
      * 获取所有比对任务
@@ -202,6 +151,70 @@ public class GPUOCRCompareController {
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("调试比对失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取Canvas版本的比对结果（包含图片信息和原始坐标）
+     */
+    @GetMapping("/canvas-result/{taskId}")
+    public ResponseEntity<Result<Map<String, Object>>> getCanvasCompareResult(@PathVariable String taskId) {
+        try {
+            GPUOCRCompareTask task = gpuOcrCompareService.getTaskStatus(taskId);
+
+            if (task == null) {
+                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+            }
+
+            if (task.getStatus() != GPUOCRCompareTask.Status.COMPLETED) {
+                Map<String, Object> responseData = new HashMap<>();
+                responseData.put("success", false);
+                responseData.put("message", "比对任务尚未完成，当前状态: " + task.getStatus().getDescription());
+                responseData.put("status", task.getStatus().name());
+                return ResponseEntity.ok(new Result<>(202, "任务尚未完成", responseData));
+            }
+
+            // 获取Canvas版本的比对结果
+            Map<String, Object> canvasResult = gpuOcrCompareService.getCanvasFrontendResult(taskId);
+            if (canvasResult != null) {
+                return ResponseEntity.ok(Result.success("获取Canvas比对结果成功", canvasResult));
+            }
+
+            return ResponseEntity.ok(Result.error("Canvas比对结果不存在"));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("获取Canvas比对结果失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取文档图片信息
+     */
+    @GetMapping("/images/{taskId}/{mode}")
+    public ResponseEntity<Result<GPUOCRCompareService.DocumentImageInfo>> getDocumentImages(
+            @PathVariable String taskId, 
+            @PathVariable String mode) {
+        try {
+            GPUOCRCompareTask task = gpuOcrCompareService.getTaskStatus(taskId);
+
+            if (task == null) {
+                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+            }
+
+            if (task.getStatus() != GPUOCRCompareTask.Status.COMPLETED) {
+                return ResponseEntity.ok(Result.error(202, "任务尚未完成"));
+            }
+
+            // 验证mode参数
+            if (!mode.equals("old") && !mode.equals("new")) {
+                return ResponseEntity.badRequest().body(Result.error("mode参数必须是old或new"));
+            }
+
+            GPUOCRCompareService.DocumentImageInfo imageInfo = gpuOcrCompareService.getDocumentImageInfo(taskId, mode);
+            return ResponseEntity.ok(Result.success("获取文档图片信息成功", imageInfo));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("获取文档图片信息失败: " + e.getMessage()));
         }
     }
 

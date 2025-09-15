@@ -74,11 +74,23 @@ public class GPUOCRFileController {
 
             // 设置响应头
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_PDF);
+            
+            // 根据文件扩展名设置MIME类型
+            String fileName = file.getName();
+            String lowerName = fileName.toLowerCase();
+            if (lowerName.endsWith(".pdf")) {
+                headers.setContentType(MediaType.APPLICATION_PDF);
+            } else if (lowerName.endsWith(".png")) {
+                headers.setContentType(MediaType.IMAGE_PNG);
+            } else if (lowerName.endsWith(".jpg") || lowerName.endsWith(".jpeg")) {
+                headers.setContentType(MediaType.IMAGE_JPEG);
+            } else {
+                headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+            }
+            
             headers.setContentLength(file.length());
             
             // 设置文件名，支持中文
-            String fileName = file.getName();
             String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString());
             headers.setContentDispositionFormData("inline", encodedFileName);
 

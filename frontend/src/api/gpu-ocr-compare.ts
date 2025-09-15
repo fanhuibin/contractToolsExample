@@ -69,10 +69,19 @@ export function getGPUOCRCompareTaskStatus(taskId: string) {
   })
 }
 
-// 获取GPU OCR比对结果
-export function getGPUOCRCompareResult(taskId: string) {
+
+// 获取Canvas版本的GPU OCR比对结果
+export function getGPUOCRCanvasCompareResult(taskId: string) {
   return request({
-    url: `/gpu-ocr-compare/result/${taskId}`,
+    url: `/gpu-ocr-compare/canvas-result/${taskId}`,
+    method: 'get'
+  })
+}
+
+// 获取文档图片信息
+export function getDocumentImages(taskId: string, mode: 'old' | 'new') {
+  return request({
+    url: `/gpu-ocr-compare/images/${taskId}/${mode}`,
     method: 'get'
   })
 }

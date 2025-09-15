@@ -20,7 +20,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.util.StreamUtils;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -59,9 +58,6 @@ public class CompareController {
     @Autowired
     private CompareRecordService compareRecordService;
     
-    // 注入OCR比对服务
-    @Autowired(required = false)
-    private com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareService ocrCompareService;
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<Map<String, Object>> uploadAndCompare(
@@ -72,7 +68,6 @@ public class CompareController {
             @RequestParam(value = "footerHeightMm", required = false, defaultValue = "20") float footerHeightMm,
             @RequestParam(value = "ignoreCase", required = false, defaultValue = "true") boolean ignoreCase,
             @RequestParam(value = "ignoredSymbols", required = false, defaultValue = "_＿") String ignoredSymbols,
-            @RequestParam(value = "useOCR", required = false, defaultValue = "false") boolean useOCR,
             @RequestParam(value = "ignoreSpaces", required = false, defaultValue = "false") boolean ignoreSpaces,
             HttpServletRequest request
     ) {
@@ -147,45 +142,6 @@ public class CompareController {
             }
 
             // 如果使用OCR比对
-            if (useOCR) {
-                try {
-                    // 检查OCR比对服务是否可用
-                    if (ocrCompareService == null) {
-                        return Result.error("OCR比对服务未配置，请检查服务依赖");
-                    }
-                    
-                    // 创建OCR比对选项
-                    com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareOptions ocrOptions = 
-                        new com.zhaoxinms.contract.tools.ocrcompare.compare.OCRCompareOptions();
-                    ocrOptions.setIgnoreHeaderFooter(ignoreHeaderFooter);
-                    ocrOptions.setIgnoreCase(ignoreCase);
-                    ocrOptions.setIgnoreSpaces(ignoreSpaces);
-                    
-                                         // 重要：OCR比对服务需要PDF文件路径，而不是原始文件路径
-                     // 我们已经转换了文件为PDF，现在传递PDF文件路径
-                     String oldPdfPath = oldPdf.getAbsolutePath();
-                     String newPdfPath = newPdf.getAbsolutePath();
-                     
-                     System.out.println("提交OCR比对任务:");
-                     System.out.println("  旧PDF: " + oldPdfPath);
-                     System.out.println("  新PDF: " + newPdfPath);
-                     
-                     // 调用OCR比对服务，传递PDF文件路径
-                     String taskId = ocrCompareService.submitCompareTaskWithPaths(oldPdfPath, newPdfPath, ocrOptions);
-                    
-                    Map<String, Object> data = new HashMap<>();
-                    data.put("id", taskId);
-                    data.put("message", "OCR比对任务已提交，请等待处理完成");
-                    data.put("useOCR", true);
-                    data.put("taskType", "OCR_COMPARE");
-                    data.put("status", "PROCESSING");
-                    
-                    return Result.success(data);
-                    
-                } catch (Exception e) {
-                    return Result.error("OCR比对失败: " + e.getMessage());
-                }
-            }
 
             // 普通比对逻辑
             File outOld = new File(workDir, "out_old_" + ts + ".pdf");
@@ -592,85 +548,6 @@ public class CompareController {
         }
     }
 
-    /**
-     * 查询OCR比对任务状态
-     */
-    @GetMapping("/ocr-task/{taskId}/status")
-    public Result<Object> getOCRTaskStatus(@PathVariable String taskId) {
-        try {
-            if (ocrCompareService == null) {
-                return Result.error("OCR比对服务未配置");
-            }
-            
-            Object taskStatus = ocrCompareService.getTaskStatus(taskId);
-            if (taskStatus != null) {
-                return Result.success(taskStatus);
-            } else {
-                return Result.error("OCR比对任务不存在");
-            }
-        } catch (Exception e) {
-            return Result.error("查询OCR比对任务状态失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 获取OCR比对结果
-     */
-    @GetMapping("/ocr-task/{taskId}/result")
-    public Result<Object> getOCRTaskResult(@PathVariable String taskId) {
-        try {
-            if (ocrCompareService == null) {
-                return Result.error("OCR比对服务未配置");
-            }
-            
-            Object result = ocrCompareService.getCompareResult(taskId);
-            if (result != null) {
-                return Result.success(result);
-            } else {
-                return Result.error("OCR比对结果不存在");
-            }
-        } catch (Exception e) {
-            return Result.error("获取OCR比对结果失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 获取所有OCR比对任务
-     */
-    @GetMapping("/ocr-task/list")
-    public Result<List<Object>> getAllOCRTasks() {
-        try {
-            if (ocrCompareService == null) {
-                return Result.error("OCR比对服务未配置");
-            }
-            
-            List<?> tasks = ocrCompareService.getAllTasks();
-            return Result.success(tasks.stream().map(task -> (Object) task).collect(java.util.stream.Collectors.toList()));
-        } catch (Exception e) {
-            return Result.error("获取OCR比对任务列表失败: " + e.getMessage());
-        }
-    }
-    
-    /**
-     * 删除OCR比对任务
-     */
-    @DeleteMapping("/ocr-task/{taskId}")
-    public Result<Boolean> deleteOCRTask(@PathVariable String taskId) {
-        try {
-            if (ocrCompareService == null) {
-                return Result.error("OCR比对服务未配置");
-            }
-            
-            boolean deleted = ocrCompareService.deleteTask(taskId);
-            if (deleted) {
-                return Result.success(true);
-            } else {
-                return Result.error("OCR比对任务不存在");
-            }
-        } catch (Exception e) {
-            return Result.error("删除OCR比对任务失败: " + e.getMessage());
-        }
-    }
 }
 
 

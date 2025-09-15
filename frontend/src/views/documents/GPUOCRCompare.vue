@@ -40,6 +40,7 @@
           <div v-if="newFileName" class="file-info">{{ newFileName }}</div>
         </el-form-item>
 
+
         <el-button
           type="primary"
           @click="doUploadGPUOCRCompare"
@@ -323,9 +324,12 @@ const doUploadGPUOCRCompare = async () => {
   uploading.value = true
 
   try {
+    // 直接跳转到Canvas版本结果页面
+    const routeName = 'GPUOCRCanvasCompareResult'
+    
     // 先进入结果页占位，显示等待动效
     router.push({ 
-      name: 'GPUOCRCompareResult', 
+      name: routeName, 
       params: { taskId: 'pending' },
       query: { 
         oldFileName: oldFile.value.name, 
@@ -346,7 +350,7 @@ const doUploadGPUOCRCompare = async () => {
 
     // 使用 replace 替换为真实 taskId，避免历史多一条
     router.replace({ 
-      name: 'GPUOCRCompareResult', 
+      name: routeName, 
       params: { taskId },
       query: {
         oldFileName: oldFile.value.name,
@@ -367,7 +371,7 @@ const doUploadGPUOCRCompare = async () => {
 // 跳转到结果页面
 const goToResult = (taskId: string) => {
   router.push({ 
-    name: 'GPUOCRCompareResult', 
+    name: 'GPUOCRCanvasCompareResult', 
     params: { taskId }
   }).catch(() => {})
 }
@@ -432,7 +436,7 @@ const viewResult = () => {
 // 查看任务结果
 const viewTaskResult = (taskId: string) => {
   sessionStorage.setItem('lastGPUOCRCompareTaskId', taskId)
-  router.push({ name: 'GPUOCRCompareResult', params: { taskId } }).catch(() => {})
+  router.push({ name: 'GPUOCRCanvasCompareResult', params: { taskId } }).catch(() => {})
 }
 
 // 开始新任务
@@ -541,7 +545,7 @@ const startDebugCompare = async () => {
 
     // 跳转到结果页面
     router.push({ 
-      name: 'GPUOCRCompareResult', 
+      name: 'GPUOCRCanvasCompareResult', 
       params: { taskId }
     }).catch(() => {})
 
@@ -583,6 +587,7 @@ const formatTime = (timeStr: string) => {
   color: #666;
   margin-top: 4px;
 }
+
 
 .progress-content {
   .progress-info {

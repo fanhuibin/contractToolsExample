@@ -110,8 +110,9 @@ gpu:
     ocr-base-url: "http://192.168.0.100:8000"  # OCR服务基础URL
     ocr-model: "dots.ocr"  # OCR模型名称
     upload-path: "./uploads"  # 文件上传路径
-    result-path: "./uploads/ocr-compare/results"  # 比对结果存储路径
+    result-path: "./uploads/gpu-ocr-compare/results"  # 比对结果存储路径
     save-rendered-images: false  # 是否保存渲染的图像
+    save-ocr-images: true  # 是否保存OCR图片（Canvas版本需要）
     parallel-threads: 4  # 并行处理线程数 
     render-dpi: 200  # 渲染DPI
     min-pixels: 3136    # 最小像素（0 关闭）

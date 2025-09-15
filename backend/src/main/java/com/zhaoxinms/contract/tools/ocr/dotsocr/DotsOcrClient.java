@@ -55,7 +55,7 @@ public class DotsOcrClient {
         private String baseUrl = "http://192.168.0.100:8000";
         private String apiKey = null;
         private String defaultModel = "model";
-        private Duration timeout = Duration.ofMinutes(5);
+        private Duration timeout = Duration.ofMinutes(3);
         private OkHttpClient httpClient;
         private boolean verboseLogging = false;
         private int maxConcurrency = 10;
@@ -263,10 +263,10 @@ public class DotsOcrClient {
         Map<String, Object> root = new HashMap<>();
         root.put("model", model);
         // 与dots.ocr demo保持一致：放宽生成上限
-        root.put("max_tokens", 24000);
+        root.put("max_tokens", 14000);
         // 控制采样参数
         root.put("temperature", 0.1f);
-        root.put("top_p", 0.9f);
+        root.put("top_p", 1.0f);
 
         List<Map<String, Object>> content = new ArrayList<>();
         if (prompt != null && !prompt.isBlank()) {
