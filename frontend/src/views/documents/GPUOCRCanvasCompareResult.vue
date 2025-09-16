@@ -54,7 +54,7 @@
           <span class="canvas-subtitle">（只显示删除内容）</span>
         </div>
         <div class="canvas-container">
-          <div class="canvas-wrapper" @scroll="onCanvasScroll('old', $event)" ref="oldCanvasWrapper">
+          <div class="canvas-wrapper" @scroll="onCanvasScroll('old', $event)" @wheel="onWheel('old', $event)" ref="oldCanvasWrapper">
             <div class="canvas-container" ref="oldCanvasContainer" @click="onCanvasClick('old', $event)"></div>
             <canvas 
               ref="oldCanvas"
@@ -73,7 +73,7 @@
           <span class="canvas-subtitle">（只显示新增内容）</span>
         </div>
         <div class="canvas-container">
-          <div class="canvas-wrapper" @scroll="onCanvasScroll('new', $event)" ref="newCanvasWrapper">
+          <div class="canvas-wrapper" @scroll="onCanvasScroll('new', $event)" @wheel="onWheel('new', $event)" ref="newCanvasWrapper">
             <div class="canvas-container" ref="newCanvasContainer" @click="onCanvasClick('new', $event)"></div>
             <canvas 
               ref="newCanvas"
@@ -900,8 +900,11 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
     return
   }
   
-  // 检查滚动侧是否匹配（只在启用同步时检查）
-  if (wheelActiveSide.value && wheelActiveSide.value !== side) return
+  // 仅在滚轮触发且当前侧为主动侧时才进行同步
+  if (wheelActiveSide.value !== side) {
+    lastScrollTop.value[side] = currentTop
+    return
+  }
   
   if (Math.abs(delta) > 500) {
     console.warn('检测到异常大的滚动增量，重新同步基准位置:', delta)
