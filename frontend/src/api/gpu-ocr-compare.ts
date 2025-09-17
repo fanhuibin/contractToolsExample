@@ -49,6 +49,18 @@ export interface GPUOCRCompareOptions {
   ignoreSeals?: boolean
 }
 
+// 任务队列统计信息
+export interface TaskQueueStats {
+  totalSubmitted: number
+  totalCompleted: number
+  totalRejected: number
+  currentQueueSize: number
+  activeThreads: number
+  maxThreads: number
+  executorCompletedTasks: number
+  executorTotalTasks: number
+}
+
 // 上传GPU OCR比对任务
 export function uploadGPUOCRCompare(formData: FormData) {
   return request({
@@ -124,5 +136,30 @@ export function debugGPUCompareLegacy(data: {
     url: '/gpu-ocr-compare/debug-compare-legacy',
     method: 'post',
     data
+  })
+}
+
+// 获取任务队列状态
+export function getQueueStats() {
+  return request({
+    url: '/gpu-ocr-compare/queue/stats',
+    method: 'get'
+  })
+}
+
+// 检查队列是否繁忙
+export function checkQueueBusy() {
+  return request({
+    url: '/gpu-ocr-compare/queue/busy',
+    method: 'get'
+  })
+}
+
+// 动态调整最大并发线程数
+export function adjustMaxConcurrency(maxThreads: number) {
+  return request({
+    url: '/gpu-ocr-compare/queue/adjust-concurrency',
+    method: 'post',
+    params: { maxThreads }
   })
 }

@@ -1,4 +1,68 @@
-## 会话总结 - 2025-01-15
+## 会话总结 - 2025-09-16
+
+### TextExtractionUtil文本处理规则优化 (2025-09-16)
+**会话主要目的**: 优化TextExtractionUtil的文本处理逻辑，改进页眉页脚检测算法，集成LaTeX到Unicode转换功能
+
+**优化成果**:
+- **页眉页脚检测算法升级**: 
+  - 实现双重条件检查：必须同时满足类型检查(`Page-header`/`Page-footer`)和位置检查
+  - 修改为bbox完全包含检测：要求bbox的顶部和底部都在页眉或页脚区域内
+  - 提高检测精度，避免误判
+- **LaTeX数学公式转换**: 在HTML标签移除后自动将LaTeX公式转换为Unicode符号
+- **代码结构优化**: 将所有文本处理规则重新编号并模块化到`applyTextProcessingRules`方法
+
+**技术改进**:
+- **新的页眉检测逻辑**: `topPercent >= 0 && bottomPercent <= headerHeightPercent`
+- **新的页脚检测逻辑**: `topPercent >= (100 - footerHeightPercent) && bottomPercent <= 100`
+- **文本处理规则重组**: 9个编号规则，包括HTML清理、LaTeX转换、Markdown处理等
+- **错误处理增强**: 支持规则返回null来跳过无效文本
+
+**处理规则清单**:
+1. HTML标签移除（Table类型）
+2. LaTeX数学公式转Unicode
+3. 移除文本开头#号
+4. 去掉列表标记（- 和 *）
+5. 移除换行符
+6. Markdown格式标记处理（6个子规则）
+7. 连续下划线规范化
+8. 括号内数字处理
+9. 无效文本过滤
+
+**修改文件**: `TextExtractionUtil.java` - 页眉页脚检测逻辑、文本处理规则模块化
+
+----
+
+### Unicode到LaTeX转换器开发 (2025-09-16)
+**会话主要目的**: 基于pandoc-unicode-math项目思路，创建Java工具类实现Unicode数学符号到LaTeX格式的转换
+
+**开发成果**:
+- **核心转换器**: 创建`UnicodeToLatexConverter`工具类，支持169个Unicode符号的映射
+- **全面支持**: 涵盖希腊字母、数学运算符、箭头、集合论、逻辑符号、上标下标等
+- **智能转换**: 自动处理数学模式包装、上标下标转换、混合文本处理
+- **完整测试**: 13个测试场景全覆盖，包含实际应用示例验证
+
+**技术特性**:
+- **映射机制**: 使用HashMap存储Unicode到LaTeX的映射关系，高效查找
+- **转换规则**: 上标下标优先转换，数学符号自动包装$...$模式
+- **错误处理**: 未识别字符保持原样，确保信息完整性
+- **扩展性**: 模块化设计，易于添加新符号支持
+
+**支持符号**: 基本运算符(±,×,÷)、希腊字母(α,β,Ω)、数学集合(ℝ,ℂ,ℕ)、上标下标(²³⁴,₁₂₃)等
+
+**实际应用**:
+```java
+// 物理公式: E = mc² → E = mc^{2}
+// 数学定理: ∀x ∈ ℝ, x² ≥ 0 → $\forall$x $\in$ $\mathbb{R}$, x^{2} $\geq$ 0
+// 化学方程式: 2H₂ + O₂ → 2H₂O → 2H_{2} + O_{2} $\rightarrow$ 2H_{2}O
+```
+
+**新增文件**: 
+- `UnicodeToLatexConverter.java` (主转换器)
+- `UnicodeToLatexConverterTest.java` (测试类)  
+- `UnicodeToLatexExample.java` (使用示例)
+- `README.md` (详细文档)
+
+----
 
 ### 页眉页脚检测算法升级 (2024-12-15)
 **会话主要目的**: 优化页眉页脚检测算法，从基于OCR category改为基于bbox位置百分比的精确检测

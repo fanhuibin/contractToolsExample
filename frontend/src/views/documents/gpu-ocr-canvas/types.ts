@@ -29,6 +29,8 @@ export interface DifferenceItem {
   pageA?: number
   pageB?: number
   page?: number
+  pageAList?: number[]
+  pageBList?: number[]
   oldBbox?: number[]
   newBbox?: number[]
   prevOldBbox?: number[]
@@ -39,6 +41,10 @@ export interface DifferenceItem {
   allTextB?: string[]
   diffRangesA?: any[]
   diffRangesB?: any[]
+  oldText?: string
+  newText?: string
+  textStartIndexA?: number
+  textStartIndexB?: number
 }
 
 // 位置信息

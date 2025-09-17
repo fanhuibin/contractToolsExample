@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ocrcompare.compare;
 
 import java.util.List;
 import java.util.Map;
+import java.util.ArrayList;
 
 import com.zhaoxinms.contract.tools.ocr.model.DiffBlock;
 
@@ -31,11 +32,17 @@ public class GPUOCRCompareResult {
     private int totalDiffCount;
     private String summary;
     private long processingTimeMs;
+    
+    // 错误页面记录
+    private List<String> failedPages; // 失败的页面信息，格式："文档A-第3页: 超时错误"
 
-    public GPUOCRCompareResult() {}
+    public GPUOCRCompareResult() {
+        this.failedPages = new ArrayList<>();
+    }
 
     public GPUOCRCompareResult(String taskId) {
         this.taskId = taskId;
+        this.failedPages = new ArrayList<>();
     }
 
     // Getters and Setters
@@ -207,6 +214,21 @@ public class GPUOCRCompareResult {
     public void setProcessingTimeMs(long processingTimeMs) {
         this.processingTimeMs = processingTimeMs;
     }
+    
+    public List<String> getFailedPages() {
+        return failedPages;
+    }
+    
+    public void setFailedPages(List<String> failedPages) {
+        this.failedPages = failedPages;
+    }
+    
+    public void addFailedPage(String failedPageInfo) {
+        if (this.failedPages == null) {
+            this.failedPages = new ArrayList<>();
+        }
+        this.failedPages.add(failedPageInfo);
+    }
 
     // 辅助方法
     private void updateCounts() {
@@ -245,6 +267,12 @@ public class GPUOCRCompareResult {
         sb.append("删除 ").append(deleteCount).append(" 处，");
         sb.append("新增 ").append(insertCount).append(" 处，");
         sb.append("忽略 ").append(ignoreCount).append(" 处。");
+        
+        // 添加错误页面信息
+        if (failedPages != null && !failedPages.isEmpty()) {
+            sb.append("识别失败 ").append(failedPages.size()).append(" 页。");
+        }
+        
         sb.append("处理耗时 ").append(processingTimeMs).append(" 毫秒。");
 
         this.summary = sb.toString();

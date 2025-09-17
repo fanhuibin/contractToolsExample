@@ -55,7 +55,7 @@ public class DotsOcrClient {
         private String baseUrl = "http://192.168.0.100:8000";
         private String apiKey = null;
         private String defaultModel = "model";
-        private Duration timeout = Duration.ofMinutes(3);
+        private Duration timeout = Duration.ofMinutes(2);
         private OkHttpClient httpClient;
         private boolean verboseLogging = false;
         private int maxConcurrency = 10;

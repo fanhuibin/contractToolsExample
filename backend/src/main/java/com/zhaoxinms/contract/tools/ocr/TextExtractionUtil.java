@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ocr;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.zhaoxinms.contract.tools.ocr.model.CharBox;
+import com.zhaoxinms.contract.tools.mathconvert.LaTeXToUnicodeConverter;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -153,6 +154,21 @@ public class TextExtractionUtil {
 
         List<PageLayout> processedLayouts = prepareLayouts(ordered, strategy);
 
+        // 输出页眉页脚配置信息
+        System.out.println("=== 页眉页脚检测配置 ===");
+        System.out.println("页眉高度占比: " + headerHeightPercent + "%");
+        System.out.println("页脚高度占比: " + footerHeightPercent + "%");
+        System.out.println("页眉区域: 0% - " + headerHeightPercent + "%");
+        System.out.println("页脚区域: " + (100 - footerHeightPercent) + "% - 100%");
+        System.out.println("忽略页眉页脚: " + (ignoreHeaderFooter ? "是" : "否"));
+        System.out.println("========================");
+
+        // 统计变量
+        int totalItems = 0;
+        int headerItems = 0;
+        int footerItems = 0;
+        int ignoredItems = 0;
+
         for (PageLayout pl : processedLayouts) {
             if (pl == null) continue;
 
@@ -164,10 +180,17 @@ public class TextExtractionUtil {
                 System.out.println("使用图片高度进行页眉页脚检测 - 页面" + pl.page + 
                     ", 图片尺寸: " + pl.imageWidth + "x" + pl.imageHeight + "像素");
             } else if (pageHeights != null && pl.page >= 1 && pl.page <= pageHeights.length) {
-                // 回退到PDF页面高度
+                // 回退到pageHeights数组中的高度（可能是PDF高度或图片高度）
                 currentPageHeight = pageHeights[pl.page - 1]; // 页面索引从1开始，数组从0开始
-                System.out.println("回退使用PDF高度进行页眉页脚检测 - 页面" + pl.page + 
-                    ", PDF高度: " + currentPageHeight + "点");
+                if (currentPageHeight > 1500) {
+                    // 如果高度大于1500，很可能是图片像素高度
+                    System.out.println("使用传入的图片高度进行页眉页脚检测 - 页面" + pl.page + 
+                        ", 图片高度: " + currentPageHeight + "像素");
+                } else if (currentPageHeight > 0) {
+                    // 如果高度在0-1500之间，很可能是PDF点高度
+                    System.out.println("回退使用PDF高度进行页眉页脚检测 - 页面" + pl.page + 
+                        ", PDF高度: " + currentPageHeight + "点");
+                }
             } else {
                 System.out.println("无法获取页面高度信息 - 页面" + pl.page + 
                     ", 跳过位置检测，使用category检测");
@@ -176,13 +199,19 @@ public class TextExtractionUtil {
             // 按顺序遍历每一页中的布局项
             for (LayoutItem it : pl.items) {
                 if (it.text == null || it.text.isEmpty()) continue;
+                
+                totalItems++; // 统计总项目数
 
                 // 如果启用忽略页眉页脚功能，进行检测
                 if (ignoreHeaderFooter) {
                     boolean isHeaderOrFooter = false;
                     
-                    if (currentPageHeight > 0 && it.bbox != null && it.bbox.length >= 4) {
-                        // 基于位置的页眉页脚检测（新算法）
+                    // 双重条件检查：必须同时满足类型检查和位置检查
+                    boolean isCategoryMatch = it.category != null && 
+                        ("Page-header".equals(it.category) || "Page-footer".equals(it.category));
+                    
+                    if (isCategoryMatch && currentPageHeight > 0 && it.bbox != null && it.bbox.length >= 4) {
+                        // 基于位置的页眉页脚检测（新算法）：要求bbox完全包含在页眉或页脚区域内
                         double bboxMinY = it.bbox[1]; // bbox的顶部Y坐标
                         double bboxMaxY = it.bbox[3]; // bbox的底部Y坐标
                         
@@ -190,82 +219,41 @@ public class TextExtractionUtil {
                         double topPercent = (bboxMinY / currentPageHeight) * 100;
                         double bottomPercent = (bboxMaxY / currentPageHeight) * 100;
                         
-                        // 页眉检测：bbox的顶部在页眉区域内
-                        if (topPercent <= headerHeightPercent) {
+                        // 页眉检测：bbox完全包含在页眉区域内（顶部和底部都在页眉区域）
+                        if ("Page-header".equals(it.category) && 
+                            topPercent >= 0 && bottomPercent <= headerHeightPercent) {
                             isHeaderOrFooter = true;
+                            headerItems++; // 统计页眉项目数
                             System.out.println("检测到页眉内容 - 页面" + pl.page + 
                                 ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
-                                ", 顶部百分比: " + String.format("%.2f", topPercent) + "%" +
-                                ", 页眉阈值: " + headerHeightPercent + "%");
+                                ", bbox范围: " + String.format("%.2f", topPercent) + "%-" + String.format("%.2f", bottomPercent) + "%" +
+                                ", 页眉阈值: 0%-" + headerHeightPercent + "%");
                         }
-                        // 页脚检测：bbox的底部在页脚区域内
-                        else if (bottomPercent >= (100 - footerHeightPercent)) {
+                        // 页脚检测：bbox完全包含在页脚区域内（顶部和底部都在页脚区域）
+                        else if ("Page-footer".equals(it.category) && 
+                                 topPercent >= (100 - footerHeightPercent) && bottomPercent <= 100) {
                             isHeaderOrFooter = true;
+                            footerItems++; // 统计页脚项目数
                             System.out.println("检测到页脚内容 - 页面" + pl.page + 
                                 ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
-                                ", 底部百分比: " + String.format("%.2f", bottomPercent) + "%" +
-                                ", 页脚阈值: " + (100 - footerHeightPercent) + "%");
-                        }
-                    } else {
-                        // 回退到基于category的检测（旧算法）
-                        if (it.category != null && 
-                            ("Page-header".equals(it.category) || "Page-footer".equals(it.category))) {
-                            isHeaderOrFooter = true;
-                            System.out.println("基于category检测到页眉页脚 - 页面" + pl.page + 
-                                ", category: " + it.category + 
-                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'");
+                                ", bbox范围: " + String.format("%.2f", topPercent) + "%-" + String.format("%.2f", bottomPercent) + "%" +
+                                ", 页脚阈值: " + (100 - footerHeightPercent) + "%-100%");
                         }
                     }
                     
                     if (isHeaderOrFooter) {
+                        ignoredItems++; // 统计被忽略的项目数
                         continue; // 跳过页眉页脚内容
                     }
                 }
 
                 String s = it.text;
                 
-                // 如果category是Table类型，去掉HTML标签，只保留文本内容
-                if ("Table".equals(it.category)) {
-                    s = removeHtmlTags(s);
-                }
+                // 应用文本处理规则（按顺序编号）
+                s = applyTextProcessingRules(s, it.category);
                 
-                // 新规则：忽略每个元素头部的#号（可能有多个），并忽略文本中的换行符
-                // 移除文本开头连续出现的#号及其前置空白
-                s = s.replaceFirst("^\\s*#*\\s*", "");
-                
-                // 添加新规则：去掉文本头部的列表标记（- 和 *）
-                // 处理多行情况，每行开头可能有 - 或 * 号
-                s = s.replaceAll("(?m)^\\s*[-*]\\s*", "");
-                
-                // 移除所有换行符（\\r 和 \\n）
-                s = s.replace("\r", "").replace("\n", "");
-                
-                // 添加新规则：去掉文本中间的空格,该规则禁用，因为英文需要空格。
-                //s = s.replace(" ", "");
-                
-                // 添加新规则：去掉markdown格式标记
-                // 1. 去掉 **文本** 格式的加粗标记
-                s = s.replaceAll("\\*\\*([^*]+?)\\*\\*", "$1");
-                // 2. 去掉 __*文本*__ 格式的下划线包围斜体标记
-                s = s.replaceAll("__\\*([^*]+?)\\*__", "$1");
-                // 3. 去掉 **_文本_** 格式的星号包围加粗标记
-                s = s.replaceAll("\\*\\*_([^_]+?)_\\*\\*", "$1");
-                // 4. 去掉单独的 *文本* 格式的斜体标记
-                s = s.replaceAll("\\*([^*]+?)\\*", "$1");
-                // 5. 去掉单独的 _文本_ 格式的斜体标记
-                s = s.replaceAll("_([^_]+?)_", "$1");
-                
-                // 6. 将任意长度的连续下划线统一为三个下划线
-                // 说明：把一段中出现的 1 个或多个连续下划线都规范为 "___"
-                s = s.replaceAll("_+", "___");
-
-                // 7. 将括号内的小于100的正整数视为编号，去掉括号，仅保留数字
-                // 支持中文括号（（ ））与英文括号 ( )，匹配(1)~(99)与（1）~（99）
-                s = s.replaceAll("[\\(（]([1-9][0-9]?)[\\)）]", "$1");
-                
-                // 8. 忽略以 "Thisimagedoesnotcontainanytext." 开头的文本
-                // 去掉空格后检查是否以此字符串开头，如果是则跳过该文本
-                if (s.replaceAll("\\s+", "").startsWith("Thisimagedoesnotcontainanytext.")) {
+                // 如果处理规则返回null，表示应跳过该文本
+                if (s == null) {
                     continue;
                 }
                 
@@ -277,9 +265,85 @@ public class TextExtractionUtil {
             }
         }
 
+        // 输出页眉页脚检测统计结果
+        System.out.println("=== 页眉页脚检测统计 ===");
+        System.out.println("总布局项目数: " + totalItems);
+        System.out.println("检测到页眉项目: " + headerItems);
+        System.out.println("检测到页脚项目: " + footerItems);
+        System.out.println("被忽略项目总数: " + ignoredItems);
+        System.out.println("保留项目数: " + (totalItems - ignoredItems));
+        if (totalItems > 0) {
+            System.out.println("页眉检测率: " + String.format("%.2f", (double)headerItems / totalItems * 100) + "%");
+            System.out.println("页脚检测率: " + String.format("%.2f", (double)footerItems / totalItems * 100) + "%");
+            System.out.println("忽略率: " + String.format("%.2f", (double)ignoredItems / totalItems * 100) + "%");
+        }
+        System.out.println("========================");
+
         return out;
     }
 
+    /**
+     * 应用文本处理规则（按顺序编号）
+     * @param text 原始文本
+     * @param category 文本类别
+     * @return 处理后的文本，如果返回null表示应跳过该文本
+     */
+    private static String applyTextProcessingRules(String text, String category) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        
+        String s = text;
+        
+        // 规则1: 如果category是Table类型，去掉HTML标签，只保留文本内容
+        if ("Table".equals(category)) {
+            s = removeHtmlTags(s);
+        }
+        
+        // 规则2: LaTeX数学公式转Unicode（在HTML标签移除后进行）
+        if (LaTeXToUnicodeConverter.containsLatexCommands(s)) {
+            s = LaTeXToUnicodeConverter.convertToUnicode(s);
+        }
+        
+        // 规则3: 移除文本开头连续出现的#号及其前置空白
+        s = s.replaceFirst("^\\s*#*\\s*", "");
+        
+        // 规则4: 去掉文本头部的列表标记（- 和 *）
+        // 处理多行情况，每行开头可能有 - 或 * 号
+        s = s.replaceAll("(?m)^\\s*[-*]\\s*", "");
+        
+        // 规则5: 移除所有换行符（\r 和 \n）
+        s = s.replace("\r", "").replace("\n", "");
+        
+        // 规则6: 去掉markdown格式标记
+        // 6.1 去掉 **文本** 格式的加粗标记
+        s = s.replaceAll("\\*\\*([^*]+?)\\*\\*", "$1");
+        // 6.2 去掉 __*文本*__ 格式的下划线包围斜体标记
+        s = s.replaceAll("__\\*([^*]+?)\\*__", "$1");
+        // 6.3 去掉 **_文本_** 格式的星号包围加粗标记
+        s = s.replaceAll("\\*\\*_([^_]+?)_\\*\\*", "$1");
+        // 6.4 去掉单独的 *文本* 格式的斜体标记
+        s = s.replaceAll("\\*([^*]+?)\\*", "$1");
+        // 6.5 去掉单独的 _文本_ 格式的斜体标记
+        s = s.replaceAll("_([^_]+?)_", "$1");
+        
+        // 规则7: 将任意长度的连续下划线统一为三个下划线
+        // 说明：把一段中出现的 1 个或多个连续下划线都规范为 "___"
+        s = s.replaceAll("_+", "___");
+
+        // 规则8: 将括号内的小于100的正整数视为编号，去掉括号，仅保留数字
+        // 支持中文括号（（ ））与英文括号 ( )，匹配(1)~(99)与（1）~（99）
+        s = s.replaceAll("[\\(（]([1-9][0-9]?)[\\)）]", "$1");
+        
+        // 规则9: 忽略以 "Thisimagedoesnotcontainanytext." 开头的文本
+        // 去掉空格后检查是否以此字符串开头，如果是则返回null表示跳过
+        if (s.replaceAll("\\s+", "").startsWith("Thisimagedoesnotcontainanytext.")) {
+            return null; // 返回null表示应跳过该文本
+        }
+        
+        return s;
+    }
+    
     /**
      * 移除HTML标签，只保留文本内容，多个空格替换为单个空格
      * @param htmlText 包含HTML标签的文本

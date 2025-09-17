@@ -19,3 +19,6 @@ export * from './canvas-renderer'
 
 // 滚动处理
 export * from './scroll-handler'
+
+// 差异数据预处理
+export * from './difference-processor'

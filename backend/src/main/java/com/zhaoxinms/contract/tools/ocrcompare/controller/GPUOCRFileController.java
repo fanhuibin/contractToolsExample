@@ -94,7 +94,6 @@ public class GPUOCRFileController {
             String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8.toString());
             headers.setContentDispositionFormData("inline", encodedFileName);
 
-            System.out.println("提供文件下载: " + target.toAbsolutePath());
             return ResponseEntity.ok()
                     .headers(headers)
                     .body(new FileSystemResource(file));

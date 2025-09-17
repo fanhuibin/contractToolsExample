@@ -1,5 +1,6 @@
 package com.zhaoxinms.contract.tools.ocr;
 
+import com.zhaoxinms.contract.tools.common.exception.ServiceException;
 import com.zhaoxinms.contract.tools.compare.DiffUtil;
 import com.zhaoxinms.contract.tools.ocr.model.CharBox;
 import com.zhaoxinms.contract.tools.ocr.model.DiffBlock;
@@ -21,10 +22,7 @@ import java.util.*;
 public class DiffProcessingUtil {
 
 	/**
-	 * 将差异列表转换为DiffBlock列表
-	 *
-	 * 根据差异操作类型（DELETE, INSERT, EQUAL）将差异对象转换为对应的DiffBlock对象。
-	 * 每个DiffBlock包含对应的bbox坐标、文本内容和索引信息。
+	 * 将差异列表转换为DiffBlock列表（向后兼容版本）
 	 *
 	 * @param diffs DiffUtil.diff_main生成的差异列表
 	 * @param seqA  文档A的字符序列
@@ -33,6 +31,23 @@ public class DiffProcessingUtil {
 	 */
 	public static List<DiffBlock> splitDiffsByBounding(LinkedList<DiffUtil.Diff> diffs, List<CharBox> seqA,
 			List<CharBox> seqB) {
+		return splitDiffsByBounding(diffs, seqA, seqB, false);
+	}
+
+	/**
+	 * 将差异列表转换为DiffBlock列表
+	 *
+	 * 根据差异操作类型（DELETE, INSERT, EQUAL）将差异对象转换为对应的DiffBlock对象。
+	 * 每个DiffBlock包含对应的bbox坐标、文本内容和索引信息。
+	 *
+	 * @param diffs DiffUtil.diff_main生成的差异列表
+	 * @param seqA  文档A的字符序列
+	 * @param seqB  文档B的字符序列
+	 * @param debugMode 是否开启调试模式，开启时会验证diff文本与字符序列的一致性
+	 * @return DiffBlock列表，每个代表一个差异单元
+	 */
+	public static List<DiffBlock> splitDiffsByBounding(LinkedList<DiffUtil.Diff> diffs, List<CharBox> seqA,
+			List<CharBox> seqB, boolean debugMode) {
 		List<DiffBlock> result = new ArrayList<>();
 		DiffBlock prevBlock = null; // 记录上一个block用于设置prevBboxes
 
@@ -54,7 +69,7 @@ public class DiffProcessingUtil {
 
 		int aIdx = 0, bIdx = 0;
 		for (DiffUtil.Diff d : diffs) {
-			String txt = d.text.replaceAll("\n", "");
+			String txt = d.text;
 			int len = txt.length();
 
 		List<CharBox> aSeg = Collections.emptyList();
@@ -62,14 +77,33 @@ public class DiffProcessingUtil {
 		
 		if (d.operation == DiffUtil.Operation.DELETE) {
 			aSeg = subChars(seqA, aIdx, aIdx + len);
+			
+			// 调试模式：验证diff文本与seqA字符的一致性
+			if (debugMode) {
+				//validateDiffTextConsistency(d, aSeg, "seqA", aIdx);
+			}
+			
 			aIdx += len;
 		} else if (d.operation == DiffUtil.Operation.INSERT) {
 			bSeg = subChars(seqB, bIdx, bIdx + len);
+			
+			// 调试模式：验证diff文本与seqB字符的一致性
+			if (debugMode) {
+				//validateDiffTextConsistency(d, bSeg, "seqB", bIdx);
+			}
+			
 			bIdx += len;
 		} else if (d.operation == DiffUtil.Operation.EQUAL) {
 			// EQUAL operation also needs to handle bbox mapping to ensure correct indexing
 			aSeg = subChars(seqA, aIdx, aIdx + len);
 			bSeg = subChars(seqB, bIdx, bIdx + len);
+			
+			// 调试模式：验证diff文本与seqA和seqB字符的一致性
+			if (debugMode) {
+				//validateDiffTextConsistency(d, aSeg, "seqA", aIdx);
+				//validateDiffTextConsistency(d, bSeg, "seqB", bIdx);
+			}
+			
 			aIdx += len;
 			bIdx += len;
 		}
@@ -142,7 +176,7 @@ public class DiffProcessingUtil {
 						
 						// 找到该 bbox 在 seqA 中的文本段起点
 						int textSegmentStart = findBboxStartInSequence(seqA, k);
-						System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + len);
+						//System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + len);
 						if (textSegmentStart >= 0 && aIdx >= textSegmentStart && !rangeAdded) {
 							// 计算差异在该文本段内的相对偏移和长度
 							int diffStartInText = aIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
@@ -151,7 +185,7 @@ public class DiffProcessingUtil {
 							// 添加范围：prefix + diffStartInText 到 prefix + diffStartInText + diffLength
 							if (diffLength > 0) {
 								rangesA.add(new DiffBlock.TextRange(prefix + diffStartInText, prefix + diffStartInText + diffLength, "DIFF"));
-								System.out.println("DEBUG A侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefix + diffStartInText) + ", " + (prefix + diffStartInText + diffLength) + "]");
+								//System.out.println("DEBUG A侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefix + diffStartInText) + ", " + (prefix + diffStartInText + diffLength) + "]");
 								rangeAdded = true; // 标记已添加，避免重复
 							}
 						}
@@ -206,7 +240,7 @@ public class DiffProcessingUtil {
 						
 						// 找到该 bbox 在 seqB 中的文本段起点
 						int textSegmentStart = findBboxStartInSequence(seqB, k);
-						System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + len);
+						//System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + len);
 						
 						if (textSegmentStart >= 0 && bIdx >= textSegmentStart && !rangeAdded) {
 							// 计算差异在该文本段内的相对偏移和长度
@@ -216,7 +250,7 @@ public class DiffProcessingUtil {
 							// 添加范围：prefixB + diffStartInText 到 prefixB + diffStartInText + diffLength
 							if (diffLength > 0) {
 								rangesB.add(new DiffBlock.TextRange(prefixB + diffStartInText, prefixB + diffStartInText + diffLength, "DIFF"));
-								System.out.println("DEBUG B侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefixB + diffStartInText) + ", " + (prefixB + diffStartInText + diffLength) + "]");
+								//System.out.println("DEBUG B侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefixB + diffStartInText) + ", " + (prefixB + diffStartInText + diffLength) + "]");
 								rangeAdded = true; // 标记已添加，避免重复
 							}
 						}
@@ -329,28 +363,62 @@ public class DiffProcessingUtil {
 				if (d.operation == DiffUtil.Operation.INSERT) {
 					// INSERT操作：优先使用前一个块的oldBboxes，如果没有则继承prevOldBboxes
 					if (prevBlock.oldBboxes != null && !prevBlock.oldBboxes.isEmpty()) {
-						blk.prevOldBboxes = new ArrayList<>(prevBlock.oldBboxes);
+						double[] last = prevBlock.oldBboxes.get(prevBlock.oldBboxes.size() - 1);
+						blk.prevOldBboxes = new ArrayList<>();
+						blk.prevOldBboxes.add(last);
+					} else if (prevBlock.prevOldBboxes != null && !prevBlock.prevOldBboxes.isEmpty()) {
+						double[] last = prevBlock.prevOldBboxes.get(prevBlock.prevOldBboxes.size() - 1);
+						blk.prevOldBboxes = new ArrayList<>();
+						blk.prevOldBboxes.add(last);
 					} else {
-						blk.prevOldBboxes = (prevBlock.prevOldBboxes == null) ? null : new ArrayList<>(prevBlock.prevOldBboxes);
+						blk.prevOldBboxes = null;
 					}
-					// prevNewBboxes使用前一个块的newBboxes
-					blk.prevNewBboxes = (prevBlock.newBboxes == null) ? null : new ArrayList<>(prevBlock.newBboxes);
-					// INSERT操作的pageA应该继承前一个块的pageA（用于跳转参考）
+					// prevNewBboxes使用前一个块的newBboxes（仅保留最后一个）
+					if (prevBlock.newBboxes != null && !prevBlock.newBboxes.isEmpty()) {
+						double[] lastNew = prevBlock.newBboxes.get(prevBlock.newBboxes.size() - 1);
+						blk.prevNewBboxes = new ArrayList<>();
+						blk.prevNewBboxes.add(lastNew);
+					} else if (prevBlock.prevNewBboxes != null && !prevBlock.prevNewBboxes.isEmpty()) {
+						double[] lastNew = prevBlock.prevNewBboxes.get(prevBlock.prevNewBboxes.size() - 1);
+						blk.prevNewBboxes = new ArrayList<>();
+						blk.prevNewBboxes.add(lastNew);
+					} else {
+						blk.prevNewBboxes = null;
+					}
+					// INSERT操作的pageA应该继承前一个块的pageA（仅保留最后一个，用于跳转参考）
 					if (prevBlock.pageA != null && !prevBlock.pageA.isEmpty()) {
-						blk.pageA = new ArrayList<>(prevBlock.pageA);
+						blk.pageA = new ArrayList<>();
+						blk.pageA.add(prevBlock.pageA.get(prevBlock.pageA.size() - 1));
 					}
 				} else if (d.operation == DiffUtil.Operation.DELETE) {
 					// DELETE操作：优先使用前一个块的newBboxes，如果没有则继承prevNewBboxes
 					if (prevBlock.newBboxes != null && !prevBlock.newBboxes.isEmpty()) {
-						blk.prevNewBboxes = new ArrayList<>(prevBlock.newBboxes);
+						double[] last = prevBlock.newBboxes.get(prevBlock.newBboxes.size() - 1);
+						blk.prevNewBboxes = new ArrayList<>();
+						blk.prevNewBboxes.add(last);
+					} else if (prevBlock.prevNewBboxes != null && !prevBlock.prevNewBboxes.isEmpty()) {
+						double[] last = prevBlock.prevNewBboxes.get(prevBlock.prevNewBboxes.size() - 1);
+						blk.prevNewBboxes = new ArrayList<>();
+						blk.prevNewBboxes.add(last);
 					} else {
-						blk.prevNewBboxes = (prevBlock.prevNewBboxes == null) ? null : new ArrayList<>(prevBlock.prevNewBboxes);
+						blk.prevNewBboxes = null;
 					}
-					// prevOldBboxes使用前一个块的oldBboxes
-					blk.prevOldBboxes = (prevBlock.oldBboxes == null) ? null : new ArrayList<>(prevBlock.oldBboxes);
-					// DELETE操作的pageB应该继承前一个块的pageB（用于跳转参考）
+					// prevOldBboxes使用前一个块的oldBboxes（仅保留最后一个）
+					if (prevBlock.oldBboxes != null && !prevBlock.oldBboxes.isEmpty()) {
+						double[] lastOld = prevBlock.oldBboxes.get(prevBlock.oldBboxes.size() - 1);
+						blk.prevOldBboxes = new ArrayList<>();
+						blk.prevOldBboxes.add(lastOld);
+					} else if (prevBlock.prevOldBboxes != null && !prevBlock.prevOldBboxes.isEmpty()) {
+						double[] lastOld = prevBlock.prevOldBboxes.get(prevBlock.prevOldBboxes.size() - 1);
+						blk.prevOldBboxes = new ArrayList<>();
+						blk.prevOldBboxes.add(lastOld);
+					} else {
+						blk.prevOldBboxes = null;
+					}
+					// DELETE操作的pageB应该继承前一个块的pageB（仅保留最后一个，用于跳转参考）
 					if (prevBlock.pageB != null && !prevBlock.pageB.isEmpty()) {
-						blk.pageB = new ArrayList<>(prevBlock.pageB);
+						blk.pageB = new ArrayList<>();
+						blk.pageB.add(prevBlock.pageB.get(prevBlock.pageB.size() - 1));
 					}
 				} else {
 					// EQUAL操作：正常继承
@@ -363,38 +431,50 @@ public class DiffProcessingUtil {
 			if (blk.prevOldBboxes == null || blk.prevOldBboxes.isEmpty()) {
 				// 对于INSERT操作，如果prevOldBboxes为空，使用当前块的oldBboxes（通常为空）
 				// 对于DELETE操作，使用当前块的oldBboxes
-				blk.prevOldBboxes = (blk.oldBboxes == null) ? new ArrayList<>() : new ArrayList<>(blk.oldBboxes);
+				if (blk.oldBboxes != null && !blk.oldBboxes.isEmpty()) {
+					double[] last = blk.oldBboxes.get(blk.oldBboxes.size() - 1);
+					blk.prevOldBboxes = new ArrayList<>();
+					blk.prevOldBboxes.add(last);
+				} else {
+					blk.prevOldBboxes = new ArrayList<>();
+				}
 			}
 			if (blk.prevNewBboxes == null || blk.prevNewBboxes.isEmpty()) {
 				// 对于DELETE操作，如果prevNewBboxes为空，使用当前块的newBboxes（通常为空）
 				// 对于INSERT操作，使用当前块的newBboxes
-				blk.prevNewBboxes = (blk.newBboxes == null) ? new ArrayList<>() : new ArrayList<>(blk.newBboxes);
+				if (blk.newBboxes != null && !blk.newBboxes.isEmpty()) {
+					double[] last = blk.newBboxes.get(blk.newBboxes.size() - 1);
+					blk.prevNewBboxes = new ArrayList<>();
+					blk.prevNewBboxes.add(last);
+				} else {
+					blk.prevNewBboxes = new ArrayList<>();
+				}
 			}
 
 			// 页码已经在创建blk对象时设置，这里不需要再次同步
 			
 			// 调试输出：验证页码和prevBboxes的设置
-			System.out.println("DEBUG DiffBlock创建 - 操作: " + d.operation + ", pageA: " + pageAList + ", pageB: " + pageBList);
-			System.out.println("DEBUG 页码设置逻辑 - 当前块页码基于实际bbox设置，prevBboxes用于跳转参考");
-			if (prevBlock != null) {
-				System.out.println("DEBUG 前一个块 - pageA: " + prevBlock.pageA + ", pageB: " + prevBlock.pageB + 
-					", oldBboxes: " + (prevBlock.oldBboxes != null ? prevBlock.oldBboxes.size() : 0) + 
-					", newBboxes: " + (prevBlock.newBboxes != null ? prevBlock.newBboxes.size() : 0));
-			}
-			if (blk.prevOldBboxes != null && !blk.prevOldBboxes.isEmpty()) {
-				System.out.println("DEBUG prevOldBboxes: " + blk.prevOldBboxes.size() + "个, 第一个: [" + 
-					blk.prevOldBboxes.get(0)[0] + "," + blk.prevOldBboxes.get(0)[1] + "," + 
-					blk.prevOldBboxes.get(0)[2] + "," + blk.prevOldBboxes.get(0)[3] + "]");
-			} else {
-				System.out.println("DEBUG prevOldBboxes: 空");
-			}
-			if (blk.prevNewBboxes != null && !blk.prevNewBboxes.isEmpty()) {
-				System.out.println("DEBUG prevNewBboxes: " + blk.prevNewBboxes.size() + "个, 第一个: [" + 
-					blk.prevNewBboxes.get(0)[0] + "," + blk.prevNewBboxes.get(0)[1] + "," + 
-					blk.prevNewBboxes.get(0)[2] + "," + blk.prevNewBboxes.get(0)[3] + "]");
-			} else {
-				System.out.println("DEBUG prevNewBboxes: 空");
-			}
+			//System.out.println("DEBUG DiffBlock创建 - 操作: " + d.operation + ", pageA: " + pageAList + ", pageB: " + pageBList);
+			//System.out.println("DEBUG 页码设置逻辑 - 当前块页码基于实际bbox设置，prevBboxes用于跳转参考");
+//			if (prevBlock != null) {
+//				System.out.println("DEBUG 前一个块 - pageA: " + prevBlock.pageA + ", pageB: " + prevBlock.pageB + 
+//					", oldBboxes: " + (prevBlock.oldBboxes != null ? prevBlock.oldBboxes.size() : 0) + 
+//					", newBboxes: " + (prevBlock.newBboxes != null ? prevBlock.newBboxes.size() : 0));
+//			}
+//			if (blk.prevOldBboxes != null && !blk.prevOldBboxes.isEmpty()) {
+//				System.out.println("DEBUG prevOldBboxes: " + blk.prevOldBboxes.size() + "个, 第一个: [" + 
+//					blk.prevOldBboxes.get(0)[0] + "," + blk.prevOldBboxes.get(0)[1] + "," + 
+//					blk.prevOldBboxes.get(0)[2] + "," + blk.prevOldBboxes.get(0)[3] + "]");
+//			} else {
+//				System.out.println("DEBUG prevOldBboxes: 空");
+//			}
+//			if (blk.prevNewBboxes != null && !blk.prevNewBboxes.isEmpty()) {
+//				System.out.println("DEBUG prevNewBboxes: " + blk.prevNewBboxes.size() + "个, 第一个: [" + 
+//					blk.prevNewBboxes.get(0)[0] + "," + blk.prevNewBboxes.get(0)[1] + "," + 
+//					blk.prevNewBboxes.get(0)[2] + "," + blk.prevNewBboxes.get(0)[3] + "]");
+//			} else {
+//				System.out.println("DEBUG prevNewBboxes: 空");
+//			}
 
 			result.add(blk);
 
@@ -562,6 +642,11 @@ public class DiffProcessingUtil {
 		}
 
 		// 第一阶段：检查是否是需要完全过滤的内容类型
+
+		// 新增：忽略仅由空格和标点组成的片段，或空格紧邻单个标点（例如："  ;"、"  ，"、" ; ")
+		if (isOnlySpacesAndPunct(diff.text) || isSpacesPlusSinglePunct(diff.text)) {
+			return "空格与标点噪声";
+		}
 		if (isAllSpaces(diff.text)) {
 			return "全为空格字符";
 		}
@@ -584,7 +669,8 @@ public class DiffProcessingUtil {
 		}
 
 		// 第二阶段：检查是否为目标标点符号（可能与相邻差异配对过滤）
-		if (isTargetPunct(diff.text)) {
+		// 修正：小数点"."不应该被忽略，因为它可能是数字的一部分
+		if (isTargetPunct(diff.text) && !".".equals(diff.text)) {
 			return "单个标点符号（可能与相邻差异配对过滤）";
 		}
 
@@ -688,7 +774,7 @@ public class DiffProcessingUtil {
 		if (s == null || s.length() != 1)
 			return false;
 		char c = s.charAt(0);
-		return c == ',' || c == '、' || c == '.';
+		return c == ',' || c == '、' || c == '.' || c == ';' || c == ':' || c == '。' || c == '；' || c == '：';
 	}
 
 	/**
@@ -715,10 +801,85 @@ public class DiffProcessingUtil {
 			return false;
 		for (int i = 0; i < s.length(); i++) {
 			char c = s.charAt(i);
-			if (c != ' ' && c != '.')
+			if (c != ' ' && c != '.' && c != '。')
 				return false;
 		}
 		return true;
+	}
+
+	/**
+	 * 仅由空白与标点组成（常见中英文标点）
+	 * 修正：只有当标点符号前面有空格时才忽略，避免误判数字中的小数点
+	 */
+	private static boolean isOnlySpacesAndPunct(String s) {
+		if (s == null || s.isEmpty()) return false;
+		
+		// 如果字符串中包含数字，则不忽略（避免误判如"1.2.3"这样的内容）
+		boolean hasDigit = false;
+		for (int i = 0; i < s.length(); i++) {
+			if (Character.isDigit(s.charAt(i))) {
+				hasDigit = true;
+				break;
+			}
+		}
+		if (hasDigit) {
+			return false;
+		}
+		
+		// 检查是否只包含空格和标点符号
+		for (int i = 0; i < s.length(); i++) {
+			char c = s.charAt(i);
+			if (Character.isWhitespace(c)) continue; // 空格/制表/换行
+			if (isPunctuation(c)) continue;
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * 空白紧邻单个标点（例："  ;" 或 ";  ")
+	 * 修正：只有真正的"空格+标点"组合才忽略，避免误判数字相关的点号
+	 */
+	private static boolean isSpacesPlusSinglePunct(String s) {
+		if (s == null || s.isEmpty()) return false;
+		String trimmed = s.trim();
+		if (trimmed.length() != 1) return false;
+		char c = trimmed.charAt(0);
+		
+		// 如果是小数点，需要更严格的判断：必须前后都是空格才忽略
+		if (c == '.') {
+			// 只有当小数点前后都有空格时才忽略（如" . "），避免误判"1.2"中的点
+			return s.length() > 1 && 
+				   Character.isWhitespace(s.charAt(0)) && 
+				   Character.isWhitespace(s.charAt(s.length() - 1));
+		}
+		
+		boolean edgeSpace = Character.isWhitespace(s.charAt(0)) || Character.isWhitespace(s.charAt(s.length() - 1));
+		return isPunctuation(c) && edgeSpace;
+	}
+
+	/**
+	 * 是否为标点符号（覆盖Unicode标点类别与常见中文符号）
+	 */
+	private static boolean isPunctuation(char c) {
+		int t = Character.getType(c);
+		if (t == Character.CONNECTOR_PUNCTUATION
+				|| t == Character.DASH_PUNCTUATION
+				|| t == Character.START_PUNCTUATION
+				|| t == Character.END_PUNCTUATION
+				|| t == Character.INITIAL_QUOTE_PUNCTUATION
+				|| t == Character.FINAL_QUOTE_PUNCTUATION
+				|| t == Character.OTHER_PUNCTUATION) {
+			return true;
+		}
+		// 补充常见中文/特殊标点与英文基础标点
+		switch (c) {
+			case '，': case '。': case '；': case '：': case '！': case '？': case '、':
+			case '·': case '…': case '—':
+				return true;
+			default:
+				return ",.;:!?".indexOf(c) >= 0;
+		}
 	}
 
 	/**
@@ -776,6 +937,95 @@ public class DiffProcessingUtil {
 			if (s.charAt(i) != '_') return false;
 		}
 		return true;
+	}
+
+	// 调试计数器，限制输出前30条
+	private static int debugConsistencyCheckCount = 0;
+	private static final int MAX_DEBUG_OUTPUT = 110;
+	
+	/**
+	 * 重置调试计数器（在每次新的比对任务开始时调用）
+	 */
+	public static void resetDebugCounter() {
+		debugConsistencyCheckCount = 0;
+	}
+
+	/**
+	 * 验证diff文本与字符序列的一致性（调试模式专用）
+	 * 
+	 * @param diff 差异对象
+	 * @param charSegment 对应的字符片段
+	 * @param seqName 序列名称（seqA或seqB）
+	 * @param startIndex 起始索引
+	 */
+	private static void validateDiffTextConsistency(DiffUtil.Diff diff, List<CharBox> charSegment, String seqName, int startIndex) {
+		// 如果已经输出30条，则不再输出
+		if (debugConsistencyCheckCount >= MAX_DEBUG_OUTPUT) {
+			return;
+		}
+		
+		String diffText = diff.text;
+		
+		// 从字符片段构建实际文本
+		StringBuilder actualText = new StringBuilder();
+		for (CharBox cb : charSegment) {
+			actualText.append(cb.ch);
+		}
+		String actualStr = actualText.toString();
+		
+		// 比较diff文本与实际字符序列
+		if (!diffText.equals(actualStr)) {
+			debugConsistencyCheckCount++;
+			
+			System.out.println("=== [调试] 文本一致性检查失败 #" + debugConsistencyCheckCount + " ===");
+			System.out.println("操作类型: " + diff.operation);
+			System.out.println("序列: " + seqName);
+			System.out.println("起始索引: " + startIndex);
+			System.out.println("长度: " + diffText.length() + " vs " + actualStr.length());
+			System.out.println("Diff文本: '" + escapeString(diffText) + "'");
+			System.out.println("实际文本: '" + escapeString(actualStr) + "'");
+			
+			// 逐字符比较，找出不一致的位置
+			int minLen = Math.min(diffText.length(), actualStr.length());
+			for (int i = 0; i < minLen; i++) {
+				char diffChar = diffText.charAt(i);
+				char actualChar = actualStr.charAt(i);
+				if (diffChar != actualChar) {
+					System.out.println("第" + i + "个字符不一致: '" + escapeChar(diffChar) + "' vs '" + escapeChar(actualChar) + "'");
+					break;
+				}
+			}
+			
+			if (diffText.length() != actualStr.length()) {
+				System.out.println("长度不一致: diff=" + diffText.length() + ", actual=" + actualStr.length());
+			}
+			System.out.println("=====================================");
+			
+			// 如果达到最大输出数量，提示用户
+			if (debugConsistencyCheckCount >= MAX_DEBUG_OUTPUT) {
+				System.out.println("=== [调试] 已达到最大输出限制(" + MAX_DEBUG_OUTPUT + "条)，后续不一致情况将不再显示 ===");
+			}
+		}
+	}
+	
+	/**
+	 * 转义字符串中的特殊字符，便于调试输出
+	 */
+	private static String escapeString(String str) {
+		return str.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
+	}
+	
+	/**
+	 * 转义单个字符，便于调试输出
+	 */
+	private static String escapeChar(char c) {
+		switch (c) {
+			case '\n': return "\\n";
+			case '\r': return "\\r";
+			case '\t': return "\\t";
+			case ' ': return "SPACE";
+			default: return String.valueOf(c);
+		}
 	}
 
 }

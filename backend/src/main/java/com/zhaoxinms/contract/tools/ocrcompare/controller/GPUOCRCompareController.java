@@ -20,6 +20,7 @@ import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareOptions;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareService;
 import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareTask;
+import com.zhaoxinms.contract.tools.ocrcompare.concurrent.GPUOCRTaskQueue;
 
 /**
  * GPU OCR比对控制器 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -248,6 +249,60 @@ public class GPUOCRCompareController {
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("获取原始坐标数据失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取任务队列状态
+     */
+    @GetMapping("/queue/stats")
+    public ResponseEntity<Result<GPUOCRTaskQueue.TaskQueueStats>> getQueueStats() {
+        try {
+            GPUOCRTaskQueue.TaskQueueStats stats = gpuOcrCompareService.getQueueStats();
+            return ResponseEntity.ok(Result.success("获取队列状态成功", stats));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("获取队列状态失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 检查队列是否繁忙
+     */
+    @GetMapping("/queue/busy")
+    public ResponseEntity<Result<Map<String, Object>>> checkQueueBusy() {
+        try {
+            boolean isBusy = gpuOcrCompareService.isQueueBusy();
+            GPUOCRTaskQueue.TaskQueueStats stats = gpuOcrCompareService.getQueueStats();
+            
+            Map<String, Object> data = new HashMap<>();
+            data.put("isBusy", isBusy);
+            data.put("queueSize", stats.getCurrentQueueSize());
+            data.put("activeThreads", stats.getActiveThreads());
+            data.put("maxThreads", stats.getMaxThreads());
+            
+            return ResponseEntity.ok(Result.success("获取队列繁忙状态成功", data));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("获取队列繁忙状态失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 动态调整最大并发线程数
+     */
+    @PostMapping("/queue/adjust-concurrency")
+    public ResponseEntity<Result<String>> adjustMaxConcurrency(@RequestParam int maxThreads) {
+        try {
+            if (maxThreads < 1 || maxThreads > 20) {
+                return ResponseEntity.badRequest().body(Result.error("线程数必须在1-20之间"));
+            }
+            
+            gpuOcrCompareService.adjustMaxConcurrency(maxThreads);
+            return ResponseEntity.ok(Result.success("调整并发线程数成功", "最大线程数已设置为: " + maxThreads));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("调整并发线程数失败: " + e.getMessage()));
         }
     }
 }

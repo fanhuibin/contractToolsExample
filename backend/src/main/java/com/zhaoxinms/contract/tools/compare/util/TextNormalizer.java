@@ -47,8 +47,8 @@ public class TextNormalizer {
         PUNCTUATION_MAP.put("～", "~");
         
         // 省略号
-        PUNCTUATION_MAP.put("……", "...");
-        PUNCTUATION_MAP.put("…", "...");
+        PUNCTUATION_MAP.put("……", "..");
+        PUNCTUATION_MAP.put("…", ".");
         
         // 其他符号
         PUNCTUATION_MAP.put("、", ".");
