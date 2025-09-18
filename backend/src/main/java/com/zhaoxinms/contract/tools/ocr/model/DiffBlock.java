@@ -24,6 +24,8 @@ public class DiffBlock {
     public List<double[]> newBboxes; // INSERT操作对应的bbox（来自新文档B）
     public List<double[]> prevOldBboxes; // 上一个block的oldBboxes，用于同步跳转
     public List<double[]> prevNewBboxes; // 上一个block的newBboxes，用于同步跳转
+    public List<Integer> prevOldBboxPages; // prevOldBboxes对应的页码列表
+    public List<Integer> prevNewBboxPages; // prevNewBboxes对应的页码列表
     public String category;
     public String oldText;
     public String newText;

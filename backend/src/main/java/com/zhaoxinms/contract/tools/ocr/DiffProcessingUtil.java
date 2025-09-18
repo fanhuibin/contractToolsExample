@@ -364,24 +364,50 @@ public class DiffProcessingUtil {
 						double[] last = prevBlock.oldBboxes.get(prevBlock.oldBboxes.size() - 1);
 						blk.prevOldBboxes = new ArrayList<>();
 						blk.prevOldBboxes.add(last);
+						// 同时设置对应的页码
+						if (prevBlock.pageA != null && !prevBlock.pageA.isEmpty()) {
+							int lastPageA = prevBlock.pageA.get(prevBlock.pageA.size() - 1);
+							blk.prevOldBboxPages = new ArrayList<>();
+							blk.prevOldBboxPages.add(lastPageA);
+						}
 					} else if (prevBlock.prevOldBboxes != null && !prevBlock.prevOldBboxes.isEmpty()) {
 						double[] last = prevBlock.prevOldBboxes.get(prevBlock.prevOldBboxes.size() - 1);
 						blk.prevOldBboxes = new ArrayList<>();
 						blk.prevOldBboxes.add(last);
+						// 同时设置对应的页码
+						if (prevBlock.prevOldBboxPages != null && !prevBlock.prevOldBboxPages.isEmpty()) {
+							int lastPageA = prevBlock.prevOldBboxPages.get(prevBlock.prevOldBboxPages.size() - 1);
+							blk.prevOldBboxPages = new ArrayList<>();
+							blk.prevOldBboxPages.add(lastPageA);
+						}
 					} else {
 						blk.prevOldBboxes = null;
+						blk.prevOldBboxPages = null;
 					}
 					// prevNewBboxes使用前一个块的newBboxes（仅保留最后一个）
 					if (prevBlock.newBboxes != null && !prevBlock.newBboxes.isEmpty()) {
 						double[] lastNew = prevBlock.newBboxes.get(prevBlock.newBboxes.size() - 1);
 						blk.prevNewBboxes = new ArrayList<>();
 						blk.prevNewBboxes.add(lastNew);
+						// 同时设置对应的页码
+						if (prevBlock.pageB != null && !prevBlock.pageB.isEmpty()) {
+							int lastPageB = prevBlock.pageB.get(prevBlock.pageB.size() - 1);
+							blk.prevNewBboxPages = new ArrayList<>();
+							blk.prevNewBboxPages.add(lastPageB);
+						}
 					} else if (prevBlock.prevNewBboxes != null && !prevBlock.prevNewBboxes.isEmpty()) {
 						double[] lastNew = prevBlock.prevNewBboxes.get(prevBlock.prevNewBboxes.size() - 1);
 						blk.prevNewBboxes = new ArrayList<>();
 						blk.prevNewBboxes.add(lastNew);
+						// 同时设置对应的页码
+						if (prevBlock.prevNewBboxPages != null && !prevBlock.prevNewBboxPages.isEmpty()) {
+							int lastPageB = prevBlock.prevNewBboxPages.get(prevBlock.prevNewBboxPages.size() - 1);
+							blk.prevNewBboxPages = new ArrayList<>();
+							blk.prevNewBboxPages.add(lastPageB);
+						}
 					} else {
 						blk.prevNewBboxes = null;
+						blk.prevNewBboxPages = null;
 					}
 					// INSERT操作的pageA应该继承前一个块的pageA（仅保留最后一个，用于跳转参考）
 					if (prevBlock.pageA != null && !prevBlock.pageA.isEmpty()) {
@@ -394,24 +420,50 @@ public class DiffProcessingUtil {
 						double[] last = prevBlock.newBboxes.get(prevBlock.newBboxes.size() - 1);
 						blk.prevNewBboxes = new ArrayList<>();
 						blk.prevNewBboxes.add(last);
+						// 同时设置对应的页码
+						if (prevBlock.pageB != null && !prevBlock.pageB.isEmpty()) {
+							int lastPageB = prevBlock.pageB.get(prevBlock.pageB.size() - 1);
+							blk.prevNewBboxPages = new ArrayList<>();
+							blk.prevNewBboxPages.add(lastPageB);
+						}
 					} else if (prevBlock.prevNewBboxes != null && !prevBlock.prevNewBboxes.isEmpty()) {
 						double[] last = prevBlock.prevNewBboxes.get(prevBlock.prevNewBboxes.size() - 1);
 						blk.prevNewBboxes = new ArrayList<>();
 						blk.prevNewBboxes.add(last);
+						// 同时设置对应的页码
+						if (prevBlock.prevNewBboxPages != null && !prevBlock.prevNewBboxPages.isEmpty()) {
+							int lastPageB = prevBlock.prevNewBboxPages.get(prevBlock.prevNewBboxPages.size() - 1);
+							blk.prevNewBboxPages = new ArrayList<>();
+							blk.prevNewBboxPages.add(lastPageB);
+						}
 					} else {
 						blk.prevNewBboxes = null;
+						blk.prevNewBboxPages = null;
 					}
 					// prevOldBboxes使用前一个块的oldBboxes（仅保留最后一个）
 					if (prevBlock.oldBboxes != null && !prevBlock.oldBboxes.isEmpty()) {
 						double[] lastOld = prevBlock.oldBboxes.get(prevBlock.oldBboxes.size() - 1);
 						blk.prevOldBboxes = new ArrayList<>();
 						blk.prevOldBboxes.add(lastOld);
+						// 同时设置对应的页码
+						if (prevBlock.pageA != null && !prevBlock.pageA.isEmpty()) {
+							int lastPageA = prevBlock.pageA.get(prevBlock.pageA.size() - 1);
+							blk.prevOldBboxPages = new ArrayList<>();
+							blk.prevOldBboxPages.add(lastPageA);
+						}
 					} else if (prevBlock.prevOldBboxes != null && !prevBlock.prevOldBboxes.isEmpty()) {
 						double[] lastOld = prevBlock.prevOldBboxes.get(prevBlock.prevOldBboxes.size() - 1);
 						blk.prevOldBboxes = new ArrayList<>();
 						blk.prevOldBboxes.add(lastOld);
+						// 同时设置对应的页码
+						if (prevBlock.prevOldBboxPages != null && !prevBlock.prevOldBboxPages.isEmpty()) {
+							int lastPageA = prevBlock.prevOldBboxPages.get(prevBlock.prevOldBboxPages.size() - 1);
+							blk.prevOldBboxPages = new ArrayList<>();
+							blk.prevOldBboxPages.add(lastPageA);
+						}
 					} else {
 						blk.prevOldBboxes = null;
+						blk.prevOldBboxPages = null;
 					}
 					// DELETE操作的pageB应该继承前一个块的pageB（仅保留最后一个，用于跳转参考）
 					if (prevBlock.pageB != null && !prevBlock.pageB.isEmpty()) {

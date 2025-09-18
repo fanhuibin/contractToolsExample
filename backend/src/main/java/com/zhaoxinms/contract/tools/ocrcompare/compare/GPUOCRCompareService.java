@@ -807,57 +807,6 @@ public class GPUOCRCompareService {
 				}
 				result.setFailedPages(allFailedPages);
 
-                // 使用已有的页面尺寸信息计算坐标转换比例
-                try {
-                    // 获取PDF的实际页面尺寸（像素，72 DPI）
-                    double oldPdfWidth = getPdfPageWidth(oldPath);
-                    double oldPdfHeight = getPdfPageHeight(oldPath);
-                    double newPdfWidth = getPdfPageWidth(newPath);
-                    double newPdfHeight = getPdfPageHeight(newPath);
-
-                    result.setOldPdfPageHeight(oldPdfHeight);
-                    result.setNewPdfPageHeight(newPdfHeight);
-
-                    // 使用已有的图像尺寸信息计算准确的缩放比例
-                    // 注意：这里假设第一页的尺寸代表整个文档
-					double oldImageWidth = sizeA.widths != null && sizeA.widths.length > 0 ? sizeA.widths[0]
-							: oldPdfWidth;
-					double oldImageHeight = sizeA.heights != null && sizeA.heights.length > 0 ? sizeA.heights[0]
-							: oldPdfHeight;
-					double newImageWidth = sizeB.widths != null && sizeB.widths.length > 0 ? sizeB.widths[0]
-							: newPdfWidth;
-					double newImageHeight = sizeB.heights != null && sizeB.heights.length > 0 ? sizeB.heights[0]
-							: newPdfHeight;
-
-                    // 计算缩放比例：图像坐标到PDF坐标的转换比例
-                    // scaleX = imageWidth / pdfWidth
-                    // 例如：如果图像宽度是PDF宽度的2倍，则scaleX = 2.0
-                    // 从图像坐标转换到PDF坐标时，需要除以scaleX（而不是乘以）
-                    double oldScaleX = oldImageWidth / oldPdfWidth;
-                    double oldScaleY = oldImageHeight / oldPdfHeight;
-                    double newScaleX = newImageWidth / newPdfWidth;
-                    double newScaleY = newImageHeight / newPdfHeight;
-
-                    result.setOldPdfScaleX(oldScaleX);
-                    result.setOldPdfScaleY(oldScaleY);
-                    result.setNewPdfScaleX(newScaleX);
-                    result.setNewPdfScaleY(newScaleY);
-
-					System.out.println(String.format(
-							"坐标转换参数计算成功: old[%.2f,%.2f]->[%.2f,%.2f] scale[%.3f,%.3f], new[%.2f,%.2f]->[%.2f,%.2f] scale[%.3f,%.3f]",
-                        oldImageWidth, oldImageHeight, oldPdfWidth, oldPdfHeight, oldScaleX, oldScaleY,
-                        newImageWidth, newImageHeight, newPdfWidth, newPdfHeight, newScaleX, newScaleY));
-                } catch (Exception ex) {
-                    System.err.println("计算坐标转换参数失败: " + ex.getMessage());
-                    // 设置默认值
-                    result.setOldPdfPageHeight(1122.52);
-                    result.setNewPdfPageHeight(1122.52);
-                    result.setOldPdfScaleX(1.0);
-                    result.setOldPdfScaleY(1.0);
-                    result.setNewPdfScaleX(1.0);
-                    result.setNewPdfScaleY(1.0);
-                }
-
                 // 将DiffBlock列表转换为前端期望的Map格式（保留原始图像坐标，坐标转换在接口层进行）
                 System.out.println("转换DiffBlock格式，merged大小: " + merged.size());
 				List<Map<String, Object>> formattedDifferences = convertDiffBlocksToMapFormat(merged, false, null, null);
@@ -1089,55 +1038,6 @@ public class GPUOCRCompareService {
 					baseUploadPath + "/gpu-ocr-compare/annotated/" + originalTaskId + "/new_annotated.pdf");
             result.setDifferences(merged);
             result.setTotalDiffCount(merged.size());
-
-            // 设置页面高度和坐标转换参数（与正常比对一致）
-            try {
-                // 1) 计算PDF实际页面尺寸（像素，72 DPI）
-                double oldPdfWidth = getPdfPageWidth(oldPdfPath);
-                double oldPdfHeight = getPdfPageHeight(oldPdfPath);
-                double newPdfWidth = getPdfPageWidth(newPdfPath);
-                double newPdfHeight = getPdfPageHeight(newPdfPath);
-
-                    result.setOldPdfPageHeight(oldPdfHeight);
-                    result.setNewPdfPageHeight(newPdfHeight);
-
-                // 2) 渲染页面以获取图像尺寸，用于像素→PDF坐标换算
-                int dpi = gpuOcrConfig.getRenderDpi();
-                PageImageSizeProvider sizeA = renderPageSizes(oldPdfPath, dpi);
-                PageImageSizeProvider sizeB = renderPageSizes(newPdfPath, dpi);
-
-                    double oldImageWidth = sizeA.widths != null && sizeA.widths.length > 0 ? sizeA.widths[0] : oldPdfWidth;
-				double oldImageHeight = sizeA.heights != null && sizeA.heights.length > 0 ? sizeA.heights[0]
-						: oldPdfHeight;
-                    double newImageWidth = sizeB.widths != null && sizeB.widths.length > 0 ? sizeB.widths[0] : newPdfWidth;
-				double newImageHeight = sizeB.heights != null && sizeB.heights.length > 0 ? sizeB.heights[0]
-						: newPdfHeight;
-
-                // 3) 计算缩放比例：图像坐标到PDF坐标的转换比例（图像尺寸 / PDF尺寸）
-                    double oldScaleX = oldImageWidth / oldPdfWidth;
-                    double oldScaleY = oldImageHeight / oldPdfHeight;
-                    double newScaleX = newImageWidth / newPdfWidth;
-                    double newScaleY = newImageHeight / newPdfHeight;
-
-                    result.setOldPdfScaleX(oldScaleX);
-                    result.setOldPdfScaleY(oldScaleY);
-                    result.setNewPdfScaleX(newScaleX);
-                    result.setNewPdfScaleY(newScaleY);
-
-//                System.out.println(String.format(
-//                    "[DEBUG坐标] 参数: old[%.2f,%.2f]->[%.2f,%.2f] scale[%.3f,%.3f], new[%.2f,%.2f]->[%.2f,%.2f] scale[%.3f,%.3f]",
-//                        oldImageWidth, oldImageHeight, oldPdfWidth, oldPdfHeight, oldScaleX, oldScaleY,
-//                        newImageWidth, newImageHeight, newPdfWidth, newPdfHeight, newScaleX, newScaleY));
-                } catch (Exception ex) {
-                System.err.println("[DEBUG坐标] 计算坐标转换参数失败: " + ex.getMessage());
-                // 设置默认值，避免前端崩溃
-                    result.setOldPdfPageHeight(1122.52);
-                    result.setNewPdfPageHeight(1122.52);
-                    result.setOldPdfScaleX(1.0);
-                    result.setOldPdfScaleY(1.0);
-                    result.setNewPdfScaleX(1.0);
-                    result.setNewPdfScaleY(1.0);
-                }
 
             // 转换为前端格式（保存为原始图像坐标，实际坐标转换在getFrontendResult中统一进行）
 			List<Map<String, Object>> formattedDifferences = convertDiffBlocksToMapFormat(merged, true, seqA, seqB);
@@ -2059,16 +1959,22 @@ public class GPUOCRCompareService {
 		merged.textStartIndexA = getMinTextStartIndex(group, true);
 		merged.textStartIndexB = getMinTextStartIndex(group, false);
 		
-		// 处理prevBboxes - 根据操作类型选择排序靠前的DiffBlock
+		// 处理prevBboxes和对应的页码 - 根据操作类型选择排序靠前的DiffBlock
 		DiffBlock firstBlock = group.get(0); // 排序靠前的block
 		if ("ADDED".equals(merged.type.toString())) {
 			// ADDED操作：prevOldBboxes以排序靠前的为准
 			merged.prevOldBboxes = firstBlock.prevOldBboxes == null ? null : new ArrayList<>(firstBlock.prevOldBboxes);
 			merged.prevNewBboxes = firstBlock.prevNewBboxes == null ? null : new ArrayList<>(firstBlock.prevNewBboxes);
+			// 同时复制对应的页码信息
+			merged.prevOldBboxPages = firstBlock.prevOldBboxPages == null ? null : new ArrayList<>(firstBlock.prevOldBboxPages);
+			merged.prevNewBboxPages = firstBlock.prevNewBboxPages == null ? null : new ArrayList<>(firstBlock.prevNewBboxPages);
 		} else if ("DELETED".equals(merged.type.toString())) {
 			// DELETED操作：prevNewBboxes以排序靠前的为准
 			merged.prevNewBboxes = firstBlock.prevNewBboxes == null ? null : new ArrayList<>(firstBlock.prevNewBboxes);
 			merged.prevOldBboxes = firstBlock.prevOldBboxes == null ? null : new ArrayList<>(firstBlock.prevOldBboxes);
+			// 同时复制对应的页码信息
+			merged.prevNewBboxPages = firstBlock.prevNewBboxPages == null ? null : new ArrayList<>(firstBlock.prevNewBboxPages);
+			merged.prevOldBboxPages = firstBlock.prevOldBboxPages == null ? null : new ArrayList<>(firstBlock.prevOldBboxPages);
 		}
 		
 		// 合并nestedBlocks
@@ -2388,16 +2294,50 @@ public class GPUOCRCompareService {
 
             // 添加页面信息
             diffMap.put("page", block.page);
-            // 页码数组：跨页时取最小页码作为主显示页
-            if (block.pageA != null && !block.pageA.isEmpty()) {
-                diffMap.put("pageA", java.util.Collections.min(block.pageA));
+            
+            // 页码处理：对于INSERT/DELETE操作，需要特殊处理pageA/pageB
+            if ("INSERT".equals(operation)) {
+                // INSERT操作：pageA应该基于prevOldBboxPages的页码，pageB基于新增内容的页码
+                if (block.pageA != null && !block.pageA.isEmpty()) {
+                    diffMap.put("pageA", java.util.Collections.min(block.pageA));
+                } else if (block.prevOldBboxPages != null && !block.prevOldBboxPages.isEmpty()) {
+                    // 使用prevOldBboxPages的页码
+                    diffMap.put("pageA", java.util.Collections.min(block.prevOldBboxPages));
+                } else {
+                    diffMap.put("pageA", block.page);
+                }
+                if (block.pageB != null && !block.pageB.isEmpty()) {
+                    diffMap.put("pageB", java.util.Collections.min(block.pageB));
+                } else {
+                    diffMap.put("pageB", block.page);
+                }
+            } else if ("DELETE".equals(operation)) {
+                // DELETE操作：pageA基于删除内容的页码，pageB应该基于prevNewBboxPages的页码
+                if (block.pageA != null && !block.pageA.isEmpty()) {
+                    diffMap.put("pageA", java.util.Collections.min(block.pageA));
+                } else {
+                    diffMap.put("pageA", block.page);
+                }
+                if (block.pageB != null && !block.pageB.isEmpty()) {
+                    diffMap.put("pageB", java.util.Collections.min(block.pageB));
+                } else if (block.prevNewBboxPages != null && !block.prevNewBboxPages.isEmpty()) {
+                    // 使用prevNewBboxPages的页码
+                    diffMap.put("pageB", java.util.Collections.min(block.prevNewBboxPages));
+                } else {
+                    diffMap.put("pageB", block.page);
+                }
             } else {
-                diffMap.put("pageA", block.page);
-            }
-            if (block.pageB != null && !block.pageB.isEmpty()) {
-                diffMap.put("pageB", java.util.Collections.min(block.pageB));
-            } else {
-                diffMap.put("pageB", block.page);
+                // REPLACE等其他操作：使用原来的逻辑
+                if (block.pageA != null && !block.pageA.isEmpty()) {
+                    diffMap.put("pageA", java.util.Collections.min(block.pageA));
+                } else {
+                    diffMap.put("pageA", block.page);
+                }
+                if (block.pageB != null && !block.pageB.isEmpty()) {
+                    diffMap.put("pageB", java.util.Collections.min(block.pageB));
+                } else {
+                    diffMap.put("pageB", block.page);
+                }
             }
             // 添加完整的页码数组供前端使用
             diffMap.put("pageAList", block.pageA);
@@ -2456,6 +2396,7 @@ public class GPUOCRCompareService {
 
         return mapResult;
     }
+
 
     /**
      * 将DiffType转换为前端期望的操作类型
