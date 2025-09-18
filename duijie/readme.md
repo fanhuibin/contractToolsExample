@@ -1,4 +1,67 @@
 ## 会话总结 - 2025-01-15
+\n+### 2025-09-17 GPU OCR 连接线锚点与新增连线渲染（Canvas版）
+**会话主要目的**: 在 `canvas-container` 内为旧/新文档各新增一条红色连接线，使其与中轴 `center-marker` 美观衔接并随滚动实时刷新。
+
+**完成的主要任务**:
+- 新增左侧连线：从左中轴灰区外边缘（`endX = centerLineLeft - centerGutterWidth * 1.5`）连接至当前差异对应的 `center-marker`。
+- 新增右侧连线：从当前差异对应的 `center-marker` 连接至中间左灰区右边缘（`startXGlobal = centerLineLeft + 53`，并换算到右侧 `wrapper` 局部 `lineStartX`）。
+- 动态刷新：依赖 `markerTick`，在滚动、跳转时实时更新；坐标换算严格区分 `compareBody` 全局坐标与各自 `wrapper` 局部坐标。
+- 样式一致：复用 `.connector-line` 样式（红色、阴影、描边），与既有左右连接线风格一致。
+
+**关键决策和解决方案**:
+- 统一锚点定义：
+
+### 2025-09-17 GPU OCR 连接线修复与精确连接
+**会话主要目的**: 修复新增的桥接线连接点问题，确保左侧桥接线从左连接线终点开始，右侧桥接线在右连接线起点结束。
+
+**完成的主要任务**:
+- 修复左侧桥接线起点：从灰区外边缘改为bbox右边缘（`bbox[2] * pageLayout.scale`），与左连接线终点精确对接
+- 修复右侧桥接线终点：确认终点为右连接线起点（`centerLineLeft + 53`），实现无缝连接
+- 坐标系统优化：简化坐标转换逻辑，直接使用容器内坐标系统
+- 调试日志完善：更新debug输出，便于跟踪连接点位置
+
+**关键决策和解决方案**:
+- 连接点精确对齐：左桥接线起点 = 左连接线终点，右桥接线终点 = 右连接线起点
+- 坐标系统统一：在各自canvas-container内使用局部坐标，避免复杂的全局坐标转换
+- 实时动态渲染：保持markerTick响应机制，确保滚动时连接线同步更新
+
+**使用的技术栈**: Vue 3 Composition API, TypeScript, Canvas API, CSS Transform
+
+**修改的文件**: 
+- `frontend/src/views/documents/GPUOCRCanvasCompareResult.vue` - 更新leftBridgeStyle和rightBridgeStyle计算逻辑
+- 再次修复：左侧桥接线起点从bbox右边缘改为左连接线真正的终点（grayAreaOuterEdge = centerLineLeft - centerGutterWidth * 1.5）
+  - 左新线：`灰区外边缘(全局X) → marker左边缘(全局X)`，再转 `old wrapper` 局部X。
+  - 右新线：`marker右边缘(全局X) → 灰区右边缘(全局X)`，再转 `new wrapper` 局部X。
+  - 样式微调：连接线与桥接线统一为 `height: 2px`，垂直偏移 `-1px`，保证视觉居中且更细。
+- 视觉微调：连接 `center-marker` 时做 ±2px 内缩，确保与方形标记的边缘视觉平滑。
+- 垂直对齐：采用差异 `bbox` 的垂直中心 `centerYInDoc`，以 `relativeY = centerYInDoc - wrapper.scrollTop` 定位线条 `top`。
+
+**使用的技术栈**:
+- 前端: Vue 3、TypeScript、Canvas API、绝对定位、响应式 `computed`。
+
+**修改了哪些文件**:
+- `frontend/src/views/documents/GPUOCRCanvasCompareResult.vue`
+  - 模板：在左右 `canvas-container` 中各新增一个 `.connector-line` 容器，分别绑定 `leftToMarkerConnectorStyle`、`markerToRightConnectorStyle`。
+  - 逻辑：新增两个 `computed`：`leftToMarkerConnectorStyle` 与 `markerToRightConnectorStyle`，实现全局/局部坐标换算与宽度计算；复用 `markerTick` 实时刷新。
+  - 样式：复用 `.connector-line` 现有样式，无新增CSS选择器。
+
+**接口/组件/界面清单**:
+- 接口：无后端改动。
+- 组件：`GPUOCRCanvasCompareResult.vue`（新增两条连线渲染）。
+- 界面：旧/新文档画布区域的 `canvas-container`（各新增一条红线）。
+- 隐藏功能：无。
+
+**验收标准清单**:
+- 选中任一差异时，两条新线正确显示并与 `center-marker` 对齐，风格与现有红线一致。
+- 滚动、跳转时连线位置与宽度实时更新，无明显闪烁。
+- 坐标换算正确：不同分栏间无错位，跨大文档分页时定位稳定。
+
+**注意事项**:
+- 坐标系严格区分：`compareBody` 全局X 与 `wrapper` 局部X需用 `wrapperRect.left - bodyRect.left` 做偏移换算。
+- `centerLineLeft` 与 `centerGutterWidth` 为中轴与灰区基准；左灰区外边缘用 `centerLineLeft - centerGutterWidth * 1.5`，右侧固定边缘用 `centerLineLeft + 53`。
+- 连接 `center-marker` 时做 2px 内缩，避免红线覆盖白色标记边的阴影，提升观感。
+- 使用 `markerTick` 触发 `computed` 重算，确保滚动、尺寸变化后同步刷新。
+
 
 ### 页眉页脚检测算法升级 (2024-12-15)
 **会话主要目的**: 优化页眉页脚检测算法，从基于OCR category改为基于bbox位置百分比的精确检测
@@ -5152,3 +5215,51 @@ const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'inser
 - **用户体验**: 简洁的文本显示，支持展开查看完整内容
 
 现在文本截断功能已经修复！🎯
+
+---
+
+## 2025-09-16 GPU OCR 同轴滚动逻辑梳理
+
+### 会话总结
+- **会话的主要目的**: 梳理 GPU OCR 合同比对页面的同轴滚动实现逻辑，定位“滚动不同轴/不同步”的可能原因。
+- **完成的主要任务**: 提炼前端 `GPUOCRCanvasCompareResult.vue` 中的滚动同步算法与触发条件；标注关键状态位与保护策略。
+- **关键决策和解决方案**: 当前仅输出逻辑说明与问题线索，未进行代码修改；建议后续评估是否由“比例映射”改为“基于页面锚点的精确对齐”。
+- **使用的技术栈**: Vue 3、TypeScript、Element Plus、Canvas 渲染与虚拟滚动。
+- **修改了哪些文件**: 无代码改动，仅更新本文档。
+
+### 逻辑要点（现状）
+- **开关与状态**: `syncEnabled` 控制是否同步；`lastScrollTop` 记录两侧滚动基线；`wheelActiveSide` 在 150ms 窗口内标记“主动滚动的一侧”；`isScrollSyncing` 防止递归触发；`isJumping` 在程序化跳转时屏蔽联动；`scrollEndTimer` 在 300ms 静止后补一次渲染。
+- **滚动同步规则**:
+  - 监听左右 `canvas-wrapper` 的 `scroll`；若未开启同步或处于程序化/同步中，则仅更新基线与虚拟渲染。
+  - 计算当前侧增量 `delta = currentTop - lastScrollTop[side]`，若绝对值>500 视为异常，重置基线并跳过同步。
+  - 以两侧可滚动区间比值 `factor = (other.scrollHeight - other.clientHeight) / (self.scrollHeight - self.clientHeight)` 做增量映射：`other.scrollTop = clamp(other.scrollTop + delta * factor)`。
+  - 采用 `wheelActiveSide` 抑制非主动侧的二次触发，避免“互相带动”的震荡。
+- **页面跳转/定位**:
+  - `jumpToPage`：左右同步滚到相同的目标 Y（按页高与间距累加得出）。
+  - 差异定位使用 `alignCanvasViewerContinuousLocal`：基于 `calculatePageLayout` 的页面布局，按缩放将差异框中心滚动到视区标线位置（`markerY = clientHeight * ratio + offset`）。
+- **虚拟渲染**: 滚动帧内调用 `updateVisibleCanvasesOnScroll()`，并在滚动结束定时器到时再次校准渲染，降低抖动与缺页。
+
+### 潜在问题线索（导致“不同轴/不同步”的可能原因）
+- 仅用“总可滚动高度比例”做映射，若两侧页高分布差异较大（甚至页数不同），会出现页面内锚点未严格对齐的体验偏差。
+- 触控板/滚轮与拖拽滚动混用时，`wheelActiveSide` 的 150ms 窗口可能导致短时不联动或错侧抑制。
+- 异常大增量（>500px）被丢弃后，若另一侧此前已偏离，可能形成肉眼可见的小幅漂移。
+
+> 注：以上为现状梳理，未变更实现。若需优化，建议考虑按“页内物理锚点（页号+相对进度）”做分段映射，并在跨页处使用插值过渡，以替代单一全局比例。
+
+### 2025-09-16 修复：拖动滚动条不再联动另一侧
+
+#### 变更说明
+- 在左右 `canvas-wrapper` 上补充 `@wheel="onWheel(...)"` 绑定，仅在滚轮滚动时标记主动侧。
+- 调整 `onCanvasScroll` 条件：只有 `wheelActiveSide === 当前侧` 时才执行同步；拖动滚动条（无 `wheel` 事件）仅更新本侧与虚拟渲染，另一侧不动。
+
+#### 涉及文件
+- `frontend/src/views/documents/GPUOCRCanvasCompareResult.vue`
+
+#### 验收标准
+- 滚轮滚动左侧时，右侧随动；滚轮滚动右侧时，左侧随动。
+- 用鼠标拖动任一侧滚动条时，另一侧不再跟随移动。
+- 程序化跳转（页跳转/差异跳转）仍能双侧同步定位，滚动结束后渲染正常。
+
+#### 风险与注意事项
+- 触控板/手势可能不触发 `wheel`，如遇不随动需另行适配 `pointer/touch` 事件策略。
+- `wheelActiveSide` 的时间窗口（150ms）可按体验调优。
