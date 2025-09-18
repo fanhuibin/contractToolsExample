@@ -75,6 +75,10 @@ public class DiffProcessingUtil {
 		List<CharBox> aSeg = Collections.emptyList();
 		List<CharBox> bSeg = Collections.emptyList();
 		
+		// 记录开始位置（在更新索引之前）
+		int startAIdx = aIdx;
+		int startBIdx = bIdx;
+		
 		if (d.operation == DiffUtil.Operation.DELETE) {
 			aSeg = subChars(seqA, aIdx, aIdx + len);
 			
@@ -164,33 +168,19 @@ public class DiffProcessingUtil {
 					}
 				}
 
-				// 计算 A 侧差异范围：只添加一次，不重复
+				// 计算 A 侧差异范围：DELETE操作，基于全局文本索引
 				{
 					java.util.List<DiffBlock.TextRange> rangesA = new java.util.ArrayList<>();
-					int prefix = 0;
-					boolean rangeAdded = false; // 标记是否已经添加过范围
 					
-					for (String k : aGroups.keySet()) {
-						java.util.List<CharBox> aa = aGroups.get(k);
-						String full = aAllText.get(k) == null ? "" : aAllText.get(k).toString();
-						
-						// 找到该 bbox 在 seqA 中的文本段起点
-						int textSegmentStart = findBboxStartInSequence(seqA, k);
-						//System.out.println("DEBUG A侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", aIdx: " + aIdx + ", actualLenA: " + len);
-						if (textSegmentStart >= 0 && aIdx >= textSegmentStart && !rangeAdded) {
-							// 计算差异在该文本段内的相对偏移和长度
-							int diffStartInText = aIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
-							int diffLength = len;  // 差异的长度
-							
-							// 添加范围：prefix + diffStartInText 到 prefix + diffStartInText + diffLength
-							if (diffLength > 0) {
-								rangesA.add(new DiffBlock.TextRange(prefix + diffStartInText, prefix + diffStartInText + diffLength, "DIFF"));
-								//System.out.println("DEBUG A侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefix + diffStartInText) + ", " + (prefix + diffStartInText + diffLength) + "]");
-								rangeAdded = true; // 标记已添加，避免重复
-							}
-						}
-						prefix += full.length();
+					// 对于DELETE操作，使用全局索引：从startAIdx开始，长度为len
+					int globalStart = startAIdx;   // DELETE操作的全局起始位置
+					int globalEnd = startAIdx + len; // DELETE操作的全局结束位置
+					
+					if (globalEnd > globalStart) {
+						rangesA.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
+						System.out.println("[DELETE全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
+					
 					computedRangesA = rangesA;
 				}
 
@@ -228,34 +218,19 @@ public class DiffProcessingUtil {
 					}
 				}
 
-				// 计算 B 侧差异范围：只添加一次，不重复
+				// 计算 B 侧差异范围：INSERT操作，基于全局文本索引
 				{
 					java.util.List<DiffBlock.TextRange> rangesB = new java.util.ArrayList<>();
-					int prefixB = 0;
-					boolean rangeAdded = false; // 标记是否已经添加过范围
 					
-					for (String k : bGroups.keySet()) {
-						java.util.List<CharBox> bb = bGroups.get(k);
-						String full = bAllText.get(k) == null ? "" : bAllText.get(k).toString();
-						
-						// 找到该 bbox 在 seqB 中的文本段起点
-						int textSegmentStart = findBboxStartInSequence(seqB, k);
-						//System.out.println("DEBUG B侧 - bbox: " + k + ", 文本段起点: " + textSegmentStart + ", bIdx: " + bIdx + ", actualLenB: " + len);
-						
-						if (textSegmentStart >= 0 && bIdx >= textSegmentStart && !rangeAdded) {
-							// 计算差异在该文本段内的相对偏移和长度
-							int diffStartInText = bIdx - textSegmentStart - len;  // 差异在文本段内的起始位置
-							int diffLength = len;  // 差异的长度
-							
-							// 添加范围：prefixB + diffStartInText 到 prefixB + diffStartInText + diffLength
-							if (diffLength > 0) {
-								rangesB.add(new DiffBlock.TextRange(prefixB + diffStartInText, prefixB + diffStartInText + diffLength, "DIFF"));
-								//System.out.println("DEBUG B侧范围 - 文本段内偏移: " + diffStartInText + ", 长度: " + diffLength + ", 最终范围: [" + (prefixB + diffStartInText) + ", " + (prefixB + diffStartInText + diffLength) + "]");
-								rangeAdded = true; // 标记已添加，避免重复
-							}
-						}
-						prefixB += full.length();
+					// 对于INSERT操作，使用全局索引：从startBIdx开始，长度为len
+					int globalStart = startBIdx;   // INSERT操作的全局起始位置
+					int globalEnd = startBIdx + len; // INSERT操作的全局结束位置
+					
+					if (globalEnd > globalStart) {
+						rangesB.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
+						System.out.println("[INSERT全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
+					
 					computedRangesB = rangesB;
 				}
 
@@ -341,10 +316,33 @@ public class DiffProcessingUtil {
 				continue; // 未知操作类型，跳过
 			}
 
+			// 计算第一个bbox在全局文本中的开始位置
+			Integer textStartIndexA = null;
+			Integer textStartIndexB = null;
+			
+			if (d.operation == DiffUtil.Operation.DELETE || d.operation == DiffUtil.Operation.EQUAL) {
+				// DELETE和EQUAL操作有A侧文本
+				if (!aGroups.isEmpty()) {
+					// 找到第一个bbox在全局序列seqA中的位置
+					textStartIndexA = findFirstBboxGlobalIndex(aGroups, seqA);
+				}
+			}
+			
+			if (d.operation == DiffUtil.Operation.INSERT || d.operation == DiffUtil.Operation.EQUAL) {
+				// INSERT和EQUAL操作有B侧文本
+				if (!bGroups.isEmpty()) {
+					// 找到第一个bbox在全局序列seqB中的位置
+					textStartIndexB = findFirstBboxGlobalIndex(bGroups, seqB);
+				}
+			}
+			
 			// 创建包含oldBboxes和newBboxes的DiffBlock
-			// textStartIndexA和textStartIndexB直接设置为当前差异在文本中的起始位置aIdx和bIdx
+			// 处理null值避免自动拆箱错误
+			int safeTextStartIndexA = (textStartIndexA != null) ? textStartIndexA : 0;
+			int safeTextStartIndexB = (textStartIndexB != null) ? textStartIndexB : 0;
+			
 			DiffBlock blk = DiffBlock.of(dt, pageAList, pageBList, oldBboxes, newBboxes, category, allOldText.toString(),
-					allNewText.toString(), aIdx, bIdx, d);
+					allNewText.toString(), safeTextStartIndexA, safeTextStartIndexB, d);
 
 			// 直接设置索引信息（简化逻辑）
 			blk.indexA = (d.operation == DiffUtil.Operation.DELETE || d.operation == DiffUtil.Operation.EQUAL) ? aIdx
@@ -568,6 +566,49 @@ public class DiffProcessingUtil {
 			}
 		}
 		return groups;
+	}
+
+	/**
+	 * 找到第一个bbox在全局序列中的开始位置
+	 * @param groups bbox分组（按bbox key分组的CharBox列表）
+	 * @param globalSequence 全局字符序列（seqA或seqB）
+	 * @return 第一个bbox的第一个字符在全局序列中的位置
+	 */
+	private static Integer findFirstBboxGlobalIndex(Map<String, List<CharBox>> groups, List<CharBox> globalSequence) {
+		if (groups.isEmpty() || globalSequence.isEmpty()) {
+			return null;
+		}
+		
+		// 获取第一个bbox的key（包含页码和坐标信息）
+		String firstBboxKey = null;
+		for (String bboxKey : groups.keySet()) {
+			List<CharBox> chars = groups.get(bboxKey);
+			if (!chars.isEmpty()) {
+				firstBboxKey = bboxKey;
+				break;
+			}
+		}
+		
+		if (firstBboxKey == null) {
+			return null;
+		}
+		
+		// 在全局序列中找到这个bbox第一次出现的位置
+		for (int i = 0; i < globalSequence.size(); i++) {
+			CharBox globalChar = globalSequence.get(i);
+			if (globalChar.bbox != null) {
+				String globalBboxKey = key(globalChar.page, globalChar.bbox);
+				if (firstBboxKey.equals(globalBboxKey)) {
+					System.out.println("[TextStartIndex] 找到第一个bbox在全局序列中的位置: 索引=" + i + 
+						", bboxKey=" + firstBboxKey + ", 字符='" + globalChar.ch + "'");
+					return i;
+				}
+			}
+		}
+		
+		// 如果没找到，返回null
+		System.out.println("[TextStartIndex] 未找到bbox在全局序列中的位置: bboxKey=" + firstBboxKey);
+		return null;
 	}
 
 	/**
