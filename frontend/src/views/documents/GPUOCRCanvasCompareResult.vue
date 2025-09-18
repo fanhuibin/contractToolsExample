@@ -48,56 +48,67 @@
       </div>
     </div>
     <div class="compare-body" v-loading="loading">
-      <div class="canvas-pane">
-        <div class="canvas-header">
-          <span class="canvas-title">旧文档</span>
-          <span class="canvas-subtitle">{{ filteredResults.length === 0 ? '（无差异）' : '（只显示删除内容）' }}</span>
-        </div>
-        <div class="canvas-container">
-          <div v-if="!viewerLoading && filteredResults.length === 0" class="no-diff-canvas">
-            <div class="no-diff-content">
-              <div class="no-diff-icon">📄</div>
-              <div class="no-diff-text">文档内容一致</div>
+      <!-- 主要对比区域容器 -->
+      <div class="compare-container">
+        <!-- 左侧文档容器盒子 -->
+        <div class="document-box left-box">
+          <div class="canvas-pane">
+            <div class="canvas-header">
+              <span class="canvas-title">旧文档</span>
+              <span class="canvas-subtitle">（只显示删除内容）</span>
+            </div>
+            <div class="canvas-container">
+              <div class="canvas-wrapper" @scroll="onCanvasScroll('old', $event)" @wheel="onWheel('old', $event)" ref="oldCanvasWrapper">
+                <div class="canvas-container" ref="oldCanvasContainer" @click="onCanvasClick('old', $event)"></div>
+                <canvas 
+                  ref="oldCanvas"
+                  style="display: none"
+                  @wheel="onWheel('old', $event)"
+                  @click="onCanvasClick('old', $event)"
+                />
+              </div>
+              <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader left-loader" />
             </div>
           </div>
-          <div v-else class="canvas-wrapper" @scroll="onCanvasScroll('old', $event)" ref="oldCanvasWrapper">
-            <div class="canvas-container" ref="oldCanvasContainer" @click="onCanvasClick('old', $event)"></div>
-            <canvas 
-              ref="oldCanvas"
-              style="display: none"
-              @wheel="onWheel('old', $event)"
-              @click="onCanvasClick('old', $event)"
-            />
-          </div>
-          <div class="marker-line" :style="markerStyle"></div>
-          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader left-loader" />
         </div>
-      </div>
-      <div class="canvas-pane">
-        <div class="canvas-header">
-          <span class="canvas-title">新文档</span>
-          <span class="canvas-subtitle">{{ filteredResults.length === 0 ? '（无差异）' : '（只显示新增内容）' }}</span>
-        </div>
-        <div class="canvas-container">
-          <div v-if="!viewerLoading && filteredResults.length === 0" class="no-diff-canvas">
-            <div class="no-diff-content">
-              <div class="no-diff-icon">📄</div>
-              <div class="no-diff-text">文档内容一致</div>
+
+        <!-- 中间交互区域 -->
+        <div class="middle-interaction-area">
+          <div class="interaction-content">
+            <!-- 进度指示器 -->
+            <div class="progress-indicator" v-if="viewerLoading">
+              <div class="progress-bar">
+                <div class="progress-fill" :style="{ width: '60%' }"></div>
+              </div>
+              <div class="progress-text">处理中...</div>
             </div>
           </div>
-          <div v-else class="canvas-wrapper" @scroll="onCanvasScroll('new', $event)" ref="newCanvasWrapper">
-            <div class="canvas-container" ref="newCanvasContainer" @click="onCanvasClick('new', $event)"></div>
-            <canvas 
-              ref="newCanvas"
-              style="display: none"
-              @wheel="onWheel('new', $event)"
-              @click="onCanvasClick('new', $event)"
-            />
+        </div>
+
+        <!-- 右侧文档容器盒子 -->
+        <div class="document-box right-box">
+          <div class="canvas-pane">
+            <div class="canvas-header">
+              <span class="canvas-title">新文档</span>
+              <span class="canvas-subtitle">（只显示新增内容）</span>
+            </div>
+            <div class="canvas-container">
+              <div class="canvas-wrapper" @scroll="onCanvasScroll('new', $event)" @wheel="onWheel('new', $event)" ref="newCanvasWrapper">
+                <div class="canvas-container" ref="newCanvasContainer" @click="onCanvasClick('new', $event)"></div>
+                <canvas 
+                  ref="newCanvas"
+                  style="display: none"
+                  @wheel="onWheel('new', $event)"
+                  @click="onCanvasClick('new', $event)"
+                />
+              </div>
+              <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader right-loader" />
+            </div>
           </div>
-          <div class="marker-line" :style="markerStyle"></div>
-          <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader right-loader" />
         </div>
       </div>
+
+      <!-- 右侧结果列表 -->
       <div class="result-list">
         <div class="head">GPU OCR比对结果 <span class="em">{{ filteredResults.length }}</span> 处（删 {{ deleteCount }} / 增 {{ insertCount }}）</div>
         <div class="list">
@@ -267,10 +278,6 @@ const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
-// 参考线样式配置
-const markerStyle = computed(() => ({ 
-  top: `calc(${MARKER_CONFIG.RATIO * 100}% + ${MARKER_CONFIG.VISUAL_OFFSET_PX}px)` 
-}))
 
 // 计算属性
 const filteredResults = computed(() => {
@@ -606,8 +613,11 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
     return
   }
   
-  // 检查滚动侧是否匹配（只在启用同步时检查）
-  if (wheelActiveSide.value && wheelActiveSide.value !== side) return
+  // 仅在滚轮触发且当前侧为主动侧时才进行同步
+  if (wheelActiveSide.value !== side) {
+    lastScrollTop.value[side] = currentTop
+    return
+  }
   
   if (Math.abs(delta) > 500) {
     console.warn('检测到异常大的滚动增量，重新同步基准位置:', delta)
@@ -1325,10 +1335,18 @@ onUnmounted(() => {
   flex: 1; 
   min-height: 0; 
   display: grid; 
-  grid-template-columns: 1fr 1fr 320px; 
+  grid-template-columns: 1fr 320px; 
   gap: 12px; 
   padding: 12px; 
   overflow: hidden; 
+}
+
+/* 主要对比区域容器 */
+.compare-container {
+  display: flex;
+  gap: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .canvas-pane { 
@@ -1339,6 +1357,69 @@ onUnmounted(() => {
   display: flex; 
   flex-direction: column;
   min-height: 0; 
+}
+
+/* 文档容器盒子样式 */
+.document-box {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.left-box, .right-box {
+  min-height: 0;
+}
+
+/* 中间交互区域 */
+.middle-interaction-area {
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: #f8f9fa;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 16px 8px;
+  min-height: 0;
+}
+
+.interaction-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+}
+
+
+/* 进度指示器 */
+.progress-indicator {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 4px;
+  background: #e6e8eb;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #409eff, #67c23a);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 9px;
+  color: #909399;
+  text-align: center;
+  margin-top: 4px;
 }
 
 .canvas-header {
@@ -1401,14 +1482,6 @@ onUnmounted(() => {
   z-index: 1; /* 确保在分隔带之上 */
 }
 
-.marker-line { 
-  position: absolute; 
-  left: 0; 
-  right: 0; 
-  height: 0; 
-  border-top: 1px dashed #f56c6c; 
-  pointer-events: none; 
-}
 
 .canvas-loader { 
   position: absolute; 
