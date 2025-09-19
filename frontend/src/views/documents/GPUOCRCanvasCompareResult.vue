@@ -47,9 +47,16 @@
         <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
     </div>
-    <div class="compare-body" v-loading="loading">
+    <div class="compare-body">
       <!-- 主要对比区域容器 -->
-      <div class="compare-container">
+      <div class="compare-container" @click.self="clearSelection">
+        <!-- SVG连接线覆盖层 -->
+        <svg 
+          ref="connectionLinesSvg"
+          class="connection-lines-overlay"
+        >
+        </svg>
+        
         <!-- 左侧文档容器盒子 -->
         <div class="document-box left-box">
           <div class="canvas-pane">
@@ -66,23 +73,22 @@
                   @wheel="onWheel('old', $event)"
                   @click="onCanvasClick('old', $event)"
                 />
+                <!-- 左侧Canvas等待效果 -->
+                <div v-if="loading || viewerLoading" class="canvas-loading-overlay">
+                  <ConcentricLoader color="#1677ff" :size="52" text="加载中..." />
+                  <div class="loading-text">正在处理文档内容...</div>
+                </div>
               </div>
-              <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader left-loader" />
             </div>
           </div>
         </div>
 
-        <!-- 中间交互区域 -->
+        <!-- 中间Canvas区域 -->
         <div class="middle-interaction-area">
-          <div class="interaction-content">
-            <!-- 进度指示器 -->
-            <div class="progress-indicator" v-if="viewerLoading">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: '60%' }"></div>
-              </div>
-              <div class="progress-text">处理中...</div>
-            </div>
-          </div>
+          <canvas 
+            ref="middleCanvas"
+            class="middle-canvas"
+          ></canvas>
         </div>
 
         <!-- 右侧文档容器盒子 -->
@@ -101,8 +107,12 @@
                   @wheel="onWheel('new', $event)"
                   @click="onCanvasClick('new', $event)"
                 />
+                <!-- 右侧Canvas等待效果 -->
+                <div v-if="loading || viewerLoading" class="canvas-loading-overlay">
+                  <ConcentricLoader color="#1677ff" :size="52" text="加载中..." />
+                  <div class="loading-text">正在处理文档内容...</div>
+                </div>
               </div>
-              <ConcentricLoader v-if="viewerLoading" color="#1677ff" :size="52" class="canvas-loader right-loader" />
             </div>
           </div>
         </div>
@@ -208,7 +218,16 @@ import {
   createCanvasPool,
   
   // 滚动处理
-  alignCanvasViewerContinuous
+  alignCanvasViewerContinuous,
+  
+  // 中间Canvas交互
+  createMiddleCanvasInteraction,
+  type MiddleCanvasInteractionProps,
+  type MiddleCanvasInteraction,
+  
+  // 同步滚动
+  createSyncScrollManager,
+  type SyncScrollManager
 } from './gpu-ocr-canvas'
 
 const route = useRoute()
@@ -228,6 +247,9 @@ const compareData = ref<any>(null)
 // Canvas相关状态
 const oldCanvas = ref<HTMLCanvasElement>()
 const newCanvas = ref<HTMLCanvasElement>()
+const middleCanvas = ref<HTMLCanvasElement>()
+// SVG连接线覆盖层
+const connectionLinesSvg = ref<SVGElement>()
 const oldCanvasWrapper = ref<HTMLElement>()
 const newCanvasWrapper = ref<HTMLElement>()
 const oldCanvasContainer = ref<HTMLElement>()
@@ -255,13 +277,18 @@ const visibleCanvasRange = ref<VisibleRange>({ start: 0, end: 0, visiblePages: [
 // 点击区域管理
 const oldCanvasClickableAreas = new Map<string, ClickableArea>()
 const newCanvasClickableAreas = new Map<string, ClickableArea>()
+// 中间Canvas点击区域映射
+const middleCanvasClickableAreas = new Map<string, ClickableArea>()
 
-// 同轴滚动相关
+// 选中的差异项状态
+const selectedDiffIndex = ref<number | null>(null)
+
+// 中间Canvas交互实例
+let middleCanvasInteraction: MiddleCanvasInteraction | null = null
+
+// 同步滚动管理器
+let syncScrollManager: SyncScrollManager | null = null
 const syncEnabled = ref(true)
-const lastScrollTop = ref({ old: 0, new: 0 })
-const wheelActiveSide = ref<ScrollSide | null>(null)
-const wheelTimer = ref<number | null>(null)
-const isScrollSyncing = ref(false)
 const isJumping = ref(false)
 
 // 轮询控制
@@ -331,6 +358,55 @@ const initLayeredCanvasSystem = () => {
   canvasLayers.value.new.forEach(canvas => newCanvasContainer.value!.appendChild(canvas))
 }
 
+// 初始化中间Canvas交互系统
+const initMiddleCanvasInteraction = () => {
+  if (!middleCanvas.value || !connectionLinesSvg.value || !oldCanvasWrapper.value) return
+  
+  const middleArea = middleCanvas.value.parentElement
+  if (!middleArea) return
+  
+  const props: MiddleCanvasInteractionProps = {
+    canvas: middleCanvas.value,
+    svg: connectionLinesSvg.value,
+    leftWrapper: oldCanvasWrapper.value,
+    rightWrapper: newCanvasWrapper.value,
+    middleArea,
+    filteredResults: filteredResults.value,
+    oldImageInfo: oldImageInfo.value,
+    newImageInfo: newImageInfo.value,
+    selectedDiffIndex: selectedDiffIndex.value,
+    clickableAreas: middleCanvasClickableAreas,
+    onDiffClick: (diffIndex, operation) => {
+      console.log(`从中间Canvas跳转到差异项 ${diffIndex + 1}, 操作: ${operation}`)
+      jumpTo(diffIndex)
+    },
+    onSelectionChange: (diffIndex) => {
+      selectedDiffIndex.value = diffIndex
+    }
+  }
+  
+  middleCanvasInteraction = createMiddleCanvasInteraction(props)
+  middleCanvasInteraction.init()
+  
+  // 初始化同步滚动管理器
+  if (!syncScrollManager) {
+    syncScrollManager = createSyncScrollManager({
+      smoothFactor: 0.9, // 更平滑的同步
+      minDelta: 0.5,     // 更敏感的同步
+      maxDelta: 300,     // 降低异常检测阈值
+      scrollEndDelay: 200 // 更快的滚动结束检测
+    })
+  }
+  
+  // 初始化滚动位置
+  if (syncScrollManager && oldCanvasWrapper.value && newCanvasWrapper.value) {
+    syncScrollManager.initScrollPositions(oldCanvasWrapper.value, newCanvasWrapper.value)
+    syncScrollManager.setEnabled(syncEnabled.value)
+  }
+  
+  console.log('中间Canvas交互系统和同步滚动初始化完成')
+}
+
 // 渲染页面分隔带（仅针对第1、2页的分隔做特殊样式）
 const renderPageSeparators = (container: HTMLElement, layout: Array<{ y: number; height: number }>) => {
   if (!container || !layout || layout.length === 0) return
@@ -389,21 +465,25 @@ const renderPageToCanvasLocal = async (
 const renderAllPages = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
   
+  console.log('开始分层Canvas渲染...')
   
   // 初始化Canvas系统
   initLayeredCanvasSystem()
   
+  // 初始化中间Canvas交互
+  await nextTick()
+  initMiddleCanvasInteraction()
+  
   const oldDifferences = results.value.filter(diff => diff.operation === 'DELETE')
   const newDifferences = results.value.filter(diff => diff.operation === 'INSERT')
   
-  const oldWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const newWidth = getCanvasWidth(newCanvasWrapper.value || null)
-  const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
-  const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
+  const containerWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
+  const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
   
   // 记录实际Canvas宽度
-  actualCanvasWidth.value.old = oldWidth
-  actualCanvasWidth.value.new = newWidth
+  actualCanvasWidth.value.old = containerWidth
+  actualCanvasWidth.value.new = containerWidth
   
   // 设置容器总高度（需要包含最后一页的pageSpacing，因为分隔带占用了空间）
   const oldLastPage = oldLayout[oldLayout.length - 1]
@@ -411,6 +491,13 @@ const renderAllPages = async () => {
   const oldTotalHeight = oldLastPage ? (oldLastPage.y + oldLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
   const newTotalHeight = newLastPage ? (newLastPage.y + newLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
   
+  console.log('容器总高度计算:', {
+    oldTotalHeight,
+    newTotalHeight,
+    oldLastPageY: oldLastPage?.y,
+    oldLastPageHeight: oldLastPage?.height,
+    pageSpacing: CANVAS_CONFIG.PAGE_SPACING
+  })
   
   if (oldCanvasContainer.value) {
     oldCanvasContainer.value.style.height = `${oldTotalHeight}px`
@@ -434,6 +521,13 @@ const renderAllPages = async () => {
   // 初始渲染可见页面
   updateVisiblePagesRender(oldLayout, newLayout, oldDifferences, newDifferences)
   
+  // 渲染中间canvas的差异图标和连接线
+  await nextTick()
+  if (middleCanvasInteraction) {
+    middleCanvasInteraction.render()
+  }
+  
+  console.log('分层Canvas渲染完成')
 }
 
 
@@ -571,89 +665,68 @@ const jumpToPage = (pageNum: number) => {
 
 // wheel 事件处理
 const onWheel = (side: 'old' | 'new', event?: WheelEvent) => {
-  wheelActiveSide.value = side
-  if (wheelTimer.value) clearTimeout(wheelTimer.value)
-  wheelTimer.value = window.setTimeout(() => {
-    wheelActiveSide.value = null
-  }, 150)
+  if (syncScrollManager) {
+    syncScrollManager.handleWheel(side)
+  }
 }
 
-// Canvas滚动处理（分层版本）
+// Canvas滚动处理（优化版本）
 const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
   if (isJumping.value) return
 
   const target = event.target as HTMLElement
   const currentTop = target.scrollTop
-  const delta = currentTop - lastScrollTop.value[side]
   
   // 清除之前的滚动结束定时器
   if (scrollEndTimer.value) {
     clearTimeout(scrollEndTimer.value)
   }
   
-  // 立即更新虚拟滚动
+  // 立即更新虚拟滚动和中间图标
   requestAnimationFrame(() => {
     updateVisibleCanvasesOnScroll()
+    
+    // 滚动时总是更新中间图标和连接线（跟随滚动动态更新）
+    if (middleCanvasInteraction) {
+      middleCanvasInteraction.renderDiffIcons()
+    }
   })
   
-  // 设置滚动结束检测（300ms后触发重新渲染）
+  // 处理同步滚动
+  if (syncEnabled.value && syncScrollManager) {
+    const sourceWrapper = target
+    const targetWrapper = side === 'old' ? newCanvasWrapper.value : oldCanvasWrapper.value
+    
+    if (targetWrapper) {
+      syncScrollManager.handleScroll(
+        side,
+        currentTop,
+        sourceWrapper,
+        targetWrapper,
+        () => {
+          // 同步滚动完成后的回调
+          if (middleCanvasInteraction) {
+            middleCanvasInteraction.renderDiffIcons()
+          }
+        }
+      )
+    }
+  }
+  
+  // 设置滚动结束检测（200ms后触发重新渲染）
   scrollEndTimer.value = window.setTimeout(() => {
     console.log('滚动结束，重新渲染页面确保完整性')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
+      // 滚动结束后总是更新中间图标
+      if (middleCanvasInteraction) {
+        middleCanvasInteraction.renderDiffIcons()
+      }
     })
     isScrollEnding.value = false
-  }, 300)
+  }, 200)
   
   isScrollEnding.value = true
-  
-  // 如果不启用同步或正在同步中，只更新虚拟滚动，不处理同步逻辑
-  if (!syncEnabled.value || isScrollSyncing.value) {
-    lastScrollTop.value[side] = currentTop
-    return
-  }
-  
-  // 仅在滚轮触发且当前侧为主动侧时才进行同步
-  if (wheelActiveSide.value !== side) {
-    lastScrollTop.value[side] = currentTop
-    return
-  }
-  
-  if (Math.abs(delta) > 500) {
-    console.warn('检测到异常大的滚动增量，重新同步基准位置:', delta)
-    lastScrollTop.value[side] = currentTop
-    const otherSide = side === 'old' ? 'new' : 'old'
-    const otherWrapper = side === 'old' ? newCanvasWrapper.value : oldCanvasWrapper.value
-    if (otherWrapper) {
-      lastScrollTop.value[otherSide] = otherWrapper.scrollTop
-    }
-    return
-  }
-  
-  lastScrollTop.value[side] = currentTop
-
-  if (Math.abs(delta) < 1) return
-
-  // 计算同步因子
-  const otherWrapper = side === 'old' ? newCanvasWrapper.value : oldCanvasWrapper.value
-  if (!otherWrapper) return
-
-  const fromRange = Math.max(1, target.scrollHeight - target.clientHeight)
-  const toRange = Math.max(1, otherWrapper.scrollHeight - otherWrapper.clientHeight)
-  const factor = toRange / fromRange
-
-  // 应用增量同步
-  isScrollSyncing.value = true
-  const otherSide = side === 'old' ? 'new' : 'old'
-  otherWrapper.scrollTop = Math.max(0, Math.min(
-    otherWrapper.scrollHeight - otherWrapper.clientHeight,
-    otherWrapper.scrollTop + delta * factor
-  ))
-  lastScrollTop.value[otherSide] = otherWrapper.scrollTop
-  
-  setTimeout(() => {
-    isScrollSyncing.value = false
-  }, 0)
 }
 
 // Canvas点击处理 - 分层Canvas版本
@@ -724,27 +797,30 @@ const scrollDifferenceListToItem = (filteredIndex: number) => {
 
 // 同轴滚动开关
 const onSyncScrollToggle = () => {
-  if (syncEnabled.value) {
-    // 重新初始化滚动位置
-    const oldWrapper = oldCanvasWrapper.value
-    const newWrapper = newCanvasWrapper.value
-    if (oldWrapper && newWrapper) {
-      lastScrollTop.value.old = oldWrapper.scrollTop
-      lastScrollTop.value.new = newWrapper.scrollTop
+  if (syncScrollManager) {
+    syncScrollManager.setEnabled(syncEnabled.value)
+    
+    if (syncEnabled.value) {
+      // 重新初始化滚动位置
+      const oldWrapper = oldCanvasWrapper.value
+      const newWrapper = newCanvasWrapper.value
+      if (oldWrapper && newWrapper) {
+        syncScrollManager.initScrollPositions(oldWrapper, newWrapper)
+      }
+      console.log('同步滚动已启用')
+    } else {
+      console.log('同步滚动已禁用')
     }
-  } else {
-    if (wheelTimer.value) {
-      clearTimeout(wheelTimer.value)
-      wheelTimer.value = null
-    }
-    wheelActiveSide.value = null
-    isScrollSyncing.value = false
   }
 }
 
 // 跳转到指定差异 - 连续滚动版本
 const jumpTo = (i: number) => {
   activeIndex.value = i
+  
+  // 设置选中的差异项索引，用于显示连接线
+  selectedDiffIndex.value = i
+  
   const r = results.value[i]
   if (!r) return
 
@@ -788,6 +864,14 @@ const jumpTo = (i: number) => {
     console.log('差异项跳转完成，重新渲染Canvas')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
+      // 跳转后更新中间图标和连接线
+      if (middleCanvasInteraction) {
+        middleCanvasInteraction.updateProps({
+          selectedDiffIndex: selectedDiffIndex.value,
+          filteredResults: filteredResults.value
+        })
+        middleCanvasInteraction.render()
+      }
     })
     isJumping.value = false
   }, 200)
@@ -888,6 +972,15 @@ const toggleExpand = (idx: number) => {
     expandedSet.value.add(idx)
   }
   expandedSet.value = new Set(expandedSet.value)
+}
+
+// 清除选中的差异项和连接线
+const clearSelection = () => {
+  selectedDiffIndex.value = null
+  // 清除连接线
+  if (middleCanvasInteraction) {
+    middleCanvasInteraction.clearSelection()
+  }
 }
 
 // 文本处理函数（复用原有逻辑）
@@ -1164,6 +1257,16 @@ watch(filterMode, () => {
     const idx = results.value.findIndex(r => r === first)
     if (idx >= 0) activeIndex.value = idx
   }
+  
+  // 筛选模式变化后更新中间图标
+  nextTick(() => {
+    if (middleCanvasInteraction) {
+      middleCanvasInteraction.updateProps({
+        filteredResults: filteredResults.value
+      })
+      middleCanvasInteraction.renderDiffIcons()
+    }
+  })
 })
 
 // 监听路由参数变化
@@ -1191,6 +1294,13 @@ const handleResize = () => {
       renderAllPages()
     })
   }
+  
+  // 重新初始化中间Canvas
+  if (middleCanvasInteraction) {
+    nextTick(() => {
+      middleCanvasInteraction?.reinit()
+    })
+  }
 }
 
 // 组件挂载
@@ -1216,11 +1326,18 @@ onMounted(() => {
 // 组件卸载
 onUnmounted(() => {
   clearPoll()
-  if (wheelTimer.value) {
-    clearTimeout(wheelTimer.value)
-  }
   if (scrollEndTimer.value) {
     clearTimeout(scrollEndTimer.value)
+  }
+  // 销毁中间Canvas交互系统
+  if (middleCanvasInteraction) {
+    middleCanvasInteraction.destroy()
+    middleCanvasInteraction = null
+  }
+  // 销毁同步滚动管理器
+  if (syncScrollManager) {
+    syncScrollManager.destroy()
+    syncScrollManager = null
   }
   // 移除窗口大小变化监听器
   window.removeEventListener('resize', handleResize)
@@ -1347,6 +1464,19 @@ onUnmounted(() => {
   gap: 12px;
   min-height: 0;
   overflow: hidden;
+  position: relative; /* 为SVG覆盖层提供定位上下文 */
+}
+
+/* SVG连接线覆盖层 */
+.connection-lines-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 9999 !important;
+  overflow: visible !important;
 }
 
 .canvas-pane { 
@@ -1376,50 +1506,26 @@ onUnmounted(() => {
   width: 80px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
   background: #f8f9fa;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 16px 8px;
+  border-top: 1px solid #ebeef5;
+  border-bottom: 1px solid #ebeef5;
   min-height: 0;
-}
-
-.interaction-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
-  width: 100%;
-}
-
-
-/* 进度指示器 */
-.progress-indicator {
-  width: 100%;
-  margin-top: 8px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 4px;
-  background: #e6e8eb;
-  border-radius: 2px;
   overflow: hidden;
+  position: relative;
 }
 
-.progress-fill {
+/* 中间Canvas样式 */
+.middle-canvas {
+  display: block;
+  background: transparent;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #409eff, #67c23a);
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  user-select: none; /* 防止选中 */
+  transition: opacity 0.2s ease; /* 添加过渡效果 */
 }
 
-.progress-text {
-  font-size: 9px;
-  color: #909399;
-  text-align: center;
-  margin-top: 4px;
+.middle-canvas:hover {
+  opacity: 0.9; /* 悬停时略微透明，提示可交互 */
 }
 
 .canvas-header {
@@ -1483,12 +1589,26 @@ onUnmounted(() => {
 }
 
 
-.canvas-loader { 
-  position: absolute; 
-  top: 50%; 
-  left: 50%; 
-  transform: translate(-50%, -50%); 
-  z-index: 10; 
+/* Canvas loading overlay - 满铺canvas-wrapper中心 */
+.canvas-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.canvas-loading-overlay .loading-text {
+  margin-top: 16px;
+  color: #666;
+  font-size: 14px;
+  text-align: center;
 }
 
 .result-list { 

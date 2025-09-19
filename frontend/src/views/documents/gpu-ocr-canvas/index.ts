@@ -22,3 +22,15 @@ export * from './scroll-handler'
 
 // 差异数据预处理
 export * from './difference-processor'
+
+// 连接线功能
+export * from './connection-lines'
+
+// 差异标记功能
+export * from './diff-markers'
+
+// 中间Canvas交互
+export * from './middle-canvas-interaction'
+
+// 同步滚动
+export * from './sync-scroll'
