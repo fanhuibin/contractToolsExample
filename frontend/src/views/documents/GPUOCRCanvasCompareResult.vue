@@ -20,7 +20,7 @@
             <el-icon><ArrowRight /></el-icon>
           </el-button>
         </el-button-group>
-        <span class="counter">{{ totalCount === 0 ? '无差异' : `第 ${displayActiveNumber} / ${totalCount} 处` }}</span>
+        <span class="counter">第 {{ displayActiveNumber }} / {{ totalCount }} 处</span>
       </div>
       <div class="right">
         <div class="page-controls">
@@ -49,7 +49,14 @@
     </div>
     <div class="compare-body" v-loading="loading">
       <!-- 主要对比区域容器 -->
-      <div class="compare-container">
+      <div class="compare-container" @click.self="clearSelection">
+        <!-- SVG连接线覆盖层 -->
+        <svg 
+          ref="connectionLinesSvg"
+          class="connection-lines-overlay"
+        >
+        </svg>
+        
         <!-- 左侧文档容器盒子 -->
         <div class="document-box left-box">
           <div class="canvas-pane">
@@ -72,17 +79,15 @@
           </div>
         </div>
 
-        <!-- 中间交互区域 -->
+        <!-- 中间Canvas区域 -->
         <div class="middle-interaction-area">
-          <div class="interaction-content">
-            <!-- 进度指示器 -->
-            <div class="progress-indicator" v-if="viewerLoading">
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: '60%' }"></div>
-              </div>
-              <div class="progress-text">处理中...</div>
-            </div>
-          </div>
+          <canvas 
+            ref="middleCanvas"
+            class="middle-canvas"
+            @click="handleMiddleCanvasClick"
+            @mousemove="handleMiddleCanvasMouseMove"
+            @mouseleave="handleMiddleCanvasMouseLeave"
+          ></canvas>
         </div>
 
         <!-- 右侧文档容器盒子 -->
@@ -115,11 +120,6 @@
           <div v-if="viewerLoading" class="list-loading">
             <ConcentricLoader color="#1677ff" :size="52" text="比对中...16%" class="list-loader" />
             <div class="loading-text-sub">任务预计处理3分钟，期间您可自由使用其他功能</div>
-          </div>
-          <div v-else-if="filteredResults.length === 0" class="no-differences">
-            <div class="no-diff-icon">✓</div>
-            <div class="no-diff-title">未发现差异</div>
-            <div class="no-diff-desc">两个文档的内容完全一致，没有发现任何差异项。</div>
           </div>
           <div v-else>
             <div
@@ -188,8 +188,10 @@ import {
   
   // 常量
   CANVAS_CONFIG,
+  SCROLL_CONFIG,
   MARKER_CONFIG,
   TEXT_CONFIG,
+  COLORS,
   
   // 布局计算
   calculatePageLayout,
@@ -200,15 +202,14 @@ import {
   // 图片管理
   imageManager,
   
-  // 差异数据预处理
-  preprocessDifferences,
-  
   // Canvas渲染
-  renderPageToCanvas,
   createCanvasPool,
+  renderPageToCanvas,
   
   // 滚动处理
-  alignCanvasViewerContinuous
+  alignCanvasViewerContinuous,
+  jumpToPage as jumpToPageHelper,
+  createPosition
 } from './gpu-ocr-canvas'
 
 const route = useRoute()
@@ -225,9 +226,17 @@ const filterMode = ref<FilterMode>('ALL')
 const taskId = ref('')
 const compareData = ref<any>(null)
 
+// 选中的差异项状态
+const selectedDiffIndex = ref<number | null>(null)
+
 // Canvas相关状态
 const oldCanvas = ref<HTMLCanvasElement>()
 const newCanvas = ref<HTMLCanvasElement>()
+const middleCanvas = ref<HTMLCanvasElement>()
+// SVG连接线覆盖层
+const connectionLinesSvg = ref<SVGElement>()
+// 中间Canvas点击区域映射
+const middleCanvasClickableAreas = new Map<string, any>()
 const oldCanvasWrapper = ref<HTMLElement>()
 const newCanvasWrapper = ref<HTMLElement>()
 const oldCanvasContainer = ref<HTMLElement>()
@@ -302,8 +311,232 @@ const displayActiveNumber = computed(() => (activeFilteredIndex.value >= 0 ? act
 
 // 图片加载现在由 imageManager 处理
 
+// Canvas渲染函数 - 连续滚动版本
+const renderCanvas = async (canvas: HTMLCanvasElement, imageInfo: any, mode: 'old' | 'new', differences: any[] = []) => {
+  if (!canvas || !imageInfo || !imageInfo.pages) {
+    return
+  }
 
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
 
+  try {
+    // 获取容器宽度
+    const wrapper = mode === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
+    if (!wrapper) return
+    
+    const canvasWidth = getCanvasWidth(wrapper)
+    
+    // 计算总高度和每页的位置信息
+    let totalHeight = 0
+    const pagePositions: { y: number; height: number; scale: number; pageInfo: any }[] = []
+    
+    for (let i = 0; i < imageInfo.pages.length; i++) {
+      const pageInfo = imageInfo.pages[i]
+      const scale = canvasWidth / pageInfo.width
+      const scaledHeight = pageInfo.height * scale
+      
+      pagePositions.push({
+        y: totalHeight,
+        height: scaledHeight,
+        scale,
+        pageInfo
+      })
+      
+      totalHeight += scaledHeight
+      if (i < imageInfo.pages.length - 1) {
+        totalHeight += CANVAS_CONFIG.PAGE_SPACING // 页面间距
+      }
+    }
+    
+    // 设置Canvas固定尺寸
+    canvas.width = canvasWidth
+    canvas.height = totalHeight
+    canvas.style.width = `${canvasWidth}px`
+    canvas.style.height = `${totalHeight}px`
+    
+    // 记录实际Canvas宽度，用于坐标计算
+    if (mode === 'old') {
+      actualCanvasWidth.value.old = canvasWidth
+    } else {
+      actualCanvasWidth.value.new = canvasWidth
+    }
+    
+    console.log(`[${mode}] Canvas尺寸: ${canvasWidth}x${totalHeight.toFixed(2)}px`)
+    
+    // 清除Canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    
+    // 清空点击区域
+    if (mode === 'old') {
+      oldCanvasClickableAreas.clear()
+    } else {
+      newCanvasClickableAreas.clear()
+    }
+    
+    // 绘制所有页面
+    for (let i = 0; i < imageInfo.pages.length; i++) {
+      const pageInfo = imageInfo.pages[i]
+      const position = pagePositions[i]
+      
+      try {
+        // 加载图片
+        const img = await imageManager.loadImage(pageInfo.imageUrl!)
+        
+        // 绘制图片
+        ctx.drawImage(img, 0, position.y, canvasWidth, position.height)
+        
+        // 绘制当前页的差异标记
+        const pageDifferences = differences.filter(diff => {
+          const pageNum = i + 1
+          if (mode === 'old') {
+            return (diff.pageA || diff.page) === pageNum
+          } else {
+            return (diff.pageB || diff.page) === pageNum
+          }
+        })
+        
+        drawDifferences(ctx, pageDifferences, mode, position.scale, position.y, pageInfo)
+        
+        // 绘制页码标识
+        drawPageNumber(ctx, i + 1, position.y, canvasWidth, position.height)
+        
+        // 绘制页面分隔线（除了最后一页）
+        if (i < imageInfo.pages.length - 1) {
+          drawPageSeparator(ctx, position.y + position.height, canvasWidth)
+        }
+        
+      } catch (error) {
+        console.error(`渲染第${i + 1}页失败:`, error)
+      }
+    }
+    
+  } catch (error) {
+    console.error('渲染Canvas失败:', error)
+  }
+}
+
+// 绘制差异标记 - 分离标记版本
+const drawDifferences = (ctx: CanvasRenderingContext2D, differences: any[], mode: 'old' | 'new', scale: number, yOffset: number, pageInfo: any) => {
+  if (!differences || differences.length === 0) return
+
+  differences.forEach((diff, diffIndex) => {
+    // 根据模式和操作类型选择要绘制的bbox
+    let bboxes: number[][] = []
+    let color = ''
+    let shouldDraw = false
+    
+    if (mode === 'old' && diff.operation === 'DELETE') {
+      // 旧文档只显示删除的内容
+      bboxes = diff.oldBboxes || []
+      color = 'rgba(255, 99, 99, 0.4)' // 红色，半透明
+      shouldDraw = true
+    } else if (mode === 'new' && diff.operation === 'INSERT') {
+      // 新文档只显示新增的内容
+      bboxes = diff.newBboxes || []
+      color = 'rgba(103, 194, 58, 0.4)' // 绿色，半透明
+      shouldDraw = true
+    }
+
+    if (!shouldDraw) return
+
+    // 绘制bbox
+    bboxes.forEach((bbox, bboxIndex) => {
+      if (bbox && bbox.length >= 4) {
+        const x = bbox[0] * scale
+        const y = bbox[1] * scale + yOffset
+        const width = (bbox[2] - bbox[0]) * scale
+        const height = (bbox[3] - bbox[1]) * scale
+        
+        // 填充背景
+        ctx.fillStyle = color
+        ctx.fillRect(x, y, width, height)
+        
+        // 绘制边框
+        ctx.strokeStyle = color.replace('0.4', '0.8')
+        ctx.lineWidth = 2
+        ctx.strokeRect(x, y, width, height)
+        
+        // 添加点击区域标识（用于双向跳转）
+        const clickableId = `${mode}-${diffIndex}-${bboxIndex}`
+        const clickableAreas = mode === 'old' ? oldCanvasClickableAreas : newCanvasClickableAreas
+        clickableAreas.set(clickableId, {
+          x, y, width, height,
+          diffIndex,
+          operation: diff.operation,
+          bbox,
+          originalDiff: diff
+        })
+      }
+    })
+  })
+}
+
+// 绘制页码标识
+const drawPageNumber = (ctx: CanvasRenderingContext2D, pageNum: number, yOffset: number, canvasWidth: number, pageHeight: number) => {
+  // 绘制页码背景
+  const pageNumText = `第 ${pageNum} 页`
+  ctx.font = '14px Arial'
+  const textWidth = ctx.measureText(pageNumText).width
+  const bgWidth = textWidth + 16
+  const bgHeight = 28
+  const bgX = canvasWidth - bgWidth - 10
+  const bgY = yOffset + 10
+  
+  // 半透明背景
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+  ctx.fillRect(bgX, bgY, bgWidth, bgHeight)
+  
+  // 页码文字
+  ctx.fillStyle = 'white'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(pageNumText, bgX + bgWidth / 2, bgY + bgHeight / 2)
+  
+  // 重置文字对齐
+  ctx.textAlign = 'start'
+  ctx.textBaseline = 'alphabetic'
+}
+
+// 绘制页面分隔线
+const drawPageSeparator = (ctx: CanvasRenderingContext2D, yPosition: number, canvasWidth: number) => {
+  const separatorHeight = CANVAS_CONFIG.PAGE_SPACING
+  const centerY = yPosition + separatorHeight / 2
+  
+  // 绘制分隔区域背景 - 使用浅灰色区分白色文档
+  ctx.fillStyle = 'rgba(248, 249, 250, 1.0)' // 更浅的灰色背景
+  ctx.fillRect(0, yPosition, canvasWidth, separatorHeight)
+  
+  // 绘制上边框阴影效果
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
+  ctx.fillRect(0, yPosition, canvasWidth, 2)
+  
+  // 绘制下边框阴影效果
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.05)'
+  ctx.fillRect(0, yPosition + separatorHeight - 2, canvasWidth, 2)
+  
+  // 绘制分隔线 - 使用更明显的颜色
+  ctx.strokeStyle = 'rgba(200, 200, 200, 0.9)' // 中灰色分隔线
+  ctx.lineWidth = 1
+  ctx.setLineDash([6, 3]) // 虚线样式
+  ctx.beginPath()
+  ctx.moveTo(40, centerY)
+  ctx.lineTo(canvasWidth - 40, centerY)
+  ctx.stroke()
+  ctx.setLineDash([]) // 重置为实线
+  
+  // 绘制页码指示器
+  const pageIndicator = '··· 页面分隔 ···'
+  ctx.font = '11px Arial'
+  ctx.fillStyle = 'rgba(140, 140, 140, 0.8)' // 深灰色文字
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(pageIndicator, canvasWidth / 2, centerY)
+  
+  // 重置文字对齐
+  ctx.textAlign = 'start'
+  ctx.textBaseline = 'alphabetic'
+}
 
 // 页面变化处理 - 连续滚动版本
 const onPageChange = () => {
@@ -363,7 +596,7 @@ const renderPageSeparators = (container: HTMLElement, layout: Array<{ y: number;
   }
 }
 
-// 使用组件化的渲染函数
+// 本地渲染函数（暂时保留，稍后统一到模块）
 const renderPageToCanvasLocal = async (
   canvas: HTMLCanvasElement, 
   imageInfo: any, 
@@ -372,38 +605,813 @@ const renderPageToCanvasLocal = async (
   differences: any[], 
   layout: any
 ) => {
+  if (!imageInfo.pages[pageIndex]) return
+  
+  const pageInfo = imageInfo.pages[pageIndex]
+  const wrapper = mode === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
+  // 使用预先计算好的布局参数，避免与分隔高度不一致导致的偏差
+  const layoutItem = layout[pageIndex]
+  const scale = layoutItem.scale
+  const scaledHeight = layoutItem.height
+  const canvasWidth = Math.round(pageInfo.width * scale)
+  
+  // 计算Canvas高度：页面高度 + 分隔空间（如果不是最后一页）
+  const isLastPage = pageIndex === imageInfo.pages.length - 1
+  const canvasHeight = isLastPage ? scaledHeight : scaledHeight + CANVAS_CONFIG.PAGE_SPACING
+  
+  // 设置Canvas尺寸和位置
+  canvas.width = canvasWidth
+  canvas.height = canvasHeight
+  canvas.style.width = `${canvasWidth}px`
+  canvas.style.height = `${canvasHeight}px`
+  canvas.style.top = `${layoutItem.y}px`
+  canvas.style.display = 'block'
+  
+  // 调试信息：记录Canvas定位
+  console.log(`Canvas ${mode} 第${pageIndex + 1}页定位: top=${layoutItem.y}px, height=${canvasHeight}px (页面=${scaledHeight}px + 分隔=${isLastPage ? 0 : CANVAS_CONFIG.PAGE_SPACING}px)`)
+  
+  // 为该canvas设置渲染标识，避免异步加载完成后写入到已复用的canvas上
+  const renderKey = `${mode}-${pageIndex}-${Date.now()}-${Math.random()}`
+  ;(canvas as any).__renderKey = renderKey
+  
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // 清除Canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  
+  // 如果不是最后一页，在分隔区域绘制背景色
+  if (!isLastPage) {
+    ctx.fillStyle = '#f5f6f8'
+    ctx.fillRect(0, scaledHeight, canvasWidth, CANVAS_CONFIG.PAGE_SPACING)
+  }
+  
+  // 加载并绘制图片
+  // 优先使用后端返回的基路径，避免taskId为空导致的路径错误
   const baseUrl = mode === 'old' ? oldImageBaseUrl.value : newImageBaseUrl.value
-  await renderPageToCanvas(
-    canvas,
-    imageInfo,
-    pageIndex,
-    mode,
-    differences,
-    layout,
-    baseUrl,
-    taskId.value
-  )
+  const imageUrl = baseUrl
+    ? `${baseUrl}/page-${pageIndex + 1}.png`
+    : `/api/gpu-ocr/files/tasks/${taskId.value}/images/${mode}/page-${pageIndex + 1}.png`
+    const image = await imageManager.loadImage(imageUrl)
+  // 渲染期间若canvas已被复用，放弃本次绘制
+  if ((canvas as any).__renderKey !== renderKey) {
+    return
+  }
+  
+  if (image) {
+    ctx.drawImage(image, 0, 0, canvasWidth, scaledHeight)
+    
+    // 绘制差异标记
+    const pageDifferences = differences.filter(diff => {
+      const page = mode === 'old' ? diff.pageA : diff.pageB
+      return page === pageIndex + 1
+    })
+    
+    // 绘制差异标记（使用现有的绘制函数）
+    for (const diff of pageDifferences) {
+      if ((canvas as any).__renderKey !== renderKey) return
+      const bbox = mode === 'old' ? diff.oldBbox : diff.newBbox
+      if (bbox && bbox.length >= 4) {
+        const x = bbox[0] * scale
+        const y = bbox[1] * scale
+        const width = (bbox[2] - bbox[0]) * scale
+        const height = (bbox[3] - bbox[1]) * scale
+        
+        // 绘制差异框
+        ctx.strokeStyle = mode === 'old' ? '#f56c6c' : '#67c23a'
+        ctx.lineWidth = 2
+        ctx.strokeRect(x, y, width, height)
+        
+        // 填充半透明背景
+        ctx.fillStyle = mode === 'old' ? 'rgba(245, 108, 108, 0.1)' : 'rgba(103, 194, 58, 0.1)'
+        ctx.fillRect(x, y, width, height)
+      }
+    }
+  }
+
+  // 右上角页码信息（分层Canvas每页）- 相对本页Canvas坐标，不受分隔影响
+  try {
+    if ((canvas as any).__renderKey !== renderKey) return
+    const labelPaddingX = 8
+    const labelPaddingY = 6
+    const labelText = `${mode === 'old' ? '旧' : '新'} 第 ${pageIndex + 1} / ${imageInfo.pages.length} 页`
+    ctx.font = 'bold 13px Arial, Helvetica, sans-serif'
+    const textMetrics = ctx.measureText(labelText)
+    const labelWidth = Math.ceil(textMetrics.width) + labelPaddingX * 2
+    const labelHeight = 24
+    const labelX = canvasWidth - labelWidth - 10
+    const labelY = 10 // 相对于本页canvas起点
+    
+    // 背景（圆角矩形）
+    ctx.save()
+    const radius = 6
+    ctx.beginPath()
+    ctx.moveTo(labelX + radius, labelY)
+    ctx.lineTo(labelX + labelWidth - radius, labelY)
+    ctx.quadraticCurveTo(labelX + labelWidth, labelY, labelX + labelWidth, labelY + radius)
+    ctx.lineTo(labelX + labelWidth, labelY + labelHeight - radius)
+    ctx.quadraticCurveTo(labelX + labelWidth, labelY + labelHeight, labelX + labelWidth - radius, labelY + labelHeight)
+    ctx.lineTo(labelX + radius, labelY + labelHeight)
+    ctx.quadraticCurveTo(labelX, labelY + labelHeight, labelX, labelY + labelHeight - radius)
+    ctx.lineTo(labelX, labelY + radius)
+    ctx.quadraticCurveTo(labelX, labelY, labelX + radius, labelY)
+    ctx.closePath()
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+    ctx.fill()
+    
+    // 文本
+    ctx.fillStyle = '#fff'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(labelText, labelX + labelPaddingX, labelY + labelHeight / 2)
+    ctx.restore()
+  } catch (_) {}
 }
+
+// 初始化中间Canvas
+const initMiddleCanvas = () => {
+  if (!middleCanvas.value || !oldCanvasWrapper.value) return
+  
+  const canvas = middleCanvas.value
+  const container = canvas.parentElement
+  if (!container) return
+  
+  // 设置canvas尺寸 - 与左侧canvas容器保持完全一致
+  const containerWidth = 80 // 固定宽度
+  const containerHeight = container.clientHeight || oldCanvasWrapper.value.clientHeight || 600
+  
+  canvas.width = containerWidth
+  canvas.height = containerHeight
+  canvas.style.width = `${containerWidth}px`
+  canvas.style.height = `${containerHeight}px`
+  
+  // 获取绘图上下文
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // 清除canvas
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  
+  // 绘制背景
+  drawMiddleCanvasBackground(ctx, containerWidth, containerHeight)
+  
+  console.log('中间Canvas初始化完成，尺寸:', containerWidth, 'x', containerHeight)
+}
+
+// 绘制中间canvas背景
+const drawMiddleCanvasBackground = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  // 绘制背景色
+  ctx.fillStyle = '#f8f9fa'
+  ctx.fillRect(0, 0, width, height)
+}
+
+// 获取canvas header的高度
+const getCanvasHeaderHeight = () => {
+  // 查找canvas-header元素
+  const canvasHeader = document.querySelector('.canvas-header')
+  if (canvasHeader) {
+    return canvasHeader.getBoundingClientRect().height
+  }
+  // 如果找不到，使用默认高度（根据CSS估算）
+  return 40 // 默认header高度
+}
+
+// 将页面绝对坐标转换为可视区域相对坐标
+const convertPageCoordinateToViewport = (absoluteY: number, scrollTop: number, headerHeight: number) => {
+  // 计算相对于可视区域的位置
+  const relativeY = absoluteY - scrollTop
+  
+  // 由于中间区域有header，需要加上header高度的偏移
+  const viewportY = relativeY + headerHeight
+  
+  return viewportY
+}
+
+// 计算差异框在左侧的绝对位置（使用与差异框绘制完全相同的逻辑）
+const calculateDiffBoxAbsoluteY = (diff: any) => {
+  if (!diff || !oldCanvasWrapper.value) {
+    return null
+  }
+
+  try {
+    let bbox: number[] | undefined
+    let pageNum: number
+    let targetImageInfo: any
+
+    if (diff.operation === 'DELETE') {
+      // 删除项：直接使用左侧文档数据
+      bbox = diff.oldBbox
+      pageNum = diff.pageA || diff.page || 1
+      targetImageInfo = oldImageInfo.value
+    } else if (diff.operation === 'INSERT') {
+      // 新增项：优先使用prevOldBbox，如果没有则映射newBbox
+      if (diff.prevOldBbox) {
+        bbox = diff.prevOldBbox
+        pageNum = diff.pageA || diff.page || 1
+        targetImageInfo = oldImageInfo.value
+      } else if (diff.newBbox && newImageInfo.value && newCanvasWrapper.value) {
+        // 将右侧坐标映射到左侧坐标系统
+        return mapRightCoordinateToLeftAbsolute(diff)
+      } else {
+        return null
+      }
+    } else {
+      return null
+    }
+
+    if (!bbox || bbox.length < 4 || pageNum < 1 || !targetImageInfo) {
+      return null
+    }
+
+    // 使用左侧canvas的布局计算绝对位置
+    const containerWidth = getCanvasWidth(oldCanvasWrapper.value)
+    const layout = calculatePageLayout(targetImageInfo, containerWidth)
+    
+    const pageIndex = pageNum - 1
+    if (pageIndex >= layout.length) {
+      return null
+    }
+
+    const pageLayout = layout[pageIndex]
+    
+    // 使用与差异框绘制完全相同的计算逻辑
+    const scale = pageLayout.scale
+    const y = bbox[1] * scale
+    const height = (bbox[3] - bbox[1]) * scale
+    const centerY = y + height / 2
+    
+    // 计算在整个左侧文档容器中的绝对位置
+    const absoluteY = pageLayout.y + centerY
+    
+    return absoluteY
+  } catch (error) {
+    console.error('计算差异框绝对位置失败:', error)
+    return null
+  }
+}
+
+// 将右侧坐标映射到左侧绝对坐标
+const mapRightCoordinateToLeftAbsolute = (diff: any) => {
+  if (!diff.newBbox || !newImageInfo.value || !oldImageInfo.value || !newCanvasWrapper.value || !oldCanvasWrapper.value) {
+    return null
+  }
+
+  try {
+    const rightBbox = diff.newBbox
+    const rightPageNum = diff.pageB || diff.page || 1
+    
+    // 计算在右侧文档中的位置
+    const rightContainerWidth = getCanvasWidth(newCanvasWrapper.value)
+    const rightLayout = calculatePageLayout(newImageInfo.value, rightContainerWidth)
+    const rightPageIndex = rightPageNum - 1
+    
+    if (rightPageIndex >= rightLayout.length) return null
+    
+    const rightPageLayout = rightLayout[rightPageIndex]
+    const rightScale = rightPageLayout.scale
+    const rightY = rightBbox[1] * rightScale
+    const rightHeight = (rightBbox[3] - rightBbox[1]) * rightScale
+    const rightCenterY = rightY + rightHeight / 2
+    
+    // 计算在右侧页面中的相对位置（0-1比例）
+    const rightPageProgress = rightCenterY / rightPageLayout.height
+    
+    // 映射到左侧对应页面
+    const leftContainerWidth = getCanvasWidth(oldCanvasWrapper.value)
+    const leftLayout = calculatePageLayout(oldImageInfo.value, leftContainerWidth)
+    const leftPageIndex = Math.min(rightPageIndex, leftLayout.length - 1)
+    
+    if (leftPageIndex < 0) return null
+    
+    const leftPageLayout = leftLayout[leftPageIndex]
+    const leftMappedCenterY = rightPageProgress * leftPageLayout.height
+    const leftMappedAbsoluteY = leftPageLayout.y + leftMappedCenterY
+    
+    return leftMappedAbsoluteY
+  } catch (error) {
+    console.error('右侧坐标映射到左侧失败:', error)
+    return null
+  }
+}
+
+// 计算差异图标在中间canvas中的位置（基于可视区域坐标转换）
+const calculateDiffIconYPosition = (diff: any) => {
+  if (!diff || !oldImageInfo.value || !oldCanvasWrapper.value) {
+    return null
+  }
+
+  try {
+    // 1. 计算差异框在左侧文档的绝对位置
+    const absoluteY = calculateDiffBoxAbsoluteY(diff)
+    if (absoluteY === null) return null
+    
+    // 2. 获取当前滚动位置和header高度
+    const scrollTop = oldCanvasWrapper.value.scrollTop
+    const headerHeight = getCanvasHeaderHeight()
+    
+    // 3. 转换为可视区域坐标
+    const viewportY = convertPageCoordinateToViewport(absoluteY, scrollTop, headerHeight)
+    
+    // 4. 检查是否在可视范围内
+    const viewportHeight = oldCanvasWrapper.value.clientHeight
+    const visible = viewportY >= (headerHeight - 50) && viewportY <= (viewportHeight + headerHeight + 50)
+    
+    return {
+      absoluteY,
+      relativeY: viewportY,
+      visible
+    }
+  } catch (error) {
+    console.error('计算差异图标位置失败:', error)
+    return null
+  }
+}
+
+// 绘制差异图标
+const drawDiffIcon = (ctx: CanvasRenderingContext2D, x: number, y: number, operation: string) => {
+  const iconSize = 20
+  const halfSize = iconSize / 2
+  const radius = 4 // 圆角半径
+  
+  // 保存当前状态
+  ctx.save()
+  
+  // 设置颜色
+  const isInsert = operation === 'INSERT'
+  const baseColor = isInsert ? '#4CAF50' : '#F44336' // 更鲜艳的绿色和红色
+  const darkColor = isInsert ? '#2E7D32' : '#C62828' // 更深的颜色用于边框和渐变
+  
+  // 创建渐变效果
+  const gradient = ctx.createLinearGradient(
+    x - halfSize, y - halfSize, 
+    x + halfSize, y + halfSize
+  )
+  gradient.addColorStop(0, baseColor)
+  gradient.addColorStop(1, darkColor)
+  
+  // 绘制圆角矩形背景
+  ctx.fillStyle = gradient
+  ctx.beginPath()
+  ctx.roundRect(x - halfSize, y - halfSize, iconSize, iconSize, radius)
+  ctx.fill()
+  
+  // 绘制深色边框
+  ctx.strokeStyle = darkColor
+  ctx.lineWidth = 1.5
+  ctx.beginPath()
+  ctx.roundRect(x - halfSize, y - halfSize, iconSize, iconSize, radius)
+  ctx.stroke()
+  
+  // 绘制符号
+  ctx.fillStyle = '#ffffff'
+  ctx.font = 'bold 14px Arial'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  
+  if (isInsert) {
+    // 绘制加号
+    // 水平线
+    ctx.fillRect(x - 6, y - 1.5, 12, 3)
+    // 垂直线
+    ctx.fillRect(x - 1.5, y - 6, 3, 12)
+  } else {
+    // 绘制减号
+    ctx.fillRect(x - 6, y - 1.5, 12, 3)
+  }
+  
+  // 添加高光效果
+  const highlightGradient = ctx.createLinearGradient(
+    x - halfSize, y - halfSize,
+    x - halfSize, y - halfSize + iconSize / 3
+  )
+  highlightGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)')
+  highlightGradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  
+  ctx.fillStyle = highlightGradient
+  ctx.beginPath()
+  ctx.roundRect(x - halfSize, y - halfSize, iconSize, iconSize / 3, [radius, radius, 0, 0])
+  ctx.fill()
+  
+  // 恢复状态
+  ctx.restore()
+}
+
+// 渲染中间canvas的差异图标
+const renderMiddleCanvasDiffIcons = () => {
+  if (!middleCanvas.value || !filteredResults.value.length) return
+  
+  const ctx = middleCanvas.value.getContext('2d')
+  if (!ctx) return
+  
+  const width = middleCanvas.value.width
+  const height = middleCanvas.value.height
+  const centerX = width / 2
+  
+  // 清除并重绘背景
+  drawMiddleCanvasBackground(ctx, width, height)
+  
+  // 清除之前的点击区域映射
+  middleCanvasClickableAreas.clear()
+  
+  // 绘制所有可见的差异图标
+  let renderedCount = 0
+  filteredResults.value.forEach((diff, index) => {
+    const position = calculateDiffIconYPosition(diff)
+    if (position && position.visible) {
+      drawDiffIcon(ctx, centerX, position.relativeY, diff.operation)
+      
+      // 记录点击区域
+      const iconSize = 20
+      const halfSize = iconSize / 2
+      const clickableId = `middle-${index}`
+      middleCanvasClickableAreas.set(clickableId, {
+        x: centerX - halfSize,
+        y: position.relativeY - halfSize,
+        width: iconSize,
+        height: iconSize,
+        diffIndex: index,
+        operation: diff.operation,
+        originalDiff: diff
+      })
+      
+      renderedCount++
+    }
+  })
+  
+  console.log(`中间Canvas差异图标渲染完成，共渲染 ${renderedCount} 个图标`)
+  
+  // 渲染连接线
+  renderConnectionLines()
+}
+
+// 渲染跨容器的连接线
+const renderConnectionLines = () => {
+  if (!connectionLinesSvg.value || !oldCanvasWrapper.value || !middleCanvas.value) return
+  
+  // 清除现有连接线
+  connectionLinesSvg.value.innerHTML = ''
+  
+  // 获取容器位置信息
+  const compareContainer = connectionLinesSvg.value.parentElement
+  if (!compareContainer) return
+  
+  // 设置SVG尺寸与容器一致
+  const containerRect = compareContainer.getBoundingClientRect()
+  connectionLinesSvg.value.setAttribute('width', containerRect.width.toString())
+  connectionLinesSvg.value.setAttribute('height', containerRect.height.toString())
+  connectionLinesSvg.value.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`)
+  
+  console.log('SVG容器设置:', {
+    width: containerRect.width,
+    height: containerRect.height,
+    viewBox: `0 0 ${containerRect.width} ${containerRect.height}`
+  })
+  
+  // 移除测试线条
+  
+  const leftBox = compareContainer.querySelector('.left-box') as HTMLElement
+  const middleArea = compareContainer.querySelector('.middle-interaction-area') as HTMLElement
+  const rightBox = compareContainer.querySelector('.right-box') as HTMLElement
+  
+  if (!leftBox || !middleArea || !rightBox) return
+  
+  // 获取各容器的位置和尺寸
+  const compareRect = compareContainer.getBoundingClientRect()
+  const leftRect = leftBox.getBoundingClientRect()
+  const middleRect = middleArea.getBoundingClientRect()
+  const rightRect = rightBox.getBoundingClientRect()
+  
+  // 计算相对位置
+  const leftRelativeX = leftRect.left - compareRect.left
+  const leftRelativeY = leftRect.top - compareRect.top
+  const middleRelativeX = middleRect.left - compareRect.left
+  const middleRelativeY = middleRect.top - compareRect.top
+  const rightRelativeX = rightRect.left - compareRect.left
+  const rightRelativeY = rightRect.top - compareRect.top
+  
+  
+  // 只渲染选中差异项的连接线
+  let lineCount = 0
+  
+  // 如果没有选中任何差异项，不渲染连接线
+  if (selectedDiffIndex.value === null) {
+    return
+  }
+  
+  // 只处理选中的差异项
+  const selectedDiff = filteredResults.value[selectedDiffIndex.value]
+  if (!selectedDiff) {
+    return
+  }
+  
+  const position = calculateDiffIconYPosition(selectedDiff)
+  if (!position || !position.visible) {
+    return
+  }
+  
+  const diff = selectedDiff
+  const index = selectedDiffIndex.value
+    
+    const middleIconX = middleRelativeX + middleRect.width / 2
+    const middleIconY = middleRelativeY + position.relativeY
+    
+    // 1. 绘制红色连接线（DELETE）：起点=差异框右边线中点，终点=差异图标左边线中点
+    if (diff.operation === 'DELETE') {
+      const leftDiffBoxY = calculateDiffBoxRelativeY(diff, 'left')
+      if (leftDiffBoxY !== null && diff.oldBbox) {
+        const diffBoxY = leftRelativeY + leftDiffBoxY
+        
+        // 获取左侧canvas容器信息
+        const leftCanvasWrapper = leftBox.querySelector('.canvas-wrapper') as HTMLElement
+        if (leftCanvasWrapper && oldImageInfo.value) {
+          const leftCanvasRect = leftCanvasWrapper.getBoundingClientRect()
+          const leftCanvasRelativeX = leftCanvasRect.left - compareRect.left
+          
+          // 计算差异框的实际右边缘X坐标
+          const containerWidth = getCanvasWidth(oldCanvasWrapper.value)
+          const layout = calculatePageLayout(oldImageInfo.value, containerWidth)
+          const pageIndex = (diff.pageA || diff.page || 1) - 1
+          
+          if (pageIndex >= 0 && pageIndex < layout.length) {
+            const pageLayout = layout[pageIndex]
+            const scale = pageLayout.scale
+            const diffBoxRightX = diff.oldBbox[2] * scale // bbox[2] 是右边缘x坐标
+            
+            // 起点：差异框右边线中点
+            const startX = leftCanvasRelativeX + diffBoxRightX
+            const startY = diffBoxY
+            
+            // 终点：差异图标左边线中点
+            const endX = middleIconX - 10 // 图标左边缘
+            const endY = middleIconY
+            
+             // 绘制红色连接线，使用DELETE差异框的颜色
+             createConnectionLine(startX, startY, endX, endY, getOperationColor('DELETE'))
+             lineCount++
+          }
+        }
+      }
+    }
+    
+    // 1.5. INSERT类型左侧连接线：起点=旧文档不同处（prevOldBbox）右边线中点，终点=新增图标左边线中点
+    if (diff.operation === 'INSERT' && diff.prevOldBbox) {
+      const leftDiffBoxY = calculateDiffBoxRelativeY(diff, 'left')
+      if (leftDiffBoxY !== null) {
+        const diffBoxY = leftRelativeY + leftDiffBoxY
+        
+        // 获取左侧canvas容器信息
+        const leftCanvasWrapper = leftBox.querySelector('.canvas-wrapper') as HTMLElement
+        if (leftCanvasWrapper && oldImageInfo.value) {
+          const leftCanvasRect = leftCanvasWrapper.getBoundingClientRect()
+          const leftCanvasRelativeX = leftCanvasRect.left - compareRect.left
+          
+          // 计算prevOldBbox（旧文档不同处）的实际右边缘X坐标
+          const containerWidth = getCanvasWidth(oldCanvasWrapper.value)
+          const layout = calculatePageLayout(oldImageInfo.value, containerWidth)
+          const pageIndex = (diff.pageA || diff.page || 1) - 1
+          
+          if (pageIndex >= 0 && pageIndex < layout.length) {
+            const pageLayout = layout[pageIndex]
+            const scale = pageLayout.scale
+            const diffBoxRightX = diff.prevOldBbox[2] * scale // prevOldBbox右边缘x坐标
+            
+            // 起点：旧文档不同处右边线中点
+            const startX = leftCanvasRelativeX + diffBoxRightX
+            const startY = diffBoxY
+            
+            // 终点：新增图标左边线中点
+            const endX = middleIconX - 10 // 图标左边缘
+            const endY = middleIconY
+            
+            // 绘制绿色连接线
+            createConnectionLine(startX, startY, endX, endY, getOperationColor('INSERT'))
+            lineCount++
+          }
+        }
+      }
+    }
+    
+    // 1.6. DELETE类型右侧连接线：起点=删除图标右边线中点，终点=新文档不同处（prevNewBbox）左边线中点
+    if (diff.operation === 'DELETE' && diff.prevNewBbox) {
+      const rightDiffBoxY = calculateDiffBoxRelativeY(diff, 'right')
+      if (rightDiffBoxY !== null) {
+        const diffBoxY = rightRelativeY + rightDiffBoxY
+        
+        // 获取右侧canvas容器信息
+        const rightCanvasWrapper = rightBox.querySelector('.canvas-wrapper') as HTMLElement
+        if (rightCanvasWrapper && newImageInfo.value) {
+          const rightCanvasRect = rightCanvasWrapper.getBoundingClientRect()
+          const rightCanvasRelativeX = rightCanvasRect.left - compareRect.left
+          
+          // 计算prevNewBbox（新文档不同处）的实际左边缘X坐标
+          const containerWidth = getCanvasWidth(newCanvasWrapper.value!)
+          const layout = calculatePageLayout(newImageInfo.value, containerWidth)
+          const pageIndex = (diff.pageB || diff.page || 1) - 1
+          
+          if (pageIndex >= 0 && pageIndex < layout.length) {
+            const pageLayout = layout[pageIndex]
+            const scale = pageLayout.scale
+            const diffBoxLeftX = diff.prevNewBbox[0] * scale // prevNewBbox左边缘x坐标
+            
+            // 起点：删除图标右边线中点
+            const startX = middleIconX + 10 // 图标右边缘
+            const startY = middleIconY
+            
+            // 终点：新文档不同处左边线中点
+            const endX = rightCanvasRelativeX + diffBoxLeftX
+            const endY = diffBoxY
+            
+            // 右侧canvas的左边缘X坐标
+            const rightCanvasLeftX = rightCanvasRelativeX
+            
+            // 计算第二段水平线的终点：在删除图标右边缘基础上向右延伸，但不超出灰色区域
+            const middleAreaWidth = 80 // 中间灰色区域宽度
+            const middleAreaRightEdge = middleRelativeX + middleAreaWidth
+            const extensionDistance = 20 // 向右延伸20px
+            const horizontalEndX = Math.min(startX + extensionDistance, middleAreaRightEdge - 5) // 确保不超出灰色区域
+            
+            // 绘制三段连接线，使用DELETE差异框的颜色：
+            const deleteColor = getOperationColor('DELETE')
+            // 1. 从新文档不同处到canvas左边缘的水平线
+            createConnectionLine(endX, endY, rightCanvasLeftX, endY, deleteColor)
+            
+            // 2. 从canvas左边缘到中间点的斜线
+            createConnectionLine(rightCanvasLeftX, endY, horizontalEndX, startY, deleteColor)
+            
+            // 3. 从中间点到删除图标的水平线
+            createConnectionLine(horizontalEndX, startY, startX, startY, deleteColor)
+            lineCount += 3 // 因为绘制了三条线
+          }
+        }
+      }
+    }
+    
+    // 2. 绘制绿色连接线（INSERT）：起点=差异图标右边线中点，终点=差异框左边线中点
+    if (diff.operation === 'INSERT') {
+      const rightDiffBoxY = calculateDiffBoxRelativeY(diff, 'right')
+      if (rightDiffBoxY !== null && diff.newBbox) {
+        const diffBoxY = rightRelativeY + rightDiffBoxY
+        
+        // 获取右侧canvas容器信息
+        const rightCanvasWrapper = rightBox.querySelector('.canvas-wrapper') as HTMLElement
+        if (rightCanvasWrapper && newImageInfo.value) {
+          const rightCanvasRect = rightCanvasWrapper.getBoundingClientRect()
+          const rightCanvasRelativeX = rightCanvasRect.left - compareRect.left
+          
+          // 计算差异框的实际左边缘X坐标
+          const containerWidth = getCanvasWidth(newCanvasWrapper.value!)
+          const layout = calculatePageLayout(newImageInfo.value, containerWidth)
+          const pageIndex = (diff.pageB || diff.page || 1) - 1
+          
+          if (pageIndex >= 0 && pageIndex < layout.length) {
+            const pageLayout = layout[pageIndex]
+            const scale = pageLayout.scale
+            const diffBoxLeftX = diff.newBbox[0] * scale // bbox[0] 是左边缘x坐标
+            
+            // 起点：差异图标右边线中点
+            const startX = middleIconX + 10 // 图标右边缘
+            const startY = middleIconY
+            
+            // 终点：差异框左边线中点
+            const endX = rightCanvasRelativeX + diffBoxLeftX
+            const endY = diffBoxY
+            
+            // 右侧canvas的左边缘X坐标
+            const rightCanvasLeftX = rightCanvasRelativeX
+            
+            // 计算第二段水平线的终点：在差异图标右边缘基础上向右延伸，但不超出灰色区域
+            const middleAreaWidth = 80 // 中间灰色区域宽度
+            const middleAreaRightEdge = middleRelativeX + middleAreaWidth
+            const extensionDistance = 20 // 向右延伸20px
+            const horizontalEndX = Math.min(startX + extensionDistance, middleAreaRightEdge - 5) // 确保不超出灰色区域
+            
+            // 绘制三段连接线，使用INSERT差异框的颜色：
+            const insertColor = getOperationColor('INSERT')
+            // 1. 从差异框到canvas左边缘的水平线（确保方向正确）
+            createConnectionLine(endX, endY, rightCanvasLeftX, endY, insertColor)
+            
+            // 2. 从canvas左边缘到中间点的斜线
+            createConnectionLine(rightCanvasLeftX, endY, horizontalEndX, startY, insertColor)
+            
+            // 3. 从中间点到差异图标的水平线
+            createConnectionLine(horizontalEndX, startY, startX, startY, insertColor)
+            lineCount += 3 // 因为绘制了三条线
+          }
+        }
+      }
+    }
+}
+
+// 根据操作类型获取颜色
+const getOperationColor = (operation: string): string => {
+  if (operation === 'DELETE') {
+    return 'rgba(255, 99, 99, 0.8)' // 删除：红色，与差异框颜色一致但更不透明
+  } else if (operation === 'INSERT') {
+    return 'rgba(103, 194, 58, 0.8)' // 新增：绿色，与差异框颜色一致但更不透明
+  }
+  return 'rgba(128, 128, 128, 0.8)' // 默认：灰色
+}
+
+// 创建单条连接线
+const createConnectionLine = (x1: number, y1: number, x2: number, y2: number, color: string) => {
+  if (!connectionLinesSvg.value) {
+    console.error('SVG元素不存在')
+    return
+  }
+  
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+  line.setAttribute('x1', Math.round(x1).toString())
+  line.setAttribute('y1', Math.round(y1).toString())
+  line.setAttribute('x2', Math.round(x2).toString())
+  line.setAttribute('y2', Math.round(y2).toString())
+  line.setAttribute('stroke', color)
+  line.setAttribute('stroke-width', '1') // 调整线条宽度为1px
+  line.setAttribute('opacity', '1')
+  line.setAttribute('stroke-linecap', 'round')
+  
+  connectionLinesSvg.value.appendChild(line)
+}
+
+// 计算差异框在容器中的相对Y位置
+const calculateDiffBoxRelativeY = (diff: any, side: 'left' | 'right') => {
+  try {
+    let bbox: number[] | undefined
+    let pageNum: number = 1
+    let canvasWrapper: HTMLElement | null = null
+    let imageInfo: any = null
+    
+    if (side === 'left') {
+      if (diff.operation === 'DELETE') {
+        bbox = diff.oldBbox
+        pageNum = diff.pageA || diff.page || 1
+      } else if (diff.operation === 'INSERT' && diff.prevOldBbox) {
+        // INSERT操作的左侧连接：使用prevOldBbox（旧文档不同处）
+        bbox = diff.prevOldBbox
+        pageNum = diff.pageA || diff.page || 1
+      }
+      canvasWrapper = oldCanvasWrapper.value || null
+      imageInfo = oldImageInfo.value
+    } else if (side === 'right') {
+      if (diff.operation === 'INSERT') {
+        bbox = diff.newBbox
+        pageNum = diff.pageB || diff.page || 1
+      } else if (diff.operation === 'DELETE' && diff.prevNewBbox) {
+        // DELETE操作的右侧连接：使用prevNewBbox（新文档不同处）
+        bbox = diff.prevNewBbox
+        pageNum = diff.pageB || diff.page || 1
+      }
+      canvasWrapper = newCanvasWrapper.value || null
+      imageInfo = newImageInfo.value
+    }
+    
+    if (!bbox || bbox.length < 4 || !canvasWrapper || !imageInfo) return null
+    
+    const containerWidth = getCanvasWidth(canvasWrapper)
+    const layout = calculatePageLayout(imageInfo, containerWidth)
+    const pageIndex = pageNum - 1
+    
+    if (pageIndex < 0 || pageIndex >= layout.length) return null
+    
+    const pageLayout = layout[pageIndex]
+    const scale = pageLayout.scale
+    const y = bbox[1] * scale
+    const height = (bbox[3] - bbox[1]) * scale
+    const centerY = y + height / 2
+    const absoluteY = pageLayout.y + centerY
+    const scrollTop = canvasWrapper.scrollTop
+    
+    // 返回相对于容器可视区域的位置
+    const headerHeight = getCanvasHeaderHeight()
+    return absoluteY - scrollTop + headerHeight
+  } catch (error) {
+    return null
+  }
+}
+
+
 
 // 渲染所有页面（使用分层Canvas）
 const renderAllPages = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
   
+  console.log('开始分层Canvas渲染...')
   
   // 初始化Canvas系统
   initLayeredCanvasSystem()
   
+  // 初始化中间Canvas
+  await nextTick()
+  initMiddleCanvas()
+  
   const oldDifferences = results.value.filter(diff => diff.operation === 'DELETE')
   const newDifferences = results.value.filter(diff => diff.operation === 'INSERT')
   
-  const oldWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const newWidth = getCanvasWidth(newCanvasWrapper.value || null)
-  const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
-  const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
+  const containerWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
+  const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
   
   // 记录实际Canvas宽度
-  actualCanvasWidth.value.old = oldWidth
-  actualCanvasWidth.value.new = newWidth
+  actualCanvasWidth.value.old = containerWidth
+  actualCanvasWidth.value.new = containerWidth
   
   // 设置容器总高度（需要包含最后一页的pageSpacing，因为分隔带占用了空间）
   const oldLastPage = oldLayout[oldLayout.length - 1]
@@ -411,6 +1419,13 @@ const renderAllPages = async () => {
   const oldTotalHeight = oldLastPage ? (oldLastPage.y + oldLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
   const newTotalHeight = newLastPage ? (newLastPage.y + newLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
   
+  console.log('容器总高度计算:', {
+    oldTotalHeight,
+    newTotalHeight,
+    oldLastPageY: oldLastPage?.y,
+    oldLastPageHeight: oldLastPage?.height,
+    pageSpacing: CANVAS_CONFIG.PAGE_SPACING
+  })
   
   if (oldCanvasContainer.value) {
     oldCanvasContainer.value.style.height = `${oldTotalHeight}px`
@@ -434,11 +1449,14 @@ const renderAllPages = async () => {
   // 初始渲染可见页面
   updateVisiblePagesRender(oldLayout, newLayout, oldDifferences, newDifferences)
   
+  // 渲染中间canvas的差异图标
+  await nextTick()
+  renderMiddleCanvasDiffIcons()
+  
+  console.log('分层Canvas渲染完成')
 }
 
-
-
-// 更新可见页面渲染（恢复原始逻辑）
+// 更新可见页面渲染
 const updateVisiblePagesRender = async (
   oldLayout: any[], 
   newLayout: any[], 
@@ -446,94 +1464,65 @@ const updateVisiblePagesRender = async (
   newDifferences: any[]
 ) => {
   if (!oldCanvasWrapper.value || !newCanvasWrapper.value) return
-
-  // 预处理差异数据
-  const oldPageDiffs = preprocessDifferences(oldDifferences)
-  const newPageDiffs = preprocessDifferences(newDifferences)
-
-  // 分别计算两侧的可见范围（使用原始逻辑）
-  const oldScrollTop = oldCanvasWrapper.value.scrollTop
-  const oldContainerHeight = oldCanvasWrapper.value.clientHeight
-  const newScrollTop = newCanvasWrapper.value.scrollTop
-  const newContainerHeight = newCanvasWrapper.value.clientHeight
-
-  const oldVisibleRange = updateVisibleCanvases(oldScrollTop, oldContainerHeight, oldLayout)
-  const newVisibleRange = updateVisibleCanvases(newScrollTop, newContainerHeight, newLayout)
-
-  // 扩展可见页面以包含所有差异页面
-  const oldDiffPageNumbers = Array.from(oldPageDiffs.keys()).map(p => p - 1) // 转换为0基索引
-  const newDiffPageNumbers = Array.from(newPageDiffs.keys()).map(p => p - 1) // 转换为0基索引
   
-  const extendedOldPages = new Set([...oldVisibleRange.visiblePages, ...oldDiffPageNumbers])
-  const extendedNewPages = new Set([...newVisibleRange.visiblePages, ...newDiffPageNumbers])
+  const scrollTop = oldCanvasWrapper.value.scrollTop
+  const containerHeight = oldCanvasWrapper.value.clientHeight
   
-
+  // 计算可见范围
+  const visibleRange = updateVisibleCanvases(scrollTop, containerHeight, oldLayout)
+  
   // 隐藏所有Canvas
   canvasLayers.value.old.forEach(canvas => canvas.style.display = 'none')
   canvasLayers.value.new.forEach(canvas => canvas.style.display = 'none')
-
-  // 渲染旧文档可见页面
-  const oldVisiblePages = oldVisibleRange.visiblePages
-  for (let i = 0; i < oldVisiblePages.length && i < CANVAS_CONFIG.MAX_VISIBLE_CANVASES; i++) {
-    const pageIndex = oldVisiblePages[i]
+  
+  // 渲染可见页面
+  const visiblePages = visibleRange.visiblePages
+  for (let i = 0; i < visiblePages.length && i < CANVAS_CONFIG.MAX_VISIBLE_CANVASES; i++) {
+    const pageIndex = visiblePages[i]
+    
     if (pageIndex < oldLayout.length && canvasLayers.value.old[i]) {
       await renderPageToCanvasLocal(
-        canvasLayers.value.old[i],
-        oldImageInfo.value,
-        pageIndex,
-        'old',
-        oldPageDiffs.get(pageIndex + 1) || [], // 传递该页面的差异数据
+        canvasLayers.value.old[i], 
+        oldImageInfo.value, 
+        pageIndex, 
+        'old', 
+        oldDifferences, 
         oldLayout
       )
     }
-  }
-
-  // 渲染新文档扩展页面（包含所有差异页面）
-  const newPagesToRender = Array.from(extendedNewPages).sort((a, b) => a - b)
-  console.log(`🖼️ [新文档渲染] 页面: [${newPagesToRender.map(p => p+1).join(',')}]`)
-  
-  // 动态扩展Canvas池
-  while (canvasLayers.value.new.length < Math.min(newPagesToRender.length, 20)) {
-    const canvas = document.createElement('canvas')
-    canvas.style.position = 'absolute'
-    canvas.style.display = 'none'
-    canvasLayers.value.new.push(canvas)
-    newCanvasContainer.value!.appendChild(canvas)
-  }
-  
-  for (let i = 0; i < newPagesToRender.length && i < 20; i++) {
-    const pageIndex = newPagesToRender[i]
-    const pageNum = pageIndex + 1
-    const pageDiffs = newPageDiffs.get(pageNum) || []
-    
-    console.log(`📋 [准备渲染页面${pageNum}] 传递${pageDiffs.length}个差异项到renderPageToCanvasLocal`)
     
     if (pageIndex < newLayout.length && canvasLayers.value.new[i]) {
       await renderPageToCanvasLocal(
-        canvasLayers.value.new[i],
-        newImageInfo.value,
-        pageIndex,
-        'new',
-        pageDiffs, // 传递该页面的差异数据
+        canvasLayers.value.new[i], 
+        newImageInfo.value, 
+        pageIndex, 
+        'new', 
+        newDifferences, 
         newLayout
       )
     }
   }
-
+  
+  console.log(`渲染了 ${visiblePages.length} 个可见页面: ${visiblePages[0]}-${visiblePages[visiblePages.length - 1]}`, {
+    scrollTop,
+    containerHeight,
+    visibleRange,
+    oldLayoutLength: oldLayout.length,
+    newLayoutLength: newLayout.length
+  })
 }
 
-// 滚动时更新可见Canvas（分别使用各自容器宽度与布局）
+// 滚动时更新可见Canvas
 const updateVisibleCanvasesOnScroll = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
-
-  const oldWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const newWidth = getCanvasWidth(newCanvasWrapper.value || null)
-  const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
-  const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
-
+  
+  const containerWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
+  const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
+  
   const oldDifferences = results.value.filter(diff => diff.operation === 'DELETE')
   const newDifferences = results.value.filter(diff => diff.operation === 'INSERT')
-
+  
   await updateVisiblePagesRender(oldLayout, newLayout, oldDifferences, newDifferences)
 }
 
@@ -594,6 +1583,11 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
   // 立即更新虚拟滚动
   requestAnimationFrame(() => {
     updateVisibleCanvasesOnScroll()
+    
+    // 只有在同步滚动启用且是滚轮触发的滚动时才更新中间图标
+    if (syncEnabled.value && wheelActiveSide.value === side) {
+      renderMiddleCanvasDiffIcons()
+    }
   })
   
   // 设置滚动结束检测（300ms后触发重新渲染）
@@ -601,6 +1595,8 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
     console.log('滚动结束，重新渲染页面确保完整性')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
+      // 滚动结束后总是更新中间图标
+      renderMiddleCanvasDiffIcons()
     })
     isScrollEnding.value = false
   }, 300)
@@ -650,6 +1646,7 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
     otherWrapper.scrollTop + delta * factor
   ))
   lastScrollTop.value[otherSide] = otherWrapper.scrollTop
+  
   
   setTimeout(() => {
     isScrollSyncing.value = false
@@ -742,9 +1739,75 @@ const onSyncScrollToggle = () => {
   }
 }
 
+// 处理中间Canvas点击事件
+const handleMiddleCanvasClick = (event: MouseEvent) => {
+  if (!middleCanvas.value) return
+  
+  const rect = middleCanvas.value.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 检查点击是否在任何差异图标区域内
+  for (const [id, area] of middleCanvasClickableAreas) {
+    if (x >= area.x && x <= area.x + area.width &&
+        y >= area.y && y <= area.y + area.height) {
+      // 点击了差异图标，跳转到对应位置
+      jumpToDifferenceFromMiddleCanvas(area.diffIndex, area.operation)
+      return
+    }
+  }
+}
+
+// 从中间Canvas跳转到差异位置
+const jumpToDifferenceFromMiddleCanvas = (diffIndex: number, operation: string) => {
+  console.log(`从中间Canvas跳转到差异项 ${diffIndex + 1}, 操作: ${operation}`)
+  
+  // 跳转到指定的差异项
+  jumpTo(diffIndex)
+}
+
+// 处理中间Canvas鼠标移动事件
+const handleMiddleCanvasMouseMove = (event: MouseEvent) => {
+  if (!middleCanvas.value) return
+  
+  const rect = middleCanvas.value.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 检查鼠标是否在任何差异图标区域内
+  let isOverIcon = false
+  for (const [id, area] of middleCanvasClickableAreas) {
+    if (x >= area.x && x <= area.x + area.width &&
+        y >= area.y && y <= area.y + area.height) {
+      isOverIcon = true
+      break
+    }
+  }
+  
+  // 设置鼠标样式
+  middleCanvas.value.style.cursor = isOverIcon ? 'pointer' : 'default'
+}
+
+// 处理中间Canvas鼠标离开事件
+const handleMiddleCanvasMouseLeave = () => {
+  if (!middleCanvas.value) return
+  middleCanvas.value.style.cursor = 'default'
+}
+
+// 清除选中的差异项和连接线
+const clearSelection = () => {
+  selectedDiffIndex.value = null
+  // 清除连接线
+  renderConnectionLines()
+}
+
 // 跳转到指定差异 - 连续滚动版本
 const jumpTo = (i: number) => {
   activeIndex.value = i
+  
+  // 设置选中的差异项索引，用于显示连接线
+  selectedDiffIndex.value = i
+  
   const r = results.value[i]
   if (!r) return
 
@@ -788,6 +1851,10 @@ const jumpTo = (i: number) => {
     console.log('差异项跳转完成，重新渲染Canvas')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
+      // 跳转后更新中间图标
+      renderMiddleCanvasDiffIcons()
+      // 重新渲染选中差异项的连接线
+      renderConnectionLines()
     })
     isJumping.value = false
   }, 200)
@@ -858,13 +1925,17 @@ const alignCanvasViewer = (side: 'old' | 'new', pos: any) => {
 const prevResult = () => {
   if (totalCount.value === 0) return
   const i = activeFilteredIndex.value
-  if (i > 0) jumpTo(indexInAll(i - 1))
+  if (i > 0) {
+    jumpTo(indexInAll(i - 1))
+  }
 }
 
 const nextResult = () => {
   if (totalCount.value === 0) return
   const i = activeFilteredIndex.value
-  if (i >= 0 && i < totalCount.value - 1) jumpTo(indexInAll(i + 1))
+  if (i >= 0 && i < totalCount.value - 1) {
+    jumpTo(indexInAll(i + 1))
+  }
 }
 
 const goBack = () => {
@@ -894,7 +1965,7 @@ const toggleExpand = (idx: number) => {
 const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete', isExpanded: boolean) => {
   if (!allTextList || allTextList.length === 0) return '无'
   
-  const fullText = allTextList.join('')
+  const fullText = allTextList.join('\n')
   if (!fullText) return '无'
   
   if (isExpanded || fullText.length <= TEXT_CONFIG.TRUNCATE_LIMIT) {
@@ -907,14 +1978,14 @@ const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'inser
 
 const needsExpand = (allTextList: string[]) => {
   if (!allTextList || allTextList.length === 0) return false
-  const fullText = allTextList.join('')
+  const fullText = allTextList.join('\n')
   return fullText && fullText.length > TEXT_CONFIG.TRUNCATE_LIMIT
 }
 
 // 高亮文本函数（复用原有逻辑）
 const highlightDiffText = (allTextList: string[], diffRanges: any[], type: 'insert' | 'delete') => {
   if (!allTextList || allTextList.length === 0) return '无'
-  const fullText = allTextList.join('')
+  const fullText = allTextList.join('\n')
   if (!fullText) return '无'
 
   if (!diffRanges || diffRanges.length === 0) {
@@ -1164,6 +2235,11 @@ watch(filterMode, () => {
     const idx = results.value.findIndex(r => r === first)
     if (idx >= 0) activeIndex.value = idx
   }
+  
+  // 筛选模式变化后更新中间图标
+  nextTick(() => {
+    renderMiddleCanvasDiffIcons()
+  })
 })
 
 // 监听路由参数变化
@@ -1189,6 +2265,15 @@ const handleResize = () => {
   if (oldImageInfo.value && newImageInfo.value) {
     nextTick(() => {
       renderAllPages()
+    })
+  }
+  
+  // 重新初始化中间Canvas
+  if (middleCanvas.value) {
+    nextTick(() => {
+      initMiddleCanvas()
+      // 重新渲染差异图标
+      renderMiddleCanvasDiffIcons()
     })
   }
 }
@@ -1347,6 +2432,20 @@ onUnmounted(() => {
   gap: 12px;
   min-height: 0;
   overflow: hidden;
+  position: relative; /* 为SVG覆盖层提供定位上下文 */
+}
+
+/* SVG连接线覆盖层 */
+.connection-lines-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none !important;
+  z-index: 9999 !important;
+  overflow: visible !important;
+  /* background: rgba(255, 0, 0, 0.1); 移除调试背景 */
 }
 
 .canvas-pane { 
@@ -1376,51 +2475,29 @@ onUnmounted(() => {
   width: 80px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
   background: #f8f9fa;
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 16px 8px;
+  border-top: 1px solid #ebeef5;
+  border-bottom: 1px solid #ebeef5;
   min-height: 0;
-}
-
-.interaction-content {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  align-items: center;
-  width: 100%;
-}
-
-
-/* 进度指示器 */
-.progress-indicator {
-  width: 100%;
-  margin-top: 8px;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 4px;
-  background: #e6e8eb;
-  border-radius: 2px;
   overflow: hidden;
+  position: relative;
 }
 
-.progress-fill {
+/* 中间Canvas样式 */
+.middle-canvas {
+  display: block;
+  background: transparent;
+  width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, #409eff, #67c23a);
-  border-radius: 2px;
-  transition: width 0.3s ease;
+  user-select: none; /* 防止选中 */
+  transition: opacity 0.2s ease; /* 添加过渡效果 */
 }
 
-.progress-text {
-  font-size: 9px;
-  color: #909399;
-  text-align: center;
-  margin-top: 4px;
+.middle-canvas:hover {
+  opacity: 0.9; /* 悬停时略微透明，提示可交互 */
 }
+
+
 
 .canvas-header {
   padding: 8px 12px;
@@ -1656,65 +2733,5 @@ onUnmounted(() => {
   display: flex; 
   align-items: center; 
   gap: 8px; 
-}
-
-/* 无差异显示样式 */
-.no-differences {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 200px;
-  padding: 40px 20px;
-}
-
-.no-diff-icon {
-  font-size: 48px;
-  color: #67c23a;
-  margin-bottom: 16px;
-}
-
-.no-diff-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
-  margin-bottom: 8px;
-}
-
-.no-diff-desc {
-  font-size: 14px;
-  color: #606266;
-  text-align: center;
-  line-height: 1.5;
-}
-
-/* Canvas区域无差异显示样式 */
-.no-diff-canvas {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: #fafafa;
-}
-
-.no-diff-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 40px;
-}
-
-.no-diff-content .no-diff-icon {
-  font-size: 36px;
-  margin-bottom: 12px;
-  opacity: 0.8;
-}
-
-.no-diff-content .no-diff-text {
-  font-size: 14px;
-  color: #606266;
-  font-weight: 500;
 }
 </style>
