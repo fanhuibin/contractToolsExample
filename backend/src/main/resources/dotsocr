@@ -1,0 +1,85 @@
+安装新服务器的流程
+好的，如果你想使用腾讯云的 Ubuntu 镜像源，可以按照以下步骤操作：  
+
+1. 备份当前的 sources.list 文件
+
+sudo cp /etc/apt/sources.list /etc/apt/sources.list.bak
+
+
+2. 编辑 sources.list 文件
+
+sudo nano /etc/apt/sources.list
+
+
+3. 替换为腾讯云镜像源（Ubuntu 22.04 Jammy Jellyfish）
+
+删除原有内容，替换为以下内容：
+# 腾讯云 Ubuntu 镜像源（22.04 LTS Jammy Jellyfish）
+deb https://mirrors.tencent.com/ubuntu/ jammy main restricted universe multiverse
+deb https://mirrors.tencent.com/ubuntu/ jammy-updates main restricted universe multiverse
+deb https://mirrors.tencent.com/ubuntu/ jammy-backports main restricted universe multiverse
+deb https://mirrors.tencent.com/ubuntu/ jammy-security main restricted universe multiverse
+
+• 保存并退出（Ctrl+O → Enter → Ctrl+X）
+
+4. 更新软件包列表
+
+sudo apt update
+
+
+5. 重新安装 docker.io
+
+sudo apt install docker.io
+
+
+6. 验证 Docker 是否安装成功
+
+docker --version
+
+如果输出类似 Docker version 24.0.5, build 24.0.5-0ubuntu1~22.04.1，说明安装成功。
+
+#安装显卡驱动
+
+
+
+第一步：安装cuda12.8与CUDNN8.9.7
+ #安装依赖
+ apt install gcc
+下载地址：
+https://developer.nvidia.com/cuda-12-8-0-download-archive?target_os=Linux&target_arch=x86_64&Distribution=Ubuntu&target_version=22.04&target_type=runfile_local
+安装命令：
+# 赋予权限
+sudo chmod +x cuda_12.8.0_570.86.10_linux.run
+# 执行安装
+sudo ./cuda_12.8.0_570.86.10_linux.run
+#修改 bashrc文件
+sudo nano ~/.bashrc
+添加内容 
+export CUDA_HOME=/usr/local/cuda-12.8
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+#修改之后执行如下命令
+source ~/.bashrc
+#确保nvcc可以找到
+which nvcc
+nvcc -V
+#下载cudnn8.9.7
+https://developer.nvidia.com/rdp/cudnn-archive
+# 解压压缩包文件
+tar -xvf cudnn-linux-x86_64-8.9.7.29_cuda12-archive.tar.xz
+#授权文件并复制
+cd cudnn-linux-x86_64-8.9.7.29_cuda12-archive
+
+sudo cp include/cudnn*.h /usr/local/cuda-12.8/include/
+sudo cp lib/libcudnn* /usr/local/cuda-12.8/lib64/
+sudo chmod a+r /usr/local/cuda-12.8/include/cudnn*.h /usr/local/cuda-12.8/lib64/libcudnn*
+#验证是否成功
+cat /usr/local/cuda/include/cudnn_version.h | grep CUDNN_MAJOR -A 2
+
+
+#安装docker 对于cuda的支持
+复制安装包的deb文件
+sudo dpkg -i *.deb
+sudo systemctl restart docker
+
+
