@@ -47,7 +47,7 @@
         <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
     </div>
-    <div class="compare-body">
+    <div class="compare-body" v-loading="loading">
       <!-- 主要对比区域容器 -->
       <div class="compare-container" @click.self="clearSelection">
         <!-- SVG连接线覆盖层 -->
@@ -65,19 +65,32 @@
               <span class="canvas-subtitle">（只显示删除内容）</span>
             </div>
             <div class="canvas-container">
-              <div class="canvas-wrapper" @scroll="onCanvasScroll('old', $event)" @wheel="onWheel('old', $event)" ref="oldCanvasWrapper">
+              <div class="canvas-wrapper" ref="oldCanvasWrapper">
                 <div class="canvas-container" ref="oldCanvasContainer" @click="onCanvasClick('old', $event)"></div>
                 <canvas 
                   ref="oldCanvas"
                   style="display: none"
-                  @wheel="onWheel('old', $event)"
                   @click="onCanvasClick('old', $event)"
                 />
-                <!-- 左侧Canvas等待效果 -->
-                <div v-if="loading || viewerLoading" class="canvas-loading-overlay">
-                  <ConcentricLoader color="#1677ff" :size="52" text="加载中..." />
-                  <div class="loading-text">正在处理文档内容...</div>
-                </div>
+              </div>
+              <!-- 左侧Canvas加载特效 - 使用wrapper包装控制定位 -->
+              <div 
+                v-if="viewerLoading" 
+                class="canvas-loader-wrapper"
+                :style="{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 10000,
+                  pointerEvents: 'none'
+                }"
+              >
+                <ConcentricLoader 
+                  color="#1677ff" 
+                  :size="52" 
+                  class="canvas-loader left-loader"
+                />
               </div>
             </div>
           </div>
@@ -99,19 +112,32 @@
               <span class="canvas-subtitle">（只显示新增内容）</span>
             </div>
             <div class="canvas-container">
-              <div class="canvas-wrapper" @scroll="onCanvasScroll('new', $event)" @wheel="onWheel('new', $event)" ref="newCanvasWrapper">
+              <div class="canvas-wrapper" ref="newCanvasWrapper">
                 <div class="canvas-container" ref="newCanvasContainer" @click="onCanvasClick('new', $event)"></div>
                 <canvas 
                   ref="newCanvas"
                   style="display: none"
-                  @wheel="onWheel('new', $event)"
                   @click="onCanvasClick('new', $event)"
                 />
-                <!-- 右侧Canvas等待效果 -->
-                <div v-if="loading || viewerLoading" class="canvas-loading-overlay">
-                  <ConcentricLoader color="#1677ff" :size="52" text="加载中..." />
-                  <div class="loading-text">正在处理文档内容...</div>
-                </div>
+              </div>
+              <!-- 右侧Canvas加载特效 - 使用wrapper包装控制定位 -->
+              <div 
+                v-if="viewerLoading" 
+                class="canvas-loader-wrapper"
+                :style="{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  zIndex: 10000,
+                  pointerEvents: 'none'
+                }"
+              >
+                <ConcentricLoader 
+                  color="#1677ff" 
+                  :size="52" 
+                  class="canvas-loader right-loader"
+                />
               </div>
             </div>
           </div>
@@ -226,8 +252,8 @@ import {
   type MiddleCanvasInteraction,
   
   // 同步滚动
-  createSyncScrollManager,
-  type SyncScrollManager
+  createAdvancedSyncScrollManager,
+  type AdvancedSyncScrollManager
 } from './gpu-ocr-canvas'
 
 const route = useRoute()
@@ -287,7 +313,7 @@ const selectedDiffIndex = ref<number | null>(null)
 let middleCanvasInteraction: MiddleCanvasInteraction | null = null
 
 // 同步滚动管理器
-let syncScrollManager: SyncScrollManager | null = null
+let syncScrollManager: AdvancedSyncScrollManager | null = null
 const syncEnabled = ref(true)
 const isJumping = ref(false)
 
@@ -390,21 +416,23 @@ const initMiddleCanvasInteraction = () => {
   
   // 初始化同步滚动管理器
   if (!syncScrollManager) {
-    syncScrollManager = createSyncScrollManager({
-      smoothFactor: 0.9, // 更平滑的同步
-      minDelta: 0.5,     // 更敏感的同步
-      maxDelta: 300,     // 降低异常检测阈值
-      scrollEndDelay: 200 // 更快的滚动结束检测
+    syncScrollManager = createAdvancedSyncScrollManager({
+      minDelta: 2,
+      scrollEndDelay: 100,
+      wheelDetectWindow: 150,
+      dragDetectDelay: 50,
+      onScroll: handleScrollUpdate, // 添加滚动回调
+      isJumping: () => isJumping.value // 添加跳转状态检查
     })
   }
   
-  // 初始化滚动位置
+  // 初始化同步滚动
   if (syncScrollManager && oldCanvasWrapper.value && newCanvasWrapper.value) {
-    syncScrollManager.initScrollPositions(oldCanvasWrapper.value, newCanvasWrapper.value)
+    syncScrollManager.init(oldCanvasWrapper.value, newCanvasWrapper.value)
     syncScrollManager.setEnabled(syncEnabled.value)
+  } else {
   }
   
-  console.log('中间Canvas交互系统和同步滚动初始化完成')
 }
 
 // 渲染页面分隔带（仅针对第1、2页的分隔做特殊样式）
@@ -660,22 +688,112 @@ const jumpToPage = (pageNum: number) => {
   if (newCanvasWrapper.value) {
     newCanvasWrapper.value.scrollTop = targetY
   }
+  
+  // 短暂延迟后建立新的同步基准
+  setTimeout(() => {
+    if (syncScrollManager) {
+      syncScrollManager.syncInitialPositions()
+    }
+  }, 100)
 }
 
 
 // wheel 事件处理
-const onWheel = (side: 'old' | 'new', event?: WheelEvent) => {
-  if (syncScrollManager) {
-    syncScrollManager.handleWheel(side)
+// 鼠标滚轮处理由 AdvancedSyncScrollManager 自动处理
+
+// 计算加载动画的精准位置 - 参考连接线定位逻辑
+const getLoaderPosition = (side: 'old' | 'new') => {
+  try {
+    // 获取对应的canvas-wrapper元素
+    const wrapper = side === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
+    if (!wrapper) {
+      console.log(`[LoaderPosition] ${side} wrapper not found, using fallback`)
+      return {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        pointerEvents: 'none'
+      }
+    }
+
+    // 获取canvas-wrapper的位置和尺寸
+    const wrapperRect = wrapper.getBoundingClientRect()
+    
+    // 检查是否获取到有效的尺寸
+    if (wrapperRect.width === 0 || wrapperRect.height === 0) {
+      console.log(`[LoaderPosition] ${side} wrapper has zero size, using fallback`)
+      return {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        pointerEvents: 'none'
+      }
+    }
+    
+    // 获取父容器canvas-container的位置
+    const container = wrapper.parentElement
+    if (!container) {
+      console.log(`[LoaderPosition] ${side} container not found, using fallback`)
+      return {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: 'translate(-50%, -50%)',
+        zIndex: 1000,
+        pointerEvents: 'none'
+      }
+    }
+    
+    const containerRect = container.getBoundingClientRect()
+    
+    // 计算canvas-wrapper相对于canvas-container的位置
+    const relativeTop = wrapperRect.top - containerRect.top
+    const relativeLeft = wrapperRect.left - containerRect.left
+    
+    // 计算canvas-wrapper的中心点
+    const centerX = relativeLeft + wrapperRect.width / 2
+    const centerY = relativeTop + wrapperRect.height / 2
+    
+    console.log(`[LoaderPosition] ${side} calculated position:`, {
+      centerX: centerX.toFixed(1),
+      centerY: centerY.toFixed(1),
+      wrapperSize: `${wrapperRect.width}x${wrapperRect.height}`,
+      containerSize: `${containerRect.width}x${containerRect.height}`
+    })
+    
+    return {
+      position: 'absolute',
+      top: `${centerY}px`,
+      left: `${centerX}px`,
+      transform: 'translate(-50%, -50%)',
+      zIndex: 1000,
+      pointerEvents: 'none'
+    }
+  } catch (error) {
+    console.error('计算加载动画位置失败:', error)
+    // 回退到简单的居中定位
+    return {
+      position: 'absolute',
+      top: '50%',
+      left: '50%',
+      transform: 'translate(-50%, -50%)',
+      zIndex: 1000,
+      pointerEvents: 'none'
+    }
   }
 }
 
-// Canvas滚动处理（优化版本）
-const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
-  if (isJumping.value) return
-
-  const target = event.target as HTMLElement
-  const currentTop = target.scrollTop
+// Canvas滚动处理由 AdvancedSyncScrollManager 自动处理
+// 这里只需要处理虚拟滚动和UI更新
+const handleScrollUpdate = () => {
+  
+  if (isJumping.value) {
+    return
+  }
   
   // 清除之前的滚动结束定时器
   if (scrollEndTimer.value) {
@@ -691,27 +809,6 @@ const onCanvasScroll = (side: 'old' | 'new', event: Event) => {
       middleCanvasInteraction.renderDiffIcons()
     }
   })
-  
-  // 处理同步滚动
-  if (syncEnabled.value && syncScrollManager) {
-    const sourceWrapper = target
-    const targetWrapper = side === 'old' ? newCanvasWrapper.value : oldCanvasWrapper.value
-    
-    if (targetWrapper) {
-      syncScrollManager.handleScroll(
-        side,
-        currentTop,
-        sourceWrapper,
-        targetWrapper,
-        () => {
-          // 同步滚动完成后的回调
-          if (middleCanvasInteraction) {
-            middleCanvasInteraction.renderDiffIcons()
-          }
-        }
-      )
-    }
-  }
   
   // 设置滚动结束检测（200ms后触发重新渲染）
   scrollEndTimer.value = window.setTimeout(() => {
@@ -801,15 +898,9 @@ const onSyncScrollToggle = () => {
     syncScrollManager.setEnabled(syncEnabled.value)
     
     if (syncEnabled.value) {
-      // 重新初始化滚动位置
-      const oldWrapper = oldCanvasWrapper.value
-      const newWrapper = newCanvasWrapper.value
-      if (oldWrapper && newWrapper) {
-        syncScrollManager.initScrollPositions(oldWrapper, newWrapper)
-      }
-      console.log('同步滚动已启用')
+      // 启用时重新同步位置
+      syncScrollManager.syncInitialPositions()
     } else {
-      console.log('同步滚动已禁用')
     }
   }
 }
@@ -856,8 +947,9 @@ const jumpTo = (i: number) => {
 
   // 执行Canvas滚动定位
   isJumping.value = true
-    alignCanvasViewerContinuousLocal('old', oldPos)
-    alignCanvasViewerContinuousLocal('new', newPos)
+  
+  alignCanvasViewerContinuousLocal('old', oldPos)
+  alignCanvasViewerContinuousLocal('new', newPos)
   
   // 跳转后重新渲染Canvas确保页面正确显示
   setTimeout(() => {
@@ -871,6 +963,11 @@ const jumpTo = (i: number) => {
           filteredResults: filteredResults.value
         })
         middleCanvasInteraction.render()
+      }
+      
+      // 以跳转后的位置作为新的同步基准
+      if (syncScrollManager) {
+        syncScrollManager.syncInitialPositions()
       }
     })
     isJumping.value = false
@@ -1589,26 +1686,45 @@ onUnmounted(() => {
 }
 
 
-/* Canvas loading overlay - 满铺canvas-wrapper中心 */
-.canvas-loading-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(255, 255, 255, 0.9);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
+/* Canvas加载特效样式 - 强制居中定位，覆盖组件默认样式 */
+.canvas-loader.left-loader,
+.canvas-loader.right-loader { 
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 1000 !important;
+  pointer-events: none !important;
+  /* 强制覆盖ConcentricLoader的所有定位样式 */
+  inset: unset !important;
+  right: unset !important;
+  bottom: unset !important;
+  /* 确保不被flex布局影响 */
+  display: block !important;
+  flex-direction: unset !important;
+  align-items: unset !important;
+  justify-content: unset !important;
 }
 
-.canvas-loading-overlay .loading-text {
-  margin-top: 16px;
-  color: #666;
-  font-size: 14px;
-  text-align: center;
+/* Canvas加载特效包装器样式 */
+.canvas-loader-wrapper {
+  /* 由内联样式控制定位 */
+  position: relative;
+}
+
+/* 深度选择器，确保ConcentricLoader组件不影响定位 */
+.canvas-loader-wrapper :deep(.concentric-loader) {
+  position: static !important;
+  inset: unset !important;
+  top: unset !important;
+  left: unset !important;
+  right: unset !important;
+  bottom: unset !important;
+  transform: none !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
 }
 
 .result-list { 
