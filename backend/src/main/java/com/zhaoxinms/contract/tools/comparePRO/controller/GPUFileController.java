@@ -48,7 +48,6 @@ public class GPUFileController {
             @PathVariable String taskId,
             @PathVariable String mode, 
             @PathVariable String fileName) {
-        System.out.println("🎯 接收到任务图片请求: taskId=" + taskId + ", mode=" + mode + ", fileName=" + fileName);
         String path = "tasks/" + taskId + "/images/" + mode + "/" + fileName;
         return serveCompareProFile(path);
     }
@@ -75,18 +74,9 @@ public class GPUFileController {
                 String fullPath = "compare-pro/" + path;
                 filePath = Paths.get(uploadPath, fullPath);
                 
-                // 调试日志
-                System.out.println("🔍 文件访问详情:");
-                System.out.println("  请求路径: " + path);
-                System.out.println("  上传配置: " + uploadPath);
-                System.out.println("  完整路径: " + fullPath);
-                System.out.println("  绝对路径: " + filePath.toAbsolutePath());
-                System.out.println("  工作目录: " + System.getProperty("user.dir"));
-                System.out.println("  文件存在: " + Files.exists(filePath));
             }
 
             if (!Files.exists(filePath)) {
-                System.out.println("文件不存在，返回404: " + filePath.toAbsolutePath());
                 return ResponseEntity.notFound().build();
             }
 
