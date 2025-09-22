@@ -50,7 +50,7 @@
           开始GPU OCR比对
         </el-button>
 
-        <el-button text @click="settingsOpen = true">比对设置</el-button>
+        <el-button type="info" @click="settingsOpen = true" icon="Setting">比对设置</el-button>
 
         <el-button type="warning" @click="debugDialogVisible = true">调试模式</el-button>
       </el-form>
