@@ -139,7 +139,7 @@ gpu:
     save-ocr-images: true
     
     # 图像处理配置
-    render-dpi: 160
+    render-dpi: 180
     min-pixels: 3136
     max-pixels: 11289600
     

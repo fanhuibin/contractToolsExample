@@ -20,12 +20,7 @@ public class GPUOCRCompareResult {
     private String annotatedNewPdfUrl;
     private List<DiffBlock> differences;
     private List<Map<String, Object>> formattedDifferences; // 原始图像坐标格式的差异数据
-    private double oldPdfPageHeight;  // 旧PDF页面高度（像素）
-    private double newPdfPageHeight;  // 新PDF页面高度（像素）
-    private double oldPdfScaleX;       // 旧PDF X轴缩放比例（图像坐标到PDF坐标）
-    private double oldPdfScaleY;       // 旧PDF Y轴缩放比例（图像坐标到PDF坐标）
-    private double newPdfScaleX;       // 新PDF X轴缩放比例（图像坐标到PDF坐标）
-    private double newPdfScaleY;       // 新PDF Y轴缩放比例（图像坐标到PDF坐标）
+    // 不再需要PDF页面高度和缩放比例，画布使用图片实际像素尺寸
     private int deleteCount;
     private int insertCount;
     private int ignoreCount;
@@ -100,54 +95,6 @@ public class GPUOCRCompareResult {
 
     public void setAnnotatedNewPdfUrl(String annotatedNewPdfUrl) {
         this.annotatedNewPdfUrl = annotatedNewPdfUrl;
-    }
-
-    public double getOldPdfPageHeight() {
-        return oldPdfPageHeight;
-    }
-
-    public void setOldPdfPageHeight(double oldPdfPageHeight) {
-        this.oldPdfPageHeight = oldPdfPageHeight;
-    }
-
-    public double getNewPdfPageHeight() {
-        return newPdfPageHeight;
-    }
-
-    public void setNewPdfPageHeight(double newPdfPageHeight) {
-        this.newPdfPageHeight = newPdfPageHeight;
-    }
-
-    public double getOldPdfScaleX() {
-        return oldPdfScaleX;
-    }
-
-    public void setOldPdfScaleX(double oldPdfScaleX) {
-        this.oldPdfScaleX = oldPdfScaleX;
-    }
-
-    public double getOldPdfScaleY() {
-        return oldPdfScaleY;
-    }
-
-    public void setOldPdfScaleY(double oldPdfScaleY) {
-        this.oldPdfScaleY = oldPdfScaleY;
-    }
-
-    public double getNewPdfScaleX() {
-        return newPdfScaleX;
-    }
-
-    public void setNewPdfScaleX(double newPdfScaleX) {
-        this.newPdfScaleX = newPdfScaleX;
-    }
-
-    public double getNewPdfScaleY() {
-        return newPdfScaleY;
-    }
-
-    public void setNewPdfScaleY(double newPdfScaleY) {
-        this.newPdfScaleY = newPdfScaleY;
     }
 
     public List<DiffBlock> getDifferences() {

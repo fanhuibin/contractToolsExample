@@ -124,3 +124,14 @@ gpu:
     
     # 调试配置
     debug-file-path: "C:\\Users\\范慧斌\\Desktop\\hetong比对前端"
+
+# RapidOCR配置
+rapidocr:
+  enabled: true
+  base-url: http://192.168.0.100:9005
+  timeout: PT2M  # 2分钟超时
+  verbose-logging: false
+  max-concurrency: 10
+  default-use-detection: true
+  default-use-classification: true
+  default-use-recognition: true

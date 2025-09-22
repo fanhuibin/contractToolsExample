@@ -35,6 +35,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import javax.annotation.PostConstruct;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 // JSON处理相关导入
 import com.fasterxml.jackson.databind.JsonNode;
@@ -48,6 +50,9 @@ import com.zhaoxinms.contract.tools.ocr.dotsocr.DotsOcrClient;
 import com.zhaoxinms.contract.tools.ocr.model.CharBox;
 import com.zhaoxinms.contract.tools.ocr.model.DiffBlock;
 import com.zhaoxinms.contract.tools.ocrcompare.config.GPUOCRConfig;
+import com.zhaoxinms.contract.tools.ocrcompare.validation.DiffBlockValidationUtil;
+import com.zhaoxinms.contract.tools.ocrcompare.progress.CompareTaskProgressManager;
+import com.zhaoxinms.contract.tools.ocrcompare.progress.CompareTaskProgressManager.TaskStep;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.ocrcompare.util.OcrImageSaver;
 import com.zhaoxinms.contract.tools.ocrcompare.concurrent.GPUOCRTaskQueue;
@@ -57,15 +62,24 @@ import com.zhaoxinms.contract.tools.ocrcompare.concurrent.GPUOCRTaskQueue;
  */
 @Service
 public class GPUOCRCompareService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(GPUOCRCompareService.class);
 
 	// 内部类：包装OCR识别结果和错误信息
 	private static class RecognitionResult {
 		public final List<CharBox> charBoxes;
 		public final List<String> failedPages;
+		public final int totalPages;
 
-		public RecognitionResult(List<CharBox> charBoxes, List<String> failedPages) {
+		public RecognitionResult(List<CharBox> charBoxes, List<String> failedPages, int totalPages) {
 			this.charBoxes = charBoxes;
 			this.failedPages = failedPages;
+			this.totalPages = totalPages;
+		}
+		
+		// 兼容旧版本的构造函数
+		public RecognitionResult(List<CharBox> charBoxes, List<String> failedPages) {
+			this(charBoxes, failedPages, 0);
 		}
 	}
 
@@ -78,8 +92,11 @@ public class GPUOCRCompareService {
     @Autowired
     private OcrImageSaver ocrImageSaver;
 
-	@Autowired
-	private GPUOCRTaskQueue taskQueue;
+    @Autowired
+    private GPUOCRTaskQueue taskQueue;
+    
+    @Autowired
+    private DiffBlockValidationUtil diffBlockValidationUtil;
 
     private final ConcurrentHashMap<String, GPUOCRCompareTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, GPUOCRCompareResult> results = new ConcurrentHashMap<>();
@@ -185,9 +202,9 @@ public class GPUOCRCompareService {
                 Files.copy(newInputStream, newFilePath);
             }
 
-            System.out.println("文件已保存到系统上传目录:");
-            System.out.println("  原文档: " + oldFilePath.toAbsolutePath());
-            System.out.println("  新文档: " + newFilePath.toAbsolutePath());
+            logger.info("文件已保存到系统上传目录:");
+            logger.info("  原文档: {}", oldFilePath.toAbsolutePath());
+            logger.info("  新文档: {}", newFilePath.toAbsolutePath());
 
 			// 使用新的任务队列执行比对任务
 			boolean submitted = taskQueue.submitTask(
@@ -318,10 +335,7 @@ public class GPUOCRCompareService {
                 task.setOldFileName((String) resultData.get("oldFileName"));
                 task.setNewFileName((String) resultData.get("newFileName"));
                 task.setStatus(GPUOCRCompareTask.Status.COMPLETED);
-                task.setOldPdfUrl((String) resultData.get("oldPdfUrl"));
-                task.setNewPdfUrl((String) resultData.get("newPdfUrl"));
-                task.setAnnotatedOldPdfUrl((String) resultData.get("annotatedOldPdfUrl"));
-                task.setAnnotatedNewPdfUrl((String) resultData.get("annotatedNewPdfUrl"));
+                // 不再需要设置PDF URL，全部使用画布显示
                 
                 System.out.println("从文件加载任务状态: " + taskId + " (已完成)");
                 return task;
@@ -338,10 +352,7 @@ public class GPUOCRCompareService {
                 task.setOldFileName((String) frontendData.get("oldFileName"));
                 task.setNewFileName((String) frontendData.get("newFileName"));
                 task.setStatus(GPUOCRCompareTask.Status.COMPLETED);
-                task.setOldPdfUrl((String) frontendData.get("oldPdfUrl"));
-                task.setNewPdfUrl((String) frontendData.get("newPdfUrl"));
-                task.setAnnotatedOldPdfUrl((String) frontendData.get("annotatedOldPdfUrl"));
-                task.setAnnotatedNewPdfUrl((String) frontendData.get("annotatedNewPdfUrl"));
+                // 不再需要设置PDF URL，全部使用画布显示
                 
                 System.out.println("从文件加载任务状态: " + taskId + " (前端结果)");
                 return task;
@@ -377,10 +388,7 @@ public class GPUOCRCompareService {
         result = new GPUOCRCompareResult(taskId);
         result.setOldFileName(task.getOldFileName());
         result.setNewFileName(task.getNewFileName());
-        result.setOldPdfUrl(task.getOldPdfUrl());
-        result.setNewPdfUrl(task.getNewPdfUrl());
-        result.setAnnotatedOldPdfUrl(task.getAnnotatedOldPdfUrl());
-        result.setAnnotatedNewPdfUrl(task.getAnnotatedNewPdfUrl());
+        // 不再需要设置PDF URL，全部使用画布显示
 
         return result;
     }
@@ -443,9 +451,7 @@ public class GPUOCRCompareService {
 			canvasResult.put("oldImageBaseUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + taskId + "/images/old");
 			canvasResult.put("newImageBaseUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + taskId + "/images/new");
 
-			// 保持原有的PDF URL作为备用
-			canvasResult.put("oldPdfUrl", originalResult.get("oldPdfUrl"));
-			canvasResult.put("newPdfUrl", originalResult.get("newPdfUrl"));
+			// 不再需要PDF URL，全部使用画布显示
 
 			System.out.println("Canvas前端结果创建成功，包含图片信息");
 
@@ -547,21 +553,21 @@ public class GPUOCRCompareService {
 		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
 		Path imagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", taskId, "images", mode);
 
-		System.out.println("获取文档图片信息 - 任务ID: " + taskId + ", 模式: " + mode);
-		System.out.println("上传根路径: " + uploadRootPath);
-		System.out.println("图片目录路径: " + imagesDir);
-		System.out.println("图片目录是否存在: " + Files.exists(imagesDir));
+		logger.debug("获取文档图片信息 - 任务ID: {}, 模式: {}", taskId, mode);
+		logger.debug("上传根路径: {}", uploadRootPath);
+		logger.debug("图片目录路径: {}", imagesDir);
+		logger.debug("图片目录是否存在: {}", Files.exists(imagesDir));
 
 		if (!Files.exists(imagesDir)) {
 			// 列出父目录内容，帮助调试
 			Path parentDir = imagesDir.getParent();
 			if (Files.exists(parentDir)) {
-				System.out.println("父目录存在，内容如下:");
+				logger.debug("父目录存在，内容如下:");
 				try (var stream = Files.list(parentDir)) {
-					stream.forEach(path -> System.out.println("  - " + path.getFileName()));
+					stream.forEach(path -> logger.debug("  - {}", path.getFileName()));
 				}
                 } else {
-				System.out.println("父目录也不存在: " + parentDir);
+				logger.debug("父目录也不存在: {}", parentDir);
 			}
 			throw new RuntimeException("图片目录不存在: " + imagesDir);
 		}
@@ -608,7 +614,7 @@ public class GPUOCRCompareService {
 			}
 		}
 
-		System.out.println("获取文档图片信息完成: " + mode + ", 共" + docInfo.getTotalPages() + "页");
+		logger.debug("获取文档图片信息完成: {}, 共{}页", mode, docInfo.getTotalPages());
 		return docInfo;
 	}
 
@@ -667,135 +673,143 @@ public class GPUOCRCompareService {
      */
 	private void executeCompareTaskWithPaths(GPUOCRCompareTask task, String oldFilePath, String newFilePath,
 			GPUOCRCompareOptions options) {
-        long startTime = System.currentTimeMillis();
-        System.out.println("开始GPU OCR正常比对任务: " + task.getTaskId());
+        
+        // 创建进度管理器（正常模式，非调试模式）
+        CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, false);
+        
+        // 记录文档基本信息
+        Path oldPath = Paths.get(oldFilePath);
+        Path newPath = Paths.get(newFilePath);
+        progressManager.logBasicStats("开始文档比对: {} vs {}", 
+            oldPath.getFileName(), newPath.getFileName());
 
         try {
             task.setStatus(GPUOCRCompareTask.Status.OCR_PROCESSING);
-            task.updateProgress(1, "初始化OCR客户端");
-
-            // 创建OCR客户端
-			DotsOcrClient client = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
+            
+            // 步骤1: 初始化
+            progressManager.startStep(TaskStep.INIT);
+            DotsOcrClient client = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
 					.defaultModel(gpuOcrConfig.getOcrModel()).build();
+            progressManager.completeStep(TaskStep.INIT);
 
-            task.updateProgress(2, "OCR识别第一个文档");
-
-            // OCR识别第一个文档
-            Path oldPath = Paths.get(oldFilePath);
+            // 步骤2: OCR识别第一个文档
+            progressManager.startStep(TaskStep.OCR_FIRST_DOC);
             
             // 保存第一个文档的OCR图片
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
-					System.out.println("开始保存第一个文档OCR图片，任务ID: " + task.getTaskId());
+                    progressManager.logStepDetail("保存第一个文档OCR图片，任务ID: {}", task.getTaskId());
 					Path savedPath = ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
-					System.out.println("第一个文档OCR图片保存成功，路径: " + savedPath);
+					progressManager.logStepDetail("第一个文档OCR图片保存成功，路径: {}", savedPath);
                 } catch (Exception e) {
-                    System.err.println("保存第一个文档OCR图片失败: " + e.getMessage());
-					e.printStackTrace();
+                    progressManager.logError("保存第一个文档OCR图片失败: " + e.getMessage(), e);
                 }
 			} else {
-				System.out.println("OCR图片保存功能已关闭，跳过保存第一个文档");
+				progressManager.logStepDetail("OCR图片保存功能已关闭，跳过保存第一个文档");
             }
             
-			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options);
+			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager);
 			List<CharBox> seqA = resultA.charBoxes;
+			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
-            task.updateProgress(3, "OCR识别第二个文档");
-
-            // OCR识别第二个文档
-            Path newPath = Paths.get(newFilePath);
+            // 步骤3: OCR识别第二个文档
+            progressManager.startStep(TaskStep.OCR_SECOND_DOC);
             
             // 保存第二个文档的OCR图片
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
-					System.out.println("开始保存第二个文档OCR图片，任务ID: " + task.getTaskId());
+                    progressManager.logStepDetail("保存第二个文档OCR图片，任务ID: {}", task.getTaskId());
 					Path savedPath = ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new");
-					System.out.println("第二个文档OCR图片保存成功，路径: " + savedPath);
+					progressManager.logStepDetail("第二个文档OCR图片保存成功，路径: {}", savedPath);
                 } catch (Exception e) {
-                    System.err.println("保存第二个文档OCR图片失败: " + e.getMessage());
-					e.printStackTrace();
+                    progressManager.logError("保存第二个文档OCR图片失败: " + e.getMessage(), e);
                 }
 			} else {
-				System.out.println("OCR图片保存功能已关闭，跳过保存第二个文档");
+				progressManager.logStepDetail("OCR图片保存功能已关闭，跳过保存第二个文档");
             }
-            
-			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options);
+
+			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager);
 			List<CharBox> seqB = resultB.charBoxes;
+			progressManager.completeStep(TaskStep.OCR_SECOND_DOC);
 
-            long ocrTime = System.currentTimeMillis() - startTime;
-            task.updateProgress(4, "OCR识别完成，开始文本比对");
+            // 步骤4: OCR完成
+            progressManager.startStep(TaskStep.OCR_COMPLETE);
+            long ocrDuration = progressManager.getTotalDuration();
+            progressManager.logOCRStats(seqA.size(), seqB.size(), ocrDuration);
+            progressManager.completeStep(TaskStep.OCR_COMPLETE);
 
-			System.out.println(String.format("OCR完成。A=%d字符, B=%d字符, 耗时=%dms", seqA.size(), seqB.size(), ocrTime));
-
-            // 文本处理和差异分析（使用TextNormalizer进行完整预处理）
+            // 步骤5: 文本比对
+            progressManager.startStep(TaskStep.TEXT_COMPARE);
             String normA = preprocessTextForComparison(joinWithLineBreaks(seqA), options);
             String normB = preprocessTextForComparison(joinWithLineBreaks(seqB), options);
-
-            task.updateProgress(5, "执行差异分析");
 
             DiffUtil dmp = new DiffUtil();
             dmp.Diff_EditCost = 6;
             LinkedList<DiffUtil.Diff> diffs = dmp.diff_main(normA, normB);
             dmp.diff_cleanupEfficiency(diffs);
+            progressManager.completeStep(TaskStep.TEXT_COMPARE);
 
-            task.updateProgress(6, "生成差异块");
-
+            // 步骤6: 差异分析
+            progressManager.startStep(TaskStep.DIFF_ANALYSIS);
 			List<DiffBlock> rawBlocks = DiffProcessingUtil.splitDiffsByBounding(diffs, seqA, seqB, false); // 正常模式不开启调试
             List<DiffBlock> filteredBlocks = DiffProcessingUtil.filterIgnoredDiffBlocks(rawBlocks, seqA, seqB);
+            progressManager.completeStep(TaskStep.DIFF_ANALYSIS);
 
-            task.updateProgress(7, "合并差异块");
-
-            System.out.println("开始合并差异块，filteredBlocks大小: " + filteredBlocks.size());
+            // 步骤7: 差异块合并
+            progressManager.startStep(TaskStep.BLOCK_MERGE);
+            progressManager.logStepDetail("开始合并差异块，filteredBlocks大小: {}", filteredBlocks.size());
             List<DiffBlock> merged = mergeBlocksByBbox(filteredBlocks);
-            System.out.println("合并完成，merged大小: " + merged.size());
+            progressManager.logStepDetail("合并完成，merged大小: {}", merged.size());
+            progressManager.completeStep(TaskStep.BLOCK_MERGE);
 
-            task.updateProgress(8, "比对完成");
+            // 步骤8: RapidOCR验证
+            progressManager.startStep(TaskStep.RAPID_OCR_VALIDATION);
+            try {
+                // 计算实际页数（取两个文档的最大页数）
+                int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
+                progressManager.logStepDetail("文档页数信息: 旧文档{}页, 新文档{}页, 使用最大值{}页", 
+                    resultA.totalPages, resultB.totalPages, actualTotalPages);
+                
+                DiffBlockValidationUtil.DiffBlockValidationResult validationResult = 
+                    diffBlockValidationUtil.analyzeDiffBlocks(merged, task.getTaskId(), false, actualTotalPages);
+                
+                // 记录验证统计信息
+                progressManager.logValidationStats(
+                    validationResult.getTotalMergedCount(),
+                    validationResult.getEligibleBlockCount(), 
+                    validationResult.getTotalPages(),
+                    validationResult.getPageThreshold(),
+                    validationResult.isValidationTriggered(),
+                    validationResult.getRemovedBlockCount());
+                
+                progressManager.logStepDetail("RapidOCR验证状态: {}", 
+                    validationResult.isValidationTriggered() ? "已启动" : "未触发");
+                
+                // 总是使用过滤后的列表（无论验证是否被触发）
+                if (validationResult.getFilteredBlocks() != null) {
+                    merged = validationResult.getFilteredBlocks();
+                    progressManager.logStepDetail("已使用过滤后的DiffBlock列表，剩余{}个块", merged.size());
+                }
+                
+            } catch (Exception e) {
+                progressManager.logError("RapidOCR验证过程出错: " + e.getMessage(), e);
+            }
+            progressManager.completeStep(TaskStep.RAPID_OCR_VALIDATION);
 
-			System.out.println(String.format("差异分析完成。原始差异块=%d, 过滤后=%d, 合并后=%d", rawBlocks.size(), filteredBlocks.size(),
-					merged.size()));
-
-			// （正常比对模式不输出调试日志）
-
-            // ===== 将比对结果映射为坐标并标注到PDF上 =====
-            System.out.println("开始PDF标注步骤...");
-            task.updateProgress(9, "开始PDF标注");
-
-            // 1) 为 normA/normB 构建索引映射（规范化文本位置 → 原始 CharBox 索引）
-            System.out.println("构建索引映射...");
-            IndexMap mapA = buildNormalizedIndexMap(seqA);
-            IndexMap mapB = buildNormalizedIndexMap(seqB);
-            System.out.println("索引映射构建完成");
-
-            // 2) 收集每个 diff 对应的一组矩形（可能跨多个 bbox）
-            System.out.println("收集差异矩形...");
-            List<RectOnPage> rectsA = collectRectsForDiffBlocks(merged, mapA, seqA, true);
-            List<RectOnPage> rectsB = collectRectsForDiffBlocks(merged, mapB, seqB, false);
-            System.out.println("矩形收集完成，rectsA=" + rectsA.size() + ", rectsB=" + rectsB.size());
-
-            // 3) 渲染每页图像以获取像素尺寸，用于像素→PDF坐标换算
-            System.out.println("创建渲染客户端...");
-			DotsOcrClient renderClient = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
-					.defaultModel(gpuOcrConfig.getOcrModel()).build();
-            int dpi = gpuOcrConfig.getRenderDpi();
-            System.out.println("渲染页面大小...");
-            PageImageSizeProvider sizeA = renderPageSizes(oldPath, dpi);
-            PageImageSizeProvider sizeB = renderPageSizes(newPath, dpi);
-            System.out.println("页面大小渲染完成");
-
-            // 4) 标注并输出PDF到系统上传目录
-            String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-            Path annotatedDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "annotated", task.getTaskId());
-            Files.createDirectories(annotatedDir);
-
-            System.out.println("开始执行保存比对结果步骤...");
-            task.updateProgress(12, "保存比对结果");
+            // 步骤9: 结果生成
+            progressManager.startStep(TaskStep.RESULT_GENERATION);
+            
+            // 记录最终差异统计
+            progressManager.logDiffStats(rawBlocks.size(), filteredBlocks.size(), merged.size());
 
             try {
                 // 保存结果到任务
-                System.out.println("创建GPUOCRCompareResult对象...");
+                progressManager.logStepDetail("创建GPUOCRCompareResult对象...");
                 GPUOCRCompareResult result = new GPUOCRCompareResult(task.getTaskId());
                 result.setOldFileName(task.getOldFileName());
                 result.setNewFileName(task.getNewFileName());
+                
+                // 不再需要设置PDF URL，全部使用画布显示
 
 				// 添加失败页面信息
 				List<String> allFailedPages = new ArrayList<>();
@@ -808,38 +822,28 @@ public class GPUOCRCompareService {
 				result.setFailedPages(allFailedPages);
 
                 // 将DiffBlock列表转换为前端期望的Map格式（保留原始图像坐标，坐标转换在接口层进行）
-                System.out.println("转换DiffBlock格式，merged大小: " + merged.size());
+                // 转换DiffBlock格式的信息通过进度管理器输出
 				List<Map<String, Object>> formattedDifferences = convertDiffBlocksToMapFormat(merged, false, null, null);
 
                 result.setDifferences(merged); // 保留原始的DiffBlock格式用于后端处理
                 result.setFormattedDifferences(formattedDifferences); // 保存前端格式的差异数据
 
-                // 设置PDF文件路径（相对于前端可以访问的路径）
-                String baseUploadPath = "/api/gpu-ocr/files";
+                // 不再需要baseUploadPath，全部使用画布显示
 
                 // 创建包装对象用于返回前端期望的格式
-                System.out.println("创建前端结果对象...");
+                // 创建前端结果对象的信息通过进度管理器输出
                 Map<String, Object> frontendResult = new HashMap<>();
                 frontendResult.put("taskId", task.getTaskId());
                 frontendResult.put("oldFileName", task.getOldFileName());
                 frontendResult.put("newFileName", task.getNewFileName());
-				frontendResult.put("oldPdfUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + task.getTaskId() + "/old_"
-						+ oldPath.getFileName().toString());
-				frontendResult.put("newPdfUrl", baseUploadPath + "/gpu-ocr-compare/tasks/" + task.getTaskId() + "/new_"
-						+ newPath.getFileName().toString());
-				frontendResult.put("annotatedOldPdfUrl",
-						baseUploadPath + "/gpu-ocr-compare/annotated/" + task.getTaskId() + "/old_annotated.pdf");
-				frontendResult.put("annotatedNewPdfUrl",
-						baseUploadPath + "/gpu-ocr-compare/annotated/" + task.getTaskId() + "/new_annotated.pdf");
+                // 不再需要PDF URL，全部使用画布显示
                 frontendResult.put("differences", formattedDifferences);
                 frontendResult.put("totalDiffCount", formattedDifferences.size());
 
-                // 添加页面高度（坐标已预先转换为PDF坐标系）
-                frontendResult.put("oldPdfPageHeight", result.getOldPdfPageHeight());
-                frontendResult.put("newPdfPageHeight", result.getNewPdfPageHeight());
+                // 不再需要页面高度，画布使用图片实际像素尺寸
 
                 // 保存前端格式的结果
-                System.out.println("保存结果到缓存...");
+                // 保存结果到缓存的信息通过进度管理器输出
                 results.put(task.getTaskId(), result);
                 frontendResults.put(task.getTaskId(), frontendResult);
 
@@ -849,36 +853,30 @@ public class GPUOCRCompareService {
                     Files.createDirectories(jsonPath.getParent());
                     byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
                     Files.write(jsonPath, json);
-                    System.out.println("前端结果已写入文件: " + jsonPath.toAbsolutePath());
+                    progressManager.logStepDetail("前端结果已写入文件: {}", jsonPath.toAbsolutePath());
                 } catch (Exception ioEx) {
-                    System.err.println("写入前端结果JSON失败: " + ioEx.getMessage());
+                    progressManager.logError("写入前端结果JSON失败: " + ioEx.getMessage(), ioEx);
                 }
 
-                // 同时保存到task中（兼容现有逻辑）
-                task.setOldPdfUrl(frontendResult.get("oldPdfUrl").toString());
-                task.setNewPdfUrl(frontendResult.get("newPdfUrl").toString());
-                task.setAnnotatedOldPdfUrl(frontendResult.get("annotatedOldPdfUrl").toString());
-                task.setAnnotatedNewPdfUrl(frontendResult.get("annotatedNewPdfUrl").toString());
-
-                System.out.println("比对结果保存完成");
+                progressManager.logStepDetail("比对结果保存完成");
             } catch (Exception ex) {
-                System.err.println("保存比对结果失败: " + ex.getMessage());
-                ex.printStackTrace();
+                progressManager.logError("保存比对结果失败: " + ex.getMessage(), ex);
             }
+            
+            progressManager.completeStep(TaskStep.RESULT_GENERATION);
 
-            task.updateProgress(13, "完成比对");
-
-            long processingTime = System.currentTimeMillis() - startTime;
-            System.out.println(String.format("GPU OCR比对完成，总耗时: %dms", processingTime));
-
-            // 设置任务结果
+            // 步骤10: 任务完成
+            progressManager.startStep(TaskStep.TASK_COMPLETE);
             task.setStatus(GPUOCRCompareTask.Status.COMPLETED);
+            progressManager.completeStep(TaskStep.TASK_COMPLETE);
+            
+            // 输出任务完成总结
+            progressManager.logTaskSummary();
 
         } catch (Exception e) {
             task.setStatus(GPUOCRCompareTask.Status.FAILED);
             task.setErrorMessage("比对过程出错: " + e.getMessage());
-            System.err.println("GPU OCR比对失败: " + e.getMessage());
-            e.printStackTrace();
+            progressManager.logError("GPU OCR比对失败: " + e.getMessage(), e);
         }
     }
 
@@ -887,13 +885,18 @@ public class GPUOCRCompareService {
      */
 	private void executeDebugCompareTaskWithExistingResult(GPUOCRCompareTask task, String originalTaskId,
 			GPUOCRCompareOptions options) {
-        long startTime = System.currentTimeMillis();
-        System.out.println("开始GPU OCR调试比对任务: " + task.getTaskId() + ", 使用原任务ID: " + originalTaskId);
+        
+        // 创建进度管理器（调试模式）
+        CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, true);
+        
+        progressManager.logBasicStats("开始调试比对任务: {} (原任务ID: {})", task.getTaskId(), originalTaskId);
 
         try {
             task.setStatus(GPUOCRCompareTask.Status.OCR_PROCESSING);
-            task.updateProgress(1, "读取原任务OCR结果");
-
+            
+            // 步骤1: 读取原任务OCR结果
+            progressManager.startStep(TaskStep.INIT);
+            
             // 查找原任务的文件路径（从上传目录查找）
             String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
             Path taskDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", originalTaskId);
@@ -907,27 +910,29 @@ public class GPUOCRCompareService {
             Path newPdfPath = findTaskPdfFile(taskDir, "new");
             
             if (oldPdfPath == null || newPdfPath == null) {
-				System.out.println("未找到PDF文件，尝试从OCR JSON推断基名进行调试解析...");
+				progressManager.logStepDetail("未找到PDF文件，尝试从OCR JSON推断基名进行调试解析...");
 				Path[] jsonBases = findOcrJsonBases(taskDir);
 				if (jsonBases == null || jsonBases.length < 2 || jsonBases[0] == null || jsonBases[1] == null) {
 					throw new RuntimeException("无法找到原任务的PDF或OCR JSON基文件，目录: " + taskDir);
 				}
-				// 使用推断的基名路径充当pdfPath基准（parseCharBoxesFromSavedJson只依赖“基名.page-N.ocr.json”）
+				// 使用推断的基名路径充当pdfPath基准（parseCharBoxesFromSavedJson只依赖"基名.page-N.ocr.json"）
 				oldPdfPath = jsonBases[0];
 				newPdfPath = jsonBases[1];
-				System.out.println("使用OCR JSON基名进行调试: ");
-				System.out.println("  旧文档基名: " + oldPdfPath);
-				System.out.println("  新文档基名: " + newPdfPath);
+				progressManager.logStepDetail("使用OCR JSON基名进行调试:");
+				progressManager.logStepDetail("  旧文档基名: {}", oldPdfPath);
+				progressManager.logStepDetail("  新文档基名: {}", newPdfPath);
 			} else {
-            System.out.println("找到原任务PDF文件:");
-            System.out.println("  旧文档: " + oldPdfPath);
-            System.out.println("  新文档: " + newPdfPath);
+                progressManager.logStepDetail("找到原任务PDF文件:");
+                progressManager.logStepDetail("  旧文档: {}", oldPdfPath);
+                progressManager.logStepDetail("  新文档: {}", newPdfPath);
 
 				// Debug模式复用原始任务的图片，不需要重新保存
-				System.out.println("Debug模式：复用原始任务 " + originalTaskId + " 的OCR图片资源");
+				progressManager.logStepDetail("Debug模式：复用原始任务 {} 的OCR图片资源", originalTaskId);
             }
+            progressManager.completeStep(TaskStep.INIT);
 
-            task.updateProgress(2, "解析OCR数据");
+            // 步骤2: 解析OCR数据
+            progressManager.startStep(TaskStep.OCR_FIRST_DOC); // 复用步骤枚举
             
 			// 从OCR结果中提取CharBox数据（使用与正常比对相同的方法）
 			RecognitionResult resultA = recognizePdfAsCharSeq(null, oldPdfPath, null, true, options);
@@ -939,11 +944,13 @@ public class GPUOCRCompareService {
                 throw new RuntimeException("无法从OCR结果中提取字符数据");
             }
 
-            long ocrTime = System.currentTimeMillis() - startTime;
-            task.updateProgress(3, "OCR数据解析完成，开始文本比对");
+            long ocrDuration = progressManager.getTotalDuration();
+            progressManager.logOCRStats(seqA.size(), seqB.size(), ocrDuration);
+            progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
-			System.out.println(String.format("OCR数据解析完成。A=%d字符, B=%d字符, 耗时=%dms", seqA.size(), seqB.size(), ocrTime));
-
+            // 步骤3: 文本比对
+            progressManager.startStep(TaskStep.TEXT_COMPARE);
+            
             // 文本处理和差异分析（使用TextNormalizer进行完整预处理）
 			String joinedA = joinWithLineBreaks(seqA);
 			String joinedB = joinWithLineBreaks(seqB);
@@ -951,11 +958,14 @@ public class GPUOCRCompareService {
 			String normB = preprocessTextForComparison(joinedB, options);
 
 			// 调试：检查各阶段文本长度变化（仅Debug模式）
-			System.out.println("[DEBUG] seqA长度=" + seqA.size() + ", joinedA长度=" + joinedA.length() + ", normA长度=" + normA.length());
-			System.out.println("[DEBUG] seqB长度=" + seqB.size() + ", joinedB长度=" + joinedB.length() + ", normB长度=" + normB.length());
-			System.out.println("[DEBUG] joinWithLineBreaks增加了 " + (joinedA.length() - seqA.size()) + " 个字符(A), " + (joinedB.length() - seqB.size()) + " 个字符(B)");
+			progressManager.logStepDetail("seqA长度={}, joinedA长度={}, normA长度={}", seqA.size(), joinedA.length(), normA.length());
+			progressManager.logStepDetail("seqB长度={}, joinedB长度={}, normB长度={}", seqB.size(), joinedB.length(), normB.length());
+			progressManager.logStepDetail("joinWithLineBreaks增加了 {} 个字符(A), {} 个字符(B)", 
+			    (joinedA.length() - seqA.size()), (joinedB.length() - seqB.size()));
+            progressManager.completeStep(TaskStep.TEXT_COMPARE);
 
-            task.updateProgress(4, "执行差异分析");
+            // 步骤4: 差异分析
+            progressManager.startStep(TaskStep.DIFF_ANALYSIS);
 
             DiffUtil dmp = new DiffUtil();
             dmp.Diff_EditCost = 6;
@@ -995,6 +1005,46 @@ public class GPUOCRCompareService {
 			System.out.println(String.format("差异分析完成。原始差异块=%d, 过滤后=%d, 合并后=%d", rawBlocks.size(), filteredBlocks.size(),
 					merged.size()));
 
+            // RapidOCR验证（DEBUG模式）
+            try {
+                // 计算实际页数（取两个文档的最大页数）
+                int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
+                System.out.println("[DEBUG] 文档页数信息: 旧文档" + resultA.totalPages + "页, 新文档" + resultB.totalPages + "页, 使用最大值" + actualTotalPages + "页");
+                
+                DiffBlockValidationUtil.DiffBlockValidationResult validationResult = 
+                    diffBlockValidationUtil.analyzeDiffBlocks(merged, originalTaskId, true, actualTotalPages);
+                
+                // 显示验证统计信息
+                System.out.println("[DEBUG] 验证统计: 总merged=" + validationResult.getTotalMergedCount() + 
+                    ", 符合条件=" + validationResult.getEligibleBlockCount() + 
+                    ", 总页数=" + validationResult.getTotalPages() + 
+                    ", 页数阈值=" + validationResult.getPageThreshold() +
+                    ", 移除幻觉块=" + validationResult.getRemovedBlockCount());
+                
+                if (validationResult.isValidationTriggered()) {
+                    System.out.println("[DEBUG] RapidOCR验证已启动，处理了 " + 
+                        (validationResult.getValidationItems() != null ? validationResult.getValidationItems().size() : 0) + " 个DiffBlock");
+                    
+                    // 输出详细的验证结果
+                    if (validationResult.getValidationItems() != null) {
+                        for (DiffBlockValidationUtil.DiffBlockValidationItem item : validationResult.getValidationItems()) {
+                            System.out.println("[DEBUG] " + item.toString());
+                        }
+                    }
+                } else {
+                    System.out.println("[DEBUG] RapidOCR验证未触发"); 
+                }
+                
+                // 总是使用过滤后的列表（无论验证是否被触发）
+                if (validationResult.getFilteredBlocks() != null) {
+                    merged = validationResult.getFilteredBlocks();
+                    System.out.println("[DEBUG] 已使用过滤后的DiffBlock列表，剩余" + merged.size() + "个块");
+                }
+            } catch (Exception e) {
+                System.err.println("[DEBUG] RapidOCR验证过程出错: " + e.getMessage());
+                e.printStackTrace();
+            }
+
             task.updateProgress(7, "比对完成");
 
             // 创建比对结果对象
@@ -1013,29 +1063,7 @@ public class GPUOCRCompareService {
 			}
 			result.setFailedPages(allFailedPages);
 
-			// 构建PDF文件URL（使用原始任务ID的资源路径）
-            String baseUploadPath = "/api/gpu-ocr/files";
-			try {
-				if (oldPdfPath != null && oldPdfPath.toString().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-					result.setOldPdfUrl(baseUploadPath + "/gpu-ocr-compare/tasks/" + originalTaskId + "/"
-							+ oldPdfPath.getFileName().toString());
-				} else {
-					result.setOldPdfUrl("");
-				}
-				if (newPdfPath != null && newPdfPath.toString().toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-					result.setNewPdfUrl(baseUploadPath + "/gpu-ocr-compare/tasks/" + originalTaskId + "/"
-							+ newPdfPath.getFileName().toString());
-				} else {
-					result.setNewPdfUrl("");
-				}
-			} catch (Exception ignore) {
-				result.setOldPdfUrl("");
-				result.setNewPdfUrl("");
-			}
-			result.setAnnotatedOldPdfUrl(
-					baseUploadPath + "/gpu-ocr-compare/annotated/" + originalTaskId + "/old_annotated.pdf");
-			result.setAnnotatedNewPdfUrl(
-					baseUploadPath + "/gpu-ocr-compare/annotated/" + originalTaskId + "/new_annotated.pdf");
+			// 不再需要PDF URL，全部使用画布显示
             result.setDifferences(merged);
             result.setTotalDiffCount(merged.size());
 
@@ -1043,24 +1071,19 @@ public class GPUOCRCompareService {
 			List<Map<String, Object>> formattedDifferences = convertDiffBlocksToMapFormat(merged, true, seqA, seqB);
 
                 // 创建包装对象用于返回前端期望的格式
-                System.out.println("创建前端结果对象...");
+                // 创建前端结果对象的信息通过进度管理器输出
                 Map<String, Object> frontendResult = new HashMap<>();
 			frontendResult.put("taskId", originalTaskId); // Debug模式使用原始任务ID
                 frontendResult.put("oldFileName", task.getOldFileName());
                 frontendResult.put("newFileName", task.getNewFileName());
-            frontendResult.put("oldPdfUrl", result.getOldPdfUrl());
-            frontendResult.put("newPdfUrl", result.getNewPdfUrl());
-            frontendResult.put("annotatedOldPdfUrl", result.getAnnotatedOldPdfUrl());
-            frontendResult.put("annotatedNewPdfUrl", result.getAnnotatedNewPdfUrl());
+            // 不再需要PDF URL，全部使用画布显示
                 frontendResult.put("differences", formattedDifferences);
                 frontendResult.put("totalDiffCount", formattedDifferences.size());
 
-            // 添加页面高度（供前端坐标转换使用）
-                frontendResult.put("oldPdfPageHeight", result.getOldPdfPageHeight());
-                frontendResult.put("newPdfPageHeight", result.getNewPdfPageHeight());
+            // 不再需要页面高度，画布使用图片实际像素尺寸
 
 			// 保存前端格式的结果（Debug模式使用原始任务ID）
-                System.out.println("保存结果到缓存...");
+                // 保存结果到缓存的信息通过进度管理器输出
 			results.put(originalTaskId, result);
 			frontendResults.put(originalTaskId, frontendResult);
 
@@ -1075,13 +1098,13 @@ public class GPUOCRCompareService {
                 System.err.println("调试模式写入前端结果JSON失败: " + ioEx.getMessage());
             }
 
-            long totalTime = System.currentTimeMillis() - startTime;
+            long totalTime = progressManager.getTotalDuration();
             task.setStatus(GPUOCRCompareTask.Status.COMPLETED);
             task.updateProgress(8, "调试比对完成");
 
 			System.out
 					.println(String.format("GPU OCR调试比对完成。差异数量=%d, 总耗时=%dms", formattedDifferences.size(), totalTime));
-            System.out.println("结果文件: A=" + frontendResult.get("oldPdfUrl") + ", B=" + frontendResult.get("newPdfUrl"));
+            System.out.println("GPU OCR调试比对完成，使用画布显示结果");
 
         } catch (Exception e) {
             System.err.println("GPU OCR调试比对过程中发生异常:");
@@ -1110,7 +1133,8 @@ public class GPUOCRCompareService {
 
 		// 调试：处理前长度
 		try {
-			System.out.println("[PREPROCESS] before length=" + text.length());
+        // 预处理长度信息在调试模式下通过日志输出
+        logger.debug("[PREPROCESS] before length={}", text.length());
 		} catch (Exception ignore) {
         }
         
@@ -1143,7 +1167,8 @@ public class GPUOCRCompareService {
 
 		// 调试：处理后长度
 		try {
-			System.out.println("[PREPROCESS] after length=" + normalized.length());
+        // 预处理长度信息在调试模式下通过日志输出
+        logger.debug("[PREPROCESS] after length={}", normalized.length());
 		} catch (Exception ignore) {
         }
         
@@ -1252,6 +1277,10 @@ public class GPUOCRCompareService {
 	 * @return 每页的高度数组（单位：点，72 DPI）
 	 */
 	private double[] calculatePageHeights(Path pdfPath) {
+        return calculatePageHeights(pdfPath, null);
+    }
+    
+    private double[] calculatePageHeights(Path pdfPath, CompareTaskProgressManager progressManager) {
 		if (pdfPath == null) {
 			return new double[0];
 		}
@@ -1266,8 +1295,10 @@ public class GPUOCRCompareService {
 				heights[i] = mediaBox.getHeight(); // 页面高度（点单位）
 			}
 
-			System.out.println("计算PDF页面高度完成: " + pdfPath.getFileName() + ", 页数: " + pageCount + ", 首页高度: "
-					+ (heights.length > 0 ? heights[0] : 0) + "点");
+            if (progressManager != null) {
+                progressManager.logStepDetail("计算PDF页面高度完成: {}, 页数: {}, 首页高度: {}点", 
+                    pdfPath.getFileName(), pageCount, (heights.length > 0 ? heights[0] : 0));
+            }
 
 			return heights;
 
@@ -1301,6 +1332,11 @@ public class GPUOCRCompareService {
 
 	private TextExtractionUtil.PageLayout parseOnePage(DotsOcrClient client, byte[] pngBytes, int page, String prompt,
 			Path pdfPath) throws Exception {
+        return parseOnePage(client, pngBytes, page, prompt, pdfPath, null);
+    }
+    
+    private TextExtractionUtil.PageLayout parseOnePage(DotsOcrClient client, byte[] pngBytes, int page, String prompt,
+			Path pdfPath, CompareTaskProgressManager progressManager) throws Exception {
         long pageStartAt = System.currentTimeMillis();
         String raw;
         if (prompt == null) {
@@ -1339,7 +1375,9 @@ public class GPUOCRCompareService {
                     String rebuilt = rebuildJsonArrayByBraces(normalized2);
                     root = M.readTree(rebuilt);
                 }
-                System.out.println("JSON修复成功 - 页面: " + page);
+                if (progressManager != null) {
+                    progressManager.logStepDetail("JSON修复成功 - 页面: {}", page);
+                }
             } catch (Exception e2) {
                 System.err.println("JSON修复失败: " + e2.getMessage());
                 throw new RuntimeException("JSON解析失败 (页面=" + page + "): " + e.getMessage(), e);
@@ -1354,7 +1392,9 @@ public class GPUOCRCompareService {
 			if (image != null) {
 				imgW = image.getWidth();
 				imgH = image.getHeight();
-				System.out.println("第" + page + "页图片尺寸: " + imgW + "x" + imgH);
+                if (progressManager != null) {
+                    progressManager.logStepDetail("第{}页图片尺寸: {}x{}", page, imgW, imgH);
+                }
 			}
 		} catch (Exception e) {
 			System.err.println("获取第" + page + "页图片尺寸失败: " + e.getMessage());
@@ -1364,15 +1404,19 @@ public class GPUOCRCompareService {
         try {
             String pageJsonPath = pdfPath.toAbsolutePath().toString() + ".page-" + page + ".ocr.json";
             Files.write(Path.of(pageJsonPath), M.writerWithDefaultPrettyPrinter().writeValueAsBytes(root));
-            System.out.println("Saved OCR JSON: " + pageJsonPath);
+            if (progressManager != null) {
+                progressManager.logStepDetail("Saved OCR JSON: {}", pageJsonPath);
+            }
         } catch (Exception e) {
             System.err.println("Failed to save OCR JSON for page " + page + ": " + e.getMessage());
         }
         List<TextExtractionUtil.LayoutItem> items = extractLayoutItems(root);
         long pageCost = System.currentTimeMillis() - pageStartAt;
         try {
-            System.out.println(String.format("OCR单页完成: file=%s, page=%d, 用时=%dms", 
-                pdfPath == null ? "-" : pdfPath.getFileName().toString(), page, pageCost));
+            if (progressManager != null) {
+                progressManager.logStepDetail("OCR单页完成: file={}, page={}, 用时={}ms", 
+                    pdfPath == null ? "-" : pdfPath.getFileName().toString(), page, pageCost);
+            }
 		} catch (Exception ignore) {
 		}
 		return new TextExtractionUtil.PageLayout(page, items, imgW, imgH);
@@ -1385,7 +1429,7 @@ public class GPUOCRCompareService {
 
 			// 使用固定DPI（来自配置）
         int dpi = gpuOcrConfig.getRenderDpi();
-			System.out.println("文档页数: " + pageCount + ", 使用固定DPI: " + dpi);
+            // 文档页数和DPI信息通过进度管理器输出
         
 			boolean saveImages = client.isSaveRenderedImages();
             PDFRenderer renderer = new PDFRenderer(doc);
@@ -1447,6 +1491,11 @@ public class GPUOCRCompareService {
 
 	private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
 			boolean resumeFromStep4, GPUOCRCompareOptions options) throws Exception {
+        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, null);
+    }
+    
+    private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
+			boolean resumeFromStep4, GPUOCRCompareOptions options, CompareTaskProgressManager progressManager) throws Exception {
         TextExtractionUtil.PageLayout[] ordered;
 		List<String> failedPages = new ArrayList<>();
 		String documentName = pdf.getFileName().toString();
@@ -1483,7 +1532,7 @@ public class GPUOCRCompareService {
                     final byte[] img = pages.get(i);
 				ecs.submit(() -> {
 					try {
-						return parseOnePage(client, img, pageNo, prompt, pdf);
+						return parseOnePage(client, img, pageNo, prompt, pdf, progressManager);
 					} catch (Exception e) {
 						System.err.println("OCR识别第" + pageNo + "页失败: " + e.getMessage());
 						return createEmptyPageLayout(pageNo);
@@ -1528,8 +1577,10 @@ public class GPUOCRCompareService {
         try {
             int pages = ordered == null ? 0 : ordered.length;
             double avg = pages > 0 ? (ocrAllCost * 1.0 / pages) : 0.0;
-            System.out.println(String.format("OCR识别完成: file=%s, 页数=%d, 总用时=%dms, 平均每页=%.1fms", 
-                pdf == null ? "-" : pdf.getFileName().toString(), pages, ocrAllCost, avg));
+            if (progressManager != null) {
+                progressManager.logStepDetail("OCR识别完成: file={}, 页数={}, 总用时={}ms, 平均每页={:.1f}ms", 
+                    pdf == null ? "-" : pdf.getFileName().toString(), pages, ocrAllCost, avg);
+            }
 		} catch (Exception ignore) {
 		}
 
@@ -1576,7 +1627,8 @@ public class GPUOCRCompareService {
             System.err.println("Failed to write extracted text: " + e.getMessage());
         }
 
-		return new RecognitionResult(out, failedPages);
+		int totalPages = ordered == null ? 0 : ordered.length;
+		return new RecognitionResult(out, failedPages, totalPages);
     }
 
     private String joinWithLineBreaks(List<CharBox> cs) {
@@ -1714,7 +1766,7 @@ public class GPUOCRCompareService {
 				for (int index : connectedGroup) {
 					groupBlocks.add(blocks.get(index));
 				}
-				System.out.println("[传递性合并] 找到连通组，包含块: " + connectedGroup);
+				//System.out.println("[传递性合并] 找到连通组，包含块: " + connectedGroup);
 				result.add(mergeSameBboxGroup(groupBlocks));
 			}
 
@@ -1761,7 +1813,7 @@ public class GPUOCRCompareService {
 					getBboxCount(otherBlock) > 0 && 
 					hasMatchingBboxWithPage(currentBlock, otherBlock)) {
 					
-					System.out.println("[传递性合并] 发现连通: 块#" + current + " 与 块#" + i);
+					//System.out.println("[传递性合并] 发现连通: 块#" + current + " 与 块#" + i);
 					queue.offer(i);
 					visited[i] = true;
 				}
@@ -1796,11 +1848,11 @@ public class GPUOCRCompareService {
 			}
 		}
 		
-		System.out.println("[全局DiffRanges合并] " + (isOldText ? "diffRangesA" : "diffRangesB") + 
-			" 合并前总数=" + group.stream().mapToInt(b -> {
-				List<DiffBlock.TextRange> r = isOldText ? b.diffRangesA : b.diffRangesB;
-				return r != null ? r.size() : 0;
-			}).sum() + ", 合并后数量=" + mergedRanges.size());
+//		System.out.println("[全局DiffRanges合并] " + (isOldText ? "diffRangesA" : "diffRangesB") + 
+//			" 合并前总数=" + group.stream().mapToInt(b -> {
+//				List<DiffBlock.TextRange> r = isOldText ? b.diffRangesA : b.diffRangesB;
+//				return r != null ? r.size() : 0;
+//			}).sum() + ", 合并后数量=" + mergedRanges.size());
 		
 		return mergedRanges;
 	}
@@ -1823,8 +1875,8 @@ public class GPUOCRCompareService {
 			}
 		}
 		
-		System.out.println("[TextStartIndex合并] " + (isOldText ? "textStartIndexA" : "textStartIndexB") + 
-			" 最小值=" + minIndex + " (全局文本位置)");
+//		System.out.println("[TextStartIndex合并] " + (isOldText ? "textStartIndexA" : "textStartIndexB") + 
+//			" 最小值=" + minIndex + " (全局文本位置)");
 		
 		return minIndex;
 	}
@@ -1985,16 +2037,16 @@ public class GPUOCRCompareService {
 			}
 		}
 
-		System.out.println("=== 传递性合并策略：基于连通图的智能合并 ===");
-		System.out.println("合并 " + merged.type + " 类型块: " + group.size() + "个块 -> 1个块");
-		System.out.println("合并后oldBboxes: " + (merged.oldBboxes != null ? merged.oldBboxes.size() : 0) + "个");
-		System.out.println("合并后newBboxes: " + (merged.newBboxes != null ? merged.newBboxes.size() : 0) + "个");
-		System.out.println("合并后allTextA: " + (merged.allTextA != null ? merged.allTextA.size() : 0) + "条");
-		System.out.println("合并后allTextB: " + (merged.allTextB != null ? merged.allTextB.size() : 0) + "条");
-		System.out.println("合并后oldText: " + merged.oldText);
-		System.out.println("合并后newText: " + merged.newText);
-		System.out.println("合并后nestedBlocks: " + (merged.nestedBlocks != null ? merged.nestedBlocks.size() : 0) + "个");
-		System.out.println("=== 传递性合并完成 ===");
+//		System.out.println("=== 传递性合并策略：基于连通图的智能合并 ===");
+//		System.out.println("合并 " + merged.type + " 类型块: " + group.size() + "个块 -> 1个块");
+//		System.out.println("合并后oldBboxes: " + (merged.oldBboxes != null ? merged.oldBboxes.size() : 0) + "个");
+//		System.out.println("合并后newBboxes: " + (merged.newBboxes != null ? merged.newBboxes.size() : 0) + "个");
+//		System.out.println("合并后allTextA: " + (merged.allTextA != null ? merged.allTextA.size() : 0) + "条");
+//		System.out.println("合并后allTextB: " + (merged.allTextB != null ? merged.allTextB.size() : 0) + "条");
+//		System.out.println("合并后oldText: " + merged.oldText);
+//		System.out.println("合并后newText: " + merged.newText);
+//		System.out.println("合并后nestedBlocks: " + (merged.nestedBlocks != null ? merged.nestedBlocks.size() : 0) + "个");
+//		System.out.println("=== 传递性合并完成 ===");
 
         return merged;
     }
@@ -2416,35 +2468,9 @@ public class GPUOCRCompareService {
         }
     }
 
-    /**
-     * 获取PDF第一页的高度（像素）
-     */
-    private double getPdfPageHeight(Path pdfPath) throws Exception {
-        try (PDDocument document = PDDocument.load(pdfPath.toFile())) {
-            if (document.getNumberOfPages() > 0) {
-                PDPage page = document.getPage(0);
-                PDRectangle mediaBox = page.getMediaBox();
-                // 返回页面高度（以像素为单位，72 DPI）
-                return mediaBox.getHeight();
-            }
-        }
-        throw new RuntimeException("PDF文档没有页面");
-    }
+    // 移除getPdfPageHeight方法，不再需要PDF页面高度
 
-    /**
-     * 获取PDF第一页的宽度（像素）
-     */
-    private double getPdfPageWidth(Path pdfPath) throws Exception {
-        try (PDDocument document = PDDocument.load(pdfPath.toFile())) {
-            if (document.getNumberOfPages() > 0) {
-                PDPage page = document.getPage(0);
-                PDRectangle mediaBox = page.getMediaBox();
-                // 返回页面宽度（以像素为单位，72 DPI）
-                return mediaBox.getWidth();
-            }
-        }
-        throw new RuntimeException("PDF文档没有页面");
-    }
+    // 移除getPdfPageWidth方法，不再需要PDF页面宽度
 
     private Path getFrontendResultJsonPath(String taskId) {
         // 基于系统配置的上传根目录保存结果文件

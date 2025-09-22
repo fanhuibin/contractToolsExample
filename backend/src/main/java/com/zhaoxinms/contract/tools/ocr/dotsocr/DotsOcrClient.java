@@ -59,7 +59,7 @@ public class DotsOcrClient {
         private OkHttpClient httpClient;
         private boolean verboseLogging = false;
         private int maxConcurrency = 10;
-        private Integer renderDpi = 150; // default 150 dpi
+        private Integer renderDpi = 180; // default 150 dpi
         private Boolean saveRenderedImages = false; // default not save
 
         public Builder baseUrl(String baseUrl) { this.baseUrl = baseUrl; return this; }
