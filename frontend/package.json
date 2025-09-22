@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vue-tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore"
+    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
+    "console-monitor": "node console-monitor.js",
+    "test:console": "playwright test tests/console-monitor.spec.ts --headed",
+    "test:console-ui": "playwright test tests/console-monitor.spec.ts --ui"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
@@ -21,6 +24,7 @@
     "vue-router": "^4.2.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "@types/node": "^20.4.5",
     "@vitejs/plugin-vue": "^4.2.3",
     "@vue/eslint-config-typescript": "^11.0.3",

@@ -20,6 +20,16 @@ export interface GPUOCRCompareTaskStatus {
   annotatedNewPdfUrl?: string
 }
 
+// GPU OCR比对任务摘要（包含统计信息）
+export interface GPUOCRCompareTaskSummary {
+  taskId: string
+  totalDiffCount: number
+  deleteCount: number
+  insertCount: number
+  ignoreCount: number
+  processingTimeMs: number
+}
+
 // GPU OCR比对结果
 export interface GPUOCRCompareResult {
   taskId: string
@@ -161,5 +171,13 @@ export function adjustMaxConcurrency(maxThreads: number) {
     url: '/gpu-ocr-compare/queue/adjust-concurrency',
     method: 'post',
     params: { maxThreads }
+  })
+}
+
+// 获取任务摘要信息（包含差异总数）
+export function getGPUOCRCompareTaskSummary(taskId: string) {
+  return request({
+    url: `/gpu-ocr-compare/task-summary/${taskId}`,
+    method: 'get'
   })
 }
