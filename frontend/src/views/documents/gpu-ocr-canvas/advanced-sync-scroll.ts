@@ -358,6 +358,7 @@ export class AdvancedSyncScrollManager {
   /**
    * 执行基于差距保持的同步
    * 核心逻辑：保持拖拽后建立的位置差距不变
+   * 修复：处理文档高度不同时的边界情况
    */
   private performPixelSync(source: HTMLElement, target: HTMLElement) {
     if (!this.enabled) {
@@ -385,14 +386,20 @@ export class AdvancedSyncScrollManager {
       return
     }
     
-    // 获取当前位置
+    // 获取当前位置和滚动边界
     const sourceScrollTop = source.scrollTop
     const targetScrollTop = target.scrollTop
+    const targetMaxScrollTop = target.scrollHeight - target.clientHeight
     
+    // 获取上次记录的源文档位置，用于判断滚动方向
+    const sourceSide = source === this.leftElement ? 'left' : 'right'
+    const sourceState = sourceSide === 'left' ? this.leftState : this.rightState
+    const lastSourceScrollTop = sourceState.scrollTop
+    const isScrollingUp = sourceScrollTop < lastSourceScrollTop // 向上滚动（数值减小）
+    const isScrollingDown = sourceScrollTop > lastSourceScrollTop // 向下滚动（数值增大）
     
     // 计算目标应该到达的位置（保持基准差距）
     let expectedTargetPosition: number
-    const sourceSide = source === this.leftElement ? 'left' : 'right'
     
     if (sourceSide === 'left') {
       // 左侧滚动，右侧应该保持差距：right = left - offset
@@ -402,8 +409,28 @@ export class AdvancedSyncScrollManager {
       expectedTargetPosition = sourceScrollTop + this.syncBaseline.offset
     }
     
-    // 确保位置不会小于0
-    expectedTargetPosition = Math.max(0, expectedTargetPosition)
+    // 检查目标文档是否已达到边界
+    const isTargetAtTop = targetScrollTop <= 0
+    const isTargetAtBottom = targetScrollTop >= targetMaxScrollTop - 1 // 允许1px误差
+    
+    // 如果期望位置超出边界，检查是否应该允许源文档独立滚动
+    if (expectedTargetPosition < 0) {
+      // 目标位置会是负数，说明目标文档应该超出顶部边界
+      if (isTargetAtTop && !isScrollingDown) {
+        // 目标文档在顶部且源文档不是向下滚动，允许源文档继续滚动
+        return
+      }
+      // 目标文档还没到顶部，或源文档开始向下滚动，正常同步到0
+      expectedTargetPosition = 0
+    } else if (expectedTargetPosition > targetMaxScrollTop) {
+      // 目标位置会超出底部边界
+      if (isTargetAtBottom && !isScrollingUp) {
+        // 目标文档在底部且源文档不是向上滚动，允许源文档继续滚动
+        return
+      }
+      // 目标文档还没到底部，或源文档开始向上滚动，同步到最大位置
+      expectedTargetPosition = targetMaxScrollTop
+    }
     
     const delta = Math.abs(targetScrollTop - expectedTargetPosition)
     
@@ -424,6 +451,10 @@ export class AdvancedSyncScrollManager {
     const targetState = targetSide === 'left' ? this.leftState : this.rightState
     targetState.scrollTop = expectedTargetPosition
     targetState.lastUpdate = Date.now()
+    
+    // 同时更新源文档状态，确保下次滚动方向检测准确
+    sourceState.scrollTop = sourceScrollTop
+    sourceState.lastUpdate = Date.now()
     
     // 异步重置同步标志
     requestAnimationFrame(() => {
