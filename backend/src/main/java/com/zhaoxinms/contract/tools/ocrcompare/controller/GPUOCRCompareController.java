@@ -40,8 +40,8 @@ public class GPUOCRCompareController {
             @RequestParam("oldFile") MultipartFile oldFile,
             @RequestParam("newFile") MultipartFile newFile,
             @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") boolean ignoreHeaderFooter,
-            @RequestParam(value = "headerHeightPercent", defaultValue = "5.0") double headerHeightPercent,
-            @RequestParam(value = "footerHeightPercent", defaultValue = "5.0") double footerHeightPercent,
+            @RequestParam(value = "headerHeightPercent", defaultValue = "12.0") double headerHeightPercent,
+            @RequestParam(value = "footerHeightPercent", defaultValue = "12.0") double footerHeightPercent,
             @RequestParam(value = "ignoreCase", defaultValue = "true") boolean ignoreCase,
             @RequestParam(value = "ignoredSymbols", defaultValue = "_＿") String ignoredSymbols,
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
@@ -131,8 +131,8 @@ public class GPUOCRCompareController {
             GPUOCRCompareOptions options = new GPUOCRCompareOptions();
             if (optionsMap != null) {
                 options.setIgnoreHeaderFooter(Boolean.TRUE.equals(optionsMap.get("ignoreHeaderFooter")));
-                options.setHeaderHeightPercent(((Number) optionsMap.getOrDefault("headerHeightPercent", 5.0)).doubleValue());
-                options.setFooterHeightPercent(((Number) optionsMap.getOrDefault("footerHeightPercent", 5.0)).doubleValue());
+                options.setHeaderHeightPercent(((Number) optionsMap.getOrDefault("headerHeightPercent", 12.0)).doubleValue());
+                options.setFooterHeightPercent(((Number) optionsMap.getOrDefault("footerHeightPercent", 12.0)).doubleValue());
                 options.setIgnoreCase(Boolean.TRUE.equals(optionsMap.get("ignoreCase")));
                 options.setIgnoredSymbols((String) optionsMap.getOrDefault("ignoredSymbols", "_＿"));
                 options.setIgnoreSpaces(Boolean.TRUE.equals(optionsMap.get("ignoreSpaces")));

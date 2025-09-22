@@ -178,7 +178,7 @@ public class DiffProcessingUtil {
 					
 					if (globalEnd > globalStart) {
 						rangesA.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
-						System.out.println("[DELETE全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
+						//System.out.println("[DELETE全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
 					
 					computedRangesA = rangesA;
@@ -228,7 +228,7 @@ public class DiffProcessingUtil {
 					
 					if (globalEnd > globalStart) {
 						rangesB.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
-						System.out.println("[INSERT全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
+						//System.out.println("[INSERT全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
 					
 					computedRangesB = rangesB;
@@ -556,8 +556,8 @@ public class DiffProcessingUtil {
 		int retainedCount = 0;
 
 		// 输出过滤开始信息
-		System.out.println("=== Difference Filtering Statistics ===");
-		System.out.println("Total blocks to process: " + blocks.size());
+//		System.out.println("=== Difference Filtering Statistics ===");
+//		System.out.println("Total blocks to process: " + blocks.size());
 
 		// 根据originalDiff.text内容标记应该被忽略的块
 		for (DiffBlock block : blocks) {
@@ -651,15 +651,15 @@ public class DiffProcessingUtil {
 			if (globalChar.bbox != null) {
 				String globalBboxKey = key(globalChar.page, globalChar.bbox);
 				if (firstBboxKey.equals(globalBboxKey)) {
-					System.out.println("[TextStartIndex] 找到第一个bbox在全局序列中的位置: 索引=" + i + 
-						", bboxKey=" + firstBboxKey + ", 字符='" + globalChar.ch + "'");
+//					System.out.println("[TextStartIndex] 找到第一个bbox在全局序列中的位置: 索引=" + i + 
+//						", bboxKey=" + firstBboxKey + ", 字符='" + globalChar.ch + "'");
 					return i;
 				}
 			}
 		}
 		
 		// 如果没找到，返回null
-		System.out.println("[TextStartIndex] 未找到bbox在全局序列中的位置: bboxKey=" + firstBboxKey);
+		//System.out.println("[TextStartIndex] 未找到bbox在全局序列中的位置: bboxKey=" + firstBboxKey);
 		return null;
 	}
 
@@ -1070,13 +1070,13 @@ public class DiffProcessingUtil {
 		if (!diffText.equals(actualStr)) {
 			debugConsistencyCheckCount++;
 			
-			System.out.println("=== [调试] 文本一致性检查失败 #" + debugConsistencyCheckCount + " ===");
-			System.out.println("操作类型: " + diff.operation);
-			System.out.println("序列: " + seqName);
-			System.out.println("起始索引: " + startIndex);
-			System.out.println("长度: " + diffText.length() + " vs " + actualStr.length());
-			System.out.println("Diff文本: '" + escapeString(diffText) + "'");
-			System.out.println("实际文本: '" + escapeString(actualStr) + "'");
+//			System.out.println("=== [调试] 文本一致性检查失败 #" + debugConsistencyCheckCount + " ===");
+//			System.out.println("操作类型: " + diff.operation);
+//			System.out.println("序列: " + seqName);
+//			System.out.println("起始索引: " + startIndex);
+//			System.out.println("长度: " + diffText.length() + " vs " + actualStr.length());
+//			System.out.println("Diff文本: '" + escapeString(diffText) + "'");
+//			System.out.println("实际文本: '" + escapeString(actualStr) + "'");
 			
 			// 逐字符比较，找出不一致的位置
 			int minLen = Math.min(diffText.length(), actualStr.length());
@@ -1084,19 +1084,19 @@ public class DiffProcessingUtil {
 				char diffChar = diffText.charAt(i);
 				char actualChar = actualStr.charAt(i);
 				if (diffChar != actualChar) {
-					System.out.println("第" + i + "个字符不一致: '" + escapeChar(diffChar) + "' vs '" + escapeChar(actualChar) + "'");
+					//System.out.println("第" + i + "个字符不一致: '" + escapeChar(diffChar) + "' vs '" + escapeChar(actualChar) + "'");
 					break;
 				}
 			}
 			
 			if (diffText.length() != actualStr.length()) {
-				System.out.println("长度不一致: diff=" + diffText.length() + ", actual=" + actualStr.length());
+				//System.out.println("长度不一致: diff=" + diffText.length() + ", actual=" + actualStr.length());
 			}
-			System.out.println("=====================================");
+			//System.out.println("=====================================");
 			
 			// 如果达到最大输出数量，提示用户
 			if (debugConsistencyCheckCount >= MAX_DEBUG_OUTPUT) {
-				System.out.println("=== [调试] 已达到最大输出限制(" + MAX_DEBUG_OUTPUT + "条)，后续不一致情况将不再显示 ===");
+				//System.out.println("=== [调试] 已达到最大输出限制(" + MAX_DEBUG_OUTPUT + "条)，后续不一致情况将不再显示 ===");
 			}
 		}
 	}

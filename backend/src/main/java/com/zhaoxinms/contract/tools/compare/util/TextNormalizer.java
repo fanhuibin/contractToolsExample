@@ -93,6 +93,7 @@ public class TextNormalizer {
         PUNCTUATION_MAP.put("羔", "盖");
         PUNCTUATION_MAP.put("运营", "经营");
         PUNCTUATION_MAP.put("買", "买");
+        PUNCTUATION_MAP.put("説", "说");
     }
     
     /**

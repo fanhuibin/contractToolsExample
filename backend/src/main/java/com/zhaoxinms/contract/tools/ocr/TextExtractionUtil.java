@@ -155,13 +155,13 @@ public class TextExtractionUtil {
         List<PageLayout> processedLayouts = prepareLayouts(ordered, strategy);
 
         // 输出页眉页脚配置信息
-        System.out.println("=== 页眉页脚检测配置 ===");
-        System.out.println("页眉高度占比: " + headerHeightPercent + "%");
-        System.out.println("页脚高度占比: " + footerHeightPercent + "%");
-        System.out.println("页眉区域: 0% - " + headerHeightPercent + "%");
-        System.out.println("页脚区域: " + (100 - footerHeightPercent) + "% - 100%");
-        System.out.println("忽略页眉页脚: " + (ignoreHeaderFooter ? "是" : "否"));
-        System.out.println("========================");
+//        System.out.println("=== 页眉页脚检测配置 ===");
+//        System.out.println("页眉高度占比: " + headerHeightPercent + "%");
+//        System.out.println("页脚高度占比: " + footerHeightPercent + "%");
+//        System.out.println("页眉区域: 0% - " + headerHeightPercent + "%");
+//        System.out.println("页脚区域: " + (100 - footerHeightPercent) + "% - 100%");
+//        System.out.println("忽略页眉页脚: " + (ignoreHeaderFooter ? "是" : "否"));
+//        System.out.println("========================");
 
         // 统计变量
         int totalItems = 0;
@@ -177,23 +177,23 @@ public class TextExtractionUtil {
             if (pl.imageHeight > 0) {
                 // 使用OCR结果中的实际图片高度
                 currentPageHeight = pl.imageHeight;
-                System.out.println("使用图片高度进行页眉页脚检测 - 页面" + pl.page + 
-                    ", 图片尺寸: " + pl.imageWidth + "x" + pl.imageHeight + "像素");
+//                System.out.println("使用图片高度进行页眉页脚检测 - 页面" + pl.page + 
+//                    ", 图片尺寸: " + pl.imageWidth + "x" + pl.imageHeight + "像素");
             } else if (pageHeights != null && pl.page >= 1 && pl.page <= pageHeights.length) {
                 // 回退到pageHeights数组中的高度（可能是PDF高度或图片高度）
                 currentPageHeight = pageHeights[pl.page - 1]; // 页面索引从1开始，数组从0开始
                 if (currentPageHeight > 1500) {
                     // 如果高度大于1500，很可能是图片像素高度
-                    System.out.println("使用传入的图片高度进行页眉页脚检测 - 页面" + pl.page + 
-                        ", 图片高度: " + currentPageHeight + "像素");
+//                    System.out.println("使用传入的图片高度进行页眉页脚检测 - 页面" + pl.page + 
+//                        ", 图片高度: " + currentPageHeight + "像素");
                 } else if (currentPageHeight > 0) {
                     // 如果高度在0-1500之间，很可能是PDF点高度
-                    System.out.println("回退使用PDF高度进行页眉页脚检测 - 页面" + pl.page + 
-                        ", PDF高度: " + currentPageHeight + "点");
+//                    System.out.println("回退使用PDF高度进行页眉页脚检测 - 页面" + pl.page + 
+//                        ", PDF高度: " + currentPageHeight + "点");
                 }
             } else {
-                System.out.println("无法获取页面高度信息 - 页面" + pl.page + 
-                    ", 跳过位置检测，使用category检测");
+//                System.out.println("无法获取页面高度信息 - 页面" + pl.page + 
+//                    ", 跳过位置检测，使用category检测");
             }
 
             // 按顺序遍历每一页中的布局项
@@ -266,18 +266,18 @@ public class TextExtractionUtil {
         }
 
         // 输出页眉页脚检测统计结果
-        System.out.println("=== 页眉页脚检测统计 ===");
-        System.out.println("总布局项目数: " + totalItems);
-        System.out.println("检测到页眉项目: " + headerItems);
-        System.out.println("检测到页脚项目: " + footerItems);
-        System.out.println("被忽略项目总数: " + ignoredItems);
-        System.out.println("保留项目数: " + (totalItems - ignoredItems));
-        if (totalItems > 0) {
-            System.out.println("页眉检测率: " + String.format("%.2f", (double)headerItems / totalItems * 100) + "%");
-            System.out.println("页脚检测率: " + String.format("%.2f", (double)footerItems / totalItems * 100) + "%");
-            System.out.println("忽略率: " + String.format("%.2f", (double)ignoredItems / totalItems * 100) + "%");
-        }
-        System.out.println("========================");
+//        System.out.println("=== 页眉页脚检测统计 ===");
+//        System.out.println("总布局项目数: " + totalItems);
+//        System.out.println("检测到页眉项目: " + headerItems);
+//        System.out.println("检测到页脚项目: " + footerItems);
+//        System.out.println("被忽略项目总数: " + ignoredItems);
+//        System.out.println("保留项目数: " + (totalItems - ignoredItems));
+//        if (totalItems > 0) {
+//            System.out.println("页眉检测率: " + String.format("%.2f", (double)headerItems / totalItems * 100) + "%");
+//            System.out.println("页脚检测率: " + String.format("%.2f", (double)footerItems / totalItems * 100) + "%");
+//            System.out.println("忽略率: " + String.format("%.2f", (double)ignoredItems / totalItems * 100) + "%");
+//        }
+//        System.out.println("========================");
 
         return out;
     }

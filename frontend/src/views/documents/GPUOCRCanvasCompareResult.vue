@@ -1319,11 +1319,10 @@ const fetchResult = async (id: string) => {
     ElMessage.error(e?.message || '加载Canvas OCR比对结果失败')
   } finally {
     loading.value = false
-    if ((results.value?.length || 0) > 0) {
-      isPolling.value = false
-      clearPoll()
-      viewerLoading.value = false
-    }
+    // 无论是否有差异结果，都应该停止loading状态
+    isPolling.value = false
+    clearPoll()
+    viewerLoading.value = false
   }
 }
 

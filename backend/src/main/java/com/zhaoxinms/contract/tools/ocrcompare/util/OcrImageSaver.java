@@ -90,11 +90,11 @@ public class OcrImageSaver {
                     // 保存图片
                     Path imagePath = imagesDir.resolve("page-" + (i + 1) + ".png");
                     Files.write(imagePath, bytes);
-                    System.out.println("[" + mode + "] OCR图片已保存: " + imagePath.toString());
+                    //System.out.println("[" + mode + "] OCR图片已保存: " + imagePath.toString());
                 }
             }
             
-            System.out.println("[" + mode + "] OCR图片保存完成，目录: " + imagesDir.toString());
+            //System.out.println("[" + mode + "] OCR图片保存完成，目录: " + imagesDir.toString());
             return imagesDir;
         }
     }

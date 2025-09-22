@@ -298,8 +298,8 @@ const debugForm = reactive({
 const settingsOpen = ref(false)
 const settings = reactive({
   ignoreHeaderFooter: true,
-  headerHeightPercent: 10,
-  footerHeightPercent: 10,
+  headerHeightPercent: 12,
+  footerHeightPercent: 12,
   ignoreCase: true,
   ignoredSymbols: '_＿',
   ignoreSpaces: false,
