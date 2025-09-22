@@ -1,12 +1,14 @@
 package com.zhaoxinms.contract.tools.config;
 
 import lombok.Data;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * 肇新合同工具集统一配置类
  * 所有配置项都使用zxcm前缀
  */
 @Data
+@ConfigurationProperties(prefix = "zxcm")
 public class ZxcmConfig {
     
     /**
@@ -207,4 +209,4 @@ public class ZxcmConfig {
             private String contextPath = "";
         }
     }
-} 
+}
