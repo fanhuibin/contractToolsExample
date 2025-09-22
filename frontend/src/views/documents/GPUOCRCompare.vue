@@ -118,50 +118,63 @@
         </div>
       </template>
 
-      <el-table :data="taskHistory" style="width: 100%" empty-text="暂无历史任务">
-        <el-table-column prop="taskId" label="任务ID" width="200" show-overflow-tooltip />
-        <el-table-column prop="statusDesc" label="状态" width="120">
+      <el-table 
+        :data="taskHistory" 
+        style="width: 100%" 
+        empty-text="暂无历史任务" 
+        class="task-history-table"
+        table-layout="auto"
+      >
+        <el-table-column prop="taskId" label="任务ID" min-width="220" show-overflow-tooltip />
+        <el-table-column prop="oldFileName" label="原始文件" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="newFileName" label="新文件" min-width="200" show-overflow-tooltip />
+        <el-table-column label="差异总数" min-width="120" align="center">
           <template #default="scope">
-            <el-tag :type="getStatusTagType(scope.row.status)" size="small">
-              {{ scope.row.statusDesc }}
-            </el-tag>
+            <span>{{ getDifferencesCount(scope.row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="progress" label="进度" width="120">
-          <template #default="scope">
-            {{ scope.row.progress.toFixed(1) }}%
-          </template>
-        </el-table-column>
-        <el-table-column prop="createdTime" label="创建时间" width="180">
+        <el-table-column prop="createdTime" label="上传时间" min-width="180">
           <template #default="scope">
             {{ formatTime(scope.row.createdTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200">
+        <el-table-column prop="updatedTime" label="分析完成时间" min-width="180">
           <template #default="scope">
-            <el-button
-              v-if="scope.row.status === 'COMPLETED'"
-              size="small"
-              type="primary"
-              @click="viewTaskResult(scope.row.taskId)"
-            >
-              查看结果
-            </el-button>
-            <el-button
-              v-if="scope.row.status === 'COMPLETED'"
-              size="small"
-              type="primary"
-              @click="goToResult(scope.row.taskId)"
-            >
-              查看结果
-            </el-button>
-            <el-button
-              size="small"
-              type="danger"
-              @click="deleteTask(scope.row.taskId)"
-            >
-              删除
-            </el-button>
+            {{ scope.row.status === 'COMPLETED' ? formatTime(scope.row.updatedTime) : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column label="分析时长" min-width="120" align="center">
+          <template #default="scope">
+            {{ getProcessingDuration(scope.row) }}
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" min-width="280" align="center">
+          <template #default="scope">
+            <div class="action-buttons">
+              <el-button
+                v-if="scope.row.status === 'COMPLETED'"
+                size="small"
+                type="primary"
+                @click="goToResult(scope.row.taskId)"
+              >
+                比对结果
+              </el-button>
+              <el-button
+                v-if="scope.row.status === 'COMPLETED'"
+                size="small"
+                type="success"
+                :icon="DownloadOutlined"
+                @click="downloadResult(scope.row.taskId)"
+                title="下载结果"
+              />
+              <el-button
+                size="small"
+                type="danger"
+                :icon="DeleteOutlined"
+                @click="deleteTask(scope.row.taskId)"
+                title="删除任务"
+              />
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -247,6 +260,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
+import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -577,6 +591,61 @@ const startDebugCompare = async () => {
 const formatTime = (timeStr: string) => {
   return new Date(timeStr).toLocaleString()
 }
+
+// 获取差异总数
+const getDifferencesCount = (task: GPUOCRCompareTaskStatus) => {
+  // 如果任务未完成，显示 "-"
+  if (task.status !== 'COMPLETED') {
+    return '-'
+  }
+  
+  // 尝试从 sessionStorage 获取缓存的Canvas结果
+  try {
+    const cacheKey = `gpu-ocr-canvas-result-${task.taskId}`
+    const cachedResult = sessionStorage.getItem(cacheKey)
+    if (cachedResult) {
+      const result = JSON.parse(cachedResult)
+      if (typeof result.totalDiffCount === 'number') {
+        return result.totalDiffCount.toString()
+      }
+    }
+  } catch (error) {
+    // 忽略缓存错误
+  }
+  
+  // 如果没有缓存，显示需要查看详情
+  return '查看详情'
+}
+
+// 计算分析时长
+const getProcessingDuration = (task: GPUOCRCompareTaskStatus) => {
+  if (task.status !== 'COMPLETED' || !task.updatedTime) {
+    return '-'
+  }
+  
+  const startTime = new Date(task.createdTime).getTime()
+  const endTime = new Date(task.updatedTime).getTime()
+  const durationMs = endTime - startTime
+  
+  if (durationMs < 1000) {
+    return '<1秒'
+  } else if (durationMs < 60000) {
+    return `${Math.round(durationMs / 1000)}秒`
+  } else if (durationMs < 3600000) {
+    const minutes = Math.floor(durationMs / 60000)
+    const seconds = Math.round((durationMs % 60000) / 1000)
+    return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
+  } else {
+    const hours = Math.floor(durationMs / 3600000)
+    const minutes = Math.round((durationMs % 3600000) / 60000)
+    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+  }
+}
+
+// 下载结果（功能开发中）
+const downloadResult = async (taskId: string) => {
+  ElMessage.info('下载功能正在开发中，敬请期待...')
+}
 </script>
 
 <style scoped>
@@ -692,5 +761,78 @@ const formatTime = (timeStr: string) => {
   color: #909399;
   margin-top: 4px;
   line-height: 1.4;
+}
+
+/* 任务历史表格样式优化 */
+.task-history-table {
+  /* 表格布局优化 */
+  width: 100% !important;
+  table-layout: auto;
+  
+  /* 表格容器 */
+  :deep(.el-table__header-wrapper),
+  :deep(.el-table__body-wrapper) {
+    width: 100% !important;
+  }
+  
+  /* 表格主体 */
+  :deep(.el-table__header),
+  :deep(.el-table__body) {
+    width: 100% !important;
+    table-layout: auto;
+  }
+  
+  /* 增加表格行高 */
+  :deep(.el-table__row) {
+    height: 60px;
+  }
+  
+  /* 表格单元格内边距 */
+  :deep(.el-table td) {
+    padding: 12px 8px;
+  }
+  
+  /* 表头样式 */
+  :deep(.el-table th) {
+    padding: 12px 8px;
+    background-color: #f8f9fa;
+  }
+  
+  /* 表格单元格内容换行处理 */
+  :deep(.cell) {
+    word-break: break-word;
+    white-space: normal;
+    line-height: 1.4;
+    overflow: visible;
+  }
+  
+  /* 让表格列自动分配剩余空间 */
+  :deep(.el-table colgroup col) {
+    min-width: auto;
+  }
+  
+  /* 确保表格占满容器宽度 */
+  :deep(.el-table) {
+    width: 100% !important;
+  }
+}
+
+/* 操作按钮容器样式 */
+.action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  
+  .el-button {
+    margin: 0;
+    white-space: nowrap;
+  }
+  
+  /* 确保按钮不换行 */
+  .el-button + .el-button {
+    margin-left: 0;
+  }
 }
 </style>

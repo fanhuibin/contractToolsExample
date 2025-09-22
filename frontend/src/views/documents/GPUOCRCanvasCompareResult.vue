@@ -1271,6 +1271,21 @@ const fetchResult = async (id: string) => {
       // 保存完整的比对结果数据
       compareData.value = data
 
+      // 缓存比对结果数据到 sessionStorage，供任务历史页面使用
+      try {
+        const cacheKey = `gpu-ocr-canvas-result-${id}`
+        const cacheData = {
+          totalDiffCount: results.value.length,
+          oldFileName: data.oldFileName,
+          newFileName: data.newFileName,
+          taskId: id,
+          cachedAt: Date.now()
+        }
+        sessionStorage.setItem(cacheKey, JSON.stringify(cacheData))
+      } catch (error) {
+        console.warn('缓存比对结果失败:', error)
+      }
+
       // 读取后端提供的图片基路径（如果存在），避免前端手动拼接
       if (typeof (data as any).oldImageBaseUrl === 'string') {
         oldImageBaseUrl.value = (data as any).oldImageBaseUrl
