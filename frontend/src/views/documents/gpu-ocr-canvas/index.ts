@@ -33,4 +33,4 @@ export * from './diff-markers'
 export * from './middle-canvas-interaction'
 
 // 同步滚动
-export * from './sync-scroll'
+export * from './advanced-sync-scroll'
