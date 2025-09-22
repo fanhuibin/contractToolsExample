@@ -12,6 +12,8 @@ public class GPUOCRCompareOptions {
     private String ignoredSymbols = "_＿";
     private boolean ignoreSpaces = false;
     private boolean ignoreSeals = true;
+    private boolean removeWatermark = false;
+    private String watermarkRemovalStrength = "smart"; // default, extended, loose, smart
 
     public GPUOCRCompareOptions() {}
 
@@ -74,5 +76,21 @@ public class GPUOCRCompareOptions {
 
     public void setIgnoreSeals(boolean ignoreSeals) {
         this.ignoreSeals = ignoreSeals;
+    }
+
+    public boolean isRemoveWatermark() {
+        return removeWatermark;
+    }
+
+    public void setRemoveWatermark(boolean removeWatermark) {
+        this.removeWatermark = removeWatermark;
+    }
+
+    public String getWatermarkRemovalStrength() {
+        return watermarkRemovalStrength;
+    }
+
+    public void setWatermarkRemovalStrength(String watermarkRemovalStrength) {
+        this.watermarkRemovalStrength = watermarkRemovalStrength;
     }
 }

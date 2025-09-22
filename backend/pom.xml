@@ -241,6 +241,13 @@
 			<artifactId>snakeyaml</artifactId>
 			<version>1.33</version>
 		</dependency>
+
+		<!-- OpenCV for image processing and watermark removal -->
+		<dependency>
+			<groupId>org.openpnp</groupId>
+			<artifactId>opencv</artifactId>
+			<version>4.6.0-0</version>
+		</dependency>
     </dependencies>
 
     <build>

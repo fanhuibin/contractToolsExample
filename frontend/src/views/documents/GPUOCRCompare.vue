@@ -244,6 +244,34 @@
         <el-form-item label="忽略印章">
           <el-switch v-model="settings.ignoreSeals" />
         </el-form-item>
+        <el-form-item label="去除水印">
+          <el-switch v-model="settings.removeWatermark" />
+          <div class="setting-hint">自动去除图片中的水印，提高OCR识别准确度</div>
+        </el-form-item>
+        <el-form-item v-if="settings.removeWatermark" label="去水印强度">
+          <el-select v-model="settings.watermarkRemovalStrength" style="width: 100%">
+            <el-option
+              v-for="option in watermarkStrengthOptions"
+              :key="option.value"
+              :label="option.label + (option.recommended ? ' (推荐)' : '')"
+              :value="option.value"
+            >
+              <div>
+                <div style="display: flex; align-items: center;">
+                  <span>{{ option.label }}</span>
+                  <el-tag v-if="option.recommended" type="success" size="small" style="margin-left: 8px">推荐</el-tag>
+                </div>
+                <div style="font-size: 12px; color: #999; margin-top: 4px;">{{ option.description }}</div>
+              </div>
+            </el-option>
+          </el-select>
+          <div class="setting-hint">
+            <strong>智能模式(推荐)</strong>：自动尝试多种强度，获得最佳效果<br>
+            <strong>默认强度</strong>：适合常见浅色水印<br>
+            <strong>扩展强度</strong>：适合半透明水印<br>
+            <strong>宽松强度</strong>：可能误删文字，慎用
+          </div>
+        </el-form-item>
         <el-alert
           title="说明：这些设置影响GPU OCR识别结果的比对过滤，页眉页脚设置影响OCR识别区域。GPU加速提供更快的处理速度和更高的准确率。"
           type="info"
@@ -268,7 +296,8 @@ import {
   deleteGPUOCRCompareTask,
   debugGPUCompareWithExistingOCR,
   debugGPUCompareLegacy,
-  type GPUOCRCompareTaskStatus
+  type GPUOCRCompareTaskStatus,
+  type WatermarkStrengthOption
 } from '@/api/gpu-ocr-compare'
 
 const router = useRouter()
@@ -294,6 +323,31 @@ const debugForm = reactive({
   taskId: ''
 })
 
+// 去水印强度选项
+const watermarkStrengthOptions: WatermarkStrengthOption[] = [
+  {
+    value: 'default',
+    label: '默认强度',
+    description: '检测浅灰色到白色水印(RGB 160-255)，适合常见水印'
+  },
+  {
+    value: 'extended',
+    label: '扩展强度',
+    description: '检测中等灰度水印(RGB 120-255)，适合半透明水印'
+  },
+  {
+    value: 'loose',
+    label: '宽松强度',
+    description: '检测深色水印(RGB 80-255)，可能误删文字，慎用'
+  },
+  {
+    value: 'smart',
+    label: '智能模式',
+    description: '自动尝试多种强度，推荐使用',
+    recommended: true
+  }
+]
+
 // 设置相关
 const settingsOpen = ref(false)
 const settings = reactive({
@@ -303,7 +357,9 @@ const settings = reactive({
   ignoreCase: true,
   ignoredSymbols: '_＿',
   ignoreSpaces: false,
-  ignoreSeals: true
+  ignoreSeals: true,
+  removeWatermark: false,
+  watermarkRemovalStrength: 'smart' as 'default' | 'extended' | 'loose' | 'smart'
 })
 
 // 生命周期
@@ -350,6 +406,8 @@ const doUploadGPUOCRCompare = async () => {
   formData.append('ignoredSymbols', settings.ignoredSymbols || '')
   formData.append('ignoreSpaces', String(settings.ignoreSpaces))
   formData.append('ignoreSeals', String(settings.ignoreSeals))
+  formData.append('removeWatermark', String(settings.removeWatermark))
+  formData.append('watermarkRemovalStrength', settings.watermarkRemovalStrength)
 
   uploading.value = true
 
@@ -552,7 +610,9 @@ const startDebugCompare = async () => {
         ignoreCase: settings.ignoreCase,
         ignoredSymbols: settings.ignoredSymbols || '',
         ignoreSpaces: settings.ignoreSpaces,
-        ignoreSeals: settings.ignoreSeals
+        ignoreSeals: settings.ignoreSeals,
+        removeWatermark: settings.removeWatermark,
+        watermarkRemovalStrength: settings.watermarkRemovalStrength
       }
     })
 

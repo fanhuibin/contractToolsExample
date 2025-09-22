@@ -17,6 +17,7 @@ import org.springframework.stereotype.Component;
 
 import com.zhaoxinms.contract.tools.ocrcompare.config.GPUOCRConfig;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import com.zhaoxinms.contract.tools.ocrcompare.compare.GPUOCRCompareOptions;
 
 /**
  * OCR图片保存工具类
@@ -31,6 +32,9 @@ public class OcrImageSaver {
     @Autowired
     private ZxcmConfig zxcmConfig;
 
+    @Autowired
+    private WatermarkRemover watermarkRemover;
+
     /**
      * 保存PDF的OCR图片到指定目录
      * @param pdfPath PDF文件路径
@@ -39,6 +43,21 @@ public class OcrImageSaver {
      * @return 保存的图片目录路径
      */
     public Path saveOcrImages(Path pdfPath, String taskId, String mode) throws Exception {
+        return saveOcrImages(pdfPath, taskId, mode, null);
+    }
+
+    /**
+     * 保存PDF的OCR图片到指定目录（支持去水印选项）
+     * @param pdfPath PDF文件路径
+     * @param taskId 任务ID
+     * @param mode 模式标识（如"old", "new", "gradio"等）
+     * @param options 比对选项（包含去水印设置）
+     * @return 保存的图片目录路径
+     */
+    public Path saveOcrImages(Path pdfPath, String taskId, String mode, GPUOCRCompareOptions options) throws Exception {
+        // 调试日志：记录去水印设置
+        System.out.println("[" + mode + "] OcrImageSaver收到的去水印设置: " + (options != null ? options.isRemoveWatermark() : "options为null"));
+        
         // 检查是否启用图片保存功能
         if (!gpuOcrConfig.isSaveOcrImages()) {
             System.out.println("[" + mode + "] OCR图片保存功能已关闭，跳过保存");
@@ -90,6 +109,40 @@ public class OcrImageSaver {
                     // 保存图片
                     Path imagePath = imagesDir.resolve("page-" + (i + 1) + ".png");
                     Files.write(imagePath, bytes);
+                    
+                    // 去水印处理
+                    if (options != null && options.isRemoveWatermark()) {
+                        try {
+                            String strength = options.getWatermarkRemovalStrength();
+                            System.out.println("[" + mode + "] 第" + (i + 1) + "页开始去水印，强度: " + strength);
+                            
+                            boolean watermarkRemoved = false;
+                            switch (strength) {
+                                case "default":
+                                    watermarkRemoved = watermarkRemover.removeWatermark(imagePath.toString());
+                                    break;
+                                case "extended":
+                                    watermarkRemoved = watermarkRemover.removeWatermarkExtended(imagePath.toString());
+                                    break;
+                                case "loose":
+                                    watermarkRemoved = watermarkRemover.removeWatermarkLoose(imagePath.toString());
+                                    break;
+                                case "smart":
+                                default:
+                                    watermarkRemoved = watermarkRemover.removeWatermarkSmart(imagePath.toString());
+                                    break;
+                            }
+                            
+                            if (watermarkRemoved) {
+                                System.out.println("[" + mode + "] 第" + (i + 1) + "页去水印处理完成(" + strength + "): " + imagePath.toString());
+                            } else {
+                                System.out.println("[" + mode + "] 第" + (i + 1) + "页水印去除失败(" + strength + "): " + imagePath.toString());
+                            }
+                        } catch (Exception e) {
+                            System.err.println("[" + mode + "] 第" + (i + 1) + "页水印去除异常: " + e.getMessage());
+                        }
+                    }
+                    
                     //System.out.println("[" + mode + "] OCR图片已保存: " + imagePath.toString());
                 }
             }

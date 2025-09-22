@@ -55,6 +55,7 @@ import com.zhaoxinms.contract.tools.ocrcompare.progress.CompareTaskProgressManag
 import com.zhaoxinms.contract.tools.ocrcompare.progress.CompareTaskProgressManager.TaskStep;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.ocrcompare.util.OcrImageSaver;
+import com.zhaoxinms.contract.tools.ocrcompare.util.WatermarkRemover;
 import com.zhaoxinms.contract.tools.ocrcompare.concurrent.GPUOCRTaskQueue;
 
 /**
@@ -97,6 +98,9 @@ public class GPUOCRCompareService {
     
     @Autowired
     private DiffBlockValidationUtil diffBlockValidationUtil;
+
+    @Autowired
+    private WatermarkRemover watermarkRemover;
 
     private final ConcurrentHashMap<String, GPUOCRCompareTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, GPUOCRCompareResult> results = new ConcurrentHashMap<>();
@@ -672,7 +676,10 @@ public class GPUOCRCompareService {
      * 执行比对任务（文件路径）
      */
 	private void executeCompareTaskWithPaths(GPUOCRCompareTask task, String oldFilePath, String newFilePath,
-			GPUOCRCompareOptions options) {
+			GPUOCRCompareOptions options) { 
+        
+        // 调试日志：记录去水印设置
+        System.out.println("Service收到的去水印设置: " + (options != null ? options.isRemoveWatermark() : "options为null"));
         
         // 创建进度管理器（正常模式，非调试模式）
         CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, false);
@@ -699,7 +706,7 @@ public class GPUOCRCompareService {
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
                     progressManager.logStepDetail("保存第一个文档OCR图片，任务ID: {}", task.getTaskId());
-					Path savedPath = ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old");
+					Path savedPath = ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old", options);
 					progressManager.logStepDetail("第一个文档OCR图片保存成功，路径: {}", savedPath);
                 } catch (Exception e) {
                     progressManager.logError("保存第一个文档OCR图片失败: " + e.getMessage(), e);
@@ -719,7 +726,7 @@ public class GPUOCRCompareService {
             if (gpuOcrConfig.isSaveOcrImages()) {
                 try {
                     progressManager.logStepDetail("保存第二个文档OCR图片，任务ID: {}", task.getTaskId());
-					Path savedPath = ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new");
+					Path savedPath = ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new", options);
 					progressManager.logStepDetail("第二个文档OCR图片保存成功，路径: {}", savedPath);
                 } catch (Exception e) {
                     progressManager.logError("保存第二个文档OCR图片失败: " + e.getMessage(), e);
@@ -1423,6 +1430,10 @@ public class GPUOCRCompareService {
     }
 
     private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath) throws Exception {
+        return renderAllPagesToPng(client, pdfPath, null);
+    }
+
+    private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath, GPUOCRCompareOptions options) throws Exception {
 		// 加载PDF文档并计算页数
 		try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
 			int pageCount = doc.getNumberOfPages();
@@ -1463,12 +1474,64 @@ public class GPUOCRCompareService {
                 try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
                     ImageIO.write(image, "png", baos);
                     byte[] bytes = baos.toByteArray();
+                    
+                    // 如果开启去水印，对图片字节进行去水印处理
+                    if (options != null && options.isRemoveWatermark()) {
+                        bytes = applyWatermarkRemoval(bytes, options.getWatermarkRemovalStrength(), i + 1);
+                    }
+                    
                     list.add(bytes);
                     
                 }
             }
             
             return list;
+        }
+    }
+
+    /**
+     * 对图片字节应用去水印处理
+     */
+    private byte[] applyWatermarkRemoval(byte[] imageBytes, String strength, int pageNo) {
+        try {
+            // 创建临时文件
+            Path tempFile = Files.createTempFile("watermark_removal_", ".png");
+            Files.write(tempFile, imageBytes);
+            
+            System.out.println("OCR流程: 第" + pageNo + "页开始去水印处理，强度: " + strength);
+            
+            boolean success = false;
+            switch (strength) {
+                case "default":
+                    success = watermarkRemover.removeWatermark(tempFile.toString());
+                    break;
+                case "extended":
+                    success = watermarkRemover.removeWatermarkExtended(tempFile.toString());
+                    break;
+                case "loose":
+                    success = watermarkRemover.removeWatermarkLoose(tempFile.toString());
+                    break;
+                case "smart":
+                default:
+                    success = watermarkRemover.removeWatermarkSmart(tempFile.toString());
+                    break;
+            }
+            
+            if (success) {
+                System.out.println("OCR流程: 第" + pageNo + "页去水印处理成功(" + strength + ")");
+                // 读取处理后的图片
+                byte[] processedBytes = Files.readAllBytes(tempFile);
+                Files.deleteIfExists(tempFile);
+                return processedBytes;
+            } else {
+                System.out.println("OCR流程: 第" + pageNo + "页去水印处理失败(" + strength + ")，使用原图");
+                Files.deleteIfExists(tempFile);
+                return imageBytes;
+            }
+            
+        } catch (Exception e) {
+            System.err.println("OCR流程: 第" + pageNo + "页去水印处理异常: " + e.getMessage());
+            return imageBytes; // 出错时返回原始图片
         }
     }
 
@@ -1518,7 +1581,7 @@ public class GPUOCRCompareService {
             }
         } else {
                 // Step 1: render PDF to images（默认旧流程）
-                List<byte[]> pages = renderAllPagesToPng(client, pdf);
+                List<byte[]> pages = renderAllPagesToPng(client, pdf, options);
                 int total = pages.size();
                 int parallel = Math.max(1, gpuOcrConfig.getParallelThreads()); // 使用配置的并行线程数
                 java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors

@@ -57,6 +57,16 @@ export interface GPUOCRCompareOptions {
   ignoredSymbols?: string
   ignoreSpaces?: boolean
   ignoreSeals?: boolean
+  removeWatermark?: boolean
+  watermarkRemovalStrength?: 'default' | 'extended' | 'loose' | 'smart'
+}
+
+// 去水印强度选项
+export interface WatermarkStrengthOption {
+  value: 'default' | 'extended' | 'loose' | 'smart'
+  label: string
+  description: string
+  recommended?: boolean
 }
 
 // 任务队列统计信息

@@ -45,9 +45,14 @@ public class GPUOCRCompareController {
             @RequestParam(value = "ignoreCase", defaultValue = "true") boolean ignoreCase,
             @RequestParam(value = "ignoredSymbols", defaultValue = "_＿") String ignoredSymbols,
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
-            @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals) {
+            @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals,
+            @RequestParam(value = "removeWatermark", defaultValue = "false") boolean removeWatermark,
+            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength) {
 
         try {
+            // 调试日志：记录接收到的去水印参数
+            System.out.println("Controller接收到的去水印参数: " + removeWatermark + ", 强度: " + watermarkRemovalStrength);
+            
             // 创建比对选项
             GPUOCRCompareOptions options = new GPUOCRCompareOptions();
             options.setIgnoreHeaderFooter(ignoreHeaderFooter);
@@ -57,6 +62,8 @@ public class GPUOCRCompareController {
             options.setIgnoredSymbols(ignoredSymbols);
             options.setIgnoreSpaces(ignoreSpaces);
             options.setIgnoreSeals(ignoreSeals);
+            options.setRemoveWatermark(removeWatermark);
+            options.setWatermarkRemovalStrength(watermarkRemovalStrength);
 
             // 提交比对任务
             String taskId = gpuOcrCompareService.submitCompareTask(oldFile, newFile, options);
@@ -137,6 +144,8 @@ public class GPUOCRCompareController {
                 options.setIgnoredSymbols((String) optionsMap.getOrDefault("ignoredSymbols", "_＿"));
                 options.setIgnoreSpaces(Boolean.TRUE.equals(optionsMap.get("ignoreSpaces")));
                 options.setIgnoreSeals(Boolean.TRUE.equals(optionsMap.get("ignoreSeals")));
+                options.setRemoveWatermark(Boolean.TRUE.equals(optionsMap.get("removeWatermark")));
+                options.setWatermarkRemovalStrength((String) optionsMap.getOrDefault("watermarkRemovalStrength", "smart"));
             }
 
             if (taskId == null || taskId.trim().isEmpty()) {
