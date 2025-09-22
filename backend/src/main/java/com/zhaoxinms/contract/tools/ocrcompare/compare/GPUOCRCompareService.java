@@ -702,40 +702,18 @@ public class GPUOCRCompareService {
             // 步骤2: OCR识别第一个文档
             progressManager.startStep(TaskStep.OCR_FIRST_DOC);
             
-            // 保存第一个文档的OCR图片
-            if (gpuOcrConfig.isSaveOcrImages()) {
-                try {
-                    progressManager.logStepDetail("保存第一个文档OCR图片，任务ID: {}", task.getTaskId());
-					Path savedPath = ocrImageSaver.saveOcrImages(oldPath, task.getTaskId(), "old", options);
-					progressManager.logStepDetail("第一个文档OCR图片保存成功，路径: {}", savedPath);
-                } catch (Exception e) {
-                    progressManager.logError("保存第一个文档OCR图片失败: " + e.getMessage(), e);
-                }
-			} else {
-				progressManager.logStepDetail("OCR图片保存功能已关闭，跳过保存第一个文档");
-            }
+            // 注意：图片保存和去水印已集成到OCR识别流程中
             
-			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager);
+			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old");
 			List<CharBox> seqA = resultA.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
             // 步骤3: OCR识别第二个文档
             progressManager.startStep(TaskStep.OCR_SECOND_DOC);
             
-            // 保存第二个文档的OCR图片
-            if (gpuOcrConfig.isSaveOcrImages()) {
-                try {
-                    progressManager.logStepDetail("保存第二个文档OCR图片，任务ID: {}", task.getTaskId());
-					Path savedPath = ocrImageSaver.saveOcrImages(newPath, task.getTaskId(), "new", options);
-					progressManager.logStepDetail("第二个文档OCR图片保存成功，路径: {}", savedPath);
-                } catch (Exception e) {
-                    progressManager.logError("保存第二个文档OCR图片失败: " + e.getMessage(), e);
-                }
-			} else {
-				progressManager.logStepDetail("OCR图片保存功能已关闭，跳过保存第二个文档");
-            }
+            // 注意：图片保存和去水印已集成到OCR识别流程中
 
-			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager);
+			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new");
 			List<CharBox> seqB = resultB.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_SECOND_DOC);
 
@@ -1434,19 +1412,50 @@ public class GPUOCRCompareService {
     }
 
     private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath, GPUOCRCompareOptions options) throws Exception {
+        return renderAllPagesToPng(client, pdfPath, options, null, null);
+    }
+
+    /**
+     * PDF转图片，可选去水印和保存
+     * @param client OCR客户端
+     * @param pdfPath PDF路径
+     * @param options 比对选项
+     * @param taskId 任务ID（用于保存图片）
+     * @param mode 模式（old/new，用于保存图片）
+     * @return 处理后的图片字节数组列表
+     */
+    private List<byte[]> renderAllPagesToPng(DotsOcrClient client, Path pdfPath, GPUOCRCompareOptions options, 
+                                           String taskId, String mode) throws Exception {
 		// 加载PDF文档并计算页数
 		try (PDDocument doc = PDDocument.load(pdfPath.toFile())) {
 			int pageCount = doc.getNumberOfPages();
 
 			// 使用固定DPI（来自配置）
         int dpi = gpuOcrConfig.getRenderDpi();
-            // 文档页数和DPI信息通过进度管理器输出
         
-			boolean saveImages = client.isSaveRenderedImages();
-            PDFRenderer renderer = new PDFRenderer(doc);
-            List<byte[]> list = new ArrayList<>();
-            long minPixels = gpuOcrConfig.getMinPixels();
-            long maxPixels = gpuOcrConfig.getMaxPixels();
+        // 判断是否需要保存图片
+        boolean shouldSaveImages = (taskId != null && mode != null && gpuOcrConfig.isSaveOcrImages());
+        Path imagesDir = null;
+        if (shouldSaveImages) {
+            String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+            imagesDir = Paths.get(uploadRootPath, "gpu-ocr-compare", "tasks", taskId, "images", mode);
+            Files.createDirectories(imagesDir);
+            System.out.println("[" + mode + "] 创建图片保存目录: " + imagesDir);
+        }
+        
+        // 判断是否需要去水印
+        boolean shouldRemoveWatermark = (options != null && options.isRemoveWatermark());
+        String watermarkStrength = shouldRemoveWatermark ? options.getWatermarkRemovalStrength() : null;
+        
+        System.out.println("PDF转图片流程开始 - 页数: " + pageCount + ", DPI: " + dpi + 
+                          ", 去水印: " + shouldRemoveWatermark + 
+                          (shouldRemoveWatermark ? "(强度: " + watermarkStrength + ")" : "") +
+                          ", 保存图片: " + shouldSaveImages);
+        
+        PDFRenderer renderer = new PDFRenderer(doc);
+        List<byte[]> list = new ArrayList<>();
+        long minPixels = gpuOcrConfig.getMinPixels();
+        long maxPixels = gpuOcrConfig.getMaxPixels();
             for (int i = 0; i < doc.getNumberOfPages(); i++) {
                 BufferedImage image = renderer.renderImageWithDPI(i, dpi);
                 // 像素裁剪：保持比例缩放到[minPixels, maxPixels]区间内
@@ -1476,10 +1485,18 @@ public class GPUOCRCompareService {
                     byte[] bytes = baos.toByteArray();
                     
                     // 如果开启去水印，对图片字节进行去水印处理
-                    if (options != null && options.isRemoveWatermark()) {
-                        bytes = applyWatermarkRemoval(bytes, options.getWatermarkRemovalStrength(), i + 1);
+                    if (shouldRemoveWatermark) {
+                        bytes = applyWatermarkRemoval(bytes, watermarkStrength, i + 1, mode);
                     }
                     
+                    // 如果需要保存图片，保存到磁盘
+                    if (shouldSaveImages) {
+                        Path imagePath = imagesDir.resolve("page-" + (i + 1) + ".png");
+                        Files.write(imagePath, bytes);
+                        System.out.println("[" + mode + "] 第" + (i + 1) + "页图片已保存: " + imagePath);
+                    }
+                    
+                    // 添加到返回列表供OCR使用
                     list.add(bytes);
                     
                 }
@@ -1492,13 +1509,14 @@ public class GPUOCRCompareService {
     /**
      * 对图片字节应用去水印处理
      */
-    private byte[] applyWatermarkRemoval(byte[] imageBytes, String strength, int pageNo) {
+    private byte[] applyWatermarkRemoval(byte[] imageBytes, String strength, int pageNo, String mode) {
+        String modePrefix = mode != null ? "[" + mode + "] " : "";
         try {
             // 创建临时文件
             Path tempFile = Files.createTempFile("watermark_removal_", ".png");
             Files.write(tempFile, imageBytes);
             
-            System.out.println("OCR流程: 第" + pageNo + "页开始去水印处理，强度: " + strength);
+            System.out.println(modePrefix + "第" + pageNo + "页开始去水印处理，强度: " + strength);
             
             boolean success = false;
             switch (strength) {
@@ -1518,19 +1536,19 @@ public class GPUOCRCompareService {
             }
             
             if (success) {
-                System.out.println("OCR流程: 第" + pageNo + "页去水印处理成功(" + strength + ")");
+                System.out.println(modePrefix + "第" + pageNo + "页去水印处理成功(" + strength + ")");
                 // 读取处理后的图片
                 byte[] processedBytes = Files.readAllBytes(tempFile);
                 Files.deleteIfExists(tempFile);
                 return processedBytes;
             } else {
-                System.out.println("OCR流程: 第" + pageNo + "页去水印处理失败(" + strength + ")，使用原图");
+                System.out.println(modePrefix + "第" + pageNo + "页去水印处理失败(" + strength + ")，使用原图");
                 Files.deleteIfExists(tempFile);
                 return imageBytes;
             }
             
         } catch (Exception e) {
-            System.err.println("OCR流程: 第" + pageNo + "页去水印处理异常: " + e.getMessage());
+            System.err.println(modePrefix + "第" + pageNo + "页去水印处理异常: " + e.getMessage());
             return imageBytes; // 出错时返回原始图片
         }
     }
@@ -1559,6 +1577,12 @@ public class GPUOCRCompareService {
     
     private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
 			boolean resumeFromStep4, GPUOCRCompareOptions options, CompareTaskProgressManager progressManager) throws Exception {
+        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, progressManager, null, null);
+    }
+    
+    private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
+			boolean resumeFromStep4, GPUOCRCompareOptions options, CompareTaskProgressManager progressManager,
+			String taskId, String mode) throws Exception {
         TextExtractionUtil.PageLayout[] ordered;
 		List<String> failedPages = new ArrayList<>();
 		String documentName = pdf.getFileName().toString();
@@ -1580,8 +1604,8 @@ public class GPUOCRCompareService {
 				}
             }
         } else {
-                // Step 1: render PDF to images（默认旧流程）
-                List<byte[]> pages = renderAllPagesToPng(client, pdf, options);
+                // Step 1: render PDF to images (集成去水印和保存)
+                List<byte[]> pages = renderAllPagesToPng(client, pdf, options, taskId, mode);
                 int total = pages.size();
                 int parallel = Math.max(1, gpuOcrConfig.getParallelThreads()); // 使用配置的并行线程数
                 java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors
