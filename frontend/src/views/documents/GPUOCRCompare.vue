@@ -5,7 +5,7 @@
       <div class="page-header">
         <div class="header-content">
           <h2><el-icon class="header-icon"><Search /></el-icon>GPU OCR合同比对</h2>
-          <p>通过视觉大模型进行ocr比对，支持pdf、word、excel格式文档。</p>
+          <p>通过视觉大模型进行ocr比对，支持pdf格式文档。</p>
         </div>
         <div class="header-decoration"></div>
       </div>
