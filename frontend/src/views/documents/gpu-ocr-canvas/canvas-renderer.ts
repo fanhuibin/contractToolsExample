@@ -65,9 +65,12 @@ export async function renderPageToCanvas(
   }
   
   // 加载并绘制图片
-  const imageUrl = baseUrl
+  // 优先使用后端提供的baseUrl，fallback为手动拼接
+  const imageUrl = baseUrl 
     ? `${baseUrl}/page-${pageIndex + 1}.png`
-    : `/api/gpu-ocr/files/tasks/${taskId}/images/${mode}/page-${pageIndex + 1}.png`
+    : `/api/compare-pro/files/tasks/${taskId}/images/${mode}/page-${pageIndex + 1}.png`
+  
+  console.log(`🔍 图片URL构建: baseUrl="${baseUrl}", taskId="${taskId}", mode="${mode}", 最终URL="${imageUrl}"`);
   
   console.log(`🎨 [渲染页面${pageIndex + 1}] ${mode}模式 - 收到${differences.length}个预处理差异项`)
   

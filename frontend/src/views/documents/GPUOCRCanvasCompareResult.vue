@@ -1293,11 +1293,17 @@ const fetchResult = async (id: string) => {
       }
 
       // 读取后端提供的图片基路径（如果存在），避免前端手动拼接
+      console.log('🔍 后端返回的数据:', data)
+      console.log('🔍 oldImageBaseUrl:', (data as any).oldImageBaseUrl)
+      console.log('🔍 newImageBaseUrl:', (data as any).newImageBaseUrl)
+      
       if (typeof (data as any).oldImageBaseUrl === 'string') {
         oldImageBaseUrl.value = (data as any).oldImageBaseUrl
+        console.log('✅ 设置 oldImageBaseUrl:', oldImageBaseUrl.value)
       }
       if (typeof (data as any).newImageBaseUrl === 'string') {
         newImageBaseUrl.value = (data as any).newImageBaseUrl
+        console.log('✅ 设置 newImageBaseUrl:', newImageBaseUrl.value)
       }
       
       // console.log('Canvas比对结果加载成功:', {
@@ -1390,6 +1396,7 @@ watch(filterMode, () => {
 // 监听路由参数变化
 watch(() => route.params.taskId, (newId) => {
   if (typeof newId === 'string' && newId) {
+    taskId.value = newId  // 设置taskId
     clearPoll()
     if (newId === 'pending') {
       viewerLoading.value = true
@@ -1431,6 +1438,7 @@ onMounted(() => {
   
   const id = route.params.taskId as string
   if (id) {
+    taskId.value = id  // 设置taskId
     clearPoll()
     if (id === 'pending') {
       viewerLoading.value = true
