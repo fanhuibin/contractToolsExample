@@ -15,7 +15,7 @@
       <template #header>
         <div class="card-header">
           <span>GPU OCR文档比对</span>
-          <el-tag type="success" size="small">基于GPU加速</el-tag>
+          <el-tag type="success" size="small">专业版</el-tag>
         </div>
       </template>
 
@@ -56,7 +56,7 @@
       </el-form>
 
       <el-alert
-        title="注意：GPU OCR比对基于先进的AI模型进行文字识别和比对，支持PDF、Word、Excel格式文档。系统会自动转换为PDF后进行GPU加速的文字识别和智能比对。"
+        title="肇新合同比对专业版，基于先进的AI模型进行文字识别和比对。已广泛应用于合同管理、招投标管理、合同风险控制等场景。"
         type="success"
         show-icon
         :closable="false"
@@ -70,7 +70,7 @@
         <div class="card-header">
           <span>处理进度</span>
           <el-tag :type="getStatusTagType(currentTask.status)" size="small">
-            {{ currentTask.statusDesc }}
+            {{ currentTask.statusDescription || currentTask.statusDesc }}
           </el-tag>
         </div>
       </template>
@@ -78,19 +78,18 @@
       <div class="progress-content">
         <div class="progress-info">
           <div class="task-id">任务ID: {{ currentTask.taskId }}</div>
-          <div class="current-step">{{ currentTask.currentStepDesc }}</div>
+          <div class="current-step">比对中</div>
         </div>
 
         <el-progress
-          :percentage="currentTask.progress"
+          :percentage="displayProgress"
           :status="getProgressStatus(currentTask.status)"
           :stroke-width="20"
         />
 
         <div class="progress-details">
-          <span>进度: {{ currentTask.progress.toFixed(1) }}%</span>
-          <span>步骤: {{ currentTask.currentStep }} / {{ currentTask.totalSteps }}</span>
-          <span>创建时间: {{ formatTime(currentTask.createdTime) }}</span>
+          <span>比对中...{{ displayProgress.toFixed(1) }}%</span>
+          <span>{{ currentTask.startTime ? '开始时间: ' + formatTime(currentTask.startTime) : (currentTask.createdTime ? '创建时间: ' + formatTime(currentTask.createdTime) : '') }}</span>
         </div>
 
         <div v-if="currentTask.status === 'FAILED'" class="error-message">
@@ -316,6 +315,20 @@ const currentTask = ref<GPUOCRCompareTaskStatus | null>(null)
 const taskHistory = ref<GPUOCRCompareTaskStatus[]>([])
 const progressTimer = ref<number | null>(null)
 
+// 平滑进度相关
+const displayProgress = ref(0) // 用于显示的平滑进度
+const targetProgress = ref(0)  // 目标进度
+const smoothTimer = ref<number | null>(null)
+
+// 阶段信息（用于基于时间的平滑增长）
+const currentStageInfo = ref({
+  minProgress: 0,
+  maxProgress: 100,
+  estimatedTime: 0,
+  elapsedTime: 0,
+  startTime: Date.now()
+})
+
 // 调试相关
 const debugDialogVisible = ref(false)
 const debugLoading = ref(false)
@@ -371,6 +384,9 @@ onUnmounted(() => {
   if (progressTimer.value) {
     clearInterval(progressTimer.value)
   }
+  if (smoothTimer.value) {
+    clearInterval(smoothTimer.value)
+  }
 })
 
 // 文件选择处理
@@ -410,6 +426,10 @@ const doUploadGPUOCRCompare = async () => {
   formData.append('watermarkRemovalStrength', settings.watermarkRemovalStrength)
 
   uploading.value = true
+  
+  // 初始化平滑进度
+  displayProgress.value = 0
+  targetProgress.value = 0
 
   try {
     // 直接跳转到Canvas版本结果页面
@@ -464,6 +484,130 @@ const goToResult = (taskId: string) => {
   }).catch(() => {})
 }
 
+// 判断当前是否是OCR步骤
+const isOCRStep = () => {
+  const stepDesc = currentTask.value?.currentStepDesc || ''
+  return stepDesc.includes('OCR识别第一个文档') || stepDesc.includes('OCR识别第二个文档')
+}
+
+// 基于页面进度计算OCR步骤的进度
+const calculateOCRPageProgress = () => {
+  const stageInfo = currentStageInfo.value
+  const task = currentTask.value
+  
+  if (!task) return stageInfo.minProgress
+  
+  let currentDocPages = 0
+  let completedPages = 0
+  
+  // 判断当前处理的是哪个文档
+  if (task.currentStepDesc?.includes('第一个文档')) {
+    currentDocPages = task.oldDocPages || 0
+    completedPages = task.completedPagesOld || 0
+  } else if (task.currentStepDesc?.includes('第二个文档')) {
+    currentDocPages = task.newDocPages || 0
+    completedPages = task.completedPagesNew || 0
+  }
+  
+  if (currentDocPages <= 0) {
+    // 如果没有页面信息，回退到时间基础计算
+    let stageProgressRatio = Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime)
+    const stageRange = stageInfo.maxProgress - stageInfo.minProgress
+    return stageInfo.minProgress + (stageRange * stageProgressRatio)
+  }
+  
+  // 计算页面进度比例
+  let pageProgressRatio = completedPages / currentDocPages
+  
+  // 限制在0-1范围内
+  pageProgressRatio = Math.min(1.0, Math.max(0.0, pageProgressRatio))
+  
+  // 在阶段范围内插值
+  const stageRange = stageInfo.maxProgress - stageInfo.minProgress
+  return stageInfo.minProgress + (stageRange * pageProgressRatio)
+}
+
+// 基于后端预估时间和页面进度的精确进度计算
+const updateSmoothProgress = () => {
+  const stageInfo = currentStageInfo.value
+  
+  // 如果没有有效的阶段信息，使用缓慢增长保持进度条活跃
+  if (stageInfo.estimatedTime <= 0 || stageInfo.elapsedTime < 0) {
+    // 缓慢增长，每次增长0.01%，但不超过5%
+    if (displayProgress.value < 5.0) {
+      displayProgress.value = Math.min(displayProgress.value + 0.01, 5.0)
+    }
+    return
+  }
+  
+  let calculatedProgress = 0
+  
+  // 检查是否是OCR步骤，如果是，优先使用页面进度
+  if (isOCRStep()) {
+    calculatedProgress = calculateOCRPageProgress()
+  } else {
+    // 非OCR步骤使用时间基础的进度计算
+    let stageProgressRatio = Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime)
+    const stageRange = stageInfo.maxProgress - stageInfo.minProgress
+    calculatedProgress = stageInfo.minProgress + (stageRange * stageProgressRatio)
+  }
+  
+  // 平滑过渡到计算出的进度
+  const diff = calculatedProgress - displayProgress.value
+  
+  if (Math.abs(diff) < 0.1) {
+    displayProgress.value = calculatedProgress
+  } else {
+    // 每次更新移动差值的15%，稍快一些但仍然平滑
+    const step = diff * 0.15
+    displayProgress.value += step
+  }
+  
+  // 确保进度在阶段范围内，并且不超过基于时间计算的进度
+  displayProgress.value = Math.max(stageInfo.minProgress, 
+    Math.min(displayProgress.value, calculatedProgress, stageInfo.maxProgress - 0.5))
+  
+  // 调试日志
+  if (Math.random() < 0.1) { // 10%概率输出日志，避免日志过多
+    console.log(`📊 进度更新: 阶段${stageInfo.minProgress}%-${stageInfo.maxProgress}%, 已用时间${stageInfo.elapsedTime}ms/${stageInfo.estimatedTime}ms (${(stageProgressRatio*100).toFixed(1)}%), 显示进度${displayProgress.value.toFixed(1)}%`)
+  }
+}
+
+
+// 更新阶段信息并启动平滑进度
+const updateStageInfoAndStartProgress = (taskData: any) => {
+  // 启动平滑进度定时器（如果还没启动）
+  if (!smoothTimer.value) {
+    smoothTimer.value = setInterval(updateSmoothProgress, 300) // 每300ms更新一次，稍慢一些更平滑
+    console.log('🚀 启动基于后端时间的平滑进度更新')
+  }
+  
+  // 检查是否有完整的阶段信息
+  if (taskData.stageMinProgress === undefined || taskData.stageMaxProgress === undefined || 
+      taskData.stageEstimatedTime === undefined || taskData.stageElapsedTime === undefined) {
+    console.warn('⚠️ 后端返回的阶段信息不完整，使用缓慢增长模式', taskData)
+    return
+  }
+  
+  const newStageInfo = {
+    minProgress: taskData.stageMinProgress,
+    maxProgress: taskData.stageMaxProgress,
+    estimatedTime: taskData.stageEstimatedTime,
+    elapsedTime: taskData.stageElapsedTime,
+    startTime: Date.now() // 这个字段在新逻辑中不再使用，但保留兼容性
+  }
+  
+  // 检查是否进入了新阶段
+  const isNewStage = newStageInfo.minProgress !== currentStageInfo.value.minProgress || 
+                     newStageInfo.maxProgress !== currentStageInfo.value.maxProgress
+  
+  if (isNewStage) {
+    console.log(`🎯 进入新阶段: ${newStageInfo.minProgress}% - ${newStageInfo.maxProgress}%, 预估时间: ${(newStageInfo.estimatedTime/1000).toFixed(1)}秒`)
+  }
+  
+  currentStageInfo.value = newStageInfo
+}
+
 // 更新任务状态
 const updateTaskStatus = async (taskId: string) => {
   // 验证taskId参数
@@ -477,17 +621,29 @@ const updateTaskStatus = async (taskId: string) => {
     const res = await getGPUOCRCompareTaskStatus(taskId)
     currentTask.value = res.data
 
+    // 更新阶段信息和平滑进度
+    updateStageInfoAndStartProgress(res.data)
+
     // 如果任务完成，停止监控
     if (res.data.status === 'COMPLETED' || res.data.status === 'FAILED' || res.data.status === 'TIMEOUT') {
       if (progressTimer.value) {
         clearInterval(progressTimer.value)
         progressTimer.value = null
       }
+      
+      // 停止平滑进度动画
+      if (smoothTimer.value) {
+        clearInterval(smoothTimer.value)
+        smoothTimer.value = null
+      }
 
       // 刷新任务历史
       refreshTasks()
 
       if (res.data.status === 'COMPLETED') {
+        // 设置进度为100%
+        displayProgress.value = 100
+        targetProgress.value = 100
         ElMessage.success('GPU OCR比对完成！')
       } else if (res.data.status === 'FAILED') {
         ElMessage.error('GPU OCR比对失败: ' + res.data.errorMessage)
@@ -506,7 +662,7 @@ const refreshTasks = async () => {
     // 后端返回格式：{code: 200, message: "...", data: [...]}
     taskHistory.value = ((res.data || []) as GPUOCRCompareTaskStatus[]).sort(
       (a: GPUOCRCompareTaskStatus, b: GPUOCRCompareTaskStatus) =>
-        new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime()
+        new Date(b.createdTime || 0).getTime() - new Date(a.createdTime || 0).getTime()
     )
   } catch (e: any) {
     console.error('获取任务历史失败:', e)
@@ -648,7 +804,8 @@ const startDebugCompare = async () => {
 }
 
 // 格式化时间
-const formatTime = (timeStr: string) => {
+const formatTime = (timeStr: string | undefined) => {
+  if (!timeStr) return ''
   return new Date(timeStr).toLocaleString()
 }
 
@@ -683,8 +840,8 @@ const getProcessingDuration = (task: GPUOCRCompareTaskStatus) => {
     return '-'
   }
   
-  const startTime = new Date(task.createdTime).getTime()
-  const endTime = new Date(task.updatedTime).getTime()
+  const startTime = new Date(task.createdTime || 0).getTime()
+  const endTime = new Date(task.updatedTime || task.createdTime || 0).getTime()
   const durationMs = endTime - startTime
   
   if (durationMs < 1000) {

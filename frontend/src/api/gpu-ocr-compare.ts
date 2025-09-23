@@ -1,19 +1,54 @@
 import request from '@/utils/request'
 
-// GPU OCR比对任务状态
+// GPU OCR比对任务状态（增强版，支持智能进度计算）
 export interface GPUOCRCompareTaskStatus {
   taskId: string
   status: 'PENDING' | 'OCR_PROCESSING' | 'COMPARING' | 'ANNOTATING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT'
-  statusDesc: string
-  progress: number
-  totalSteps: number
-  currentStep: number
-  currentStepDesc: string
-  createdTime: string
-  updatedTime: string
-  errorMessage?: string
+  statusDescription: string
   oldFileName: string
   newFileName: string
+  currentStep: number
+  currentStepDesc: string
+  
+  // 智能进度信息
+  progressPercentage: number
+  progressDescription: string
+  currentStepDescription: string
+  remainingTime: string
+  estimatedTotalTime: string
+  
+  // 阶段进度范围信息（新增）
+  stageMinProgress?: number     // 当前阶段最小进度
+  stageMaxProgress?: number     // 当前阶段最大进度
+  stageEstimatedTime?: number   // 当前阶段预估总时间（毫秒）
+  stageElapsedTime?: number     // 当前阶段已过时间（毫秒）
+  
+  // 页面级别进度信息（新增）
+  totalPages?: number           // 总页数（最大值）
+  oldDocPages?: number          // 旧文档页数
+  newDocPages?: number          // 新文档页数
+  currentPageOld?: number       // 当前处理的旧文档页面
+  currentPageNew?: number       // 当前处理的新文档页面
+  completedPagesOld?: number    // 已完成的旧文档页面数
+  completedPagesNew?: number    // 已完成的新文档页面数
+  
+  // 时间统计
+  startTime?: string
+  endTime?: string
+  totalDuration?: number
+  stepDurations?: Record<string, number>
+  
+  // 错误和失败页面信息
+  errorMessage?: string
+  failedPages?: string[]
+  failedPagesCount?: number
+  
+  // 向后兼容的字段
+  statusDesc?: string
+  progress?: number
+  totalSteps?: number
+  createdTime?: string
+  updatedTime?: string
   oldPdfUrl?: string
   newPdfUrl?: string
   annotatedOldPdfUrl?: string

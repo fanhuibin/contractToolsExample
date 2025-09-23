@@ -38,7 +38,7 @@ public class CompareTaskProgressManager {
         TEXT_COMPARE("文本比对", 5),
         DIFF_ANALYSIS("差异分析", 6),
         BLOCK_MERGE("差异块合并", 7),
-        RAPID_OCR_VALIDATION("RapidOCR验证", 8),
+        OCR_VALIDATION("OCR验证", 8),
         RESULT_GENERATION("结果生成", 9),
         TASK_COMPLETE("任务完成", 10);
         
@@ -213,5 +213,64 @@ public class CompareTaskProgressManager {
      */
     public boolean isDebugMode() {
         return debugMode;
+    }
+    
+    /**
+     * 完成任务并同步时间统计信息到CompareTask
+     */
+    public void completeTask() {
+        long totalDuration = System.currentTimeMillis() - taskStartTime;
+        
+        // 同步时间统计信息到CompareTask
+        task.setStepDurations(new java.util.HashMap<>(stepDurations));
+        task.setTotalDuration(totalDuration);
+        task.setEndTime(java.time.LocalDateTime.now());
+        
+        // 添加总体统计信息
+        task.addStatistic("totalSteps", stepDurations.size());
+        task.addStatistic("taskStartTime", taskStartTime);
+        task.addStatistic("totalDurationMs", totalDuration);
+        task.addStatistic("totalDurationHuman", formatDuration(totalDuration));
+        
+        logger.info("任务 {} 完成，总耗时: {}ms", task.getTaskId(), totalDuration);
+    }
+    
+    /**
+     * 获取步骤耗时统计Map
+     */
+    public Map<String, Long> getStepDurationsMap() {
+        return new java.util.HashMap<>(stepDurations);
+    }
+    
+    /**
+     * 格式化时长为人类可读格式
+     */
+    private String formatDuration(long milliseconds) {
+        long seconds = milliseconds / 1000;
+        long minutes = seconds / 60;
+        seconds = seconds % 60;
+        
+        if (minutes > 0) {
+            return String.format("%d分%d秒", minutes, seconds);
+        } else {
+            return String.format("%d秒", seconds);
+        }
+    }
+    
+    /**
+     * 添加失败页面信息到任务
+     */
+    public void addFailedPages(java.util.List<String> failedPages) {
+        if (failedPages != null && !failedPages.isEmpty()) {
+            for (String failedPage : failedPages) {
+                task.addFailedPage(failedPage);
+            }
+            
+            // 添加统计信息
+            task.addStatistic("totalFailedPages", failedPages.size());
+            task.addStatistic("failedPagesList", new java.util.ArrayList<>(failedPages));
+            
+            logger.warn("任务 {} 有 {} 个页面识别失败: {}", task.getTaskId(), failedPages.size(), failedPages);
+        }
     }
 }

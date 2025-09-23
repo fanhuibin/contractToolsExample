@@ -34,3 +34,6 @@ export * from './middle-canvas-interaction'
 
 // 同步滚动
 export * from './advanced-sync-scroll'
+
+// 进度计算
+export * from './progress-calculator'

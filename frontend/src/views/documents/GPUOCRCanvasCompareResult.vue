@@ -159,8 +159,8 @@
         <div class="head">GPU OCR比对结果 <span class="em">{{ filteredResults.length }}</span> 处（删 {{ deleteCount }} / 增 {{ insertCount }}）</div>
         <div class="list">
           <div v-if="viewerLoading" class="list-loading">
-            <ConcentricLoader color="#1677ff" :size="52" text="比对中...16%" class="list-loader" />
-            <div class="loading-text-sub">任务预计处理3分钟，期间您可自由使用其他功能</div>
+            <ConcentricLoader color="#1677ff" :size="52" :text="progressCalculator.progressState.value.loadingText" class="list-loader" />
+            <div class="loading-text-sub">{{ progressCalculator.estimatedTimeText.value }}</div>
           </div>
           <div v-else-if="filteredResults.length === 0" class="no-differences">
             <div class="no-diff-icon">✓</div>
@@ -263,7 +263,11 @@ import {
   
   // 同步滚动
   createAdvancedSyncScrollManager,
-  type AdvancedSyncScrollManager
+  type AdvancedSyncScrollManager,
+  
+  // 进度计算
+  createProgressCalculator,
+  type ProgressCalculator
 } from './gpu-ocr-canvas'
 
 const route = useRoute()
@@ -327,9 +331,28 @@ let syncScrollManager: AdvancedSyncScrollManager | null = null
 const syncEnabled = ref(true)
 const isJumping = ref(false)
 
-// 轮询控制
+// 进度计算器
+const progressCalculator = createProgressCalculator()
 const pollTimer = ref<number | null>(null)
-const isPolling = ref(false)
+
+
+
+
+
+// 轮询控制
+const clearPoll = () => {
+  if (pollTimer.value) {
+    clearTimeout(pollTimer.value)
+    pollTimer.value = null
+  }
+}
+
+const schedulePoll = (id: string, delayMs = 1500) => {
+  clearPoll()
+  pollTimer.value = window.setTimeout(() => {
+    checkStatusAndMaybePoll(id)
+  }, delayMs)
+}
 
 // 滚动防抖控制
 const scrollEndTimer = ref<number | null>(null)
@@ -1179,21 +1202,6 @@ const escapeHtml = (text: string) => {
   return div.innerHTML
 }
 
-// 轮询相关函数
-const clearPoll = () => {
-  if (pollTimer.value) {
-    clearTimeout(pollTimer.value)
-    pollTimer.value = null
-  }
-}
-
-const schedulePoll = (id: string, delayMs = 1500) => {
-  clearPoll()
-  isPolling.value = true
-  pollTimer.value = window.setTimeout(() => {
-    checkStatusAndMaybePoll(id)
-  }, delayMs)
-}
 
 const checkStatusAndMaybePoll = async (id: string) => {
   try {
@@ -1208,9 +1216,14 @@ const checkStatusAndMaybePoll = async (id: string) => {
     }
 
     const status = data.status
+    
+    // 更新阶段信息和进度
+    progressCalculator.updateTaskDataAndStageInfo(data)
+    
     if (status === 'FAILED' || status === 'TIMEOUT') {
-      isPolling.value = false
+      // 停止所有定时器
       clearPoll()
+      progressCalculator.stopProgressUpdates()
       ElMessage.error(data?.statusDesc || '比对任务失败或超时')
       return
     }
@@ -1221,8 +1234,14 @@ const checkStatusAndMaybePoll = async (id: string) => {
       return
     }
 
+    // 任务完成，停止轮询和进度更新
+    clearPoll()
+    progressCalculator.setProgressComplete()
+
+    // 获取结果
     fetchResult(id)
   } catch (e) {
+    console.error('获取任务状态失败:', e)
     schedulePoll(id)
   }
 }
@@ -1249,7 +1268,6 @@ const fetchResult = async (id: string) => {
         ElMessage.info(statusData?.message || '比对任务处理中，请稍候...')
         hasShownProcessingTip.value = true
       }
-      schedulePoll(id)
       return
     } else if ((res as any)?.code !== 200) {
       ElMessage.error((res as any)?.message || '获取比对结果失败')
@@ -1452,6 +1470,7 @@ onMounted(() => {
 // 组件卸载
 onUnmounted(() => {
   clearPoll()
+  progressCalculator.cleanup()
   if (scrollEndTimer.value) {
     clearTimeout(scrollEndTimer.value)
   }

@@ -13,6 +13,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorCompletionService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.imageio.ImageIO;
 
@@ -21,6 +27,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 
 import com.zhaoxinms.contract.tools.comparePRO.model.DiffBlock;
 import com.zhaoxinms.contract.tools.comparePRO.client.RapidOcrClient;
@@ -68,7 +76,48 @@ public class DiffBlockValidationUtil {
     
     @Autowired
     private ZxcmConfig zxcmConfig;
+    
+    // OCR验证专用线程池
+    private ExecutorService ocrValidationExecutor;
+    private static final int DEFAULT_THREAD_POOL_SIZE = 4;
+    private static final String THREAD_NAME_PREFIX = "RapidOCR-Validation-";
 
+    /**
+     * 初始化线程池
+     */
+    @PostConstruct
+    public void initializeThreadPool() {
+        ocrValidationExecutor = Executors.newFixedThreadPool(DEFAULT_THREAD_POOL_SIZE, r -> {
+            Thread t = new Thread(r, THREAD_NAME_PREFIX + System.currentTimeMillis());
+            t.setDaemon(false);
+            t.setPriority(Thread.NORM_PRIORITY);
+            return t;
+        });
+        logger.info("🚀 RapidOCR验证线程池初始化完成，线程数: {}", DEFAULT_THREAD_POOL_SIZE);
+    }
+    
+    /**
+     * 销毁线程池
+     */
+    @PreDestroy
+    public void destroyThreadPool() {
+        if (ocrValidationExecutor != null && !ocrValidationExecutor.isShutdown()) {
+            logger.info("⚡ 正在关闭RapidOCR验证线程池...");
+            ocrValidationExecutor.shutdown();
+            try {
+                if (!ocrValidationExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+                    logger.warn("线程池未在30秒内完成关闭，强制关闭");
+                    ocrValidationExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                logger.warn("等待线程池关闭时被中断");
+                ocrValidationExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            logger.info("✅ RapidOCR验证线程池已关闭");
+        }
+    }
+    
     /**
      * 设置 debug 模式
      * @param debugMode true 启用详细日志输出，false 只输出关键日志
@@ -990,49 +1039,152 @@ public class DiffBlockValidationUtil {
     }
     
     /**
-     * 分别识别每个图片的文本内容
+     * 分别识别每个图片的文本内容（并行版本）
      */
     private List<String> recognizeIndividualImages(List<String> imagePaths) {
-        List<String> results = new ArrayList<>();
-        
         if (imagePaths == null || imagePaths.isEmpty()) {
-            return results;
+            return new ArrayList<>();
         }
         
         if (rapidOcrService == null) {
             logger.warn("RapidOCR服务不可用，跳过图片识别");
-            return results;
+            return java.util.Collections.nCopies(imagePaths.size(), "");
         }
         
+        // 如果只有一个图片，直接串行处理
+        if (imagePaths.size() == 1) {
+            return recognizeIndividualImagesSerial(imagePaths);
+        }
+        
+        // 多个图片时使用并行处理
+        return recognizeIndividualImagesParallel(imagePaths);
+    }
+    
+    /**
+     * 串行识别图片（用于单个图片或作为fallback）
+     */
+    private List<String> recognizeIndividualImagesSerial(List<String> imagePaths) {
+        List<String> results = new ArrayList<>();
+        
         for (String imagePath : imagePaths) {
-            try {
-                File imageFile = new File(imagePath);
-                List<RapidOcrClient.RapidOcrTextBox> textBoxes = rapidOcrService.recognizeFile(imageFile);
-                
-                StringBuilder imageText = new StringBuilder();
-                for (RapidOcrClient.RapidOcrTextBox box : textBoxes) {
-                    if (box.text != null && !box.text.trim().isEmpty()) {
-                        if (imageText.length() > 0) {
-                            imageText.append(" ");
-                        }
-                        imageText.append(box.text.trim());
-                    }
-                }
-                
-                String recognizedText = imageText.toString().trim();
-                results.add(recognizedText);
-                
-                if (debugMode) {
-                    logger.debug("单独识别图片: {}, 文本: \"{}\"", imagePath, recognizedText);
-                }
-                
-            } catch (Exception e) {
-                logger.warn("识别图片文本失败: {}", imagePath, e);
-                results.add(""); // 添加空字符串保持索引对应
-            }
+            String recognizedText = recognizeSingleImage(imagePath);
+            results.add(recognizedText);
         }
         
         return results;
+    }
+    
+    /**
+     * 并行识别图片（使用统一线程池）
+     */
+    private List<String> recognizeIndividualImagesParallel(List<String> imagePaths) {
+        int imageCount = imagePaths.size();
+        
+        // 检查线程池是否可用
+        if (ocrValidationExecutor == null || ocrValidationExecutor.isShutdown()) {
+            logger.warn("RapidOCR验证线程池不可用，降级为串行处理");
+            return recognizeIndividualImagesSerial(imagePaths);
+        }
+        
+        ExecutorCompletionService<String> completionService = 
+            new ExecutorCompletionService<>(ocrValidationExecutor);
+        
+        if (debugMode) {
+            logger.debug("🚀 开始并行OCR验证: {}个图片，使用统一线程池(最大{}线程)", 
+                imageCount, DEFAULT_THREAD_POOL_SIZE);
+        }
+        
+        // 提交所有任务
+        Map<Future<String>, Integer> futureIndexMap = new HashMap<>();
+        for (int i = 0; i < imageCount; i++) {
+            final String imagePath = imagePaths.get(i);
+            final int index = i;
+            try {
+                Future<String> future = completionService.submit(() -> {
+                    return recognizeSingleImage(imagePath);
+                });
+                futureIndexMap.put(future, index);
+            } catch (Exception e) {
+                logger.warn("提交OCR验证任务失败: {}, 图片: {}", e.getMessage(), imagePath);
+                futureIndexMap.put(null, index); // 占位符，后续处理为空结果
+            }
+        }
+        
+        // 收集结果（保持原始顺序）
+        String[] results = new String[imageCount];
+        int completedTasks = 0;
+        
+        for (Map.Entry<Future<String>, Integer> entry : futureIndexMap.entrySet()) {
+            Future<String> future = entry.getKey();
+            Integer index = entry.getValue();
+            
+            if (future == null) {
+                results[index] = ""; // 提交失败的任务
+                continue;
+            }
+            
+            try {
+                String result = future.get(30, TimeUnit.SECONDS); // 30秒超时
+                results[index] = result;
+                completedTasks++;
+                
+                if (debugMode) {
+                    logger.debug("🚀 并行OCR验证进度 [{}/{}] 完成图片: {}", 
+                        completedTasks, imageCount, imagePaths.get(index));
+                }
+            } catch (TimeoutException e) {
+                logger.warn("图片识别超时: {}", imagePaths.get(index));
+                results[index] = "";
+                future.cancel(true); // 取消超时任务
+            } catch (Exception e) {
+                logger.warn("图片识别任务执行失败: {}, 图片: {}", e.getMessage(), imagePaths.get(index));
+                results[index] = "";
+            }
+        }
+        
+        // 确保所有结果都有值（防止null）
+        List<String> resultList = new ArrayList<>();
+        for (int i = 0; i < imageCount; i++) {
+            resultList.add(results[i] != null ? results[i] : "");
+        }
+        
+        if (debugMode) {
+            logger.debug("✅ 并行OCR验证完成: {}/{}个任务成功", completedTasks, imageCount);
+        }
+        
+        return resultList;
+    }
+    
+    /**
+     * 识别单个图片的文本内容
+     */
+    private String recognizeSingleImage(String imagePath) {
+        try {
+            File imageFile = new File(imagePath);
+            List<RapidOcrClient.RapidOcrTextBox> textBoxes = rapidOcrService.recognizeFile(imageFile);
+            
+            StringBuilder imageText = new StringBuilder();
+            for (RapidOcrClient.RapidOcrTextBox box : textBoxes) {
+                if (box.text != null && !box.text.trim().isEmpty()) {
+                    if (imageText.length() > 0) {
+                        imageText.append(" ");
+                    }
+                    imageText.append(box.text.trim());
+                }
+            }
+            
+            String recognizedText = imageText.toString().trim();
+            
+            if (debugMode) {
+                logger.debug("单独识别图片: {}, 文本: \"{}\"", imagePath, recognizedText);
+            }
+            
+            return recognizedText;
+            
+        } catch (Exception e) {
+            logger.warn("识别图片文本失败: {}", imagePath, e);
+            return ""; // 返回空字符串保持索引对应
+        }
     }
     
     /**

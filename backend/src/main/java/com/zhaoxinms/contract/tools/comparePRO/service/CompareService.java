@@ -146,7 +146,6 @@ public class CompareService {
                             CompareTask task = loadTaskFromFile(taskId);
                             if (task != null) {
                                 tasks.put(taskId, task);
-                                System.out.println("启动时加载任务: " + taskId);
                             }
                         } catch (Exception e) {
                             System.err.println("加载任务失败: " + jsonFile + ", error=" + e.getMessage());
@@ -345,8 +344,6 @@ public class CompareService {
                 task.setNewFileName((String) resultData.get("newFileName"));
                 task.setStatus(CompareTask.Status.COMPLETED);
                 // 不再需要设置PDF URL，全部使用画布显示
-                
-                System.out.println("从文件加载任务状态: " + taskId + " (已完成)");
                 return task;
             }
             
@@ -445,6 +442,34 @@ public class CompareService {
 
 		// 创建Canvas版本的结果
 		Map<String, Object> canvasResult = new HashMap<>(originalResult);
+		
+		// 添加时间统计信息
+		if (task.getStepDurations() != null && !task.getStepDurations().isEmpty()) {
+			canvasResult.put("stepDurations", task.getStepDurations());
+		}
+		if (task.getTotalDuration() != null) {
+			canvasResult.put("totalDuration", task.getTotalDuration());
+		}
+		if (task.getStartTime() != null) {
+			canvasResult.put("startTime", task.getStartTime().toString());
+		}
+		if (task.getEndTime() != null) {
+			canvasResult.put("endTime", task.getEndTime().toString());
+		}
+		
+		// 添加失败页面信息
+		if (task.getFailedPages() != null && !task.getFailedPages().isEmpty()) {
+			canvasResult.put("failedPages", task.getFailedPages());
+			canvasResult.put("failedPagesCount", task.getFailedPages().size());
+		} else {
+			canvasResult.put("failedPages", new ArrayList<>());
+			canvasResult.put("failedPagesCount", 0);
+		}
+		
+		// 添加统计信息
+		if (task.getStatistics() != null && !task.getStatistics().isEmpty()) {
+			canvasResult.put("statistics", task.getStatistics());
+		}
 
 		try {
 			// 获取图片信息
@@ -689,6 +714,9 @@ public class CompareService {
         // 创建进度管理器（正常模式，非调试模式）
         CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, false);
         
+        // 设置任务开始时间
+        task.setStartTime(java.time.LocalDateTime.now());
+        
         // 记录文档基本信息
         Path oldPath = Paths.get(oldFilePath);
         Path newPath = Paths.get(newFilePath);
@@ -707,9 +735,24 @@ public class CompareService {
             // 步骤2: OCR识别第一个文档
             progressManager.startStep(TaskStep.OCR_FIRST_DOC);
             
+            // 提前获取PDF页数信息用于进度计算
+            try (org.apache.pdfbox.pdmodel.PDDocument oldDoc = org.apache.pdfbox.pdmodel.PDDocument.load(oldPath.toFile());
+                 org.apache.pdfbox.pdmodel.PDDocument newDoc = org.apache.pdfbox.pdmodel.PDDocument.load(newPath.toFile())) {
+                int oldPages = oldDoc.getNumberOfPages();
+                int newPages = newDoc.getNumberOfPages();
+                int totalPages = Math.max(oldPages, newPages);
+                
+                // 分别设置两个文档的页数
+                task.setOldDocPages(oldPages);
+                task.setNewDocPages(newPages);
+                task.setTotalPages(totalPages);
+                
+                progressManager.logStepDetail("📄 文档页数: 旧文档{}页, 新文档{}页, 设置总页数为{}页", oldPages, newPages, totalPages);
+            }
+            
             // 注意：图片保存和去水印已集成到OCR识别流程中
             
-			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old");
+			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
 			List<CharBox> seqA = resultA.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
@@ -718,7 +761,7 @@ public class CompareService {
             
             // 注意：图片保存和去水印已集成到OCR识别流程中
 
-			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new");
+			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
 			List<CharBox> seqB = resultB.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_SECOND_DOC);
 
@@ -752,14 +795,18 @@ public class CompareService {
             progressManager.logStepDetail("合并完成，merged大小: {}", merged.size());
             progressManager.completeStep(TaskStep.BLOCK_MERGE);
 
-            // 步骤8: RapidOCR验证
-            progressManager.startStep(TaskStep.RAPID_OCR_VALIDATION);
+            // 步骤8: OCR验证
+            progressManager.startStep(TaskStep.OCR_VALIDATION);
             try {
                 // 计算实际页数（取两个文档的最大页数）
                 int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
                 progressManager.logStepDetail("文档页数信息: 旧文档{}页, 新文档{}页, 使用最大值{}页", 
                     resultA.totalPages, resultB.totalPages, actualTotalPages);
                 
+                // 设置任务的总页数
+                task.setTotalPages(actualTotalPages);
+                
+                progressManager.logStepDetail("🚀 开始OCR验证（已优化并行处理）: {}个差异块", merged.size());
                 DiffBlockValidationUtil.DiffBlockValidationResult validationResult = 
                     diffBlockValidationUtil.analyzeDiffBlocks(merged, task.getTaskId(), false, actualTotalPages);
                 
@@ -784,7 +831,7 @@ public class CompareService {
             } catch (Exception e) {
                 progressManager.logError("RapidOCR验证过程出错: " + e.getMessage(), e);
             }
-            progressManager.completeStep(TaskStep.RAPID_OCR_VALIDATION);
+            progressManager.completeStep(TaskStep.OCR_VALIDATION);
 
             // 步骤9: 结果生成
             progressManager.startStep(TaskStep.RESULT_GENERATION);
@@ -829,6 +876,34 @@ public class CompareService {
                 // 不再需要PDF URL，全部使用画布显示
                 frontendResult.put("differences", formattedDifferences);
                 frontendResult.put("totalDiffCount", formattedDifferences.size());
+                
+                // 添加时间统计信息
+                if (task.getStepDurations() != null && !task.getStepDurations().isEmpty()) {
+                    frontendResult.put("stepDurations", task.getStepDurations());
+                }
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+                
+                // 添加失败页面信息
+                if (task.getFailedPages() != null && !task.getFailedPages().isEmpty()) {
+                    frontendResult.put("failedPages", task.getFailedPages());
+                    frontendResult.put("failedPagesCount", task.getFailedPages().size());
+                } else {
+                    frontendResult.put("failedPages", new ArrayList<>());
+                    frontendResult.put("failedPagesCount", 0);
+                }
+                
+                // 添加统计信息
+                if (task.getStatistics() != null && !task.getStatistics().isEmpty()) {
+                    frontendResult.put("statistics", task.getStatistics());
+                }
 
                 // 不再需要页面高度，画布使用图片实际像素尺寸
 
@@ -857,8 +932,22 @@ public class CompareService {
 
             // 步骤10: 任务完成
             progressManager.startStep(TaskStep.TASK_COMPLETE);
+            
+            // 添加失败页面信息（从OCR结果中收集）
+            List<String> allFailedPages = new ArrayList<>();
+            if (resultA != null && resultA.failedPages != null) {
+                allFailedPages.addAll(resultA.failedPages);
+            }
+            if (resultB != null && resultB.failedPages != null) {
+                allFailedPages.addAll(resultB.failedPages);
+            }
+            progressManager.addFailedPages(allFailedPages);
+            
             task.setStatus(CompareTask.Status.COMPLETED);
             progressManager.completeStep(TaskStep.TASK_COMPLETE);
+            
+            // 完成任务并同步统计信息
+            progressManager.completeTask();
             
             // 输出任务完成总结
             progressManager.logTaskSummary();
@@ -878,6 +967,9 @@ public class CompareService {
         
         // 创建进度管理器（调试模式）
         CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, true);
+        
+        // 设置任务开始时间
+        task.setStartTime(java.time.LocalDateTime.now());
         
         progressManager.logBasicStats("开始调试比对任务: {} (原任务ID: {})", task.getTaskId(), originalTaskId);
 
@@ -924,9 +1016,24 @@ public class CompareService {
             // 步骤2: 解析OCR数据
             progressManager.startStep(TaskStep.OCR_FIRST_DOC); // 复用步骤枚举
             
+            // 提前获取PDF页数信息用于进度计算（DEBUG模式）
+            try (org.apache.pdfbox.pdmodel.PDDocument oldDoc = org.apache.pdfbox.pdmodel.PDDocument.load(oldPdfPath.toFile());
+                 org.apache.pdfbox.pdmodel.PDDocument newDoc = org.apache.pdfbox.pdmodel.PDDocument.load(newPdfPath.toFile())) {
+                int oldPages = oldDoc.getNumberOfPages();
+                int newPages = newDoc.getNumberOfPages();
+                int totalPages = Math.max(oldPages, newPages);
+                
+                // 分别设置两个文档的页数
+                task.setOldDocPages(oldPages);
+                task.setNewDocPages(newPages);
+                task.setTotalPages(totalPages);
+                
+                System.out.println("[DEBUG] 文档页数: 旧文档" + oldPages + "页, 新文档" + newPages + "页, 设置总页数为" + totalPages + "页");
+            }
+            
 			// 从OCR结果中提取CharBox数据（使用与正常比对相同的方法）
-			RecognitionResult resultA = recognizePdfAsCharSeq(null, oldPdfPath, null, true, options);
-			RecognitionResult resultB = recognizePdfAsCharSeq(null, newPdfPath, null, true, options);
+			RecognitionResult resultA = recognizePdfAsCharSeq(null, oldPdfPath, null, true, options, null, null, "old", task);
+			RecognitionResult resultB = recognizePdfAsCharSeq(null, newPdfPath, null, true, options, null, null, "new", task);
 			List<CharBox> seqA = resultA.charBoxes;
 			List<CharBox> seqB = resultB.charBoxes;
             
@@ -1001,6 +1108,9 @@ public class CompareService {
                 int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
                 System.out.println("[DEBUG] 文档页数信息: 旧文档" + resultA.totalPages + "页, 新文档" + resultB.totalPages + "页, 使用最大值" + actualTotalPages + "页");
                 
+                // 设置任务的总页数
+                task.setTotalPages(actualTotalPages);
+                
                 DiffBlockValidationUtil.DiffBlockValidationResult validationResult = 
                     diffBlockValidationUtil.analyzeDiffBlocks(merged, originalTaskId, true, actualTotalPages);
                 
@@ -1069,6 +1179,34 @@ public class CompareService {
             // 不再需要PDF URL，全部使用画布显示
                 frontendResult.put("differences", formattedDifferences);
                 frontendResult.put("totalDiffCount", formattedDifferences.size());
+                
+                // 添加时间统计信息
+                if (task.getStepDurations() != null && !task.getStepDurations().isEmpty()) {
+                    frontendResult.put("stepDurations", task.getStepDurations());
+                }
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+                
+                // 添加失败页面信息
+                if (task.getFailedPages() != null && !task.getFailedPages().isEmpty()) {
+                    frontendResult.put("failedPages", task.getFailedPages());
+                    frontendResult.put("failedPagesCount", task.getFailedPages().size());
+                } else {
+                    frontendResult.put("failedPages", new ArrayList<>());
+                    frontendResult.put("failedPagesCount", 0);
+                }
+                
+                // 添加统计信息
+                if (task.getStatistics() != null && !task.getStatistics().isEmpty()) {
+                    frontendResult.put("statistics", task.getStatistics());
+                }
 
             // 不再需要页面高度，画布使用图片实际像素尺寸
 
@@ -1088,10 +1226,13 @@ public class CompareService {
                 System.err.println("调试模式写入前端结果JSON失败: " + ioEx.getMessage());
             }
 
-            long totalTime = progressManager.getTotalDuration();
             task.setStatus(CompareTask.Status.COMPLETED);
             task.updateProgress(8, "调试比对完成");
-
+            
+            // 完成任务并同步统计信息
+            progressManager.completeTask();
+            
+            long totalTime = progressManager.getTotalDuration();
 			System.out
 					.println(String.format("GPU OCR调试比对完成。差异数量=%d, 总耗时=%dms", formattedDifferences.size(), totalTime));
             System.out.println("GPU OCR调试比对完成，使用画布显示结果");
@@ -1527,8 +1668,16 @@ public class CompareService {
     private byte[] applyWatermarkRemoval(byte[] imageBytes, String strength, int pageNo, String mode) {
         String modePrefix = mode != null ? "[" + mode + "] " : "";
         try {
-            // 创建临时文件
-            Path tempFile = Files.createTempFile("watermark_removal_", ".png");
+            // 使用系统配置的根路径创建临时文件夹（避免中文路径问题）
+            String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+            Path tempDir = Paths.get(uploadRootPath, "temp");
+            if (!Files.exists(tempDir)) {
+                Files.createDirectories(tempDir);
+            }
+            
+            // 使用英文路径避免OpenCV读取问题
+            String tempFileName = "watermark_removal_" + System.currentTimeMillis() + "_" + pageNo + ".png";
+            Path tempFile = tempDir.resolve(tempFileName);
             Files.write(tempFile, imageBytes);
             
             // 去水印开始日志已在调用处显示
@@ -1587,17 +1736,17 @@ public class CompareService {
 
 	private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
 			boolean resumeFromStep4, CompareOptions options) throws Exception {
-        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, null);
+        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, null, null, null, null);
     }
     
     private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
 			boolean resumeFromStep4, CompareOptions options, CompareTaskProgressManager progressManager) throws Exception {
-        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, progressManager, null, null);
+        return recognizePdfAsCharSeq(client, pdf, prompt, resumeFromStep4, options, progressManager, null, null, null);
     }
     
     private RecognitionResult recognizePdfAsCharSeq(DotsOcrClient client, Path pdf, String prompt,
 			boolean resumeFromStep4, CompareOptions options, CompareTaskProgressManager progressManager,
-			String taskId, String mode) throws Exception {
+			String taskId, String mode, CompareTask task) throws Exception {
         TextExtractionUtil.PageLayout[] ordered;
 		List<String> failedPages = new ArrayList<>();
 		String documentName = pdf.getFileName().toString();
@@ -1652,6 +1801,18 @@ public class CompareService {
 					if (p != null) {
                     ordered[p.page - 1] = p;
                     System.out.println("📋 OCR收集进度 [" + (i + 1) + "/" + total + "] 第" + p.page + "页结果已收集");
+                    
+                    // 更新CompareTask的页面进度
+                    if (task != null && mode != null) {
+                        if ("old".equals(mode)) {
+                            task.setCurrentPageOld(p.page);
+                            task.setCompletedPagesOld(i + 1);
+                        } else if ("new".equals(mode)) {
+                            task.setCurrentPageNew(p.page);
+                            task.setCompletedPagesNew(i + 1);
+                        }
+                    }
+                    
 						// 检查是否为空页面布局（表示识别失败）
 						if (isEmptyPageLayout(p)) {
 							failedPages.add(documentName + "-第" + p.page + "页: OCR识别失败");
@@ -1667,6 +1828,17 @@ public class CompareService {
 					// 创建空页面布局
 					TextExtractionUtil.PageLayout emptyPage = createEmptyPageLayout(i + 1);
 					ordered[i] = emptyPage;
+					
+					// 即使失败也要更新页面进度
+                    if (task != null && mode != null) {
+                        if ("old".equals(mode)) {
+                            task.setCurrentPageOld(i + 1);
+                            task.setCompletedPagesOld(i + 1);
+                        } else if ("new".equals(mode)) {
+                            task.setCurrentPageNew(i + 1);
+                            task.setCompletedPagesNew(i + 1);
+                        }
+                    }
 
 					String errorMsg = e.getMessage();
 					if (errorMsg != null && errorMsg.contains("timeout")) {

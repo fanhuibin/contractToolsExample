@@ -21,6 +21,7 @@ import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
+import com.zhaoxinms.contract.tools.comparePRO.util.ProgressCalculator;
 
 /**
  * GPU OCR比对控制器 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -31,6 +32,9 @@ public class GPUCompareController {
 
     @Autowired
     private CompareService compareService;
+    
+    @Autowired
+    private ProgressCalculator progressCalculator;
 
     /**
      * 提交GPU OCR比对任务（使用文件上传）
@@ -79,13 +83,79 @@ public class GPUCompareController {
     }
 
     /**
-     * 获取比对任务状态
+     * 获取比对任务状态（包含进度信息）
      */
     @GetMapping("/task/{taskId}")
-    public ResponseEntity<Result<CompareTask>> getTaskStatus(@PathVariable String taskId) {
+    public ResponseEntity<Result<Map<String, Object>>> getTaskStatus(@PathVariable String taskId) {
         try {
             CompareTask task = compareService.getTaskStatus(taskId);
-            return ResponseEntity.ok(Result.success("获取任务状态成功", task));
+            if (task == null) {
+                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+            }
+            
+            // 计算进度信息
+            ProgressCalculator.ProgressInfo progressInfo = progressCalculator.calculateProgress(task);
+            
+            // 构建返回数据
+            Map<String, Object> responseData = new HashMap<>();
+            
+            // 基本任务信息
+            responseData.put("taskId", task.getTaskId());
+            responseData.put("status", task.getStatus().name());
+            responseData.put("statusDescription", task.getStatus().getDescription());
+            responseData.put("oldFileName", task.getOldFileName());
+            responseData.put("newFileName", task.getNewFileName());
+            responseData.put("currentStep", task.getCurrentStep());
+            responseData.put("currentStepDesc", task.getCurrentStepDesc());
+            
+            // 进度信息
+            responseData.put("progressPercentage", progressInfo.getProgressPercentage());
+            responseData.put("progressDescription", progressInfo.getProgressDescription());
+            responseData.put("currentStepDescription", progressInfo.getCurrentStepDescription());
+            responseData.put("remainingTime", progressInfo.getRemainingTimeFormatted());
+            responseData.put("estimatedTotalTime", progressInfo.getEstimatedTotalTime());
+            
+            // 新增阶段信息，用于前端平滑进度
+            responseData.put("stageMinProgress", progressInfo.getStageMinProgress());
+            responseData.put("stageMaxProgress", progressInfo.getStageMaxProgress());
+            responseData.put("stageEstimatedTime", progressInfo.getStageEstimatedTime());
+            responseData.put("stageElapsedTime", progressInfo.getStageElapsedTime());
+            
+            // 页面级别进度信息
+            responseData.put("totalPages", task.getTotalPages());
+            responseData.put("oldDocPages", task.getOldDocPages());
+            responseData.put("newDocPages", task.getNewDocPages());
+            responseData.put("currentPageOld", task.getCurrentPageOld());
+            responseData.put("currentPageNew", task.getCurrentPageNew());
+            responseData.put("completedPagesOld", task.getCompletedPagesOld());
+            responseData.put("completedPagesNew", task.getCompletedPagesNew());
+            
+            // 时间统计（如果任务已完成或进行中）
+            if (task.getStartTime() != null) {
+                responseData.put("startTime", task.getStartTime().toString());
+            }
+            if (task.getEndTime() != null) {
+                responseData.put("endTime", task.getEndTime().toString());
+            }
+            if (task.getTotalDuration() != null) {
+                responseData.put("totalDuration", task.getTotalDuration());
+            }
+            if (task.getStepDurations() != null && !task.getStepDurations().isEmpty()) {
+                responseData.put("stepDurations", task.getStepDurations());
+            }
+            
+            // 错误信息（如果有）
+            if (task.getErrorMessage() != null && !task.getErrorMessage().isEmpty()) {
+                responseData.put("errorMessage", task.getErrorMessage());
+            }
+            
+            // 失败页面信息（如果有）
+            if (task.getFailedPages() != null && !task.getFailedPages().isEmpty()) {
+                responseData.put("failedPages", task.getFailedPages());
+                responseData.put("failedPagesCount", task.getFailedPages().size());
+            }
+            
+            return ResponseEntity.ok(Result.success("获取任务状态成功", responseData));
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("获取任务状态失败: " + e.getMessage()));

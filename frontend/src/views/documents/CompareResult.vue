@@ -79,8 +79,8 @@
         <div class="list">
           <!-- 加载状态显示 -->
           <div v-if="viewerLoading" class="list-loading">
-            <ConcentricLoader color="#1677ff" :size="52" text="比对中...16%" class="list-loader" />
-            <div class="loading-text-sub">任务预计处理3分钟，期间您可自由使用其他功能</div>
+            <ConcentricLoader color="#1677ff" :size="52" text="比对中..." class="list-loader" />
+            <div class="loading-text-sub">任务处理中，请稍候</div>
           </div>
           <!-- 正常结果列表 -->
           <div v-else>
