@@ -51,7 +51,8 @@ public class GPUCompareController {
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
             @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals,
             @RequestParam(value = "removeWatermark", defaultValue = "false") boolean removeWatermark,
-            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength) {
+            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength,
+            @RequestParam(value = "ocrServiceType", defaultValue = "dotsocr") String ocrServiceType) {
 
         try {
             // 调试日志：记录接收到的去水印参数
@@ -68,6 +69,7 @@ public class GPUCompareController {
             options.setIgnoreSeals(ignoreSeals);
             options.setRemoveWatermark(removeWatermark);
             options.setWatermarkRemovalStrength(watermarkRemovalStrength);
+            options.setOcrServiceType(ocrServiceType);
 
             // 提交比对任务
             String taskId = compareService.submitCompareTask(oldFile, newFile, options);
@@ -216,6 +218,7 @@ public class GPUCompareController {
                 options.setIgnoreSeals(Boolean.TRUE.equals(optionsMap.get("ignoreSeals")));
                 options.setRemoveWatermark(Boolean.TRUE.equals(optionsMap.get("removeWatermark")));
                 options.setWatermarkRemovalStrength((String) optionsMap.getOrDefault("watermarkRemovalStrength", "smart"));
+                options.setOcrServiceType((String) optionsMap.getOrDefault("ocrServiceType", "dotsocr"));
             }
 
             if (taskId == null || taskId.trim().isEmpty()) {

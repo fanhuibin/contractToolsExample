@@ -23,6 +23,10 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import javax.imageio.ImageIO;
 
@@ -106,6 +110,9 @@ public class CompareService {
 
     @Autowired
     private WatermarkRemover watermarkRemover;
+
+    @Autowired(required = false)
+    private ThirdPartyOcrService thirdPartyOcrService;
 
     private final ConcurrentHashMap<String, CompareTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompareResult> results = new ConcurrentHashMap<>();
@@ -728,8 +735,27 @@ public class CompareService {
             
             // 步骤1: 初始化
             progressManager.startStep(TaskStep.INIT);
-            DotsOcrClient client = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
-					.defaultModel(gpuOcrConfig.getOcrModel()).build();
+            
+            // 根据options选择OCR服务
+            boolean useThirdPartyOcr = options != null && options.isUseThirdPartyOcr();
+            DotsOcrClient client = null;
+            
+            if (useThirdPartyOcr) {
+                // 验证第三方OCR服务是否可用
+                if (thirdPartyOcrService == null) {
+                    throw new RuntimeException("第三方OCR服务未启用，请检查配置：zxcm.compare.third-party-ocr.enabled=true");
+                }
+                if (!thirdPartyOcrService.isAvailable()) {
+                    throw new RuntimeException("第三方OCR服务不可用，请检查API密钥和网络连接");
+                }
+                progressManager.logStepDetail("使用第三方OCR服务 (阿里云Dashscope)");
+            } else {
+                // 使用DotsOCR服务
+                client = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
+                        .defaultModel(gpuOcrConfig.getOcrModel()).build();
+                progressManager.logStepDetail("使用DotsOCR服务");
+            }
+            
             progressManager.completeStep(TaskStep.INIT);
 
             // 步骤2: OCR识别第一个文档
@@ -752,7 +778,12 @@ public class CompareService {
             
             // 注意：图片保存和去水印已集成到OCR识别流程中
             
-			RecognitionResult resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
+			RecognitionResult resultA;
+			if (useThirdPartyOcr) {
+			    resultA = recognizePdfAsCharSeqWithThirdParty(oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
+			} else {
+			    resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
+			}
 			List<CharBox> seqA = resultA.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
@@ -761,7 +792,12 @@ public class CompareService {
             
             // 注意：图片保存和去水印已集成到OCR识别流程中
 
-			RecognitionResult resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
+			RecognitionResult resultB;
+			if (useThirdPartyOcr) {
+			    resultB = recognizePdfAsCharSeqWithThirdParty(newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
+			} else {
+			    resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
+			}
 			List<CharBox> seqB = resultB.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_SECOND_DOC);
 
@@ -1909,6 +1945,278 @@ public class CompareService {
 		int totalPages = ordered == null ? 0 : ordered.length;
 		return new RecognitionResult(out, failedPages, totalPages);
     }
+
+    /**
+     * 使用第三方OCR服务识别PDF文档
+     * 基于阿里云Dashscope的通义千问VL模型进行识别
+     */
+    private RecognitionResult recognizePdfAsCharSeqWithThirdParty(Path pdf, String prompt, boolean resumeFromStep4, 
+                                                                  CompareOptions options, CompareTaskProgressManager progressManager, 
+                                                                  String taskId, String mode, CompareTask task) {
+        List<String> failedPages = new ArrayList<>();
+        
+        try {
+            if (pdf == null) {
+                throw new RuntimeException("PDF路径为空");
+            }
+
+            // 判断是否需要保存图片
+            boolean shouldSaveImages = (taskId != null && mode != null && gpuOcrConfig.isSaveOcrImages());
+            Path imagesDir = null;
+            if (shouldSaveImages) {
+                String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+                imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+                Files.createDirectories(imagesDir);
+                progressManager.logStepDetail("[{}] 创建图片保存目录: {}", mode, imagesDir);
+            }
+
+            // 步骤1: 将PDF转换为图片
+            progressManager.logStepDetail("开始PDF转图片处理: {}", pdf.getFileName());
+            List<byte[]> pngPages = renderAllPagesToPng(null, pdf, options, taskId, mode);
+            
+            if (pngPages.isEmpty()) {
+                throw new RuntimeException("PDF转图片失败，未生成任何页面");
+            }
+
+            progressManager.logStepDetail("PDF转图片完成，共{}页", pngPages.size());
+
+            // 步骤2: 使用第三方OCR并行识别所有页面
+            int total = pngPages.size();
+            String documentName = pdf.getFileName().toString();
+            
+            progressManager.logStepDetail("🚀 开始第三方OCR识别: {}页面", total);
+            
+            // 创建页面布局数组
+            TextExtractionUtil.PageLayout[] ordered = new TextExtractionUtil.PageLayout[total];
+            
+            // 使用并发处理提高效率，并发数由ThirdPartyOcrClient控制
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(total, 8)); // 限制最大8个线程
+            List<Future<Void>> futures = new ArrayList<>();
+            
+            progressManager.logStepDetail("🚀 启动并发OCR处理，最大并发数: {}", Math.min(total, 8));
+            
+            for (int i = 0; i < total; i++) {
+                final int pageIndex = i;
+                final int pageNum = i + 1;
+                final byte[] pngBytes = pngPages.get(i);
+                
+                Future<Void> future = executor.submit(() -> {
+                    try {
+                        progressManager.logStepDetail("正在识别第{}页...", pageNum);
+                        
+                        // 先获取图片尺寸（用于坐标转换）
+                        int imgW = 0, imgH = 0;
+                        try {
+                            ByteArrayInputStream bais = new ByteArrayInputStream(pngBytes);
+                            BufferedImage image = ImageIO.read(bais);
+                            if (image != null) {
+                                imgW = image.getWidth();
+                                imgH = image.getHeight();
+                                progressManager.logStepDetail("第{}页图片尺寸: {}x{}", pageNum, imgW, imgH);
+                            }
+                        } catch (Exception e) {
+                            progressManager.logStepDetail("获取第{}页图片尺寸失败: {}", pageNum, e.getMessage());
+                            // 使用默认尺寸
+                            imgW = 1000;
+                            imgH = 1400;
+                        }
+                        
+                        // 调用第三方OCR服务（传递图片尺寸用于坐标转换）
+                        List<CharBox> charBoxes = thirdPartyOcrService.performOCR(pngBytes, "image/png", pageNum, imgW, imgH);
+                        
+                        // 将CharBox转换为LayoutItem格式
+                        List<TextExtractionUtil.LayoutItem> items = convertCharBoxesToLayoutItems(charBoxes);
+                        
+                        // 创建页面布局
+                        TextExtractionUtil.PageLayout pageLayout = new TextExtractionUtil.PageLayout(pageNum, items, imgW, imgH);
+                        ordered[pageIndex] = pageLayout;
+                        
+                        // 保存OCR结果为JSON（与DotsOCR格式兼容）
+                        if (shouldSaveImages) {
+                            saveThirdPartyOcrResult(pdf, pageNum, items, progressManager);
+                        }
+                        
+                        // 更新进度
+                        if (task != null && mode != null) {
+                            if ("old".equals(mode)) {
+                                task.setCurrentPageOld(pageNum);
+                                task.setCompletedPagesOld(pageNum);
+                            } else if ("new".equals(mode)) {
+                                task.setCurrentPageNew(pageNum);
+                                task.setCompletedPagesNew(pageNum);
+                            }
+                        }
+                        
+                        progressManager.logStepDetail("第{}页识别完成，识别到 {} 个文本块", pageNum, charBoxes.size());
+                        
+                    } catch (Exception e) {
+                        progressManager.logStepDetail("第{}页识别失败: {}", pageNum, e.getMessage());
+                        
+                        // 创建空页面布局
+                        ordered[pageIndex] = createEmptyPageLayout(pageNum);
+                        String errorMsg = e.getMessage();
+                        if (errorMsg != null && errorMsg.contains("timeout")) {
+                            failedPages.add(documentName + "-第" + pageNum + "页: 超时错误");
+                        } else {
+                            failedPages.add(documentName + "-第" + pageNum + "页: " + errorMsg);
+                        }
+                        
+                        // 即使失败也要更新页面进度
+                        if (task != null && mode != null) {
+                            if ("old".equals(mode)) {
+                                task.setCurrentPageOld(pageNum);
+                                task.setCompletedPagesOld(pageNum);
+                            } else if ("new".equals(mode)) {
+                                task.setCurrentPageNew(pageNum);
+                                task.setCompletedPagesNew(pageNum);
+                            }
+                        }
+                    }
+                    return null;
+                });
+                
+                futures.add(future);
+            }
+            
+            // 等待所有任务完成
+            for (Future<Void> future : futures) {
+                try {
+                    future.get(); // 等待任务完成
+                } catch (Exception e) {
+                    progressManager.logStepDetail("页面处理异常: {}", e.getMessage());
+                }
+            }
+            
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                    progressManager.logStepDetail("OCR处理超时，强制关闭线程池");
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+
+            progressManager.logStepDetail("第三方OCR识别完成，共处理 {} 页", total);
+
+            // 计算页面高度信息用于页眉页脚检测
+            double[] pageHeights = calculatePageHeights(pdf, progressManager);
+
+            // 使用现有的文本解析逻辑
+            List<CharBox> out = TextExtractionUtil.parseTextAndPositionsFromResults(ordered,
+                    TextExtractionUtil.ExtractionStrategy.SEQUENTIAL, options.isIgnoreHeaderFooter(),
+                    options.getHeaderHeightPercent(), options.getFooterHeightPercent(), pageHeights);
+
+            // 保存提取的纯文本
+            try {
+                String extractedWithPages = TextExtractionUtil.extractTextWithPageMarkers(out);
+                String extractedNoPages = TextExtractionUtil.extractText(out);
+
+                String txtOut = pdf.toAbsolutePath().toString() + ".extracted.thirdparty.txt";
+                String txtOutCompare = pdf.toAbsolutePath().toString() + ".extracted.thirdparty.compare.txt";
+
+                Files.write(Path.of(txtOut), extractedWithPages.getBytes(StandardCharsets.UTF_8));
+                Files.write(Path.of(txtOutCompare), extractedNoPages.getBytes(StandardCharsets.UTF_8));
+
+                progressManager.logStepDetail("第三方OCR提取文本已保存: {}", txtOut);
+            } catch (Exception e) {
+                progressManager.logStepDetail("保存第三方OCR提取文本失败: {}", e.getMessage());
+            }
+
+            int totalPages = ordered.length;
+            return new RecognitionResult(out, failedPages, totalPages);
+            
+        } catch (Exception e) {
+            progressManager.logStepDetail("第三方OCR识别过程发生异常: {}", e.getMessage());
+            throw new RuntimeException("第三方OCR识别失败: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 将CharBox列表转换为LayoutItem列表
+     * 将分散的字符CharBox重新组织为文本块LayoutItem
+     */
+    private List<TextExtractionUtil.LayoutItem> convertCharBoxesToLayoutItems(List<CharBox> charBoxes) {
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        
+        if (charBoxes.isEmpty()) {
+            return items;
+        }
+        
+        // 将连续的同类别字符合并为文本块
+        StringBuilder currentText = new StringBuilder();
+        String currentCategory = null;
+        double[] currentBbox = null;
+        
+        for (CharBox charBox : charBoxes) {
+            // 如果类别变化或者是新的开始，创建新的LayoutItem
+            if (currentCategory == null || !currentCategory.equals(charBox.category)) {
+                // 保存上一个LayoutItem
+                if (currentCategory != null && currentText.length() > 0 && currentBbox != null) {
+                    TextExtractionUtil.LayoutItem item = new TextExtractionUtil.LayoutItem(
+                            currentBbox.clone(), currentCategory, currentText.toString());
+                    items.add(item);
+                }
+                
+                // 开始新的LayoutItem
+                currentCategory = charBox.category;
+                currentText = new StringBuilder();
+                currentBbox = charBox.bbox.clone();
+            }
+            
+            // 添加字符到当前文本块
+            currentText.append(charBox.ch);
+            
+            // 扩展边界框
+            if (currentBbox != null) {
+                currentBbox[0] = Math.min(currentBbox[0], charBox.bbox[0]); // min x
+                currentBbox[1] = Math.min(currentBbox[1], charBox.bbox[1]); // min y
+                currentBbox[2] = Math.max(currentBbox[2], charBox.bbox[2]); // max x
+                currentBbox[3] = Math.max(currentBbox[3], charBox.bbox[3]); // max y
+            }
+        }
+        
+        // 保存最后一个LayoutItem
+        if (currentCategory != null && currentText.length() > 0 && currentBbox != null) {
+            TextExtractionUtil.LayoutItem item = new TextExtractionUtil.LayoutItem(
+                    currentBbox.clone(), currentCategory, currentText.toString());
+            items.add(item);
+        }
+        
+        return items;
+    }
+
+    /**
+     * 保存第三方OCR结果为JSON格式（与DotsOCR格式兼容）
+     */
+    private void saveThirdPartyOcrResult(Path pdfPath, int page, List<TextExtractionUtil.LayoutItem> items, CompareTaskProgressManager progressManager) {
+        try {
+            // 构建与DotsOCR兼容的JSON格式
+            List<Map<String, Object>> jsonItems = new ArrayList<>();
+            for (TextExtractionUtil.LayoutItem item : items) {
+                if (item.bbox != null && item.text != null && !item.text.trim().isEmpty()) {
+                    Map<String, Object> jsonItem = new HashMap<>();
+                    jsonItem.put("bbox", item.bbox);
+                    jsonItem.put("category", item.category);
+                    jsonItem.put("text", item.text);
+                    jsonItems.add(jsonItem);
+                }
+            }
+            
+            String pageJsonPath = pdfPath.toAbsolutePath().toString() + ".page-" + page + ".ocr.json";
+            Files.write(Path.of(pageJsonPath), M.writerWithDefaultPrettyPrinter().writeValueAsBytes(jsonItems));
+            
+            if (progressManager != null) {
+                progressManager.logStepDetail("第三方OCR结果已保存: page-{}.ocr.json", page);
+            }
+        } catch (Exception e) {
+            if (progressManager != null) {
+                progressManager.logStepDetail("保存第三方OCR结果失败 (page {}): {}", page, e.getMessage());
+            }
+        }
+    }
+
 
     private String joinWithLineBreaks(List<CharBox> cs) {
 		if (cs.isEmpty())

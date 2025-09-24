@@ -14,6 +14,9 @@ public class CompareOptions {
     private boolean ignoreSeals = true;
     private boolean removeWatermark = false;
     private String watermarkRemovalStrength = "smart"; // default, extended, loose, smart
+    
+    // OCR服务选择
+    private String ocrServiceType = "dotsocr"; // dotsocr, thirdparty
 
     public CompareOptions() {}
 
@@ -92,5 +95,27 @@ public class CompareOptions {
 
     public void setWatermarkRemovalStrength(String watermarkRemovalStrength) {
         this.watermarkRemovalStrength = watermarkRemovalStrength;
+    }
+
+    public String getOcrServiceType() {
+        return ocrServiceType;
+    }
+
+    public void setOcrServiceType(String ocrServiceType) {
+        this.ocrServiceType = ocrServiceType;
+    }
+
+    /**
+     * 判断是否使用第三方OCR服务
+     */
+    public boolean isUseThirdPartyOcr() {
+        return "thirdparty".equalsIgnoreCase(ocrServiceType);
+    }
+
+    /**
+     * 判断是否使用DotsOCR服务
+     */
+    public boolean isUseDotsOcr() {
+        return "dotsocr".equalsIgnoreCase(ocrServiceType);
     }
 }
