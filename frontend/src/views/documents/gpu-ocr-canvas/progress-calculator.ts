@@ -60,7 +60,7 @@ export function createProgressCalculator() {
    */
   const isOCRStep = (): boolean => {
     const stepDesc = progressState.value.currentTaskData?.currentStepDesc || ''
-    return stepDesc.includes('OCR识别第一个文档') || stepDesc.includes('OCR识别第二个文档')
+    return stepDesc.includes('OCR识别原文档') || stepDesc.includes('OCR识别新文档')
   }
 
   /**
@@ -76,10 +76,10 @@ export function createProgressCalculator() {
     let completedPages = 0
     
     // 判断当前处理的是哪个文档
-    if (task.currentStepDesc?.includes('第一个文档')) {
+    if (task.currentStepDesc?.includes('原文档')) {
       currentDocPages = task.oldDocPages || 0
       completedPages = task.completedPagesOld || 0
-    } else if (task.currentStepDesc?.includes('第二个文档')) {
+    } else if (task.currentStepDesc?.includes('新文档')) {
       currentDocPages = task.newDocPages || 0
       completedPages = task.completedPagesNew || 0
     }
@@ -190,7 +190,7 @@ export function createProgressCalculator() {
       
       // 调试日志：显示OCR进度信息
       if (isOCRStep() && taskData.currentStepDesc) {
-        const isFirstDoc = taskData.currentStepDesc.includes('第一个文档')
+        const isFirstDoc = taskData.currentStepDesc.includes('原文档')
         const currentDocPages = isFirstDoc ? taskData.oldDocPages : taskData.newDocPages
         const completedPages = isFirstDoc ? taskData.completedPagesOld : taskData.completedPagesNew
         

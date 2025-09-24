@@ -95,7 +95,7 @@
                 <span class="badge" :class="r.diff.operation === 'DELETE' ? 'del' : 'ins'">{{ r.diff.operation === 'DELETE' ? '删' : '增' }}</span>
                 <span class="text">{{ r.diff.text }}</span>
               </div>
-              <div class="meta">旧文档第 {{ r.oldPosition?.page ?? 0 }} 页 / 新文档第 {{ r.newPosition?.page ?? 0 }} 页</div>
+              <div class="meta">原文档第 {{ r.oldPosition?.page ?? 0 }} 页 / 新文档第 {{ r.newPosition?.page ?? 0 }} 页</div>
             </div>
           </div>
         </div>

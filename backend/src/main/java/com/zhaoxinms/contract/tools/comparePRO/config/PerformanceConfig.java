@@ -17,10 +17,10 @@ public class PerformanceConfig {
     private long pageSetupTime = 100;              // 每页设置时间
     
     // OCR识别性能参数（每页时间）
-    private long ocrFirstDocPerPage = 3000;        // OCR第一个文档每页时间（毫秒）
-    private long ocrSecondDocPerPage = 2500;       // OCR第二个文档每页时间（毫秒）
-    private long ocrFirstDocMinTime = 10000;       // OCR第一个文档最小时间
-    private long ocrSecondDocMinTime = 8000;       // OCR第二个文档最小时间
+    private long ocrFirstDocPerPage = 3000;        // OCR原文档每页时间（毫秒）
+    private long ocrSecondDocPerPage = 2500;       // OCR新文档每页时间（毫秒）
+    private long ocrFirstDocMinTime = 10000;       // OCR原文档最小时间
+    private long ocrSecondDocMinTime = 8000;       // OCR新文档最小时间
     
     // 其他步骤性能参数
     private long initTime = 2000;                  // 初始化时间

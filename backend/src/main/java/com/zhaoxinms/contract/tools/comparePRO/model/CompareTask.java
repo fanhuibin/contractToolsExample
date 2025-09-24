@@ -59,11 +59,11 @@ public class CompareTask {
     
     // 页面级别进度信息
     private int totalPages; // 总页数（取两个文档的最大值，用于整体进度计算）
-    private int oldDocPages; // 旧文档页数
+    private int oldDocPages; // 原文档页数
     private int newDocPages; // 新文档页数
-    private int currentPageOld; // 当前处理的旧文档页面
+    private int currentPageOld; // 当前处理的原文档页面
     private int currentPageNew; // 当前处理的新文档页面
-    private int completedPagesOld; // 已完成的旧文档页面数
+    private int completedPagesOld; // 已完成的原文档页面数
     private int completedPagesNew; // 已完成的新文档页面数
 
     public CompareTask() {

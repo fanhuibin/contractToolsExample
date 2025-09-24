@@ -732,7 +732,7 @@ public class CompareService {
 					.defaultModel(gpuOcrConfig.getOcrModel()).build();
             progressManager.completeStep(TaskStep.INIT);
 
-            // 步骤2: OCR识别第一个文档
+            // 步骤2: OCR识别原文档
             progressManager.startStep(TaskStep.OCR_FIRST_DOC);
             
             // 提前获取PDF页数信息用于进度计算
@@ -747,7 +747,7 @@ public class CompareService {
                 task.setNewDocPages(newPages);
                 task.setTotalPages(totalPages);
                 
-                progressManager.logStepDetail("📄 文档页数: 旧文档{}页, 新文档{}页, 设置总页数为{}页", oldPages, newPages, totalPages);
+                progressManager.logStepDetail("📄 文档页数: 原文档{}页, 新文档{}页, 设置总页数为{}页", oldPages, newPages, totalPages);
             }
             
             // 注意：图片保存和去水印已集成到OCR识别流程中
@@ -756,7 +756,7 @@ public class CompareService {
 			List<CharBox> seqA = resultA.charBoxes;
 			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
-            // 步骤3: OCR识别第二个文档
+            // 步骤3: OCR识别新文档
             progressManager.startStep(TaskStep.OCR_SECOND_DOC);
             
             // 注意：图片保存和去水印已集成到OCR识别流程中
@@ -800,7 +800,7 @@ public class CompareService {
             try {
                 // 计算实际页数（取两个文档的最大页数）
                 int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
-                progressManager.logStepDetail("文档页数信息: 旧文档{}页, 新文档{}页, 使用最大值{}页", 
+                progressManager.logStepDetail("文档页数信息: 原文档{}页, 新文档{}页, 使用最大值{}页", 
                     resultA.totalPages, resultB.totalPages, actualTotalPages);
                 
                 // 设置任务的总页数
@@ -1001,11 +1001,11 @@ public class CompareService {
 				oldPdfPath = jsonBases[0];
 				newPdfPath = jsonBases[1];
 				progressManager.logStepDetail("使用OCR JSON基名进行调试:");
-				progressManager.logStepDetail("  旧文档基名: {}", oldPdfPath);
+				progressManager.logStepDetail("  原文档基名: {}", oldPdfPath);
 				progressManager.logStepDetail("  新文档基名: {}", newPdfPath);
 			} else {
                 progressManager.logStepDetail("找到原任务PDF文件:");
-                progressManager.logStepDetail("  旧文档: {}", oldPdfPath);
+                progressManager.logStepDetail("  原文档: {}", oldPdfPath);
                 progressManager.logStepDetail("  新文档: {}", newPdfPath);
 
 				// Debug模式复用原始任务的图片，不需要重新保存
@@ -1028,7 +1028,7 @@ public class CompareService {
                 task.setNewDocPages(newPages);
                 task.setTotalPages(totalPages);
                 
-                System.out.println("[DEBUG] 文档页数: 旧文档" + oldPages + "页, 新文档" + newPages + "页, 设置总页数为" + totalPages + "页");
+                System.out.println("[DEBUG] 文档页数: 原文档" + oldPages + "页, 新文档" + newPages + "页, 设置总页数为" + totalPages + "页");
             }
             
 			// 从OCR结果中提取CharBox数据（使用与正常比对相同的方法）
@@ -1106,7 +1106,7 @@ public class CompareService {
             try {
                 // 计算实际页数（取两个文档的最大页数）
                 int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
-                System.out.println("[DEBUG] 文档页数信息: 旧文档" + resultA.totalPages + "页, 新文档" + resultB.totalPages + "页, 使用最大值" + actualTotalPages + "页");
+                System.out.println("[DEBUG] 文档页数信息: 原文档" + resultA.totalPages + "页, 新文档" + resultB.totalPages + "页, 使用最大值" + actualTotalPages + "页");
                 
                 // 设置任务的总页数
                 task.setTotalPages(actualTotalPages);

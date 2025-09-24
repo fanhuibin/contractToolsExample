@@ -216,7 +216,7 @@ export const calculateDiffBoxRelativeY = (
         bbox = diff.oldBbox
         pageNum = diff.pageA || diff.page || 1
       } else if (diff.operation === 'INSERT' && diff.prevOldBbox) {
-        // INSERT操作的左侧连接：使用prevOldBbox（旧文档不同处）
+        // INSERT操作的左侧连接：使用prevOldBbox（原文档不同处）
         bbox = diff.prevOldBbox
         pageNum = diff.pageA || diff.page || 1
       }
@@ -409,7 +409,7 @@ export const renderConnectionLines = (props: ConnectionLineProps) => {
     }
   }
   
-  // 2. INSERT类型左侧连接线：起点=旧文档不同处（prevOldBbox）右边线中点，终点=新增图标左边线中点（直线）
+  // 2. INSERT类型左侧连接线：起点=原文档不同处（prevOldBbox）右边线中点，终点=新增图标左边线中点（直线）
   if (diff.operation === 'INSERT' && diff.prevOldBbox) {
     const leftDiffBoxY = calculateDiffBoxRelativeY(diff, 'left', leftWrapper, rightWrapper, oldImageInfo, newImageInfo)
     if (leftDiffBoxY !== null) {
@@ -421,7 +421,7 @@ export const renderConnectionLines = (props: ConnectionLineProps) => {
         const leftCanvasRect = leftCanvasWrapper.getBoundingClientRect()
         const leftCanvasRelativeX = leftCanvasRect.left - compareRect.left
         
-        // 计算prevOldBbox（旧文档不同处）的实际右边缘X坐标
+        // 计算prevOldBbox（原文档不同处）的实际右边缘X坐标
         const containerWidth = getCanvasWidth(leftWrapper)
         const layout = calculatePageLayout(oldImageInfo, containerWidth)
         const pageIndex = (diff.pageA || diff.page || 1) - 1
@@ -431,7 +431,7 @@ export const renderConnectionLines = (props: ConnectionLineProps) => {
           const scale = pageLayout.scale
           const diffBoxRightX = diff.prevOldBbox[2] * scale // prevOldBbox右边缘x坐标
           
-          // 起点：旧文档不同处右边线中点
+          // 起点：原文档不同处右边线中点
           const startX = leftCanvasRelativeX + diffBoxRightX
           const startY = diffBoxY
           

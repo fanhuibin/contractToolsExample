@@ -32,8 +32,8 @@ public class CompareTaskProgressManager {
      */
     public enum TaskStep {
         INIT("初始化", 1),
-        OCR_FIRST_DOC("OCR识别第一个文档", 2), 
-        OCR_SECOND_DOC("OCR识别第二个文档", 3),
+        OCR_FIRST_DOC("OCR识别原文档", 2), 
+        OCR_SECOND_DOC("OCR识别新文档", 3),
         OCR_COMPLETE("OCR识别完成", 4),
         TEXT_COMPARE("文本比对", 5),
         DIFF_ANALYSIS("差异分析", 6),

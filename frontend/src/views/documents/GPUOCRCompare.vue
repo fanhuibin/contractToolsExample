@@ -70,7 +70,7 @@
         <div class="card-header">
           <span>处理进度</span>
           <el-tag :type="getStatusTagType(currentTask.status)" size="small">
-            {{ currentTask.statusDescription || currentTask.statusDesc }}
+            {{ currentTask.statusDescription }}
           </el-tag>
         </div>
       </template>
@@ -125,21 +125,21 @@
         table-layout="auto"
       >
         <el-table-column prop="taskId" label="任务ID" min-width="220" show-overflow-tooltip />
-        <el-table-column prop="oldFileName" label="原始文件" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="newFileName" label="新文件" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="oldFileName" label="原文档名称" min-width="200" show-overflow-tooltip />
+        <el-table-column prop="newFileName" label="新文档名称" min-width="200" show-overflow-tooltip />
         <el-table-column label="差异总数" min-width="120" align="center">
           <template #default="scope">
             <span>{{ getDifferencesCount(scope.row) }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="createdTime" label="上传时间" min-width="180">
+        <el-table-column prop="startTime" label="任务开始时间" min-width="180">
           <template #default="scope">
-            {{ formatTime(scope.row.createdTime) }}
+            {{ formatTime(scope.row.startTime) }}
           </template>
         </el-table-column>
-        <el-table-column prop="updatedTime" label="分析完成时间" min-width="180">
+        <el-table-column prop="endTime" label="任务完成时间" min-width="180">
           <template #default="scope">
-            {{ scope.row.status === 'COMPLETED' ? formatTime(scope.row.updatedTime) : '-' }}
+            {{ scope.row.endTime ? formatTime(scope.row.endTime) : '-' }}
           </template>
         </el-table-column>
         <el-table-column label="分析时长" min-width="120" align="center">
@@ -151,7 +151,7 @@
           <template #default="scope">
             <div class="action-buttons">
               <el-button
-                v-if="scope.row.status === 'COMPLETED'"
+                v-if="scope.row.resultUrl"
                 size="small"
                 type="primary"
                 @click="goToResult(scope.row.taskId)"
@@ -159,7 +159,7 @@
                 比对结果
               </el-button>
               <el-button
-                v-if="scope.row.status === 'COMPLETED'"
+                v-if="scope.row.resultUrl"
                 size="small"
                 type="success"
                 :icon="DownloadOutlined"
@@ -487,7 +487,7 @@ const goToResult = (taskId: string) => {
 // 判断当前是否是OCR步骤
 const isOCRStep = () => {
   const stepDesc = currentTask.value?.currentStepDesc || ''
-  return stepDesc.includes('OCR识别第一个文档') || stepDesc.includes('OCR识别第二个文档')
+  return stepDesc.includes('OCR识别原文档') || stepDesc.includes('OCR识别新文档')
 }
 
 // 基于页面进度计算OCR步骤的进度
@@ -501,10 +501,10 @@ const calculateOCRPageProgress = () => {
   let completedPages = 0
   
   // 判断当前处理的是哪个文档
-  if (task.currentStepDesc?.includes('第一个文档')) {
+  if (task.currentStepDesc?.includes('原文档')) {
     currentDocPages = task.oldDocPages || 0
     completedPages = task.completedPagesOld || 0
-  } else if (task.currentStepDesc?.includes('第二个文档')) {
+  } else if (task.currentStepDesc?.includes('新文档')) {
     currentDocPages = task.newDocPages || 0
     completedPages = task.completedPagesNew || 0
   }
@@ -569,6 +569,7 @@ const updateSmoothProgress = () => {
   
   // 调试日志
   if (Math.random() < 0.1) { // 10%概率输出日志，避免日志过多
+    const stageProgressRatio = stageInfo.estimatedTime > 0 ? Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime) : 0
     console.log(`📊 进度更新: 阶段${stageInfo.minProgress}%-${stageInfo.maxProgress}%, 已用时间${stageInfo.elapsedTime}ms/${stageInfo.estimatedTime}ms (${(stageProgressRatio*100).toFixed(1)}%), 显示进度${displayProgress.value.toFixed(1)}%`)
   }
 }
@@ -660,9 +661,9 @@ const refreshTasks = async () => {
   try {
     const res = await getAllGPUOCRCompareTasks()
     // 后端返回格式：{code: 200, message: "...", data: [...]}
-    taskHistory.value = ((res.data || []) as GPUOCRCompareTaskStatus[]).sort(
-      (a: GPUOCRCompareTaskStatus, b: GPUOCRCompareTaskStatus) =>
-        new Date(b.createdTime || 0).getTime() - new Date(a.createdTime || 0).getTime()
+    taskHistory.value = ((res.data || []) as any[]).sort(
+      (a: any, b: any) =>
+        new Date(b.startTime || 0).getTime() - new Date(a.startTime || 0).getTime()
     )
   } catch (e: any) {
     console.error('获取任务历史失败:', e)
@@ -810,38 +811,24 @@ const formatTime = (timeStr: string | undefined) => {
 }
 
 // 获取差异总数
-const getDifferencesCount = (task: GPUOCRCompareTaskStatus) => {
-  // 如果任务未完成，显示 "-"
-  if (task.status !== 'COMPLETED') {
-    return '-'
+const getDifferencesCount = (task: any) => {
+  // 直接使用后端返回的 differenceCount 字段
+  if (task.differenceCount !== null && task.differenceCount !== undefined) {
+    return task.differenceCount.toString()
   }
   
-  // 尝试从 sessionStorage 获取缓存的Canvas结果
-  try {
-    const cacheKey = `gpu-ocr-canvas-result-${task.taskId}`
-    const cachedResult = sessionStorage.getItem(cacheKey)
-    if (cachedResult) {
-      const result = JSON.parse(cachedResult)
-      if (typeof result.totalDiffCount === 'number') {
-        return result.totalDiffCount.toString()
-      }
-    }
-  } catch (error) {
-    // 忽略缓存错误
-  }
-  
-  // 如果没有缓存，显示需要查看详情
-  return '查看详情'
+  // 如果没有差异数据，显示 "-"
+  return '-'
 }
 
 // 计算分析时长
-const getProcessingDuration = (task: GPUOCRCompareTaskStatus) => {
-  if (task.status !== 'COMPLETED' || !task.updatedTime) {
+const getProcessingDuration = (task: any) => {
+  if (!task.startTime || !task.endTime) {
     return '-'
   }
   
-  const startTime = new Date(task.createdTime || 0).getTime()
-  const endTime = new Date(task.updatedTime || task.createdTime || 0).getTime()
+  const startTime = new Date(task.startTime || 0).getTime()
+  const endTime = new Date(task.endTime || 0).getTime()
   const durationMs = endTime - startTime
   
   if (durationMs < 1000) {

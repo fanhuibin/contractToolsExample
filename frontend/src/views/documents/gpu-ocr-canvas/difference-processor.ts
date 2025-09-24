@@ -24,7 +24,7 @@ export function preprocessDifferences(differences: DifferenceItem[]): Map<number
   
   differences.forEach(diff => {
     if (diff.operation === 'DELETE' && diff.pageAList && diff.oldBboxes) {
-      // DELETE操作：处理旧文档页面
+      // DELETE操作：处理原文档页面
       diff.oldBboxes.forEach((bbox: number[], index: number) => {
         const pageNum = (diff.pageAList as number[])[index]
         if (pageNum) {
