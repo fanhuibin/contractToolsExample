@@ -61,7 +61,7 @@
         <div class="document-box left-box">
           <div class="canvas-pane">
             <div class="canvas-header">
-              <span class="canvas-title">旧文档</span>
+              <span class="canvas-title">原文档</span>
               <span class="canvas-subtitle">（只显示删除内容）</span>
             </div>
             <div class="canvas-container">
@@ -623,7 +623,7 @@ const updateVisiblePagesRender = async (
   canvasLayers.value.old.forEach(canvas => canvas.style.display = 'none')
   canvasLayers.value.new.forEach(canvas => canvas.style.display = 'none')
 
-  // 渲染旧文档可见页面
+  // 渲染原文档可见页面
   const oldVisiblePages = oldVisibleRange.visiblePages
   for (let i = 0; i < oldVisiblePages.length && i < CANVAS_CONFIG.MAX_VISIBLE_CANVASES; i++) {
     const pageIndex = oldVisiblePages[i]
@@ -1224,7 +1224,7 @@ const checkStatusAndMaybePoll = async (id: string) => {
       // 停止所有定时器
       clearPoll()
       progressCalculator.stopProgressUpdates()
-      ElMessage.error(data?.statusDesc || '比对任务失败或超时')
+      ElMessage.error(data?.errorMessage || '比对任务失败或超时')
       return
     }
 

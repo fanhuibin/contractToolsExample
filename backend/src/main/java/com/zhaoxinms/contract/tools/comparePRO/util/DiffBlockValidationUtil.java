@@ -394,12 +394,12 @@ public class DiffBlockValidationUtil {
             logger.info("操作类型: {}, bbox数量: {}", block.type, bboxCount);
         }
         
-        // 处理旧文档的bbox
+        // 处理原文档的bbox
         String recognizedOldText = "";
         List<String> recognizedOldTexts = new ArrayList<>();
         if (block.oldBboxes != null && !block.oldBboxes.isEmpty() && block.pageA != null) {
             if (debugMode) {
-                logger.debug("处理旧文档bbox，数量: {}", block.oldBboxes.size());
+                logger.debug("处理原文档bbox，数量: {}", block.oldBboxes.size());
             }
             List<String> oldImagePaths = extractBboxImages(block.oldBboxes, block.pageA, 
                     taskId, "old", blockIndex);
@@ -431,7 +431,7 @@ public class DiffBlockValidationUtil {
         // 输出bbox提取内容和差异文本
         String diffText = getDiffText(block);
         if (debugMode) {
-            logger.info("bbox提取内容: 旧文档=\"{}\", 新文档=\"{}\"", recognizedOldText, recognizedNewText);
+            logger.info("bbox提取内容: 原文档=\"{}\", 新文档=\"{}\"", recognizedOldText, recognizedNewText);
             logger.info("差异文本: {}", diffText);
         }
         

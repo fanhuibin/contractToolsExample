@@ -334,8 +334,8 @@ public class ProgressCalculator {
         
         switch (currentStep) {
             case "初始化": return "正在初始化处理环境";
-            case "OCR识别第一个文档": return "正在OCR识别第一个文档";
-            case "OCR识别第二个文档": return "正在OCR识别第二个文档";
+            case "OCR识别第一个文档": return "正在OCR识别原文档";
+            case "OCR识别第二个文档": return "正在OCR识别新文档";
             case "OCR识别完成": return "OCR识别完成";
             case "文本比对": return "正在进行文本比对";
             case "差异分析": return "正在分析文档差异";

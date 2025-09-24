@@ -4,7 +4,7 @@ import request from '@/utils/request'
 export interface GPUOCRCompareTaskStatus {
   taskId: string
   status: 'PENDING' | 'OCR_PROCESSING' | 'COMPARING' | 'ANNOTATING' | 'COMPLETED' | 'FAILED' | 'TIMEOUT'
-  statusDescription: string
+  statusDescription: string // 后端通过Status枚举的getDescription()方法提供
   oldFileName: string
   newFileName: string
   currentStep: number
@@ -25,11 +25,11 @@ export interface GPUOCRCompareTaskStatus {
   
   // 页面级别进度信息（新增）
   totalPages?: number           // 总页数（最大值）
-  oldDocPages?: number          // 旧文档页数
+  oldDocPages?: number          // 原文档页数
   newDocPages?: number          // 新文档页数
-  currentPageOld?: number       // 当前处理的旧文档页面
+  currentPageOld?: number       // 当前处理的原文档页面
   currentPageNew?: number       // 当前处理的新文档页面
-  completedPagesOld?: number    // 已完成的旧文档页面数
+  completedPagesOld?: number    // 已完成的原文档页面数
   completedPagesNew?: number    // 已完成的新文档页面数
   
   // 时间统计
@@ -44,7 +44,6 @@ export interface GPUOCRCompareTaskStatus {
   failedPagesCount?: number
   
   // 向后兼容的字段
-  statusDesc?: string
   progress?: number
   totalSteps?: number
   createdTime?: string

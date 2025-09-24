@@ -1,5 +1,7 @@
 package com.zhaoxinms.contract.tools.comparePRO.controller;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,10 +20,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
+import com.zhaoxinms.contract.tools.comparePRO.model.CompareUrlRequest;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
 import com.zhaoxinms.contract.tools.comparePRO.util.ProgressCalculator;
+import com.zhaoxinms.contract.tools.comparePRO.util.FileDownloadUtil;
 
 /**
  * GPU OCR比对控制器 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -81,6 +85,82 @@ public class GPUCompareController {
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("提交GPU OCR比对任务失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 提交合同比对任务（使用JSON + URL格式）- 对外接口
+     */
+    @PostMapping("/submit-url")
+    public ResponseEntity<Result<Map<String, String>>> submitCompareTaskByUrl(
+            @RequestBody CompareUrlRequest request) {
+
+        try {
+            // 验证必需参数
+            if (request.getOldFileUrl() == null || request.getOldFileUrl().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Result.error(400, "缺少必需参数: oldFileUrl"));
+            }
+            if (request.getNewFileUrl() == null || request.getNewFileUrl().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Result.error(400, "缺少必需参数: newFileUrl"));
+            }
+
+            // 下载文件
+            MultipartFile oldFile;
+            MultipartFile newFile;
+            
+            try {
+                oldFile = FileDownloadUtil.downloadFromUrl(request.getOldFileUrl(), "oldFile");
+            } catch (IllegalArgumentException e) {
+                String message = e.getMessage();
+                if (message.contains("文件格式") || message.contains("PDF格式")) {
+                    return ResponseEntity.status(415).body(Result.error(415, "原文档格式不支持，仅支持PDF格式"));
+                }
+                return ResponseEntity.badRequest().body(Result.error(400, "原文档URL无效: " + e.getMessage()));
+            } catch (IOException e) {
+                String message = e.getMessage();
+                if (message.contains("文件大小超过") || message.contains("超过限制")) {
+                    return ResponseEntity.status(413).body(Result.error(413, "原文档文件过大，最大支持50MB"));
+                } else if (message.contains("超时") || message.contains("timeout")) {
+                    return ResponseEntity.status(408).body(Result.error(408, "原文档下载超时"));
+                }
+                return ResponseEntity.status(422).body(Result.error(422, "原文档下载失败"));
+            } catch (Exception e) {
+                return ResponseEntity.status(404).body(Result.error(404, "无法访问原文档URL: " + request.getOldFileUrl()));
+            }
+            
+            try {
+                newFile = FileDownloadUtil.downloadFromUrl(request.getNewFileUrl(), "newFile");
+            } catch (IllegalArgumentException e) {
+                String message = e.getMessage();
+                if (message.contains("文件格式") || message.contains("PDF格式")) {
+                    return ResponseEntity.status(415).body(Result.error(415, "新文档格式不支持，仅支持PDF格式"));
+                }
+                return ResponseEntity.badRequest().body(Result.error(400, "新文档URL无效: " + e.getMessage()));
+            } catch (IOException e) {
+                String message = e.getMessage();
+                if (message.contains("文件大小超过") || message.contains("超过限制")) {
+                    return ResponseEntity.status(413).body(Result.error(413, "新文档文件过大，最大支持50MB"));
+                } else if (message.contains("超时") || message.contains("timeout")) {
+                    return ResponseEntity.status(408).body(Result.error(408, "新文档下载超时"));
+                }
+                return ResponseEntity.status(422).body(Result.error(422, "新文档下载失败"));
+            } catch (Exception e) {
+                return ResponseEntity.status(404).body(Result.error(404, "无法访问新文档URL: " + request.getNewFileUrl()));
+            }
+
+            // 转换比对选项
+            CompareOptions options = request.toCompareOptions();
+
+            // 提交比对任务
+            String taskId = compareService.submitCompareTask(oldFile, newFile, options);
+
+            Map<String, String> data = new HashMap<>();
+            data.put("taskId", taskId);
+
+            return ResponseEntity.ok(Result.success("合同比对pro版任务提交成功", data));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Result.error("提交合同比对任务失败: " + e.getMessage()));
         }
     }
 
@@ -166,13 +246,53 @@ public class GPUCompareController {
 
 
     /**
-     * 获取所有比对任务
+     * 获取所有比对任务（简化版本，只返回核心信息）
      */
     @GetMapping("/tasks")
-    public ResponseEntity<Result<List<CompareTask>>> getAllTasks() {
+    public ResponseEntity<Result<List<Map<String, Object>>>> getAllTasks() {
         try {
             List<CompareTask> tasks = compareService.getAllTasks();
-            return ResponseEntity.ok(Result.success("获取任务列表成功", tasks));
+            List<Map<String, Object>> simplifiedTasks = new ArrayList<>();
+            
+            for (CompareTask task : tasks) {
+                Map<String, Object> taskInfo = new HashMap<>();
+                
+                // 基本信息
+                taskInfo.put("taskId", task.getTaskId());
+                taskInfo.put("oldFileName", task.getOldFileName());
+                taskInfo.put("newFileName", task.getNewFileName());
+                taskInfo.put("startTime", task.getStartTime());
+                taskInfo.put("endTime", task.getEndTime());
+                
+                // 差异总数和结果页地址 - 只有完成的任务才有
+                if (task.isCompleted()) {
+                    // 从比对结果中获取差异总数
+                    com.zhaoxinms.contract.tools.comparePRO.model.CompareResult result = compareService.getCompareResult(task.getTaskId());
+                    if (result != null) {
+                        taskInfo.put("differenceCount", result.getTotalDiffCount());
+                    } else {
+                        taskInfo.put("differenceCount", 0);
+                    }
+                    taskInfo.put("resultUrl", "/api/compare-pro/canvas-result/" + task.getTaskId());
+                } else {
+                    taskInfo.put("differenceCount", null);
+                    taskInfo.put("resultUrl", null);
+                }
+                
+                simplifiedTasks.add(taskInfo);
+            }
+            
+            // 按开始时间倒序排列（最新的在前面）
+            simplifiedTasks.sort((a, b) -> {
+                java.time.LocalDateTime timeA = (java.time.LocalDateTime) a.get("startTime");
+                java.time.LocalDateTime timeB = (java.time.LocalDateTime) b.get("startTime");
+                if (timeA == null && timeB == null) return 0;
+                if (timeA == null) return 1;
+                if (timeB == null) return -1;
+                return timeB.compareTo(timeA);
+            });
+            
+            return ResponseEntity.ok(Result.success("获取任务列表成功", simplifiedTasks));
 
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("获取任务列表失败: " + e.getMessage()));
