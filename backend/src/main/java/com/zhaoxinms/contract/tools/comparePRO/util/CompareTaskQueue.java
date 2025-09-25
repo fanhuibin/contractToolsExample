@@ -11,7 +11,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import com.zhaoxinms.contract.tools.comparePRO.config.GpuOcrConfig;
 
 /**
  * GPU OCR任务队列管理器
@@ -23,23 +25,24 @@ import org.springframework.stereotype.Component;
 @Component
 public class CompareTaskQueue {
     
-    // 核心线程数（始终保持活跃）
-    private static final int CORE_POOL_SIZE = 2;
+    @Autowired
+    private GpuOcrConfig config;
     
-    // 最大线程数（根据配置动态调整）
-    private int maxPoolSize = 4;
-    
-    // 线程空闲时间（秒）
-    private static final long KEEP_ALIVE_TIME = 60L;
-    
-    // 任务队列容量
-    private static final int QUEUE_CAPACITY = 100;
+    // 线程池配置参数（从配置文件读取）
+    private int corePoolSize;
+    private int maxPoolSize;
+    private long keepAliveTime;
+    private int queueCapacity;
+    private String threadNamePrefix;
+    private boolean allowCoreThreadTimeout;
+    private double busyThreshold;
+    private boolean enableDetailedLogging;
     
     // 线程池执行器
     private ThreadPoolExecutor executor;
     
     // 任务队列
-    private final BlockingQueue<Runnable> taskQueue;
+    private BlockingQueue<Runnable> taskQueue;
     
     // 统计信息
     private final AtomicLong totalSubmitted = new AtomicLong(0);
@@ -47,13 +50,12 @@ public class CompareTaskQueue {
     private final AtomicLong totalRejected = new AtomicLong(0);
     
     // 自定义线程工厂
-    private static class GPUOCRThreadFactory implements ThreadFactory {
+    private class GPUOCRThreadFactory implements ThreadFactory {
         private final AtomicInteger threadNumber = new AtomicInteger(1);
-        private final String namePrefix = "GPU-OCR-Worker-";
         
         @Override
         public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, namePrefix + threadNumber.getAndIncrement());
+            Thread t = new Thread(r, threadNamePrefix + threadNumber.getAndIncrement());
             t.setDaemon(false);
             t.setPriority(Thread.NORM_PRIORITY);
             return t;
@@ -90,17 +92,61 @@ public class CompareTaskQueue {
     }
     
     public CompareTaskQueue() {
+        // 构造函数中不做初始化，等待Spring注入完成后再初始化
+    }
+    
+    /**
+     * Spring Bean初始化后调用
+     */
+    @javax.annotation.PostConstruct
+    public void init() {
+        // 从配置文件读取参数
+        loadConfiguration();
+        
         // 初始化任务队列
-        this.taskQueue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
+        this.taskQueue = new LinkedBlockingQueue<>(queueCapacity);
         
         // 初始化线程池
         initializeThreadPool();
         
         System.out.println("GPU OCR任务队列初始化完成:");
-        System.out.println("  - 核心线程数: " + CORE_POOL_SIZE);
+        System.out.println("  - 核心线程数: " + corePoolSize);
         System.out.println("  - 最大线程数: " + maxPoolSize);
-        System.out.println("  - 队列容量: " + QUEUE_CAPACITY);
-        System.out.println("  - 线程空闲时间: " + KEEP_ALIVE_TIME + "秒");
+        System.out.println("  - 队列容量: " + queueCapacity);
+        System.out.println("  - 线程空闲时间: " + keepAliveTime + "秒");
+        System.out.println("  - 线程名称前缀: " + threadNamePrefix);
+        System.out.println("  - 详细日志: " + (enableDetailedLogging ? "启用" : "禁用"));
+        System.out.println("  - 最大处理能力: " + (maxPoolSize + queueCapacity) + "个并发任务");
+    }
+    
+    /**
+     * 从配置文件加载配置参数
+     */
+    private void loadConfiguration() {
+        this.corePoolSize = config.getThreadPool().getCorePoolSize();
+        this.maxPoolSize = config.getThreadPool().getMaxPoolSize();
+        this.keepAliveTime = config.getThreadPool().getKeepAliveTime();
+        this.queueCapacity = config.getThreadPool().getQueueCapacity();
+        this.threadNamePrefix = config.getThreadPool().getThreadNamePrefix();
+        this.allowCoreThreadTimeout = config.getThreadPool().isAllowCoreThreadTimeout();
+        this.busyThreshold = config.getTask().getBusyThreshold();
+        this.enableDetailedLogging = config.getMonitoring().isEnableDetailedLogging();
+        
+        // 参数验证
+        if (corePoolSize <= 0) {
+            throw new IllegalArgumentException("核心线程数必须大于0，当前配置: " + corePoolSize);
+        }
+        if (maxPoolSize < corePoolSize) {
+            throw new IllegalArgumentException("最大线程数不能小于核心线程数，当前配置: maxPoolSize=" + maxPoolSize + ", corePoolSize=" + corePoolSize);
+        }
+        if (queueCapacity <= 0) {
+            throw new IllegalArgumentException("队列容量必须大于0，当前配置: " + queueCapacity);
+        }
+        if (keepAliveTime < 0) {
+            throw new IllegalArgumentException("线程空闲时间不能为负数，当前配置: " + keepAliveTime);
+        }
+        
+        System.out.println("GPU OCR线程池配置加载完成: " + config.toString());
     }
     
     /**
@@ -108,17 +154,17 @@ public class CompareTaskQueue {
      */
     private void initializeThreadPool() {
         this.executor = new ThreadPoolExecutor(
-            CORE_POOL_SIZE,
+            corePoolSize,
             maxPoolSize,
-            KEEP_ALIVE_TIME,
+            keepAliveTime,
             TimeUnit.SECONDS,
             taskQueue,
             new GPUOCRThreadFactory(),
             new GPUOCRRejectedExecutionHandler(totalRejected)
         );
         
-        // 允许核心线程超时
-        executor.allowCoreThreadTimeOut(false);
+        // 设置是否允许核心线程超时
+        executor.allowCoreThreadTimeOut(allowCoreThreadTimeout);
     }
     
     /**
@@ -137,9 +183,11 @@ public class CompareTaskQueue {
             executor.execute(wrappedTask);
             totalSubmitted.incrementAndGet();
             
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-            System.out.printf("[%s] 任务 %s 已提交到队列，队列大小: %d, 活跃线程: %d/%d%n",
-                timestamp, taskId, getQueueSize(), getActiveCount(), getMaximumPoolSize());
+            if (enableDetailedLogging) {
+                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                System.out.printf("[%s] 任务 %s 已提交到队列，队列大小: %d, 活跃线程: %d/%d%n",
+                    timestamp, taskId, getQueueSize(), getActiveCount(), getMaximumPoolSize());
+            }
             
             return true;
             
@@ -158,7 +206,9 @@ public class CompareTaskQueue {
             String threadName = Thread.currentThread().getName();
             
             try {
-                System.out.printf("[%s] 线程 %s 开始执行任务 %s%n", timestamp, threadName, taskId);
+                if (enableDetailedLogging) {
+                    System.out.printf("[%s] 线程 %s 开始执行任务 %s%n", timestamp, threadName, taskId);
+                }
                 long startTime = System.currentTimeMillis();
                 
                 // 执行原始任务
@@ -167,9 +217,11 @@ public class CompareTaskQueue {
                 long endTime = System.currentTimeMillis();
                 totalCompleted.incrementAndGet();
                 
-                System.out.printf("[%s] 线程 %s 完成任务 %s，耗时: %d毫秒%n", 
-                    LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
-                    threadName, taskId, (endTime - startTime));
+                if (enableDetailedLogging) {
+                    System.out.printf("[%s] 线程 %s 完成任务 %s，耗时: %d毫秒%n", 
+                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
+                        threadName, taskId, (endTime - startTime));
+                }
                 
             } catch (Exception e) {
                 System.err.printf("[%s] 线程 %s 执行任务 %s 失败: %s%n", 
@@ -186,13 +238,12 @@ public class CompareTaskQueue {
      * @param newMaxPoolSize 新的最大线程数
      */
     public void adjustMaxPoolSize(int newMaxPoolSize) {
-        if (newMaxPoolSize < CORE_POOL_SIZE) {
-            System.err.println("最大线程数不能小于核心线程数: " + CORE_POOL_SIZE);
+        if (newMaxPoolSize < corePoolSize) {
+            System.err.println("最大线程数不能小于核心线程数: " + corePoolSize);
             return;
         }
         
-        if (newMaxPoolSize != this.maxPoolSize) {
-            this.maxPoolSize = newMaxPoolSize;
+        if (newMaxPoolSize != executor.getMaximumPoolSize()) {
             executor.setMaximumPoolSize(newMaxPoolSize);
             
             System.out.printf("GPU OCR线程池最大线程数已调整为: %d%n", newMaxPoolSize);
@@ -239,13 +290,13 @@ public class CompareTaskQueue {
     /**
      * 检查队列是否繁忙
      * 
-     * @return 如果队列使用率超过80%则认为繁忙
+     * @return 如果队列使用率超过配置的阈值则认为繁忙
      */
     public boolean isBusy() {
-        double queueUsage = (double) getQueueSize() / QUEUE_CAPACITY;
+        double queueUsage = (double) getQueueSize() / queueCapacity;
         double threadUsage = (double) getActiveCount() / getMaximumPoolSize();
         
-        return queueUsage > 0.8 || threadUsage > 0.8;
+        return queueUsage > busyThreshold || threadUsage > busyThreshold;
     }
     
     /**

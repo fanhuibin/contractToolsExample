@@ -176,7 +176,6 @@ export const renderMiddleCanvasDiffIcons = (
     }
   })
   
-  console.log(`中间Canvas差异图标渲染完成，共渲染 ${renderedCount} 个图标`)
   
   // 渲染完成后调用回调，通常用于触发连接线渲染
   if (onRenderComplete) {
@@ -210,7 +209,6 @@ export const initMiddleCanvas = (canvas: HTMLCanvasElement, leftWrapper: HTMLEle
   // 绘制背景
   drawMiddleCanvasBackground(ctx, containerWidth, containerHeight)
   
-  console.log('中间Canvas初始化完成，尺寸:', containerWidth, 'x', containerHeight)
 }
 
 // 处理中间Canvas点击事件

@@ -290,12 +290,6 @@ export const renderConnectionLines = (props: ConnectionLineProps) => {
   svg.setAttribute('height', containerRect.height.toString())
   svg.setAttribute('viewBox', `0 0 ${containerRect.width} ${containerRect.height}`)
   
-  console.log('SVG容器设置:', {
-    width: containerRect.width,
-    height: containerRect.height,
-    viewBox: `0 0 ${containerRect.width} ${containerRect.height}`
-  })
-  
   const leftBox = compareContainer.querySelector('.left-box') as HTMLElement
   const middleAreaElement = compareContainer.querySelector('.middle-interaction-area') as HTMLElement
   const rightBox = compareContainer.querySelector('.right-box') as HTMLElement

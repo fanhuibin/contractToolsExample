@@ -61,7 +61,6 @@ export class MiddleCanvasInteraction {
     this.setupEventListeners()
     this.isInitialized = true
     
-    console.log('中间Canvas交互系统初始化完成')
   }
   
   // 设置事件监听器
@@ -87,7 +86,6 @@ export class MiddleCanvasInteraction {
     canvas.removeEventListener('mouseleave', this.handleMouseLeave.bind(this))
     
     this.isInitialized = false
-    console.log('中间Canvas交互系统已销毁')
   }
   
   // 处理点击事件
@@ -97,7 +95,6 @@ export class MiddleCanvasInteraction {
       this.props.canvas,
       this.props.clickableAreas,
       (diffIndex, operation) => {
-        console.log(`从中间Canvas跳转到差异项 ${diffIndex + 1}, 操作: ${operation}`)
         this.props.onDiffClick(diffIndex, operation)
       }
     )
@@ -137,7 +134,6 @@ export class MiddleCanvasInteraction {
   // 渲染连接线
   renderConnectionLines() {
     if (!this.props.rightWrapper) {
-      console.warn('右侧容器未找到，跳过连接线渲染')
       return
     }
     
@@ -158,7 +154,6 @@ export class MiddleCanvasInteraction {
   // 完整渲染（差异图标 + 连接线）
   render() {
     if (!this.isInitialized) {
-      console.warn('中间Canvas交互系统未初始化，跳过渲染')
       return
     }
     
@@ -168,7 +163,6 @@ export class MiddleCanvasInteraction {
     // 渲染连接线
     this.renderConnectionLines()
     
-    console.log('中间Canvas完整渲染完成')
   }
   
   // 重新初始化（用于窗口大小变化等情况）

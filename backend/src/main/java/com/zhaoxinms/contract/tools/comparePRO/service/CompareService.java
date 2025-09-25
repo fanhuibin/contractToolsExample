@@ -495,7 +495,7 @@ public class CompareService {
 
 			// 不再需要PDF URL，全部使用画布显示
 
-			System.out.println("Canvas前端结果创建成功，包含图片信息");
+			//System.out.println("Canvas前端结果创建成功，包含图片信息");
 
 		} catch (Exception e) {
 			System.err.println("获取Canvas前端结果失败: " + e.getMessage());
@@ -595,10 +595,6 @@ public class CompareService {
 		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
 		Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
 
-		logger.debug("获取文档图片信息 - 任务ID: {}, 模式: {}", taskId, mode);
-		logger.debug("上传根路径: {}", uploadRootPath);
-		logger.debug("图片目录路径: {}", imagesDir);
-		logger.debug("图片目录是否存在: {}", Files.exists(imagesDir));
 
 		if (!Files.exists(imagesDir)) {
 			// 列出父目录内容，帮助调试
@@ -656,7 +652,6 @@ public class CompareService {
 			}
 		}
 
-		logger.debug("获取文档图片信息完成: {}, 共{}页", mode, docInfo.getTotalPages());
 		return docInfo;
 	}
 

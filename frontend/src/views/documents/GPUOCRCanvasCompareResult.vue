@@ -452,10 +452,6 @@ const isJumping = ref(false)
 const progressCalculator = createProgressCalculator()
 const pollTimer = ref<number | null>(null)
 
-
-
-
-
 // 轮询控制
 const clearPoll = () => {
   if (pollTimer.value) {
@@ -593,7 +589,6 @@ const initMiddleCanvasInteraction = () => {
     selectedDiffIndex: selectedDiffIndex.value,
     clickableAreas: middleCanvasClickableAreas,
     onDiffClick: (diffIndex, operation) => {
-      // console.log(`从中间Canvas跳转到差异项 ${diffIndex + 1}, 操作: ${operation}`)
       jumpTo(diffIndex)
     },
     onSelectionChange: (diffIndex) => {
@@ -683,8 +678,6 @@ const renderPageToCanvasLocal = async (
 const renderAllPages = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
   
-  // console.log('开始分层Canvas渲染...')
-  
   // 初始化Canvas系统
   initLayeredCanvasSystem()
   
@@ -708,14 +701,6 @@ const renderAllPages = async () => {
   const newLastPage = newLayout[newLayout.length - 1]
   const oldTotalHeight = oldLastPage ? (oldLastPage.y + oldLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
   const newTotalHeight = newLastPage ? (newLastPage.y + newLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
-  
-  // console.log('容器总高度计算:', {
-  //   oldTotalHeight,
-  //   newTotalHeight,
-  //   oldLastPageY: oldLastPage?.y,
-  //   oldLastPageHeight: oldLastPage?.height,
-  //   pageSpacing: CANVAS_CONFIG.PAGE_SPACING
-  // })
   
   if (oldCanvasContainer.value) {
     oldCanvasContainer.value.style.height = `${oldTotalHeight}px`
@@ -745,7 +730,6 @@ const renderAllPages = async () => {
     middleCanvasInteraction.render()
   }
   
-  // console.log('分层Canvas渲染完成')
 }
 
 
@@ -802,7 +786,6 @@ const updateVisiblePagesRender = async (
 
   // 渲染新文档扩展页面（包含所有差异页面）
   const newPagesToRender = Array.from(extendedNewPages).sort((a, b) => a - b)
-  // console.log(`🖼️ [新文档渲染] 页面: [${newPagesToRender.map(p => p+1).join(',')}]`)
   
   // 动态扩展Canvas池
   while (canvasLayers.value.new.length < Math.min(newPagesToRender.length, 20)) {
@@ -817,8 +800,6 @@ const updateVisiblePagesRender = async (
     const pageIndex = newPagesToRender[i]
     const pageNum = pageIndex + 1
     const pageDiffs = newPageDiffs.get(pageNum) || []
-    
-    // console.log(`📋 [准备渲染页面${pageNum}] 传递${pageDiffs.length}个差异项到renderPageToCanvasLocal`)
     
     if (pageIndex < newLayout.length && canvasLayers.value.new[i]) {
       await renderPageToCanvasLocal(
@@ -869,8 +850,6 @@ const jumpToPage = (pageNum: number) => {
     }
   }
   
-  // console.log(`跳转到第${pageNum}页，目标Y位置: ${targetY.toFixed(2)}px`)
-  
   // 滚动到目标位置
   if (oldCanvasWrapper.value) {
     oldCanvasWrapper.value.scrollTop = targetY
@@ -897,7 +876,6 @@ const getLoaderPosition = (side: 'old' | 'new') => {
     // 获取对应的canvas-wrapper元素
     const wrapper = side === 'old' ? oldCanvasWrapper.value : newCanvasWrapper.value
     if (!wrapper) {
-      // console.log(`[LoaderPosition] ${side} wrapper not found, using fallback`)
       return {
         position: 'absolute',
         top: '50%',
@@ -913,7 +891,6 @@ const getLoaderPosition = (side: 'old' | 'new') => {
     
     // 检查是否获取到有效的尺寸
     if (wrapperRect.width === 0 || wrapperRect.height === 0) {
-      // console.log(`[LoaderPosition] ${side} wrapper has zero size, using fallback`)
       return {
         position: 'absolute',
         top: '50%',
@@ -927,7 +904,6 @@ const getLoaderPosition = (side: 'old' | 'new') => {
     // 获取父容器canvas-container的位置
     const container = wrapper.parentElement
     if (!container) {
-      // console.log(`[LoaderPosition] ${side} container not found, using fallback`)
       return {
         position: 'absolute',
         top: '50%',
@@ -947,13 +923,6 @@ const getLoaderPosition = (side: 'old' | 'new') => {
     // 计算canvas-wrapper的中心点
     const centerX = relativeLeft + wrapperRect.width / 2
     const centerY = relativeTop + wrapperRect.height / 2
-    
-    // console.log(`[LoaderPosition] ${side} calculated position:`, {
-    //   centerX: centerX.toFixed(1),
-    //   centerY: centerY.toFixed(1),
-    //   wrapperSize: `${wrapperRect.width}x${wrapperRect.height}`,
-    //   containerSize: `${containerRect.width}x${containerRect.height}`
-    // })
     
     return {
       position: 'absolute',
@@ -1002,7 +971,6 @@ const handleScrollUpdate = () => {
   
   // 设置滚动结束检测（200ms后触发重新渲染）
   scrollEndTimer.value = window.setTimeout(() => {
-        // console.log('滚动结束，重新渲染页面确保完整性')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
       // 滚动结束后总是更新中间图标
@@ -1030,14 +998,10 @@ const onCanvasClick = (side: 'old' | 'new', event: MouseEvent) => {
   const x = event.clientX - rect.left
   const y = event.clientY - rect.top + wrapper.scrollTop
   
-  // console.log(`Canvas容器点击: ${side}`, { x, y, scrollTop: wrapper.scrollTop })
-  
   // 查找点击的差异区域
   for (const [clickableId, area] of clickableAreas) {
     if (x >= area.x && x <= area.x + area.width &&
         y >= area.y && y <= area.y + area.height) {
-      
-      // console.log(`点击了差异区域: ${clickableId}`, area)
       
       // 跳转到对应的差异项
       jumpToDifferenceFromCanvas(area.diffIndex, area.operation)
@@ -1090,7 +1054,6 @@ const onSyncScrollToggle = () => {
     if (syncEnabled.value) {
       // 启用时重新同步位置
       syncScrollManager.syncInitialPositions()
-    } else {
     }
   }
 }
@@ -1105,12 +1068,9 @@ const jumpTo = (i: number) => {
   const r = results.value[i]
   if (!r) return
 
-  // console.log(`前端跳转调试 - 差异项 ${i + 1}:`, r)
-
   // 计算跳转位置（本地函数）
   const createPositionLocal = (bbox: number[] | undefined, page: number, description: string) => {
     if (!bbox || bbox.length < 4) {
-      // console.log(`前端跳转调试 - ${description}位置创建失败: bbox无效`, bbox)
       return null
     }
     return {
@@ -1143,7 +1103,6 @@ const jumpTo = (i: number) => {
   
   // 跳转后重新渲染Canvas确保页面正确显示
   setTimeout(() => {
-    // console.log('差异项跳转完成，重新渲染Canvas')
     requestAnimationFrame(() => {
       updateVisibleCanvasesOnScroll()
       // 跳转后更新中间图标和连接线
@@ -1195,17 +1154,6 @@ const alignCanvasViewerContinuousLocal = (side: 'old' | 'new', pos: any) => {
     const newScrollTop = Math.max(0, targetY - markerY)
 
     wrapper.scrollTop = newScrollTop
-
-    // console.log(`Canvas连续滚动定位完成: ${side}`, {
-    //   页面: pos.page,
-    //   页面布局Y: pageLayout.y,
-    //   页面高度: pageLayout.height,
-    //   缩放比例: pageLayout.scale,
-    //   原始坐标: [pos.x, pos.y],
-    //   目标坐标: [targetX, targetY],
-    //   滚动位置: newScrollTop,
-    //   markerY: markerY
-    // })
 
   } catch (error) {
     console.error(`Canvas连续滚动定位失败: ${side}`, error)
@@ -1664,26 +1612,12 @@ const fetchResult = async (id: string) => {
       }
 
       // 读取后端提供的图片基路径（如果存在），避免前端手动拼接
-      console.log('🔍 后端返回的数据:', data)
-      console.log('🔍 oldImageBaseUrl:', (data as any).oldImageBaseUrl)
-      console.log('🔍 newImageBaseUrl:', (data as any).newImageBaseUrl)
-      
       if (typeof (data as any).oldImageBaseUrl === 'string') {
         oldImageBaseUrl.value = (data as any).oldImageBaseUrl
-        console.log('✅ 设置 oldImageBaseUrl:', oldImageBaseUrl.value)
       }
       if (typeof (data as any).newImageBaseUrl === 'string') {
         newImageBaseUrl.value = (data as any).newImageBaseUrl
-        console.log('✅ 设置 newImageBaseUrl:', newImageBaseUrl.value)
       }
-      
-      // console.log('Canvas比对结果加载成功:', {
-      //   taskId: id,
-      //   oldFileName: oldFileName.value,
-      //   newFileName: newFileName.value,
-      //   differencesCount: results.value.length,
-      //   totalPages: totalPages.value
-      // })
       
       // 检查大文档并显示提示
       if (totalPages.value > 50) {
@@ -1702,9 +1636,6 @@ const fetchResult = async (id: string) => {
     ElMessage.error(e?.message || '加载Canvas OCR比对结果失败')
   } finally {
     loading.value = false
-    // 无论是否有差异结果，都应该停止loading状态
-    //isPolling.value = false
-    //clearPoll()
     viewerLoading.value = false
   }
 }

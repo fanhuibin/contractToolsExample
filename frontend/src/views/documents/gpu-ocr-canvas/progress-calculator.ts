@@ -152,12 +152,6 @@ export function createProgressCalculator() {
     
     progressState.value.loadingText = `加载中...${progressState.value.displayProgress.toFixed(1)}%`
     
-    // 调试日志：每隔一段时间输出进度信息
-    if (Math.random() < 0.05) { // 5%概率输出日志，避免日志过多
-      const isOCR = isOCRStep()
-      const progressType = isOCR ? '页面基础' : '时间基础'
-      console.log(`📊 进度更新(${progressType}): 显示${progressState.value.displayProgress.toFixed(1)}%, 计算${calculatedProgress.toFixed(1)}%, 阶段${stageInfo.minProgress}%-${stageInfo.maxProgress}%`)
-    }
   }
 
   /**
@@ -167,8 +161,6 @@ export function createProgressCalculator() {
     // 保存当前任务数据供页面进度计算使用
     progressState.value.currentTaskData = taskData
     
-    // 调试日志：显示后端返回的时间信息
-    console.log(`⏰ 后端时间信息: estimatedTotalTime="${taskData.estimatedTotalTime}", remainingTime="${taskData.remainingTime}", stageEstimatedTime=${taskData.stageEstimatedTime}ms, stageElapsedTime=${taskData.stageElapsedTime}ms`)
     
     // 启动平滑进度定时器（如果还没启动）
     if (!smoothTimer.value) {
@@ -194,7 +186,6 @@ export function createProgressCalculator() {
         const currentDocPages = isFirstDoc ? taskData.oldDocPages : taskData.newDocPages
         const completedPages = isFirstDoc ? taskData.completedPagesOld : taskData.completedPagesNew
         
-        console.log(`📄 OCR进度: ${taskData.currentStepDesc}, 已完成${completedPages}/${currentDocPages}页`)
       }
     }
   }

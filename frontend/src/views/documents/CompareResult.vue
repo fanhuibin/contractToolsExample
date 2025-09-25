@@ -170,12 +170,6 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
     const search = frame?.contentWindow?.location?.search || ''
     // 打印 viewer 加载的 file 参数与可用 API
     const params = new URLSearchParams(search)
-    // eslint-disable-next-line no-console
-    console.log(`[viewer:${side}] loaded`, {
-      viewerHref: frame?.contentWindow?.location?.href,
-      fileParam: params.get('file'),
-      hasPDFApp: !!w?.PDFViewerApplication,
-    })
     frameWin[side] = frame?.contentWindow
     
     // 隐藏PDF工具栏按钮
@@ -188,8 +182,6 @@ const onFrameLoad = (side: 'old' | 'new', ev: Event) => {
     if (side === 'new') loadedStatus.new = true
     if (loadedStatus.old && loadedStatus.new) viewerLoading.value = false
   } catch (e) {
-    // eslint-disable-next-line no-console
-    console.warn(`[viewer:${side}] onload inspect failed`, e)
   }
 }
 
@@ -289,7 +281,6 @@ const hidePDFToolbarButtons = (side: 'old' | 'new') => {
               `
             }
           } catch (e) {
-            console.warn('获取文档信息失败', e)
             toolbarLeft.innerHTML = `
               <span style="font-weight: 500; color: #333; font-size: 12px;">${fileName}</span>
             `
@@ -314,7 +305,6 @@ const hidePDFToolbarButtons = (side: 'old' | 'new') => {
         toolbarRight.style.minHeight = '32px'
       }
       
-      console.log(`[PDF:${side}] 工具栏按钮已隐藏，文档信息已添加`)
     }
     
     // 立即尝试隐藏
@@ -331,7 +321,6 @@ const hidePDFToolbarButtons = (side: 'old' | 'new') => {
     }
     
   } catch (e) {
-    console.warn(`[PDF:${side}] 隐藏工具栏按钮失败`, e)
   }
 }
 
@@ -366,14 +355,12 @@ const getFileNameFromSide = (side: 'old' | 'new'): string => {
           return cleanFileName
         }
       } catch (e) {
-        console.warn('解析PDF URL失败', e)
       }
     }
     
     // 最后的备用方案
     return side === 'old' ? '原文档' : '新文档'
   } catch (e) {
-    console.warn('获取文件名失败', e)
     return side === 'old' ? '原文档' : '新文档'
   }
 }
@@ -439,7 +426,6 @@ const setupSyncScrollListener = (side: 'old' | 'new') => {
         // 快速释放同步锁，避免卡顿
         setTimeout(() => { isScrollSyncing = false }, 0)
       } catch (e) {
-        console.warn('[syncScroll] delta sync failed', e)
         isScrollSyncing = false
       }
     }
@@ -447,7 +433,6 @@ const setupSyncScrollListener = (side: 'old' | 'new') => {
     viewerContainer.addEventListener('wheel', handleWheel, { passive: true })
     viewerContainer.addEventListener('scroll', handleScroll, { passive: true })
   } catch (e) {
-    console.warn(`[syncScroll] setup failed for ${side}`, e)
   }
 }
 
@@ -487,14 +472,12 @@ const syncScrollToOther = (fromSide: 'old' | 'new', toSide: 'old' | 'new') => {
     }, 50)
     
   } catch (e) {
-    console.warn('[syncScroll] sync failed', e)
     isScrollSyncing = false
   }
 }
 
 // 同轴滚动开关切换处理
 const onSyncScrollToggle = (enabled: boolean) => {
-  console.log(`[syncScroll] ${enabled ? '开启' : '关闭'}同轴滚动`)
   
   if (enabled) {
     // 重新设置监听器
@@ -533,23 +516,15 @@ const fetchResult = async (id: string) => {
 
 onMounted(() => {
   const id = route.params.id as string
-  // eslint-disable-next-line no-console
-  console.log('[CompareResult] mounted with id =', id)
   if (id) {
     if (id === 'pending') {
       // 占位状态：仅显示加载动画，等待真正的 id 替换
       viewerLoading.value = true
-      // eslint-disable-next-line no-console
-      console.log('[CompareResult] pending mode, waiting for real id')
     } else {
-      // eslint-disable-next-line no-console
-      console.log('[CompareResult] fetch result for id =', id)
       fetchResult(id)
     }
   } else {
     const lastId = sessionStorage.getItem('lastCompareId')
-    // eslint-disable-next-line no-console
-    console.log('[CompareResult] no id, lastId =', lastId)
     if (lastId) {
       router.replace({ name: 'CompareResult', params: { id: lastId } }).catch(() => {})
     }
@@ -557,8 +532,6 @@ onMounted(() => {
 })
 
 watch(() => route.params.id, (newId) => {
-  // eslint-disable-next-line no-console
-  console.log('[CompareResult] route id changed =>', newId)
   if (typeof newId === 'string' && newId) {
     if (newId !== 'pending') fetchResult(newId)
   }

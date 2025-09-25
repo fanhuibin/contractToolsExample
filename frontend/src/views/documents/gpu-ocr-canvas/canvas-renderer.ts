@@ -70,9 +70,6 @@ export async function renderPageToCanvas(
     ? `${baseUrl}/page-${pageIndex + 1}.png`
     : `/api/compare-pro/files/tasks/${taskId}/images/${mode}/page-${pageIndex + 1}.png`
   
-  console.log(`🔍 图片URL构建: baseUrl="${baseUrl}", taskId="${taskId}", mode="${mode}", 最终URL="${imageUrl}"`);
-  
-  console.log(`🎨 [渲染页面${pageIndex + 1}] ${mode}模式 - 收到${differences.length}个预处理差异项`)
   
   try {
     const image = await imageManager.loadImage(imageUrl)
@@ -110,7 +107,6 @@ export async function renderPageToCanvas(
         drawnCount++
       }
       
-      console.log(`🎨 [渲染页面${pageIndex + 1}] ${mode}模式 - 绘制了${drawnCount}个bbox`)
       
       // 绘制页码标识
       drawPageNumber(ctx, pageIndex + 1, 0, canvasWidth, scaledHeight, mode, imageInfo.pages.length)

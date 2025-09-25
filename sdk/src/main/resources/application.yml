@@ -129,6 +129,35 @@ zxcm:
       # 并发处理配置
       parallel-threads: 30  # 默认并发线程数，可根据服务器性能调整
       
+      # GPU OCR线程池配置
+      thread-pool:
+        # 核心线程数（始终保持活跃的线程数）
+        core-pool-size: 2
+        # 最大线程数（线程池允许的最大线程数）
+        max-pool-size: 30
+        # 任务队列容量（等待队列中最多能容纳的任务数）
+        queue-capacity: 500
+        # 线程空闲时间（秒）- 非核心线程的最大空闲时间
+        keep-alive-time: 60
+        # 线程名称前缀
+        thread-name-prefix: "GPU-OCR-Worker-"
+        # 是否允许核心线程超时
+        allow-core-thread-timeout: false
+        
+      # 任务处理配置
+      task:
+        # 队列繁忙阈值（当队列使用率超过此值时认为繁忙）
+        busy-threshold: 0.8
+        # 任务超时时间（分钟）
+        timeout-minutes: 30
+        
+      # 监控配置
+      monitoring:
+        # 是否启用详细日志
+        enable-detailed-logging: true
+        # 统计信息输出间隔（秒）
+        stats-interval-seconds: 300
+      
       # 幻觉校验配置
       hallucination-validation:
         enabled: true  # 是否启用RapidOCR幻觉校验
