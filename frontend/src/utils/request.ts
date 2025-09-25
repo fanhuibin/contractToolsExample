@@ -21,7 +21,12 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response) => {
-    const { data } = response
+    const { data, config } = response
+
+    // 如果是blob响应（如文件下载），直接返回response
+    if (config.responseType === 'blob') {
+      return response
+    }
 
     // 支持统一响应格式：{code: 200, message: "...", data: ...}
     if (data.code === 200) {

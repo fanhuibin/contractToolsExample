@@ -38,11 +38,7 @@
         </div>
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
-        <el-radio-group v-model="filterMode" size="small" class="filter-group">
-          <el-radio-button label="ALL">全部</el-radio-button>
-          <el-radio-button label="DELETE">仅删除</el-radio-button>
-          <el-radio-button label="INSERT">仅新增</el-radio-button>
-        </el-radio-group>
+       
         <el-button size="small" type="warning" @click="startDebug" :loading="debugLoading">调试模式</el-button>
         <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
@@ -154,53 +150,151 @@
         </div>
       </div>
 
-      <!-- 右侧结果列表 -->
-      <div class="result-list">
-        <div class="head">GPU OCR比对结果 <span class="em">{{ filteredResults.length }}</span> 处（删 {{ deleteCount }} / 增 {{ insertCount }}）</div>
-        <div class="list">
-          <div v-if="viewerLoading" class="list-loading">
-            <ConcentricLoader color="#1677ff" :size="52" :text="progressCalculator.progressState.value.loadingText" class="list-loader" />
-            <div class="loading-text-sub">{{ progressCalculator.estimatedTimeText.value }}</div>
+      <!-- 右侧差异列表 - 参考样式重构 -->
+      <div class="diff-list-container" :style="{ width: diffListWidth + 'px' }">
+        <!-- 拖拽手柄 -->
+        <div class="diff-list-drag-box" @mousedown="handleDragStart">
+          <svg width="32" height="86" viewBox="0 0 32 86" fill="none">
+            <g id="Group 261" filter="url(#filter0_d_2219_7163)">
+              <path id="矩形复制23" fill-rule="evenodd" clip-rule="evenodd" d="M30 2L30 80L9.3424 76.5571C7.41365 76.2356 6 74.5668 6 72.6115L6 9.38851C6 7.43315 7.41365 5.76439 9.3424 5.44293L30 2Z" fill="url(#paint0_linear_2219_7163)"></path>
+              <path id="矩形" fill-rule="evenodd" clip-rule="evenodd" d="M15.9129 40.6284C15.6923 40.827 15.6923 41.173 15.9129 41.3716L19.6655 44.749C19.9873 45.0386 20.5 44.8102 20.5 44.3773L20.5 37.6227C20.5 37.1898 19.9873 36.9614 19.6655 37.251L15.9129 40.6284Z" fill="#979797"></path>
+            </g>
+            <defs>
+              <filter id="filter0_d_2219_7163" x="0" y="0" width="32" height="86" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                <feFlood flood-opacity="0" result="BackgroundImageFix"></feFlood>
+                <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"></feColorMatrix>
+                <feOffset dx="-2" dy="2"></feOffset>
+                <feGaussianBlur stdDeviation="2"></feGaussianBlur>
+                <feComposite in2="hardAlpha" operator="out"></feComposite>
+                <feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.1 0"></feColorMatrix>
+                <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_2219_7163"></feBlend>
+                <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_2219_7163" result="shape"></feBlend>
+              </filter>
+              <linearGradient id="paint0_linear_2219_7163" x1="30" y1="41" x2="6" y2="41" gradientUnits="userSpaceOnUse">
+                <stop stop-color="white"></stop>
+                <stop offset="1" stop-color="#F0F0F0"></stop>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        
+        <!-- 差异列表头部 -->
+        <div class="diff-list-header">
+          <span class="diff-list-title">
+            差异列表
+          </span>
+          <span class="ignore-box" @click="toggleIgnoredView">
+            <span class="ant-badge ant-badge-not-a-wrapper">
+              <sup data-show="true" class="ant-scroll-number ant-badge-count" :title="ignoredCount.toString()">{{ ignoredCount }}</sup>
+            </span>
+            <span class="ignored-text" :class="{ active: showIgnoredView }">已忽略</span>
+          </span>
+        </div>
+        
+        <!-- 差异列表容器 -->
+        <div class="diff-list-container-inner">
+          
+          <!-- 状态选项卡 -->
+          <div class="diff-list-header-tabs">
+            <div class="tab-header-item" :class="{ active: filterMode === 'ALL' }" @click="filterMode = 'ALL'">
+              全部 {{ totalCount }}
+            </div>
+            <div class="tab-header-item" :class="{ active: filterMode === 'DELETE' }" @click="filterMode = 'DELETE'">
+              删除 {{ deleteCount }}
+            </div>
+            <div class="tab-header-item" :class="{ active: filterMode === 'INSERT' }" @click="filterMode = 'INSERT'">
+              新增 {{ insertCount }}
+            </div>
+            <div class="bottom-bar" :style="{ transform: `translateX(${getTabBarPosition()}%)` }"></div>
           </div>
-          <div v-else-if="filteredResults.length === 0" class="no-differences">
-            <div class="no-diff-icon">✓</div>
-            <div class="no-diff-title">未发现差异</div>
-            <div class="no-diff-desc">两个文档的内容完全一致，没有发现任何差异项。</div>
-          </div>
-          <div v-else>
-            <div
-              v-for="(r, i) in filteredResults"
-              :key="i"
-              class="result-item"
-              :class="{ active: indexInAll(i) === activeIndex }"
-              @click="jumpTo(indexInAll(i))"
-            >
-              <div class="headline">
-                <span class="index">{{ i + 1 }}</span>
-                <span class="badge" :class="r.operation === 'DELETE' ? 'del' : (r.operation === 'INSERT' ? 'ins' : 'mod')">
-                  {{ r.operation === 'DELETE' ? '删除' : '新增' }}
-                </span>
-              </div>
-              <div class="content">
-                <div class="text">
-                  <span
-                    v-html="getTruncatedText(
-                      r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []),
-                      r.operation === 'DELETE' ? (r.diffRangesA || []) : (r.diffRangesB || []),
-                      r.operation === 'DELETE' ? 'delete' : 'insert',
-                      isExpanded(indexInAll(i))
-                    )"
-                  ></span>
-                  <span 
-                    v-if="needsExpand(r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []))"
-                    class="toggle-btn" 
-                    @click.stop="toggleExpand(indexInAll(i))"
-                  >
-                    {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
-                  </span>
+          
+          <!-- 差异列表内容 -->
+          <div class="diff-list-content">
+            <div v-if="viewerLoading" class="list-loading">
+              <ConcentricLoader color="#1677ff" :size="52" :text="progressCalculator.progressState.value.loadingText" class="list-loader" />
+              <div class="loading-text-sub">{{ progressCalculator.estimatedTimeText.value }}</div>
+            </div>
+            <div v-else-if="filteredResults.length === 0" class="no-differences">
+              <div class="no-diff-icon">✓</div>
+              <div class="no-diff-title">未发现差异</div>
+              <div class="no-diff-desc">两个文档的内容完全一致，没有发现任何差异项。</div>
+            </div>
+            <div v-else>
+              <div
+                v-for="(r, i) in filteredResults"
+                :key="i"
+                class="diff-item"
+                :class="{ 
+                  active: indexInAll(i) === activeIndex,
+                  'diff_update': false, // 当前系统只有DELETE和INSERT操作
+                  'diff_delete': r.operation === 'DELETE',
+                  'diff_insert': r.operation === 'INSERT',
+                  'ignored': showIgnoredView
+                }"
+                @click="jumpTo(indexInAll(i))"
+              >
+                <div class="headline">
+                  <div class="headline-left">
+                    <span class="index">{{ i + 1 }}</span>
+                    <span class="badge" :class="r.operation === 'DELETE' ? 'del' : (r.operation === 'INSERT' ? 'ins' : 'mod')">
+                      {{ r.operation === 'DELETE' ? '删除' : '新增' }}
+                    </span>
+                  </div>
+                  <div class="headline-right">
+                    <el-button 
+                      size="small" 
+                      type="text" 
+                      class="ignore-btn"
+                      @click.stop="toggleIgnore(indexInAll(i))"
+                    >
+                      {{ showIgnoredView ? '取消忽略' : '忽略' }}
+                    </el-button>
+                  </div>
                 </div>
-                <div class="meta">
-                  第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+                <div class="diff-item-content">
+                  <div class="text">
+                    <span
+                      v-html="getTruncatedText(
+                        r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []),
+                        r.operation === 'DELETE' ? (r.diffRangesA || []) : (r.diffRangesB || []),
+                        r.operation === 'DELETE' ? 'delete' : 'insert',
+                        isExpanded(indexInAll(i))
+                      )"
+                    ></span>
+                    <span 
+                      v-if="needsExpand(r.operation === 'DELETE' ? (r.allTextA || []) : (r.allTextB || []))"
+                      class="toggle-btn" 
+                      @click.stop="toggleExpand(indexInAll(i))"
+                    >
+                      {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
+                    </span>
+                  </div>
+                  <div class="meta">
+                    第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+                  </div>
+                  <div class="diff-item-actions">
+                    <el-button 
+                      size="small" 
+                      type="text" 
+                      class="remark-btn"
+                      @click.stop="showRemarkDialog(indexInAll(i))"
+                    >
+                      <el-icon><EditPen /></el-icon>
+                      备注
+                    </el-button>
+                  </div>
+                  <!-- 备注显示框 -->
+                  <div v-if="hasRemark(indexInAll(i))" class="remark-display-box">
+                    <div class="remark-header" @click.stop="toggleRemarkExpand(indexInAll(i))">
+                      <span class="remark-title">备注信息</span>
+                      <el-icon class="expand-icon" :class="{ expanded: isRemarkExpanded(indexInAll(i)) }">
+                        <ArrowRight />
+                      </el-icon>
+                    </div>
+                    <div v-show="isRemarkExpanded(indexInAll(i))" class="remark-content-expanded">
+                      {{ getRemark(indexInAll(i)) }}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -208,6 +302,29 @@
         </div>
       </div>
     </div>
+
+    <!-- 备注对话框 -->
+    <el-dialog
+      v-model="showRemarkDialogVisible"
+      title="添加备注"
+      width="500px"
+      :close-on-click-modal="false"
+    >
+      <el-input
+        v-model="currentRemarkText"
+        type="textarea"
+        :rows="4"
+        placeholder="请输入备注内容..."
+        maxlength="500"
+        show-word-limit
+      />
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="cancelRemark">取消</el-button>
+          <el-button type="primary" @click="saveRemark">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -215,7 +332,7 @@
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, View, Close, EditPen } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
@@ -360,17 +477,61 @@ const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
+// 拖拽调整宽度相关状态
+const isDragging = ref(false)
+const diffListWidth = ref(500) // 默认宽度500px
+const dragStartX = ref(0)
+const dragStartWidth = ref(0)
+
+// 忽略和备注状态管理
+const ignoredSet = ref<Set<number>>(new Set())
+const remarksMap = ref<Map<number, string>>(new Map())
+const showRemarkDialogVisible = ref(false)
+const currentRemarkIndex = ref(-1)
+const currentRemarkText = ref('')
+const showIgnoredView = ref(false) // 控制是否显示已忽略视图
+const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状态
+
+
 
 // 计算属性
 const filteredResults = computed(() => {
-  if (filterMode.value === 'DELETE') return results.value.filter(r => r?.operation === 'DELETE')
-  if (filterMode.value === 'INSERT') return results.value.filter(r => r?.operation === 'INSERT')
-  return results.value
+  return results.value.filter((r, index) => {
+    // 首先根据忽略状态过滤
+    if (showIgnoredView.value) {
+      // 显示已忽略的项目
+      if (!ignoredSet.value.has(index)) return false
+    } else {
+      // 显示未忽略的项目
+      if (ignoredSet.value.has(index)) return false
+    }
+    
+    // 然后根据操作类型过滤
+    if (filterMode.value === 'DELETE') return r?.operation === 'DELETE'
+    if (filterMode.value === 'INSERT') return r?.operation === 'INSERT'
+    return true
+  })
 })
 
-const deleteCount = computed(() => results.value.filter(r => r?.operation === 'DELETE').length)
-const insertCount = computed(() => results.value.filter(r => r?.operation === 'INSERT').length)
+// 计算未忽略的删除项数量
+const deleteCount = computed(() => 
+  results.value.filter((r, index) => 
+    r?.operation === 'DELETE' && !ignoredSet.value.has(index)
+  ).length
+)
+
+// 计算未忽略的新增项数量  
+const insertCount = computed(() => 
+  results.value.filter((r, index) => 
+    r?.operation === 'INSERT' && !ignoredSet.value.has(index)
+  ).length
+)
+
+// 计算当前过滤后的总数
 const totalCount = computed(() => filteredResults.value.length)
+
+// 计算已忽略的总数
+const ignoredCount = computed(() => ignoredSet.value.size)
 
 const activeFilteredIndex = computed(() => {
   const current = results.value[activeIndex.value]
@@ -1150,6 +1311,153 @@ const escapeHtml = (text: string) => {
   return div.innerHTML
 }
 
+// 忽略和备注功能函数
+const isIgnored = (diffIndex: number) => ignoredSet.value.has(diffIndex)
+
+const toggleIgnore = (diffIndex: number) => {
+  if (ignoredSet.value.has(diffIndex)) {
+    ignoredSet.value.delete(diffIndex)
+  } else {
+    ignoredSet.value.add(diffIndex)
+  }
+  ignoredSet.value = new Set(ignoredSet.value)
+  
+  // 如果当前选中的项目被忽略了，重置选中状态
+  if (activeIndex.value === diffIndex && ignoredSet.value.has(diffIndex)) {
+    activeIndex.value = -1
+    selectedDiffIndex.value = null
+  }
+  
+  // 更新中间Canvas的差异图标和连接线
+  nextTick(() => {
+    if (middleCanvasInteraction) {
+      middleCanvasInteraction.updateProps({
+        filteredResults: filteredResults.value,
+        selectedDiffIndex: selectedDiffIndex.value
+      })
+      middleCanvasInteraction.render()
+    }
+  })
+  
+  // 可以在这里添加保存到后端的逻辑
+  console.log(`差异项 ${diffIndex + 1} ${isIgnored(diffIndex) ? '已忽略' : '已取消忽略'}`)
+}
+
+const hasRemark = (diffIndex: number) => remarksMap.value.has(diffIndex) && remarksMap.value.get(diffIndex)
+
+const getRemark = (diffIndex: number) => remarksMap.value.get(diffIndex) || ''
+
+const isRemarkExpanded = (diffIndex: number) => remarkExpandedSet.value.has(diffIndex)
+
+const toggleRemarkExpand = (diffIndex: number) => {
+  if (remarkExpandedSet.value.has(diffIndex)) {
+    remarkExpandedSet.value.delete(diffIndex)
+  } else {
+    remarkExpandedSet.value.add(diffIndex)
+  }
+  remarkExpandedSet.value = new Set(remarkExpandedSet.value)
+}
+
+const showRemarkDialog = (diffIndex: number) => {
+  currentRemarkIndex.value = diffIndex
+  currentRemarkText.value = remarksMap.value.get(diffIndex) || ''
+  showRemarkDialogVisible.value = true
+}
+
+const saveRemark = () => {
+  if (currentRemarkIndex.value >= 0) {
+    if (currentRemarkText.value.trim()) {
+      remarksMap.value.set(currentRemarkIndex.value, currentRemarkText.value.trim())
+      // 保存备注后自动展开显示
+      remarkExpandedSet.value.add(currentRemarkIndex.value)
+      remarkExpandedSet.value = new Set(remarkExpandedSet.value)
+    } else {
+      remarksMap.value.delete(currentRemarkIndex.value)
+      // 删除备注时也删除展开状态
+      remarkExpandedSet.value.delete(currentRemarkIndex.value)
+      remarkExpandedSet.value = new Set(remarkExpandedSet.value)
+    }
+    remarksMap.value = new Map(remarksMap.value)
+    
+    // 可以在这里添加保存到后端的逻辑
+    console.log(`差异项 ${currentRemarkIndex.value + 1} 备注已保存:`, currentRemarkText.value)
+  }
+  showRemarkDialogVisible.value = false
+}
+
+const cancelRemark = () => {
+  showRemarkDialogVisible.value = false
+  currentRemarkText.value = ''
+  currentRemarkIndex.value = -1
+}
+
+const toggleIgnoredView = () => {
+  showIgnoredView.value = !showIgnoredView.value
+  // 切换视图时重置活动索引和选中状态
+  activeIndex.value = -1
+  selectedDiffIndex.value = null
+  
+  // 更新中间Canvas的差异图标和连接线
+  nextTick(() => {
+    if (middleCanvasInteraction) {
+      middleCanvasInteraction.updateProps({
+        filteredResults: filteredResults.value,
+        selectedDiffIndex: selectedDiffIndex.value
+      })
+      middleCanvasInteraction.render()
+    }
+  })
+}
+
+
+
+// 新增方法：获取选项卡底部条位置
+const getTabBarPosition = () => {
+  if (filterMode.value === 'ALL') return 0
+  if (filterMode.value === 'DELETE') return 100 // 移动一个选项卡的宽度
+  if (filterMode.value === 'INSERT') return 200 // 移动两个选项卡的宽度
+  return 0
+}
+
+// 拖拽开始
+const handleDragStart = (event: MouseEvent) => {
+  isDragging.value = true
+  dragStartX.value = event.clientX
+  dragStartWidth.value = diffListWidth.value
+  
+  // 添加全局鼠标事件监听
+  document.addEventListener('mousemove', handleDragMove)
+  document.addEventListener('mouseup', handleDragEnd)
+  
+  // 防止选中文本和改善拖拽体验
+  event.preventDefault()
+  document.body.classList.add('dragging')
+}
+
+// 拖拽移动
+const handleDragMove = (event: MouseEvent) => {
+  if (!isDragging.value) return
+  
+  const deltaX = event.clientX - dragStartX.value
+  const newWidth = dragStartWidth.value - deltaX // 向左拖拽增加宽度，向右拖拽减少宽度
+  
+  // 限制宽度范围：最小300px，最大800px
+  const clampedWidth = Math.max(300, Math.min(800, newWidth))
+  diffListWidth.value = clampedWidth
+}
+
+// 拖拽结束
+const handleDragEnd = () => {
+  isDragging.value = false
+  
+  // 移除全局事件监听
+  document.removeEventListener('mousemove', handleDragMove)
+  document.removeEventListener('mouseup', handleDragEnd)
+  
+  // 恢复样式
+  document.body.classList.remove('dragging')
+}
+
 
 const checkStatusAndMaybePoll = async (id: string) => {
   try {
@@ -1243,17 +1551,62 @@ const fetchResult = async (id: string) => {
       // 保存完整的比对结果数据
       compareData.value = data
 
-      // 缓存比对结果数据到 sessionStorage，供任务历史页面使用
+      // 缓存比对结果数据到 localStorage，供任务历史页面使用（持久保存）
       try {
         const cacheKey = `gpu-ocr-canvas-result-${id}`
         const cacheData = {
           totalDiffCount: results.value.length,
+          deleteCount: results.value.filter(r => r?.operation === 'DELETE').length,
+          insertCount: results.value.filter(r => r?.operation === 'INSERT').length,
           oldFileName: data.oldFileName,
           newFileName: data.newFileName,
           taskId: id,
-          cachedAt: Date.now()
+          completedAt: new Date().toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }),
+          cachedAt: Date.now(),
+          // 如果后端有提供处理时长，保存它
+          processingTime: data.processingTime || null,
+          totalPages: Math.max(
+            oldImageInfo.value?.totalPages || 1,
+            newImageInfo.value?.totalPages || 1
+          )
         }
-        sessionStorage.setItem(cacheKey, JSON.stringify(cacheData))
+        
+        // 使用 localStorage 而不是 sessionStorage 以实现持久保存
+        localStorage.setItem(cacheKey, JSON.stringify(cacheData))
+        
+        // 同时保存一个任务列表索引，便于后续查询
+        const taskListKey = 'gpu-ocr-task-history'
+        const existingTasks = JSON.parse(localStorage.getItem(taskListKey) || '[]')
+        const taskIndex = {
+          taskId: id,
+          completedAt: cacheData.completedAt,
+          totalDiffCount: cacheData.totalDiffCount,
+          oldFileName: data.oldFileName,
+          newFileName: data.newFileName
+        }
+        
+        // 避免重复添加同一个任务
+        const existingIndex = existingTasks.findIndex((task: any) => task.taskId === id)
+        if (existingIndex >= 0) {
+          existingTasks[existingIndex] = taskIndex
+        } else {
+          existingTasks.unshift(taskIndex) // 新任务添加到开头
+        }
+        
+        // 限制保存的任务数量（最多保存100个）
+        if (existingTasks.length > 100) {
+          existingTasks.splice(100)
+        }
+        
+        localStorage.setItem(taskListKey, JSON.stringify(existingTasks))
+        
       } catch (error) {
         console.warn('缓存比对结果失败:', error)
       }
@@ -1417,6 +1770,11 @@ onUnmounted(() => {
   }
   // 移除窗口大小变化监听器
   window.removeEventListener('resize', handleResize)
+  
+  // 清理拖拽相关事件监听器
+  document.removeEventListener('mousemove', handleDragMove)
+  document.removeEventListener('mouseup', handleDragEnd)
+  document.body.classList.remove('dragging')
 })
 </script>
 
@@ -1527,8 +1885,7 @@ onUnmounted(() => {
 .compare-body { 
   flex: 1; 
   min-height: 0; 
-  display: grid; 
-  grid-template-columns: 1fr 320px; 
+  display: flex; 
   gap: 12px; 
   padding: 12px; 
   overflow: hidden; 
@@ -1541,6 +1898,7 @@ onUnmounted(() => {
   min-height: 0;
   overflow: hidden;
   position: relative; /* 为SVG覆盖层提供定位上下文 */
+  flex: 1; /* 占用剩余空间 */
 }
 
 /* SVG连接线覆盖层 */
@@ -1700,32 +2058,159 @@ onUnmounted(() => {
   justify-content: center !important;
 }
 
-.result-list { 
-  background: #fff; 
-  border: 1px solid #ebeef5; 
-  border-radius: 8px; 
-  display: flex; 
-  flex-direction: column; 
-  overflow: hidden; 
+/* 差异列表容器样式 - 参考设计 */
+.diff-list-container {
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0; /* 防止被压缩 */
+  min-width: 300px; /* 最小宽度 */
+  max-width: 800px; /* 最大宽度 */
 }
 
-.result-list .head { 
-  padding: 12px; 
-  border-bottom: 1px solid #ebeef5; 
-  font-weight: 600; 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between; 
+.diff-list-drag-box {
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  cursor: ew-resize;
+  transition: opacity 0.3s ease;
+  opacity: 0.6;
 }
 
-.result-list .head .em { 
-  color: #f56c6c; 
+.diff-list-drag-box:hover {
+  opacity: 1;
 }
 
-.result-list .list { 
-  flex: 1; 
-  overflow: auto; 
-  padding: 10px; 
+.diff-list-drag-box:active {
+  opacity: 1;
+}
+
+/* 拖拽状态下的全局样式 */
+body.dragging {
+  user-select: none !important;
+  cursor: ew-resize !important;
+}
+
+body.dragging * {
+  pointer-events: none !important;
+}
+
+.diff-list-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #ebeef5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fafafa;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden; /* 防止内容溢出 */
+}
+
+.diff-list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #303133;
+  font-size: 14px;
+  white-space: nowrap; /* 防止换行 */
+  overflow: hidden; /* 隐藏溢出 */
+  text-overflow: ellipsis; /* 溢出时显示省略号 */
+  flex-shrink: 1; /* 允许收缩 */
+  min-width: 0; /* 允许收缩到0 */
+}
+
+
+.ignore-box {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #909399;
+  white-space: nowrap; /* 防止换行 */
+  flex-shrink: 0; /* 不允许收缩，保持固定大小 */
+  cursor: pointer; /* 添加鼠标指针 */
+  transition: color 0.3s;
+}
+
+.ignore-box:hover {
+  color: #1890ff;
+}
+
+.ignored-text.active {
+  color: #1890ff;
+  font-weight: 600;
+}
+
+
+.diff-list-container-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+
+.diff-list-header-tabs {
+  display: flex;
+  border-bottom: 1px solid #ebeef5;
+  background: #fff;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden; /* 防止内容溢出 */
+}
+
+.tab-header-item {
+  flex: 1;
+  padding: 12px 8px;
+  text-align: center;
+  font-size: 14px;
+  color: #606266;
+  cursor: pointer;
+  transition: color 0.3s;
+  border-right: 1px solid #ebeef5;
+  white-space: nowrap; /* 防止文本换行 */
+  overflow: hidden; /* 隐藏溢出 */
+  text-overflow: ellipsis; /* 溢出时显示省略号 */
+  min-width: 0; /* 允许 flex 项目收缩 */
+}
+
+.tab-header-item:last-child {
+  border-right: none;
+}
+
+.tab-header-item.active {
+  color: #1890ff;
+  font-weight: 600;
+}
+
+.tab-header-item:hover {
+  color: #40a9ff;
+}
+
+.bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 33.33%; /* 调整为3个选项卡的宽度 */
+  height: 2px;
+  background: #1890ff;
+  transition: transform 0.3s;
+  transform-origin: left center; /* 设置变换原点 */
+}
+
+.diff-list-content {
+  flex: 1;
+  overflow: auto;
+  padding: 12px;
 }
 
 .list-loading { 
@@ -1752,85 +2237,241 @@ onUnmounted(() => {
   margin-top: 8px; 
 }
 
-.result-item { 
-  border: 1px solid #ebeef5; 
-  border-radius: 8px; 
-  padding: 10px; 
-  margin-bottom: 10px; 
-  cursor: pointer; 
-  background: #fff; 
-  transition: box-shadow .2s ease, border-color .2s ease; 
+/* 差异项样式 - 参考设计 */
+.diff-item {
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  background: #fff;
+  transition: all 0.3s;
 }
 
-.result-item:hover { 
-  box-shadow: 0 4px 16px rgba(0,0,0,.06); 
-  border-color: #dcdfe6; 
+.diff-item:hover {
+  box-shadow: 0 4px 16px rgba(0,0,0,.06);
+  border-color: #dcdfe6;
 }
 
-.result-item.active { 
-  border-color: #409eff; 
-  box-shadow: 0 0 0 2px rgba(64,158,255,.15); 
+.diff-item.active {
+  border-color: #1890ff;
+  box-shadow: 0 0 0 2px rgba(24,144,255,.15);
 }
 
-.result-item .headline { 
-  display: flex; 
-  align-items: center; 
-  gap: 8px; 
-  margin-bottom: 6px; 
+.diff-item.diff_update {
+  border-left: 4px solid #ff9500;
 }
 
-.result-item .index { 
-  width: 24px; 
-  height: 24px; 
-  border-radius: 50%; 
-  background: #f2f3f5; 
-  color: #606266; 
-  display: inline-flex; 
-  align-items: center; 
-  justify-content: center; 
-  font-size: 12px; 
-  font-weight: 600; 
+.diff-item.diff_delete {
+  border-left: 4px solid #ff4d4f;
 }
 
-.result-item .badge { 
-  display: inline-block; 
-  min-width: 22px; 
-  text-align: center; 
-  padding: 0 6px; 
-  height: 22px; 
-  line-height: 22px; 
-  border-radius: 6px; 
-  font-size: 12px; 
-  color: #fff; 
+.diff-item.diff_insert {
+  border-left: 4px solid #52c41a;
 }
 
-.result-item .badge.del { 
-  background: #F56C6C; 
+.diff-item .headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
 }
 
-.result-item .badge.ins { 
-  background: #67C23A; 
+.diff-item .headline-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.result-item .badge.mod { 
-  background: #E6A23C; 
+.diff-item .headline-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-/* 差异文本高亮样式 */
+.diff-item .index {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f2f3f5;
+  color: #606266;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.diff-item .badge {
+  display: inline-block;
+  min-width: 22px;
+  text-align: center;
+  padding: 0 6px;
+  height: 22px;
+  line-height: 22px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #fff;
+}
+
+.diff-item .badge.del {
+  background: #F56C6C;
+}
+
+.diff-item .badge.ins {
+  background: #67C23A;
+}
+
+.diff-item .badge.mod {
+  background: #E6A23C;
+}
+
+.diff-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.diff-item-content .text {
+  color: #303133;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.diff-item-content .text .toggle-btn {
+  color: #409eff;
+  cursor: pointer;
+  text-decoration: underline;
+  margin-left: 4px;
+  font-size: 12px;
+}
+
+.diff-item-content .text .toggle-btn:hover {
+  color: #66b1ff;
+}
+
+.diff-item-content .meta {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 忽略按钮样式 */
+.ignore-btn {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  color: #ff4d4f !important;
+  opacity: 0.8;
+  transition: all 0.3s;
+}
+
+.ignore-btn:hover {
+  opacity: 1;
+  background-color: #fff2f0 !important;
+}
+
+/* 差异项操作区域样式 */
+.diff-item-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f0f2f5;
+}
+
+.remark-btn {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  color: #1890ff !important;
+  flex-shrink: 0;
+}
+
+.remark-btn:hover {
+  background-color: #f0f8ff !important;
+}
+
+/* 备注显示框样式 */
+.remark-display-box {
+  margin-top: 8px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fafafa;
+  overflow: hidden;
+}
+
+.remark-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f0f2f5;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.remark-header:hover {
+  background: #e6f7ff;
+}
+
+.remark-title {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.expand-icon {
+  font-size: 12px;
+  color: #999;
+  transition: transform 0.3s;
+}
+
+.expand-icon.expanded {
+  transform: rotate(90deg);
+}
+
+.remark-content-expanded {
+  padding: 12px;
+  background: #fff;
+  font-size: 13px;
+  color: #333;
+  line-height: 1.5;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* 已忽略的差异项样式（在已忽略视图中显示时使用） */
+.diff-item.ignored {
+  background-color: #fafafa !important;
+  border-color: #d9d9d9 !important;
+}
+
+.diff-item.ignored .diff-item-content {
+  opacity: 0.8;
+}
+
+/* 差异文本高亮样式 - 参考设计 */
 :deep(.diff-insert) {
-  background-color: #d4edda;
-  color: #155724;
-  padding: 1px 2px;
-  border-radius: 2px;
-  font-weight: bold;
+  background-color: #fff2e8;
+  color: #ff9500;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 600;
+  display: inline;
 }
 
 :deep(.diff-delete) {
-  background-color: #f8d7da;
-  color: #721c24;
-  padding: 1px 2px;
-  border-radius: 2px;
-  font-weight: bold;
+  background-color: #fff2e8;
+  color: #ff9500;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 600;
+  display: inline;
   text-decoration: line-through;
 }
 
