@@ -1,0 +1,14 @@
+rules:
+  - code: company_seal
+    type: normal
+    insertValue: 公章
+    keywords:
+      - "SEAL_COMPANY_SEAL_"
+  - code: finance_seal
+    type: normal
+    insertValue: 财务专用章
+    keywords:
+      - "SEAL_FINANCE_SEAL_"
+  - code: company_seal
+    type: riding
+    image: "stamp.png"

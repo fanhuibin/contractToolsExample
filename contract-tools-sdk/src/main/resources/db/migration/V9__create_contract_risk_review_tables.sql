@@ -1,0 +1,75 @@
+-- Risk library tables for contract intelligent review
+
+CREATE TABLE IF NOT EXISTS review_clause_type (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  clause_code VARCHAR(64) NOT NULL UNIQUE,
+  clause_name VARCHAR(128) NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  remark VARCHAR(255),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS review_point (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  clause_type_id BIGINT NOT NULL,
+  point_code VARCHAR(64) NOT NULL UNIQUE,
+  point_name VARCHAR(128) NOT NULL,
+  algorithm_type VARCHAR(128) NOT NULL,
+  description TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_point_clause (clause_type_id)
+);
+
+CREATE TABLE IF NOT EXISTS review_prompt (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  point_id BIGINT NOT NULL,
+  prompt_key VARCHAR(128) NOT NULL UNIQUE,
+  name VARCHAR(128) NOT NULL,
+  message TEXT NOT NULL,
+  status_type ENUM('INFO','WARNING','ERROR') NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_prompt_point (point_id)
+);
+
+CREATE TABLE IF NOT EXISTS review_action (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  prompt_id BIGINT NOT NULL,
+  action_id VARCHAR(64) NOT NULL,
+  action_type ENUM('COPY','REPLACE','LINK') NOT NULL,
+  action_message TEXT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  enabled TINYINT(1) NOT NULL DEFAULT 1,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_action_prompt (prompt_id)
+);
+
+CREATE TABLE IF NOT EXISTS review_profile (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  profile_code VARCHAR(64) NOT NULL UNIQUE,
+  profile_name VARCHAR(128) NOT NULL,
+  is_default TINYINT(1) NOT NULL DEFAULT 0,
+  description VARCHAR(255),
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS review_profile_item (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  profile_id BIGINT NOT NULL,
+  clause_type_id BIGINT NOT NULL,
+  point_id BIGINT NOT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uq_profile_point (profile_id, point_id),
+  INDEX idx_profile_item (profile_id, clause_type_id, sort_order)
+);
+
+

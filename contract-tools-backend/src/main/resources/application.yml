@@ -1,0 +1,48 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: contract-tools-backend
+  
+  # 数据库配置（可选，如果不使用数据库可以注释掉）
+  # datasource:
+  #   driver-class-name: com.mysql.cj.jdbc.Driver
+  #   url: jdbc:mysql://localhost:3306/contract_tools?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+  #   username: root
+  #   password: password
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+# 授权模块配置（可选）
+zhaoxin:
+  auth:
+    enabled: false  # 设置为true启用授权功能
+    jwt:
+      secret: your-secret-key-here
+      expiration: 86400  # 24小时
+      refresh-expiration: 604800  # 7天
+
+# 日志配置
+logging:
+  level:
+    com.zhaoxinms: DEBUG
+    root: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# 监控端点配置
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
