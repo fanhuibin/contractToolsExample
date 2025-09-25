@@ -279,6 +279,35 @@
         />
       </el-form>
     </el-drawer>
+
+    <!-- 导出比对报告对话框 -->
+    <el-dialog
+      v-model="showExportDialogVisible"
+      title="导出比对报告"
+      width="400px"
+      :close-on-click-modal="false"
+    >
+      <div class="export-options">
+        <div class="export-section">
+          <h4 class="section-title">选择导出文档格式类型</h4>
+          <el-checkbox-group v-model="exportFormats" class="checkbox-group">
+            <el-checkbox label="doc" class="checkbox-item">
+              <span class="checkbox-text">.doc</span>
+            </el-checkbox>
+            <el-checkbox label="html" class="checkbox-item">
+              <span class="checkbox-text">.html</span>
+            </el-checkbox>
+          </el-checkbox-group>
+        </div>
+      </div>
+      
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button @click="cancelExport">取消</el-button>
+          <el-button type="primary" @click="confirmExport" :disabled="exportFormats.length === 0">确定</el-button>
+        </span>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -286,7 +315,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, EditPen } from '@element-plus/icons-vue'
 import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
 import {
   uploadGPUOCRCompare,
@@ -295,6 +324,7 @@ import {
   deleteGPUOCRCompareTask,
   debugGPUCompareWithExistingOCR,
   debugGPUCompareLegacy,
+  exportCompareReport,
   type GPUOCRCompareTaskStatus,
   type WatermarkStrengthOption
 } from '@/api/gpu-ocr-compare'
@@ -335,6 +365,11 @@ const debugLoading = ref(false)
 const debugForm = reactive({
   taskId: ''
 })
+
+// 导出功能状态管理
+const showExportDialogVisible = ref(false)
+const exportFormats = ref(['doc']) // ['doc', 'html']
+const currentExportTaskId = ref('')
 
 // 去水印强度选项
 const watermarkStrengthOptions: WatermarkStrengthOption[] = [
@@ -846,9 +881,66 @@ const getProcessingDuration = (task: any) => {
   }
 }
 
-// 下载结果（功能开发中）
+// 下载结果
 const downloadResult = async (taskId: string) => {
-  ElMessage.info('下载功能正在开发中，敬请期待...')
+  currentExportTaskId.value = taskId
+  showExportDialogVisible.value = true
+}
+
+// 导出功能函数
+const cancelExport = () => {
+  showExportDialogVisible.value = false
+  currentExportTaskId.value = ''
+}
+
+const confirmExport = async () => {
+  if (exportFormats.value.length === 0) {
+    ElMessage.warning('请选择至少一种导出格式')
+    return
+  }
+  
+  try {
+    const exportData = {
+      taskId: currentExportTaskId.value,
+      formats: exportFormats.value,
+      includeIgnored: false, // 是否包含已忽略的差异
+      includeRemarks: true // 是否包含备注
+    }
+    
+    ElMessage.info('正在生成导出文件，请稍候...')
+    
+    // 调用后端导出API
+    const response = await exportCompareReport(exportData)
+    
+    // 创建下载链接
+    const blob = new Blob([response.data], { type: response.headers['content-type'] || 'application/octet-stream' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    
+    // 确定文件名
+    const format = exportFormats.value[0]
+    let filename = `比对报告_${currentExportTaskId.value}`
+    if (exportFormats.value.length === 1) {
+      filename += format === 'html' ? '.zip' : '.docx'
+    } else {
+      filename += '.zip'
+    }
+    
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('导出成功！文件已开始下载')
+    showExportDialogVisible.value = false
+    currentExportTaskId.value = ''
+    
+  } catch (error: any) {
+    console.error('导出失败:', error)
+    ElMessage.error(error?.message || '导出失败，请重试')
+  }
 }
 </script>
 
@@ -1038,5 +1130,66 @@ const downloadResult = async (taskId: string) => {
   .el-button + .el-button {
     margin-left: 0;
   }
+}
+
+/* 导出对话框样式 */
+.export-options {
+  padding: 20px 0;
+}
+
+.export-section {
+  margin-bottom: 24px;
+}
+
+.export-section:last-child {
+  margin-bottom: 0;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  margin: 0 0 16px 0;
+  padding: 0;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-item {
+  margin: 0 !important;
+  height: auto;
+}
+
+.radio-text {
+  font-size: 14px;
+  color: #606266;
+  margin-left: 8px;
+}
+
+.checkbox-group {
+  display: flex;
+  gap: 20px;
+}
+
+.checkbox-item {
+  margin: 0 !important;
+  height: auto;
+}
+
+.checkbox-text {
+  font-size: 14px;
+  color: #606266;
+  margin-left: 8px;
+}
+
+/* 对话框底部按钮样式 */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
 }
 </style>

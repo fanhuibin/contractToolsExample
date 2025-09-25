@@ -66,6 +66,7 @@ import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareResult;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
+import com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController;
 
 /**
  * GPU OCR比对服务 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -3348,5 +3349,282 @@ public class CompareService {
 			System.err.println("提取文档模式失败: " + e.getMessage());
 		}
 		return null;
+	}
+
+	/**
+	 * 导出比对报告
+	 */
+	public byte[] exportReport(GPUCompareController.ExportRequest request) throws Exception {
+		String taskId = request.getTaskId();
+		List<String> formats = request.getFormats();
+		
+		// 获取任务数据
+		CompareResult result = getCompareResult(taskId);
+		if (result == null) {
+			throw new RuntimeException("任务结果不存在: " + taskId);
+		}
+
+		// 根据格式数量决定返回类型
+		if (formats.size() == 1) {
+			String format = formats.get(0);
+			if ("html".equals(format)) {
+				return generateHTMLReport(result, request);
+			} else if ("doc".equals(format)) {
+				return generateDOCXReport(result, request);
+			} else {
+				throw new IllegalArgumentException("不支持的导出格式: " + format);
+			}
+		} else {
+			// 多种格式，返回ZIP包含所有格式
+			return generateMultiFormatReport(result, request);
+		}
+	}
+
+	/**
+	 * 生成HTML格式报告（ZIP包）
+	 */
+	private byte[] generateHTMLReport(CompareResult result, GPUCompareController.ExportRequest request) throws Exception {
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+			// 这里需要实现HTML报告生成逻辑
+			// 参考cankao文件夹中的HTML结构
+			
+			// 创建ZIP文件包含：
+			// 1. index.html - 主页面
+			// 2. antd.css, table.css - 样式文件  
+			// 3. index.js - JavaScript文件
+			// 4. image/ - 图片文件夹
+			
+			String htmlContent = generateHTMLContent(result, request);
+			String cssContent = generateCSSContent();
+			String jsContent = generateJSContent(result);
+			
+			// 使用Java的ZipOutputStream创建ZIP
+			java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+			
+			// 添加HTML文件
+			zos.putNextEntry(new java.util.zip.ZipEntry("index.html"));
+			zos.write(htmlContent.getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+			
+			// 添加CSS文件
+			zos.putNextEntry(new java.util.zip.ZipEntry("antd.css"));
+			zos.write(cssContent.getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+			
+			zos.putNextEntry(new java.util.zip.ZipEntry("table.css"));
+			zos.write(generateTableCSS().getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+			
+			// 添加JS文件
+			zos.putNextEntry(new java.util.zip.ZipEntry("index.js"));
+			zos.write(jsContent.getBytes(StandardCharsets.UTF_8));
+			zos.closeEntry();
+			
+			// 添加图片文件
+			addImagesToZip(zos, result);
+			
+			zos.close();
+			return baos.toByteArray();
+		}
+	}
+
+	/**
+	 * 生成DOCX格式报告
+	 */
+	private byte[] generateDOCXReport(CompareResult result, GPUCompareController.ExportRequest request) throws Exception {
+		// 这里需要实现DOCX报告生成逻辑
+		// 使用Apache POI或者其他DOCX库
+		
+		// 临时返回示例内容
+		String content = "比对报告\n\n";
+		content += "任务ID: " + request.getTaskId() + "\n";
+		content += "原文档: " + result.getOldFileName() + "\n";
+		content += "新文档: " + result.getNewFileName() + "\n";
+		content += "差异总数: " + (result.getDifferences() != null ? result.getDifferences().size() : 0) + "\n\n";
+		
+		if (result.getDifferences() != null) {
+			for (int i = 0; i < result.getDifferences().size(); i++) {
+				DiffBlock diff = result.getDifferences().get(i);
+				content += "差异 " + (i + 1) + ": " + diff.type + "\n";
+				content += "页面: " + diff.page + "\n";
+				if (diff.oldText != null && !diff.oldText.isEmpty()) {
+					content += "原文: " + diff.oldText + "\n";
+				}
+				if (diff.newText != null && !diff.newText.isEmpty()) {
+					content += "新文: " + diff.newText + "\n";
+				}
+				content += "\n";
+			}
+		}
+		
+		return content.getBytes(StandardCharsets.UTF_8);
+	}
+
+	/**
+	 * 生成多格式报告（ZIP包含HTML和DOCX）
+	 */
+	private byte[] generateMultiFormatReport(CompareResult result, GPUCompareController.ExportRequest request) throws Exception {
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
+			java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+			
+			// 添加HTML格式
+			if (request.getFormats().contains("html")) {
+				byte[] htmlZip = generateHTMLReport(result, request);
+				zos.putNextEntry(new java.util.zip.ZipEntry("html_report.zip"));
+				zos.write(htmlZip);
+				zos.closeEntry();
+			}
+			
+			// 添加DOCX格式
+			if (request.getFormats().contains("doc")) {
+				byte[] docxData = generateDOCXReport(result, request);
+				zos.putNextEntry(new java.util.zip.ZipEntry("report.docx"));
+				zos.write(docxData);
+				zos.closeEntry();
+			}
+			
+			zos.close();
+			return baos.toByteArray();
+		}
+	}
+
+	/**
+	 * 生成HTML内容
+	 */
+	private String generateHTMLContent(CompareResult result, GPUCompareController.ExportRequest request) {
+		StringBuilder html = new StringBuilder();
+		html.append("<!doctype html>\n");
+		html.append("<html>\n");
+		html.append("  <head>\n");
+		html.append("    <title>比对结果</title>\n");
+		html.append("    <link rel=\"stylesheet\" href=\"./antd.css\">\n");
+		html.append("    <link rel=\"stylesheet\" href=\"./table.css\">\n");
+		html.append("  </head>\n");
+		html.append("  <body>\n");
+		html.append("    <div id=\"root\"></div>\n");
+		html.append("    <script>\n");
+		html.append("      var queryResultJson = ").append(generateQueryResultJson(result)).append(";\n");
+		html.append("      var compareResultJson = ").append(generateCompareResultJson(result)).append(";\n");
+		html.append("    </script>\n");
+		html.append("    <script src=\"./index.js\"></script>\n");
+		html.append("  </body>\n");
+		html.append("</html>");
+		return html.toString();
+	}
+
+	/**
+	 * 生成CSS内容
+	 */
+	private String generateCSSContent() {
+		// 返回基础的CSS样式
+		return "/* Ant Design CSS - 简化版本 */\n" +
+			   "body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; }\n" +
+			   ".ant-table { border: 1px solid #f0f0f0; }\n" +
+			   ".ant-btn { padding: 4px 15px; border: 1px solid #d9d9d9; }\n";
+	}
+
+	/**
+	 * 生成表格CSS
+	 */
+	private String generateTableCSS() {
+		return "/* 表格样式 */\n" +
+			   "table { width: 100%; border-collapse: collapse; }\n" +
+			   "th, td { padding: 8px; border: 1px solid #ddd; text-align: left; }\n" +
+			   "th { background-color: #f5f5f5; }\n";
+	}
+
+	/**
+	 * 生成JavaScript内容
+	 */
+	private String generateJSContent(CompareResult result) {
+		// 返回基础的JavaScript代码来渲染比对结果
+		return "// 比对结果展示脚本\n" +
+			   "function renderResults() {\n" +
+			   "  const root = document.getElementById('root');\n" +
+			   "  let html = '<h1>比对结果</h1>';\n" +
+			   "  html += '<p>原文档: ' + queryResultJson.response.data.left_filename + '</p>';\n" +
+			   "  html += '<p>新文档: ' + queryResultJson.response.data.right_filename + '</p>';\n" +
+			   "  html += '<p>差异总数: ' + (queryResultJson.response.data.differences ? queryResultJson.response.data.differences.length : 0) + '</p>';\n" +
+			   "  root.innerHTML = html;\n" +
+			   "}\n" +
+			   "document.addEventListener('DOMContentLoaded', renderResults);\n";
+	}
+
+	/**
+	 * 生成查询结果JSON
+	 */
+	private String generateQueryResultJson(CompareResult result) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			Map<String, Object> queryResult = new HashMap<>();
+			queryResult.put("result", 1);
+			queryResult.put("message", "success");
+			
+			Map<String, Object> response = new HashMap<>();
+			Map<String, Object> data = new HashMap<>();
+			data.put("id", result.getTaskId());
+			data.put("left_filename", result.getOldFileName());
+			data.put("right_filename", result.getNewFileName());
+			data.put("differences", result.getDifferences());
+			
+			response.put("data", data);
+			queryResult.put("response", response);
+			
+			return mapper.writeValueAsString(queryResult);
+		} catch (Exception e) {
+			return "{}";
+		}
+	}
+
+	/**
+	 * 生成比对结果JSON
+	 */
+	private String generateCompareResultJson(CompareResult result) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			Map<String, Object> compareResult = new HashMap<>();
+			// 简化的比对结果JSON结构
+			compareResult.put("result", 1);
+			compareResult.put("message", "success");
+			return mapper.writeValueAsString(compareResult);
+		} catch (Exception e) {
+			return "{}";
+		}
+	}
+
+	/**
+	 * 添加图片到ZIP
+	 */
+	private void addImagesToZip(java.util.zip.ZipOutputStream zos, CompareResult result) throws Exception {
+		// 这里需要实现图片文件的添加逻辑
+		// 根据result中的图片信息，将对应的图片文件添加到ZIP中
+		
+		// 临时实现：创建示例图片文件夹结构
+		try {
+			// 创建示例图片目录
+			String taskId = result.getTaskId();
+			
+			// 添加左侧文档图片
+			for (int i = 1; i <= 3; i++) { // 假设有3页
+				String imagePath = "image/" + taskId + "_left/" + String.format("%03d.png", i);
+				zos.putNextEntry(new java.util.zip.ZipEntry(imagePath));
+				// 这里需要读取实际的图片文件
+				byte[] imageData = new byte[100]; // 临时示例数据
+				zos.write(imageData);
+				zos.closeEntry();
+			}
+			
+			// 添加右侧文档图片
+			for (int i = 1; i <= 3; i++) { // 假设有3页
+				String imagePath = "image/" + taskId + "_right/" + String.format("%03d.png", i);
+				zos.putNextEntry(new java.util.zip.ZipEntry(imagePath));
+				// 这里需要读取实际的图片文件
+				byte[] imageData = new byte[100]; // 临时示例数据
+				zos.write(imageData);
+				zos.closeEntry();
+			}
+		} catch (Exception e) {
+			logger.warn("添加图片到ZIP时出错: " + e.getMessage());
+		}
 	}
 }

@@ -225,3 +225,18 @@ export function getGPUOCRCompareTaskSummary(taskId: string) {
     method: 'get'
   })
 }
+
+// 导出比对报告
+export function exportCompareReport(exportData: {
+  taskId: string
+  formats: string[]
+  includeIgnored?: boolean
+  includeRemarks?: boolean
+}) {
+  return request({
+    url: '/compare-pro/export-report',
+    method: 'post',
+    data: exportData,
+    responseType: 'blob' // 重要：设置响应类型为blob以处理二进制数据
+  })
+}
