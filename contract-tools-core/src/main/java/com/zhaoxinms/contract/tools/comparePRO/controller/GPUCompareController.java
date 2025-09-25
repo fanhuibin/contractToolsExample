@@ -17,6 +17,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
@@ -33,6 +37,8 @@ import com.zhaoxinms.contract.tools.comparePRO.util.FileDownloadUtil;
 @RestController
 @RequestMapping("/api/compare-pro")
 public class GPUCompareController {
+
+    private static final Logger log = LoggerFactory.getLogger(GPUCompareController.class);
 
     @Autowired
     private CompareService compareService;
@@ -506,5 +512,105 @@ public class GPUCompareController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Result.error("调整并发线程数失败: " + e.getMessage()));
         }
+    }
+
+    /**
+     * 导出比对报告
+     */
+    @PostMapping("/export-report")
+    public ResponseEntity<?> exportReport(@RequestBody ExportRequest request) {
+        try {
+            // 验证请求参数
+            if (request.getTaskId() == null || request.getTaskId().trim().isEmpty()) {
+                return ResponseEntity.badRequest().body(Result.error("任务ID不能为空"));
+            }
+            
+            if (request.getFormats() == null || request.getFormats().isEmpty()) {
+                return ResponseEntity.badRequest().body(Result.error("导出格式不能为空"));
+            }
+
+            // 转换为service层DTO
+            com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest serviceRequest = convertToServiceRequest(request);
+            
+            // 调用导出服务
+            byte[] exportData = compareService.exportReport(serviceRequest);
+            
+            // 确定文件名和Content-Type
+            String filename;
+            String contentType;
+            
+            if (request.getFormats().size() == 1) {
+                String format = request.getFormats().get(0);
+                if ("html".equals(format)) {
+                    filename = "比对报告_" + request.getTaskId() + ".zip";
+                    contentType = "application/zip";
+                } else if ("doc".equals(format)) {
+                    filename = "比对报告_" + request.getTaskId() + ".docx";
+                    contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                } else {
+                    return ResponseEntity.badRequest().body(Result.error("不支持的导出格式: " + format));
+                }
+            } else {
+                // 多种格式，返回ZIP
+                filename = "比对报告_" + request.getTaskId() + ".zip";
+                contentType = "application/zip";
+            }
+
+            // 对文件名进行URL编码以支持中文
+            String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replaceAll("\\+", "%20");
+            
+            return ResponseEntity.ok()
+                    .header("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFilename)
+                    .header("Content-Type", contentType)
+                    .body(exportData);
+
+        } catch (Exception e) {
+            log.error("导出比对报告失败", e);
+            return ResponseEntity.internalServerError().body(Result.error("导出失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 导出请求DTO
+     */
+    public static class ExportRequest {
+        private String taskId;
+        private List<String> formats;
+        private boolean includeIgnored = false;
+        private boolean includeRemarks = true;
+
+        // Getters and setters
+        public String getTaskId() { return taskId; }
+        public void setTaskId(String taskId) { this.taskId = taskId; }
+        public List<String> getFormats() { return formats; }
+        public void setFormats(List<String> formats) { this.formats = formats; }
+        public boolean isIncludeIgnored() { return includeIgnored; }
+        public void setIncludeIgnored(boolean includeIgnored) { this.includeIgnored = includeIgnored; }
+        public boolean isIncludeRemarks() { return includeRemarks; }
+        public void setIncludeRemarks(boolean includeRemarks) { this.includeRemarks = includeRemarks; }
+    }
+    
+    /**
+     * 将Controller层DTO转换为Service层DTO
+     */
+    private com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest convertToServiceRequest(ExportRequest controllerRequest) {
+        com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest serviceRequest = 
+            new com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest();
+        
+        serviceRequest.setTaskId(controllerRequest.getTaskId());
+        serviceRequest.setFormats(controllerRequest.getFormats());
+        serviceRequest.setIncludeImages(true); // 默认包含图片
+        serviceRequest.setTitle("比对报告"); // 默认标题
+        
+        // 设置导出选项
+        com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest.ExportOptions options = 
+            new com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest.ExportOptions();
+        options.setIncludeStatistics(true);
+        options.setIncludeDetailedDiffs(!controllerRequest.isIncludeIgnored()); // 取反，因为语义相反
+        options.setIncludePagePreview(controllerRequest.isIncludeRemarks());
+        
+        serviceRequest.setOptions(options);
+        
+        return serviceRequest;
     }
 }
