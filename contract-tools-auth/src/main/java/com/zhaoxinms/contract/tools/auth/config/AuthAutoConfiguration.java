@@ -16,4 +16,5 @@ import org.springframework.context.annotation.Configuration;
 public class AuthAutoConfiguration {
     
     // 授权模块的自动配置将在此处定义
+    // 注意：Spring Security的依赖已设置为optional，只有显式启用才会加载
 }

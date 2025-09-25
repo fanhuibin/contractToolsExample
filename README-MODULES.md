@@ -25,10 +25,12 @@ zhaoxin-contract-tool-set/
 - **打包方式**：普通jar包
 
 ### 2. contract-tools-auth（授权管理模块）
-- **用途**：提供用户认证、权限管理、JWT令牌等授权相关功能
+- **用途**：提供基础的授权码检查和功能授权管理
 - **特点**：
   - 可选模块，通过配置启用/禁用
-  - 支持Spring Security集成
+  - 不依赖Spring Security，轻量级实现
+  - 支持功能级别的授权检查
+  - 提供注解式授权验证（@RequireFeature）
   - 自动配置，零侵入集成
 - **打包方式**：普通jar包
 
@@ -159,16 +161,41 @@ mvn clean install
 
 ### 授权模块配置
 
+**默认情况下授权模块是禁用的**，系统会跳过所有授权检查。如需启用授权功能：
+
 ```yaml
 zhaoxin:
   auth:
-    enabled: true              # 是否启用授权功能
-    jwt:
-      secret: your-jwt-secret  # JWT密钥
-      expiration: 86400        # Token过期时间（秒）
-    session:
-      timeout: 1800           # 会话超时时间（秒）
-      max-concurrent-sessions: 1  # 最大并发会话数
+    enabled: true              # 启用授权功能
+    license:
+      code: "your-license-code"           # 授权码
+      expiration: 1735689600000           # 授权过期时间（毫秒时间戳）
+      features: ["*"]                     # 授权的功能列表，"*"表示所有功能
+      max-users: -1                       # 最大用户数，-1表示无限制
+```
+
+**重要说明**：
+- 当 `zhaoxin.auth.enabled=false` 或未配置时，系统会：
+  - 跳过所有授权检查
+  - 自动配置CORS支持，允许跨域访问
+  - 所有API接口无需授权即可访问
+- 当 `zhaoxin.auth.enabled=true` 时，系统会：
+  - 启用授权码检查
+  - 支持功能级别的授权控制
+  - 提供 `@RequireFeature` 注解进行方法级授权检查
+
+**使用示例**：
+```java
+@RestController
+public class MyController {
+    
+    @RequireFeature("advanced-ocr")
+    @PostMapping("/advanced-compare")
+    public Result advancedCompare() {
+        // 需要 "advanced-ocr" 功能授权
+        return Result.success();
+    }
+}
 ```
 
 ### 数据库配置（SDK和后端应用）

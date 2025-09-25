@@ -5,6 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
  * 授权模块配置属性
+ * 简化版本，只包含基础的授权检查配置
  */
 @Data
 @ConfigurationProperties(prefix = "zhaoxin.auth")
@@ -16,43 +17,30 @@ public class AuthProperties {
     private boolean enabled = false;
     
     /**
-     * JWT配置
+     * 授权码配置
      */
-    private Jwt jwt = new Jwt();
-    
-    /**
-     * 会话配置
-     */
-    private Session session = new Session();
+    private License license = new License();
     
     @Data
-    public static class Jwt {
+    public static class License {
         /**
-         * JWT密钥
+         * 授权码
          */
-        private String secret = "zhaoxin-contract-tools-default-secret-key";
+        private String code;
         
         /**
-         * JWT过期时间（秒）
+         * 授权过期时间（毫秒时间戳）
          */
-        private long expiration = 86400; // 24小时
+        private long expiration = 0;
         
         /**
-         * 刷新令牌过期时间（秒）
+         * 授权的功能列表
          */
-        private long refreshExpiration = 604800; // 7天
-    }
-    
-    @Data
-    public static class Session {
-        /**
-         * 会话超时时间（秒）
-         */
-        private long timeout = 1800; // 30分钟
+        private String[] features = new String[0];
         
         /**
-         * 最大并发会话数
+         * 最大用户数量
          */
-        private int maxConcurrentSessions = 1;
+        private int maxUsers = -1; // -1表示无限制
     }
 }
