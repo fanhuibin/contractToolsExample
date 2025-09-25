@@ -19,7 +19,6 @@ export interface ProcessedDifferenceItem extends DifferenceItem {
  * @returns 按页面分组的差异数据 Map<pageNum, ProcessedDifferenceItem[]>
  */
 export function preprocessDifferences(differences: DifferenceItem[]): Map<number, ProcessedDifferenceItem[]> {
-  console.log(`📊 [预处理开始] 收到${differences.length}个差异项`)
   const pageMap = new Map<number, ProcessedDifferenceItem[]>()
   
   differences.forEach(diff => {
@@ -78,10 +77,6 @@ export function preprocessDifferences(differences: DifferenceItem[]): Map<number
     }
   })
   
-  console.log(`📊 [预处理完成] 生成${pageMap.size}个页面的差异数据`)
-  pageMap.forEach((diffs, pageNum) => {
-    console.log(`📄 页面${pageNum}: ${diffs.length}个差异项`)
-  })
   
   return pageMap
 }

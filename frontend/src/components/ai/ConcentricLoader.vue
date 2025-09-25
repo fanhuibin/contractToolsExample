@@ -107,7 +107,6 @@ function onResize() {
 onMounted(() => {
   // 调试：组件已挂载
   // eslint-disable-next-line no-console
-  console.log('[ConcentricLoader] mounted')
   onResize()
   window.addEventListener('resize', onResize)
   rafId = requestAnimationFrame(drawFrame)

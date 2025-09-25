@@ -44,17 +44,6 @@ export function alignCanvasViewerContinuous(
 
     wrapper.scrollTop = newScrollTop
 
-    console.log(`Canvas连续滚动定位完成: ${side}`, {
-      页面: pos.page,
-      页面布局Y: pageLayout.y,
-      页面高度: pageLayout.height,
-      缩放比例: pageLayout.scale,
-      原始坐标: [pos.x, pos.y],
-      目标坐标: [targetX, targetY],
-      滚动位置: newScrollTop,
-      markerY: markerY
-    })
-
   } catch (error) {
     console.error(`Canvas连续滚动定位失败: ${side}`, error)
   }
@@ -89,7 +78,6 @@ export function jumpToPage(
   
   const targetY = layout[pageIndex].y
   
-  console.log(`跳转到第${pageNum}页，目标Y位置: ${targetY.toFixed(2)}px`)
   
   // 滚动到目标位置
   wrapper.scrollTop = targetY
@@ -108,7 +96,6 @@ export function createPosition(
   description: string
 ): Position | null {
   if (!bbox || bbox.length < 4) {
-    console.log(`前端跳转调试 - ${description}位置创建失败: bbox无效`, bbox)
     return null
   }
   return {

@@ -1,6 +1,6 @@
 package com.zhaoxinms.contract.tools.compare.util;
 
-import java.util.HashMap;
+import com.zhaoxinms.contract.tools.compare.config.CharacterMappingConfig;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -11,90 +11,9 @@ import java.util.regex.Pattern;
 public class TextNormalizer {
     
     /**
-     * 中英文标点符号映射表
-     * 将中文标点符号统一转换为英文标点符号
+     * 字符映射配置管理器
      */
-    private static final Map<String, String> PUNCTUATION_MAP = new HashMap<>();
-    
-    static {
-        // 括号
-        PUNCTUATION_MAP.put("（", "(");
-        PUNCTUATION_MAP.put("）", ")");
-        PUNCTUATION_MAP.put("【", "[");
-        PUNCTUATION_MAP.put("】", "]");
-        PUNCTUATION_MAP.put("｛", "{");
-        PUNCTUATION_MAP.put("｝", "}");
-        
-        // 标点符号
-        PUNCTUATION_MAP.put("：", ":");
-        PUNCTUATION_MAP.put("；", ";");
-        PUNCTUATION_MAP.put("，", ",");
-        PUNCTUATION_MAP.put("。", ".");
-        PUNCTUATION_MAP.put("？", "?");
-        PUNCTUATION_MAP.put("！", "!");
-        
-        // 引号
-        PUNCTUATION_MAP.put("“", "\"");
-        PUNCTUATION_MAP.put("”", "\"");
-        PUNCTUATION_MAP.put("‘", "'");
-        PUNCTUATION_MAP.put("’", "'");
-        PUNCTUATION_MAP.put("｀", "`");
-        
-        // 破折号和连接符
-        PUNCTUATION_MAP.put("——", "--");
-        PUNCTUATION_MAP.put("—", "-");
-        PUNCTUATION_MAP.put("－", "-");
-        PUNCTUATION_MAP.put("～", "~");
-        
-        // 省略号
-        PUNCTUATION_MAP.put("……", "..");
-        PUNCTUATION_MAP.put("…", ".");
-        
-        // 其他符号
-        PUNCTUATION_MAP.put("、", ".");
-        PUNCTUATION_MAP.put(",", ".");
-        PUNCTUATION_MAP.put("·", ".");
-        PUNCTUATION_MAP.put("＊", "*");
-        PUNCTUATION_MAP.put("＃", "#");
-        PUNCTUATION_MAP.put("＆", "&");
-        PUNCTUATION_MAP.put("％", "%");
-        PUNCTUATION_MAP.put("＠", "@");
-        PUNCTUATION_MAP.put("＋", "+");
-        PUNCTUATION_MAP.put("＝", "=");
-        PUNCTUATION_MAP.put("＜", "<");
-        PUNCTUATION_MAP.put("＞", ">");
-        PUNCTUATION_MAP.put("｜", "|");
-        PUNCTUATION_MAP.put("＼", "\\");
-        PUNCTUATION_MAP.put("／", "/");
-        
-        // 数字符号
-        PUNCTUATION_MAP.put("０", "0");
-        PUNCTUATION_MAP.put("１", "1");
-        PUNCTUATION_MAP.put("２", "2");
-        PUNCTUATION_MAP.put("３", "3");
-        PUNCTUATION_MAP.put("４", "4");
-        PUNCTUATION_MAP.put("５", "5");
-        PUNCTUATION_MAP.put("６", "6");
-        PUNCTUATION_MAP.put("７", "7");
-        PUNCTUATION_MAP.put("８", "8");
-        PUNCTUATION_MAP.put("９", "9");
-        
-        //金额常见识别错误
-        PUNCTUATION_MAP.put("貳", "贰");
-        PUNCTUATION_MAP.put("參", "叁");
-        PUNCTUATION_MAP.put("陸", "陆");
-        PUNCTUATION_MAP.put("陌", "佰");
-        PUNCTUATION_MAP.put("萬", "万");
-        PUNCTUATION_MAP.put("億", "亿");
-        
-        // 更多常见错误项
-        PUNCTUATION_MAP.put("经营商", "经营者");
-        PUNCTUATION_MAP.put("購", "购");
-        PUNCTUATION_MAP.put("羔", "盖");
-        PUNCTUATION_MAP.put("运营", "经营");
-        PUNCTUATION_MAP.put("買", "买");
-        PUNCTUATION_MAP.put("説", "说");
-    }
+    private static final CharacterMappingConfig mappingConfig = CharacterMappingConfig.getInstance();
     
     /**
      * 空格字符正则表达式
@@ -152,7 +71,8 @@ public class TextNormalizer {
         }
         
         String result = text;
-        for (Map.Entry<String, String> entry : PUNCTUATION_MAP.entrySet()) {
+        Map<String, String> mappingMap = mappingConfig.getMappingMap();
+        for (Map.Entry<String, String> entry : mappingMap.entrySet()) {
             result = result.replace(entry.getKey(), entry.getValue());
         }
         
@@ -257,5 +177,22 @@ public class TextNormalizer {
         String normalized1 = normalizeForComparison(text1, ignoreCase, ignoreWhitespace, ignorePunctuation);
         String normalized2 = normalizeForComparison(text2, ignoreCase, ignoreWhitespace, ignorePunctuation);
         return normalized1.equals(normalized2);
+    }
+    
+    /**
+     * 重新加载字符映射配置
+     * 用于在运行时更新映射规则
+     */
+    public static void reloadMappingConfig() {
+        mappingConfig.reloadConfig();
+    }
+    
+    /**
+     * 获取当前字符映射配置信息
+     * 
+     * @return 配置信息描述
+     */
+    public static String getMappingConfigInfo() {
+        return mappingConfig.getConfigInfo();
     }
 }

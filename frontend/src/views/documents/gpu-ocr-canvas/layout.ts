@@ -53,7 +53,6 @@ export function updateVisibleCanvases(
   
   let visiblePages: number[] = []
   
-  console.log(`可见范围计算: scrollTop=${scrollTop}, startY=${startY.toFixed(0)}, endY=${endY.toFixed(0)}`)
   
   // 计算在可见范围内的页面
   for (let i = 0; i < pageLayout.length; i++) {
@@ -65,7 +64,6 @@ export function updateVisibleCanvases(
     }
   }
   
-  console.log(`初始可见页面计算结果: ${visiblePages.length}页 [${visiblePages.map(p => p + 1).join(', ')}]`)
   
   // 确保至少渲染指定数量的页面
   const minPages = CANVAS_CONFIG.MIN_RENDERED_PAGES
@@ -86,7 +84,6 @@ export function updateVisibleCanvases(
       }
     }
     
-    console.log(`可见页面不足${minPages}页，基于视口中心${viewportCenter.toFixed(0)}px找到中心页面${centerPageIndex + 1}`)
     
     // 以中心页面为基准，向前后扩展
     const halfMinPages = Math.floor(minPages / 2)
@@ -98,7 +95,6 @@ export function updateVisibleCanvases(
       visiblePages.push(i)
     }
     
-    console.log(`扩展渲染范围: 第${start + 1}-${end + 1}页`)
   }
   
   // 限制同时显示的Canvas数量

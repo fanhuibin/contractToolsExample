@@ -446,15 +446,12 @@ const doUploadGPUOCRCompare = async () => {
     }).catch(() => {})
 
     const res = await uploadGPUOCRCompare(formData)
-    console.log('GPU OCR比对响应:', res) // 添加调试日志
 
     // 检查响应结构，获取正确的任务ID
     let taskId = res.data?.taskId
     if (!taskId) {
       throw new Error('无法获取任务ID，响应格式异常')
     }
-
-    console.log('获取到的任务ID:', taskId) // 添加调试日志
 
     // 使用 replace 替换为真实 taskId，避免历史多一条
     router.replace({ 
@@ -567,11 +564,6 @@ const updateSmoothProgress = () => {
   displayProgress.value = Math.max(stageInfo.minProgress, 
     Math.min(displayProgress.value, calculatedProgress, stageInfo.maxProgress - 0.5))
   
-  // 调试日志
-  if (Math.random() < 0.1) { // 10%概率输出日志，避免日志过多
-    const stageProgressRatio = stageInfo.estimatedTime > 0 ? Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime) : 0
-    console.log(`📊 进度更新: 阶段${stageInfo.minProgress}%-${stageInfo.maxProgress}%, 已用时间${stageInfo.elapsedTime}ms/${stageInfo.estimatedTime}ms (${(stageProgressRatio*100).toFixed(1)}%), 显示进度${displayProgress.value.toFixed(1)}%`)
-  }
 }
 
 
@@ -580,13 +572,11 @@ const updateStageInfoAndStartProgress = (taskData: any) => {
   // 启动平滑进度定时器（如果还没启动）
   if (!smoothTimer.value) {
     smoothTimer.value = setInterval(updateSmoothProgress, 300) // 每300ms更新一次，稍慢一些更平滑
-    console.log('🚀 启动基于后端时间的平滑进度更新')
   }
   
   // 检查是否有完整的阶段信息
   if (taskData.stageMinProgress === undefined || taskData.stageMaxProgress === undefined || 
       taskData.stageEstimatedTime === undefined || taskData.stageElapsedTime === undefined) {
-    console.warn('⚠️ 后端返回的阶段信息不完整，使用缓慢增长模式', taskData)
     return
   }
   
@@ -602,9 +592,6 @@ const updateStageInfoAndStartProgress = (taskData: any) => {
   const isNewStage = newStageInfo.minProgress !== currentStageInfo.value.minProgress || 
                      newStageInfo.maxProgress !== currentStageInfo.value.maxProgress
   
-  if (isNewStage) {
-    console.log(`🎯 进入新阶段: ${newStageInfo.minProgress}% - ${newStageInfo.maxProgress}%, 预估时间: ${(newStageInfo.estimatedTime/1000).toFixed(1)}秒`)
-  }
   
   currentStageInfo.value = newStageInfo
 }
@@ -618,7 +605,6 @@ const updateTaskStatus = async (taskId: string) => {
   }
 
   try {
-    console.log('查询任务状态:', taskId) // 添加调试日志
     const res = await getGPUOCRCompareTaskStatus(taskId)
     currentTask.value = res.data
 
@@ -773,7 +759,6 @@ const startDebugCompare = async () => {
       }
     })
 
-    console.log('调试比对响应:', res)
 
     // 获取任务ID
     const taskId = res.data?.taskId
