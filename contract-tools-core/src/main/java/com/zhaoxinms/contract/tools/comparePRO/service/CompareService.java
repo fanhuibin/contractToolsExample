@@ -5,10 +5,14 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -391,7 +395,25 @@ public class CompareService {
             return result;
         }
 
-        // 如果没有找到完整结果（可能是旧任务），构造一个基本的返回结果
+        // 如果没有找到完整结果，尝试从文件中加载并转换为CompareResult
+        try {
+            Map<String, Object> rawData = getRawFrontendResult(taskId);
+            if (rawData != null) {
+                logger.info("🔍 从文件加载原始比对结果，转换为CompareResult对象");
+                result = convertRawDataToCompareResult(rawData, taskId);
+                logger.info("✅ 成功转换，差异数量: {}", 
+                    result.getDifferences() != null ? result.getDifferences().size() : 0);
+                
+                // 将结果放入缓存以便后续使用
+                results.put(taskId, result);
+                return result;
+            }
+        } catch (Exception e) {
+            logger.error("从文件加载并转换比对结果失败: {}", e.getMessage());
+        }
+
+        // 如果文件也不存在，构造一个基本的返回结果
+        logger.warn("⚠️ 未找到比对结果文件，创建空的结果对象");
         result = new CompareResult(taskId);
         result.setOldFileName(task.getOldFileName());
         result.setNewFileName(task.getNewFileName());
@@ -3368,51 +3390,162 @@ public class CompareService {
 	}
 
 	/**
-	 * 生成HTML格式报告（ZIP包）
+	 * 生成HTML格式报告（ZIP包）- 基于export项目模板的完整实现
+	 * 实现和 embed-json-data.cjs 一样的JSON内嵌逻辑和自动化打包功能
 	 */
 	private byte[] generateHTMLReport(CompareResult result, ExportRequest request) throws Exception {
 		try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-			// 这里需要实现HTML报告生成逻辑
-			// 参考cankao文件夹中的HTML结构
+			String taskId = request.getTaskId();
+			long startTime = System.currentTimeMillis();
 			
-			// 创建ZIP文件包含：
-			// 1. index.html - 主页面
-			// 2. antd.css, table.css - 样式文件  
-			// 3. index.js - JavaScript文件
-			// 4. image/ - 图片文件夹
+			logger.info("🔄 Java后端 - 开始HTML自动化导出流程");
+			logger.info("📋 任务信息: ID={}, 原文档={}, 新文档={}", taskId, result.getOldFileName(), result.getNewFileName());
 			
-			String htmlContent = generateHTMLContent(result, request);
-			String cssContent = generateCSSContent();
-			String jsContent = generateJSContent(result);
+			// 1. 获取文件根目录和模板路径
+			String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+			String templatePath = resolveTemplatePath(uploadRootPath);
+			String tempDirPath = resolveTempDirPath(uploadRootPath, taskId);
 			
-			// 使用Java的ZipOutputStream创建ZIP
-			java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+			logger.info("📁 路径配置:");
+			logger.info("  - 文件根目录: {}", uploadRootPath);
+			logger.info("  - HTML模板: {}", templatePath);
+			logger.info("  - 临时目录: {}", tempDirPath);
 			
-			// 添加HTML文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("index.html"));
-			zos.write(htmlContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
+			Path tempDir = Paths.get(tempDirPath);
+			Files.createDirectories(tempDir);
 			
-			// 添加CSS文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("antd.css"));
-			zos.write(cssContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			zos.putNextEntry(new java.util.zip.ZipEntry("table.css"));
-			zos.write(generateTableCSS().getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			// 添加JS文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("index.js"));
-			zos.write(jsContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			// 添加图片文件
-			addImagesToZip(zos, result);
-			
-			zos.close();
-			return baos.toByteArray();
+			try {
+				// 2. 准备JSON数据（和 embed-json-data.cjs 相同的数据结构）
+				logger.info("📊 准备JSON数据...");
+				String compareResultJson = generateCompareResultJsonForExport(result);
+				// 使用增强的任务状态生成方法（根据实际情况生成完整数据）
+				String taskStatusJson = generateTaskStatusJsonFromCompareResult(result, request, compareResultJson);
+				
+				// 输出数据统计（和前端脚本一样的格式）
+				logDataStatistics(result, taskStatusJson, compareResultJson);
+				
+				// 3. 读取HTML模板文件
+				logger.info("📄 读取HTML模板文件: {}", templatePath);
+				Path templateFile = Paths.get(templatePath);
+				
+				if (!Files.exists(templateFile)) {
+					throw new RuntimeException("HTML模板文件不存在: " + templatePath + 
+						"，请确保模板文件存在于: {文件根目录}/templates/export/index.html");
+				}
+				
+				String htmlTemplate = Files.readString(templateFile, StandardCharsets.UTF_8);
+				logger.info("✅ 读取HTML模板文件成功 (大小: {} KB)", Files.size(templateFile) / 1024);
+				
+				// 4. 执行JSON数据内嵌（和 embed-json-data.cjs 完全相同的逻辑）
+				logger.info("🔧 执行JSON数据内嵌...");
+				String finalHtml = embedJsonDataIntoHtml(htmlTemplate, taskStatusJson, compareResultJson);
+				logger.info("✅ JSON数据内嵌完成 (内嵌数据大小: {} KB)", 
+					(taskStatusJson.length() + compareResultJson.length()) / 1024);
+				
+				// 5. 自动化复制和替换图片文件
+				logger.info("🖼️ 自动化处理图片文件...");
+				int copiedImages = copyAndReplaceTaskImages(taskId, tempDir);
+				logger.info("✅ 图片文件处理完成 (复制了 {} 个图片文件)", copiedImages);
+				
+				// 6. 创建自动化ZIP包
+				logger.info("📦 创建自动化ZIP包...");
+				java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+				
+				// 添加内嵌后的HTML文件
+				zos.putNextEntry(new java.util.zip.ZipEntry("index.html"));
+				zos.write(finalHtml.getBytes(StandardCharsets.UTF_8));
+				zos.closeEntry();
+				logger.info("  ✓ 添加HTML文件到ZIP (大小: {} KB)", finalHtml.getBytes(StandardCharsets.UTF_8).length / 1024);
+				
+				// 添加图片文件到ZIP（保持和前端一致的目录结构）
+				int zipImages = addTempImagesToZip(zos, tempDir);
+				logger.info("  ✓ 添加图片文件到ZIP (数量: {})", zipImages);
+				
+				zos.close();
+				
+				long duration = System.currentTimeMillis() - startTime;
+				logger.info("🎉 Java后端 - HTML自动化导出完成!");
+				logger.info("📈 导出统计: 耗时 {}ms, ZIP大小 {} KB", duration, baos.size() / 1024);
+				
+				return baos.toByteArray();
+				
+			} finally {
+				// 7. 清理临时文件夹
+				deleteTempDirectory(tempDir);
+				logger.info("🧹 临时文件夹已清理");
+			}
 		}
+	}
+	
+	/**
+	 * 解析HTML模板文件路径（基于文件根目录）
+	 */
+	private String resolveTemplatePath(String uploadRootPath) {
+		Path templatePath = Paths.get(uploadRootPath, "templates", "export", "index.html");
+		return templatePath.toAbsolutePath().toString();
+	}
+	
+	
+	/**
+	 * 解析临时目录路径（基于文件根目录）
+	 */
+	private String resolveTempDirPath(String uploadRootPath, String taskId) {
+		Path tempPath = Paths.get(uploadRootPath, "html-export-temp", taskId + "-" + System.currentTimeMillis());
+		return tempPath.toAbsolutePath().toString();
+	}
+	
+	/**
+	 * 输出数据统计信息（和 embed-json-data.cjs 相同的格式）
+	 */
+	private void logDataStatistics(CompareResult result, String taskStatusJson, String compareResultJson) {
+		logger.info("📊 数据统计:");
+		logger.info("  - 任务状态: {} vs {}", result.getOldFileName(), result.getNewFileName());
+		
+		// 解析比对结果以获取页面总数
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			JsonNode compareData = mapper.readTree(compareResultJson);
+			int oldPages = compareData.path("oldImageInfo").path("totalPages").asInt(0);
+			int newPages = compareData.path("newImageInfo").path("totalPages").asInt(0);
+			int differences = compareData.path("differences").size();
+			int failedPages = compareData.path("failedPagesCount").asInt(0);
+			
+			logger.info("  - 页面总数: 原文档 {} 页, 新文档 {} 页", oldPages, newPages);
+			logger.info("  - 差异数量: {} 个", differences);
+			logger.info("  - 失败页面: {} 个", failedPages);
+			logger.info("  - JSON大小: 任务状态 {} KB, 比对结果 {} KB", 
+				taskStatusJson.length() / 1024, compareResultJson.length() / 1024);
+		} catch (Exception e) {
+			logger.warn("解析数据统计时出错: {}", e.getMessage());
+		}
+	}
+	
+	/**
+	 * 将JSON数据内嵌到HTML中（和 embed-json-data.cjs 完全相同的逻辑）
+	 */
+	private String embedJsonDataIntoHtml(String htmlTemplate, String taskStatusJson, String compareResultJson) {
+		// 创建内嵌脚本（和前端脚本完全相同的格式）
+		String inlineScript = String.format(
+			"<script>\n" +
+			"// 内联数据，避免file://协议的CORS问题\n" +
+			"// 由 Java后端自动生成，逻辑等同于 export/embed-json-data.cjs\n" +
+			"window.TASK_STATUS_DATA = %s;\n" +
+			"window.COMPARE_RESULT_DATA = %s;\n" +
+			"console.log('内嵌数据已加载:', { taskStatus: window.TASK_STATUS_DATA, compareResult: window.COMPARE_RESULT_DATA });\n" +
+			"</script>",
+			taskStatusJson,
+			compareResultJson
+		);
+		
+		// 检查是否已经包含内嵌数据（和前端脚本相同的逻辑）
+		if (htmlTemplate.contains("window.TASK_STATUS_DATA")) {
+			logger.info("⚠️ HTML文件已包含内嵌数据，将替换现有数据");
+			// 移除现有的内嵌脚本
+			htmlTemplate = htmlTemplate.replaceAll("<script>[\\s\\S]*?window\\.TASK_STATUS_DATA[\\s\\S]*?</script>", "");
+		}
+		
+		// 将脚本插入到</head>标签之前（和前端脚本相同的逻辑）
+		return htmlTemplate.replace("</head>", inlineScript + "\n</head>");
 	}
 
 	/**
@@ -3473,6 +3606,228 @@ public class CompareService {
 			zos.close();
 			return baos.toByteArray();
 		}
+	}
+
+	/**
+	 * 生成适用于export的任务状态JSON
+	 */
+	/**
+	 * 从比对结果生成任务状态JSON（增强版本，根据实际情况生成完整数据）
+	 */
+	private String generateTaskStatusJsonFromCompareResult(CompareResult result, ExportRequest request, String compareResultJson) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			
+			// 解析比对结果以获取页面信息
+			JsonNode compareData = mapper.readTree(compareResultJson);
+			int oldPages = compareData.path("oldImageInfo").path("totalPages").asInt(0);
+			int newPages = compareData.path("newImageInfo").path("totalPages").asInt(0);
+			int totalPages = Math.max(oldPages, newPages);
+			
+			// 生成默认的完成状态
+			Map<String, Object> taskStatus = new HashMap<>();
+			String now = java.time.Instant.now().toString();
+			
+			taskStatus.put("taskId", request.getTaskId());
+			taskStatus.put("status", "COMPLETED");
+			taskStatus.put("progress", 100);
+			taskStatus.put("progressPercentage", 100);
+			taskStatus.put("currentStep", 10);
+			taskStatus.put("totalSteps", 8);
+			taskStatus.put("currentStepDescription", "已完成所有比对任务");
+			taskStatus.put("currentStepDesc", "任务完成");
+			taskStatus.put("statusDescription", "比对完成");
+			taskStatus.put("progressDescription", "比对完成");
+			taskStatus.put("oldFileName", result.getOldFileName());
+			taskStatus.put("newFileName", result.getNewFileName());
+			taskStatus.put("totalPages", totalPages);
+			taskStatus.put("oldDocPages", oldPages);
+			taskStatus.put("newDocPages", newPages);
+			taskStatus.put("currentPageOld", oldPages);
+			taskStatus.put("currentPageNew", newPages);
+			taskStatus.put("completedPagesOld", oldPages);
+			taskStatus.put("completedPagesNew", newPages);
+			taskStatus.put("failedPages", new ArrayList<>());
+			taskStatus.put("failedPagesCount", 0);
+			taskStatus.put("createdTime", now);
+			taskStatus.put("startTime", now);
+			taskStatus.put("updatedTime", now);
+			taskStatus.put("endTime", now);
+			taskStatus.put("totalDuration", 0);
+			taskStatus.put("estimatedTotalTime", "0秒");
+			taskStatus.put("remainingTime", "0秒");
+			
+			logger.info("✅ 从比对结果生成任务状态: {} 页 (原文档: {}, 新文档: {})", totalPages, oldPages, newPages);
+			
+			return mapper.writeValueAsString(taskStatus);
+		} catch (Exception e) {
+			throw new RuntimeException("从比对结果生成任务状态JSON失败", e);
+		}
+	}
+	
+	/**
+	 * 生成适用于export的比对结果JSON
+	 */
+	private String generateCompareResultJsonForExport(CompareResult result) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			Map<String, Object> exportResult = new HashMap<>();
+			
+		// 基本信息
+		exportResult.put("failedPages", result.getFailedPages() != null ? result.getFailedPages() : new ArrayList<>());
+		exportResult.put("failedPagesCount", result.getFailedPages() != null ? result.getFailedPages().size() : 0);
+		
+		// 使用保留的原始格式差异数据，如果没有则使用转换后的数据
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			exportResult.put("differences", result.getFormattedDifferences());
+			logger.info("✅ 使用原始格式的差异数据，包含 {} 个差异项", result.getFormattedDifferences().size());
+		} else {
+			exportResult.put("differences", result.getDifferences() != null ? result.getDifferences() : new ArrayList<>());
+			logger.warn("⚠️ 使用转换后的差异数据，可能格式不匹配");
+		}
+		
+		// 如果有差异数据，记录总数
+		if (result.getDifferences() != null && !result.getDifferences().isEmpty()) {
+			logger.info("✅ 导出包含 {} 个差异项", result.getDifferences().size());
+		} else {
+			logger.warn("⚠️ 导出的比对结果中无差异数据");
+		}
+		exportResult.put("oldFileName", result.getOldFileName());
+		exportResult.put("newFileName", result.getNewFileName());
+		exportResult.put("startTime", System.currentTimeMillis()); // 使用当前时间
+		
+		// 图片信息 - 从实际文件动态获取图片信息
+		exportResult.put("oldImageInfo", generateActualImageInfo("old", result.getTaskId()));
+		exportResult.put("newImageInfo", generateActualImageInfo("new", result.getTaskId()));
+			
+		// 图片基路径供Vue组件使用
+		exportResult.put("oldImageBaseUrl", "./data/current/images/old");
+		exportResult.put("newImageBaseUrl", "./data/current/images/new");
+			
+			return mapper.writeValueAsString(exportResult);
+		} catch (Exception e) {
+			throw new RuntimeException("生成比对结果JSON失败", e);
+		}
+	}
+
+	/**
+	 * 从实际文件动态获取图片信息（基于yml配置的文件根目录）
+	 */
+	private Map<String, Object> generateActualImageInfo(String mode, String taskId) {
+		Map<String, Object> info = new HashMap<>();
+		List<Map<String, Object>> pages = new ArrayList<>();
+		
+		// 使用配置的文件根目录，参考存图片的逻辑
+		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+		Path actualImageDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+		
+		logger.info("🔍 读取图片目录: {}", actualImageDir);
+		
+		if (!Files.exists(actualImageDir) || !Files.isDirectory(actualImageDir)) {
+			logger.warn("⚠️ 图片目录不存在: {}，返回空图片信息", actualImageDir);
+			info.put("totalPages", 0);
+			info.put("pages", pages);
+			return info;
+		}
+		
+		// 读取实际的图片文件
+		try {
+			// 先尝试新格式 (page-N.png)
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, "page-*.png")) {
+				for (Path imagePath : stream) {
+					int pageNum = extractPageNumber(imagePath.getFileName().toString(), "page-", ".png");
+					if (pageNum > 0) {
+						Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
+						pages.add(page);
+					}
+				}
+			}
+			
+			// 如果没有找到新格式，尝试旧格式 (old_N.png, new_N.png)
+			if (pages.isEmpty()) {
+				try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, mode + "_*.png")) {
+					for (Path imagePath : stream) {
+						int pageNum = extractPageNumber(imagePath.getFileName().toString(), mode + "_", ".png");
+						if (pageNum > 0) {
+							Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
+							pages.add(page);
+						}
+					}
+				}
+			}
+			
+		} catch (IOException e) {
+			logger.error("读取图片文件时出错: {}", e.getMessage());
+			info.put("totalPages", 0);
+			info.put("pages", new ArrayList<>());
+			return info;
+		}
+		
+		// 按页码排序
+		pages.sort((a, b) -> {
+			Integer pageA = (Integer) a.get("pageNum");
+			Integer pageB = (Integer) b.get("pageNum");
+			return Integer.compare(pageA, pageB);
+		});
+		
+		info.put("totalPages", pages.size());
+		info.put("pages", pages);
+		
+		logger.info("✅ 实际获取 {} 图片信息: {} 页", mode, pages.size());
+		return info;
+	}
+	
+	/**
+	 * 创建单页图片信息
+	 */
+	private Map<String, Object> createPageInfo(int pageNum, String mode, Path imagePath) {
+		Map<String, Object> page = new HashMap<>();
+		page.put("pageNum", pageNum);
+		page.put("imageUrl", String.format("./data/current/images/%s/page-%d.png", mode, pageNum));
+		
+		// 尝试获取实际图片尺寸
+		try {
+			if (Files.exists(imagePath)) {
+				// 使用 Java 内置的图片读取功能获取尺寸
+				java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imagePath.toFile());
+				if (image != null) {
+					page.put("width", image.getWidth());
+					page.put("height", image.getHeight());
+					logger.debug("获取图片尺寸: {} -> {}x{}", imagePath.getFileName(), image.getWidth(), image.getHeight());
+				} else {
+					// 如果无法读取图片，使用默认尺寸
+					page.put("width", 1322);
+					page.put("height", 1870);
+					logger.warn("无法读取图片 {}，使用默认尺寸", imagePath.getFileName());
+				}
+			} else {
+				// 文件不存在，使用默认尺寸
+				page.put("width", 1322);
+				page.put("height", 1870);
+			}
+		} catch (Exception e) {
+			// 读取图片出错，使用默认尺寸
+			page.put("width", 1322);
+			page.put("height", 1870);
+			logger.warn("读取图片 {} 尺寸时出错: {}，使用默认尺寸", imagePath.getFileName(), e.getMessage());
+		}
+		
+		return page;
+	}
+	
+	/**
+	 * 从文件名中提取页码
+	 */
+	private int extractPageNumber(String fileName, String prefix, String suffix) {
+		try {
+			if (fileName.startsWith(prefix) && fileName.endsWith(suffix)) {
+				String numberPart = fileName.substring(prefix.length(), fileName.length() - suffix.length());
+				return Integer.parseInt(numberPart);
+			}
+		} catch (NumberFormatException e) {
+			logger.warn("无法从文件名 {} 提取页码", fileName);
+		}
+		return -1;
 	}
 
 	/**
@@ -3613,5 +3968,420 @@ public class CompareService {
 		} catch (Exception e) {
 			logger.warn("添加图片到ZIP时出错: " + e.getMessage());
 		}
+	}
+
+	/**
+	 * 复制任务图片到临时目录
+	 */
+	/**
+	 * 自动化复制和替换任务图片（增强版本，支持自动化替换）
+	 */
+	private int copyAndReplaceTaskImages(String taskId, Path tempDir) throws IOException {
+		return copyTaskImagesToTemp(taskId, tempDir);
+	}
+	
+	/**
+	 * 复制任务图片到临时目录
+	 */
+	private int copyTaskImagesToTemp(String taskId, Path tempDir) throws IOException {
+		String projectRoot = System.getProperty("user.dir");
+		
+		logger.info("  🔍 搜索任务图片文件，任务ID: {}", taskId);
+		
+		// 创建图片目录 - 按照前端期望的路径结构（和 embed-json-data.cjs 一致）
+		Path oldImagesDir = tempDir.resolve("data").resolve("current").resolve("images").resolve("old");
+		Path newImagesDir = tempDir.resolve("data").resolve("current").resolve("images").resolve("new");
+		Files.createDirectories(oldImagesDir);
+		Files.createDirectories(newImagesDir);
+		logger.info("  📁 创建目录结构: data/current/images/{{old,new}}");
+		
+		// 复制图片文件 - 根据当前工作目录调整路径
+		String[] possiblePaths;
+		if (projectRoot.endsWith("contract-tools-sdk")) {
+			// 当前在contract-tools-sdk目录下
+			possiblePaths = new String[] {
+				projectRoot + "/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/uploads/compare-pro/" + taskId,
+				projectRoot + "/../uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/../backend/uploads/compare-pro/tasks/" + taskId
+			};
+		} else {
+			// 当前在项目根目录下
+			possiblePaths = new String[] {
+				projectRoot + "/contract-tools-sdk/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/sdk/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/backend/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/contract-tools-sdk/uploads/compare-pro/" + taskId,
+				projectRoot + "/uploads/compare-pro/" + taskId
+			};
+		}
+		
+		for (String basePath : possiblePaths) {
+			Path taskPath = Paths.get(basePath);
+			if (Files.exists(taskPath)) {
+				logger.info("  ✓ 找到任务图片目录: {}", basePath);
+				int copiedCount = copyTaskImagesFromPath(taskPath, oldImagesDir, newImagesDir);
+				logger.info("  ✅ 自动化复制完成: {} 个图片文件", copiedCount);
+				return copiedCount;
+			} else {
+				logger.debug("  ✗ 路径不存在: {}", basePath);
+			}
+		}
+		
+		logger.warn("  ⚠️ 未找到任务图片文件，任务ID: {}，将使用默认图片", taskId);
+		return 0;
+	}
+
+	/**
+	 * 从指定路径复制任务图片（返回复制的图片数量）
+	 */
+	private int copyTaskImagesFromPath(Path taskPath, Path oldImagesDir, Path newImagesDir) throws IOException {
+		int totalCopied = 0;
+		
+		// 检查是否存在images子目录结构
+		Path oldImagesPath = taskPath.resolve("images").resolve("old");
+		Path newImagesPath = taskPath.resolve("images").resolve("new");
+		
+		if (Files.exists(oldImagesPath)) {
+			// 新的目录结构：tasks/{taskId}/images/old/page-N.png
+			logger.info("  📂 使用新的图片目录结构: {}", oldImagesPath);
+			int oldCopied = copyImagesFromDirectory(oldImagesPath, oldImagesDir, "page-*.png");
+			int newCopied = copyImagesFromDirectory(newImagesPath, newImagesDir, "page-*.png");
+			totalCopied = oldCopied + newCopied;
+			logger.info("    ✓ 原文档图片: {} 个, 新文档图片: {} 个", oldCopied, newCopied);
+		} else {
+			// 旧的文件结构：tasks/{taskId}/old_*.png, new_*.png
+			logger.info("  📂 使用旧的图片文件结构: {}", taskPath);
+			
+			// 复制原文档图片
+			int oldPageNum = 1;
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "old_*.png")) {
+				for (Path imagePath : stream) {
+					Files.copy(imagePath, oldImagesDir.resolve("page-" + oldPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
+					oldPageNum++;
+					totalCopied++;
+				}
+			}
+			
+			// 复制新文档图片
+			int newPageNum = 1;
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "new_*.png")) {
+				for (Path imagePath : stream) {
+					Files.copy(imagePath, newImagesDir.resolve("page-" + newPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
+					newPageNum++;
+					totalCopied++;
+				}
+			}
+			
+			logger.info("    ✓ 原文档图片: {} 个, 新文档图片: {} 个", oldPageNum - 1, newPageNum - 1);
+		}
+		
+		return totalCopied;
+	}
+	
+	/**
+	 * 从指定目录复制图片文件（返回复制的数量）
+	 */
+	private int copyImagesFromDirectory(Path sourceDir, Path targetDir, String pattern) throws IOException {
+		if (!Files.exists(sourceDir)) {
+			logger.warn("    ✗ 源图片目录不存在: {}", sourceDir);
+			return 0;
+		}
+		
+		int copiedCount = 0;
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(sourceDir, pattern)) {
+			for (Path imagePath : stream) {
+				String fileName = imagePath.getFileName().toString();
+				Files.copy(imagePath, targetDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+				copiedCount++;
+				logger.debug("      复制图片: {} -> {}", fileName, targetDir.resolve(fileName));
+			}
+		}
+		
+		return copiedCount;
+	}
+
+	/**
+	 * 将临时目录中的图片添加到ZIP（返回添加的文件数量）
+	 */
+	private int addTempImagesToZip(java.util.zip.ZipOutputStream zos, Path tempDir) throws IOException {
+		Path dataDir = tempDir.resolve("data");
+		if (!Files.exists(dataDir)) {
+			logger.warn("  ✗ 数据目录不存在: {}", dataDir);
+			return 0;
+		}
+		
+		final int[] addedCount = {0}; // 使用数组来在lambda中修改值
+		
+		try {
+			Files.walk(dataDir)
+				.filter(Files::isRegularFile)
+				.forEach(imagePath -> {
+					try {
+						String relativePath = tempDir.relativize(imagePath).toString().replace("\\", "/");
+						zos.putNextEntry(new java.util.zip.ZipEntry(relativePath));
+						Files.copy(imagePath, zos);
+						zos.closeEntry();
+						addedCount[0]++;
+						logger.debug("    添加到ZIP: {}", relativePath);
+					} catch (IOException e) {
+						throw new RuntimeException("添加图片到ZIP失败: " + imagePath, e);
+					}
+				});
+		} catch (IOException e) {
+			throw new IOException("遍历数据目录失败: " + dataDir, e);
+		}
+		
+		return addedCount[0];
+	}
+
+	/**
+	 * 删除临时目录
+	 */
+	private void deleteTempDirectory(Path tempDir) {
+		try {
+			if (Files.exists(tempDir)) {
+				Files.walk(tempDir)
+					.map(Path::toFile)
+					.sorted((o1, o2) -> -o1.compareTo(o2))
+					.forEach(File::delete);
+			}
+		} catch (IOException e) {
+			logger.warn("清理临时目录失败: {}", tempDir, e);
+		}
+	}
+
+	/**
+	 * 将原始JSON数据转换为CompareResult对象
+	 * 处理字段不一致的问题，确保数据完整性
+	 */
+	private CompareResult convertRawDataToCompareResult(Map<String, Object> rawData, String taskId) {
+		CompareResult result = new CompareResult(taskId);
+		
+		try {
+			// 基本信息
+			result.setOldFileName((String) rawData.get("oldFileName"));
+			result.setNewFileName((String) rawData.get("newFileName"));
+			result.setTotalDiffCount((Integer) rawData.getOrDefault("totalDiffCount", 0));
+			
+			// 失败页面信息
+			@SuppressWarnings("unchecked")
+			List<String> failedPages = (List<String>) rawData.getOrDefault("failedPages", new ArrayList<>());
+			result.setFailedPages(failedPages);
+			
+			// 差异数据 - 保留原始格式供前端使用
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> rawDifferences = (List<Map<String, Object>>) rawData.get("differences");
+			if (rawDifferences != null && !rawDifferences.isEmpty()) {
+				// 将原始差异数据转换为DiffBlock对象（用于统计）
+				List<DiffBlock> differences = convertRawDifferencesToDiffBlocks(rawDifferences);
+				result.setDifferences(differences);
+				
+				// 同时保留原始格式的差异数据（用于前端显示）
+				result.setFormattedDifferences(rawDifferences);
+				logger.info("🔄 转换了 {} 个差异项，保留原始格式供前端使用", differences.size());
+			}
+			
+			// 计算统计信息
+			if (result.getDifferences() != null) {
+				int deleteCount = 0, insertCount = 0;
+				for (DiffBlock diff : result.getDifferences()) {
+					if (diff.type == DiffBlock.DiffType.DELETED) {
+						deleteCount++;
+					} else if (diff.type == DiffBlock.DiffType.ADDED) {
+						insertCount++;
+					}
+				}
+				result.setDeleteCount(deleteCount);
+				result.setInsertCount(insertCount);
+			}
+			
+			// 生成摘要
+			result.generateSummary();
+			
+			logger.info("✅ CompareResult转换完成: 差异{}个, 删除{}个, 新增{}个", 
+				result.getTotalDiffCount(), result.getDeleteCount(), result.getInsertCount());
+				
+		} catch (Exception e) {
+			logger.error("转换原始数据为CompareResult时出错: {}", e.getMessage());
+			throw new RuntimeException("数据转换失败", e);
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * 将原始差异数据转换为DiffBlock对象列表
+	 */
+	@SuppressWarnings("unchecked")
+	private List<DiffBlock> convertRawDifferencesToDiffBlocks(List<Map<String, Object>> rawDifferences) {
+		List<DiffBlock> differences = new ArrayList<>();
+		
+		for (Map<String, Object> rawDiff : rawDifferences) {
+			try {
+				DiffBlock diff = new DiffBlock();
+				
+				// 基本信息
+				diff.page = (Integer) rawDiff.getOrDefault("page", 1);
+				String operation = (String) rawDiff.getOrDefault("operation", "UNKNOWN");
+				diff.oldText = (String) rawDiff.getOrDefault("oldText", "");
+				diff.newText = (String) rawDiff.getOrDefault("newText", "");
+				
+				// 坐标信息
+				if (rawDiff.containsKey("oldBbox")) {
+					List<Double> bbox = (List<Double>) rawDiff.get("oldBbox");
+					if (bbox != null && bbox.size() >= 4) {
+						// 转换List<Double>为double[]
+						double[] bboxArray = new double[4];
+						for (int i = 0; i < 4; i++) {
+							bboxArray[i] = bbox.get(i);
+						}
+						// 创建oldBboxes列表
+						if (diff.oldBboxes == null) {
+							diff.oldBboxes = new ArrayList<>();
+						}
+						diff.oldBboxes.add(bboxArray);
+					}
+				}
+				
+				if (rawDiff.containsKey("newBbox")) {
+					List<Double> bbox = (List<Double>) rawDiff.get("newBbox");
+					if (bbox != null && bbox.size() >= 4) {
+						// 转换List<Double>为double[]
+						double[] bboxArray = new double[4];
+						for (int i = 0; i < 4; i++) {
+							bboxArray[i] = bbox.get(i);
+						}
+						// 创建newBboxes列表
+						if (diff.newBboxes == null) {
+							diff.newBboxes = new ArrayList<>();
+						}
+						diff.newBboxes.add(bboxArray);
+					}
+				}
+				
+				// 设置类型
+				if ("DELETE".equals(operation)) {
+					diff.type = DiffBlock.DiffType.DELETED;
+				} else if ("INSERT".equals(operation)) {
+					diff.type = DiffBlock.DiffType.ADDED;
+				} else {
+					diff.type = DiffBlock.DiffType.MODIFIED;
+				}
+				
+				differences.add(diff);
+				
+			} catch (Exception e) {
+				logger.warn("转换单个差异项时出错，跳过: {}", e.getMessage());
+			}
+		}
+		
+		return differences;
+	}
+
+	/**
+	 * 将DiffBlock对象转换为前端期望的JSON格式
+	 * 确保字段名和数据结构与前端Vue组件完全匹配
+	 */
+	private Map<String, Object> convertDiffBlockToFrontendFormat(DiffBlock diff) {
+		Map<String, Object> frontendDiff = new HashMap<>();
+		
+		// 基本信息
+		frontendDiff.put("page", diff.page);
+		frontendDiff.put("oldText", diff.oldText != null ? diff.oldText : "");
+		frontendDiff.put("newText", diff.newText != null ? diff.newText : "");
+		
+		// 操作类型 - 转换为前端期望的格式
+		String operation = "UNKNOWN";
+		if (diff.type == DiffBlock.DiffType.DELETED) {
+			operation = "DELETE";
+		} else if (diff.type == DiffBlock.DiffType.ADDED) {
+			operation = "INSERT";
+		} else if (diff.type == DiffBlock.DiffType.MODIFIED) {
+			operation = "MODIFY";
+		}
+		frontendDiff.put("operation", operation);
+		
+		// 页面信息 - 设置具体的页码
+		if (diff.pageA != null && !diff.pageA.isEmpty()) {
+			frontendDiff.put("pageA", diff.pageA.get(0));
+			frontendDiff.put("pageAList", diff.pageA);
+		} else {
+			frontendDiff.put("pageA", diff.page);
+			frontendDiff.put("pageAList", List.of(diff.page));
+		}
+		
+		if (diff.pageB != null && !diff.pageB.isEmpty()) {
+			frontendDiff.put("pageB", diff.pageB.get(0));
+			frontendDiff.put("pageBList", diff.pageB);
+		} else {
+			frontendDiff.put("pageB", diff.page);
+			frontendDiff.put("pageBList", List.of(diff.page));
+		}
+		
+		// 坐标信息 - 转换为前端期望的单个bbox格式
+		if (diff.oldBboxes != null && !diff.oldBboxes.isEmpty()) {
+			frontendDiff.put("oldBbox", diff.oldBboxes.get(0)); // 前端期望单个bbox
+			frontendDiff.put("oldBboxes", diff.oldBboxes);       // 保留数组格式以防需要
+		}
+		
+		if (diff.newBboxes != null && !diff.newBboxes.isEmpty()) {
+			frontendDiff.put("newBbox", diff.newBboxes.get(0)); // 前端期望单个bbox
+			frontendDiff.put("newBboxes", diff.newBboxes);       // 保留数组格式以防需要
+		}
+		
+		// 文本信息
+		frontendDiff.put("textStartIndexA", diff.textStartIndexA);
+		frontendDiff.put("textStartIndexB", diff.textStartIndexB);
+		
+		// 完整文本信息
+		if (diff.allTextA != null && !diff.allTextA.isEmpty()) {
+			frontendDiff.put("allTextA", diff.allTextA);
+		} else {
+			frontendDiff.put("allTextA", diff.oldText != null ? List.of(diff.oldText) : new ArrayList<>());
+		}
+		
+		if (diff.allTextB != null && !diff.allTextB.isEmpty()) {
+			frontendDiff.put("allTextB", diff.allTextB);
+		} else {
+			frontendDiff.put("allTextB", diff.newText != null ? List.of(diff.newText) : new ArrayList<>());
+		}
+		
+		// 差异范围信息 - 如果没有则创建默认的
+		if (diff.diffRangesA != null) {
+			frontendDiff.put("diffRangesA", diff.diffRangesA);
+		} else if (diff.oldText != null && !diff.oldText.isEmpty()) {
+			// 创建默认的差异范围
+			Map<String, Object> range = new HashMap<>();
+			range.put("start", 0);
+			range.put("end", diff.oldText.length());
+			range.put("type", "DIFF");
+			frontendDiff.put("diffRangesA", List.of(range));
+		} else {
+			frontendDiff.put("diffRangesA", new ArrayList<>());
+		}
+		
+		if (diff.diffRangesB != null) {
+			frontendDiff.put("diffRangesB", diff.diffRangesB);
+		} else if (diff.newText != null && !diff.newText.isEmpty()) {
+			// 创建默认的差异范围
+			Map<String, Object> range = new HashMap<>();
+			range.put("start", 0);
+			range.put("end", diff.newText.length());
+			range.put("type", "DIFF");
+			frontendDiff.put("diffRangesB", List.of(range));
+		} else {
+			frontendDiff.put("diffRangesB", new ArrayList<>());
+		}
+		
+		// 上一个位置信息 - 如果没有则设置为null或默认值
+		frontendDiff.put("prevOldBbox", diff.prevOldBboxes != null && !diff.prevOldBboxes.isEmpty() ? 
+			diff.prevOldBboxes.get(0) : null);
+		frontendDiff.put("prevNewBbox", diff.prevNewBboxes != null && !diff.prevNewBboxes.isEmpty() ? 
+			diff.prevNewBboxes.get(0) : null);
+		
+		logger.debug("转换差异项: {} -> {}", operation, frontendDiff);
+		return frontendDiff;
 	}
 }
