@@ -348,7 +348,42 @@ public class CompareService {
                 task.setOldFileName((String) resultData.get("oldFileName"));
                 task.setNewFileName((String) resultData.get("newFileName"));
                 task.setStatus(CompareTask.Status.COMPLETED);
-                // 不再需要设置PDF URL，全部使用画布显示
+                
+                // 从result.json中恢复时间信息
+                try {
+                    // 读取开始时间
+                    String startTimeStr = (String) resultData.get("startTime");
+                    if (startTimeStr != null) {
+                        task.setStartTime(java.time.LocalDateTime.parse(startTimeStr));
+                        logger.debug("从文件恢复开始时间: {}", startTimeStr);
+                    }
+                    
+                    // 读取结束时间（如果存在）
+                    String endTimeStr = (String) resultData.get("endTime");
+                    if (endTimeStr != null) {
+                        task.setEndTime(java.time.LocalDateTime.parse(endTimeStr));
+                        logger.debug("从文件恢复结束时间: {}", endTimeStr);
+                    }
+                    
+                    // 读取总耗时（如果存在）
+                    Object totalDurationObj = resultData.get("totalDuration");
+                    if (totalDurationObj != null) {
+                        Long totalDuration = null;
+                        if (totalDurationObj instanceof Number) {
+                            totalDuration = ((Number) totalDurationObj).longValue();
+                        }
+                        if (totalDuration != null) {
+                            task.setTotalDuration(totalDuration);
+                            logger.debug("从文件恢复总耗时: {}ms", totalDuration);
+                        }
+                    }
+                    
+                    logger.info("✅ 从result.json恢复任务时间信息: {}", taskId);
+                    
+                } catch (Exception e) {
+                    logger.warn("恢复任务时间信息时出错，使用默认值: {}", e.getMessage());
+                }
+                
                 return task;
             }
             
@@ -734,6 +769,9 @@ public class CompareService {
         // 设置任务开始时间
         task.setStartTime(java.time.LocalDateTime.now());
         
+        // 在方法开始处定义frontendResult，以便在整个方法中使用
+        Map<String, Object> frontendResult = null;
+        
         // 记录文档基本信息
         Path oldPath = Paths.get(oldFilePath);
         Path newPath = Paths.get(newFilePath);
@@ -915,7 +953,7 @@ public class CompareService {
 
                 // 创建包装对象用于返回前端期望的格式
                 // 创建前端结果对象的信息通过进度管理器输出
-                Map<String, Object> frontendResult = new HashMap<>();
+                frontendResult = new HashMap<>();
                 frontendResult.put("taskId", task.getTaskId());
                 frontendResult.put("oldFileName", task.getOldFileName());
                 frontendResult.put("newFileName", task.getNewFileName());
@@ -956,18 +994,7 @@ public class CompareService {
                 // 保存前端格式的结果
                 // 保存结果到缓存的信息通过进度管理器输出
                 results.put(task.getTaskId(), result);
-                frontendResults.put(task.getTaskId(), frontendResult);
-
-                // 持久化写入磁盘，供前端或服务重启后读取
-                try {
-                    Path jsonPath = getFrontendResultJsonPath(task.getTaskId());
-                    Files.createDirectories(jsonPath.getParent());
-                    byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
-                    Files.write(jsonPath, json);
-                    progressManager.logStepDetail("前端结果已写入文件: {}", jsonPath.toAbsolutePath());
-                } catch (Exception ioEx) {
-                    progressManager.logError("写入前端结果JSON失败: " + ioEx.getMessage(), ioEx);
-                }
+                // 暂时不保存frontendResult，等时间信息完整后再保存
 
                 progressManager.logStepDetail("比对结果保存完成");
             } catch (Exception ex) {
@@ -992,8 +1019,37 @@ public class CompareService {
             task.setStatus(CompareTask.Status.COMPLETED);
             progressManager.completeStep(TaskStep.TASK_COMPLETE);
             
-            // 完成任务并同步统计信息
+            // 完成任务并同步统计信息（包括设置endTime）
             progressManager.completeTask();
+            
+            // 现在时间信息已完整，更新frontendResult并保存到文件
+            if (frontendResult != null) {
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+            }
+            
+            // 保存包含完整时间信息的frontendResult
+            frontendResults.put(task.getTaskId(), frontendResult);
+            
+            // 持久化写入磁盘，供前端或服务重启后读取
+            try {
+                Path jsonPath = getFrontendResultJsonPath(task.getTaskId());
+                Files.createDirectories(jsonPath.getParent());
+                byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
+                Files.write(jsonPath, json);
+                progressManager.logStepDetail("✅ 前端结果已写入文件（包含完整时间信息）: {}", jsonPath.toAbsolutePath());
+                logger.info("✅ 任务时间信息已持久化: startTime={}, endTime={}, duration={}ms", 
+                    task.getStartTime(), task.getEndTime(), task.getTotalDuration());
+            } catch (Exception ioEx) {
+                progressManager.logError("写入前端结果JSON失败: " + ioEx.getMessage(), ioEx);
+            }
             
             // 输出任务完成总结
             progressManager.logTaskSummary();
@@ -1259,7 +1315,29 @@ public class CompareService {
 			// 保存前端格式的结果（Debug模式使用原始任务ID）
                 // 保存结果到缓存的信息通过进度管理器输出
 			results.put(originalTaskId, result);
-			frontendResults.put(originalTaskId, frontendResult);
+			// 暂时不保存frontendResult，等时间信息完整后再保存
+
+            task.setStatus(CompareTask.Status.COMPLETED);
+            task.updateProgress(8, "调试比对完成");
+            
+            // 完成任务并同步统计信息（包括设置endTime）
+            progressManager.completeTask();
+            
+            // 现在时间信息已完整，更新frontendResult并保存到文件
+            if (frontendResult != null) {
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+            }
+            
+            // 保存包含完整时间信息的frontendResult
+            frontendResults.put(originalTaskId, frontendResult);
 
             // 调试模式也需要生成前端结果文件，供前端查看
                 try {
