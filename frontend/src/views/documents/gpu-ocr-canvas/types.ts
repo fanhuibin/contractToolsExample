@@ -83,4 +83,4 @@ export type CanvasMode = 'old' | 'new'
 export type ScrollSide = 'old' | 'new'
 
 // 筛选模式
-export type FilterMode = 'ALL' | 'DELETE' | 'INSERT'
+export type FilterMode = 'ALL' | 'DELETE' | 'INSERT' | 'IGNORED'

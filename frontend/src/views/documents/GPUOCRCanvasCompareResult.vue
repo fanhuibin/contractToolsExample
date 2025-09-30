@@ -183,12 +183,7 @@
           <span class="diff-list-title">
             差异列表
           </span>
-          <span class="ignore-box" @click="toggleIgnoredView">
-            <span class="ant-badge ant-badge-not-a-wrapper">
-              <sup data-show="true" class="ant-scroll-number ant-badge-count" :title="ignoredCount.toString()">{{ ignoredCount }}</sup>
-            </span>
-            <span class="ignored-text" :class="{ active: showIgnoredView }">已忽略</span>
-          </span>
+
         </div>
         
         <!-- 差异列表容器 -->
@@ -197,13 +192,16 @@
           <!-- 状态选项卡 -->
           <div class="diff-list-header-tabs">
             <div class="tab-header-item" :class="{ active: filterMode === 'ALL' }" @click="filterMode = 'ALL'">
-              全部 {{ totalCount }}
+              全部 {{ allCount }}
             </div>
             <div class="tab-header-item" :class="{ active: filterMode === 'DELETE' }" @click="filterMode = 'DELETE'">
               删除 {{ deleteCount }}
             </div>
             <div class="tab-header-item" :class="{ active: filterMode === 'INSERT' }" @click="filterMode = 'INSERT'">
               新增 {{ insertCount }}
+            </div>
+            <div class="tab-header-item" :class="{ active: filterMode === 'IGNORED' }" @click="filterMode = 'IGNORED'">
+              已忽略 {{ ignoredCount }}
             </div>
             <div class="bottom-bar" :style="{ transform: `translateX(${getTabBarPosition()}%)` }"></div>
           </div>
@@ -229,7 +227,7 @@
                   'diff_update': false, // 当前系统只有DELETE和INSERT操作
                   'diff_delete': r.operation === 'DELETE',
                   'diff_insert': r.operation === 'INSERT',
-                  'ignored': showIgnoredView
+                  'ignored': filterMode === 'IGNORED'
                 }"
                 @click="jumpTo(indexInAll(i))"
               >
@@ -247,7 +245,7 @@
                       class="ignore-btn"
                       @click.stop="toggleIgnore(indexInAll(i))"
                     >
-                      {{ showIgnoredView ? '取消忽略' : '忽略' }}
+                      {{ filterMode === 'IGNORED' ? '取消忽略' : '忽略' }}
                     </el-button>
                   </div>
                 </div>
@@ -489,7 +487,7 @@ const remarksMap = ref<Map<number, string>>(new Map())
 const showRemarkDialogVisible = ref(false)
 const currentRemarkIndex = ref(-1)
 const currentRemarkText = ref('')
-const showIgnoredView = ref(false) // 控制是否显示已忽略视图
+// 移除 showIgnoredView，现在使用 filterMode 来控制
 const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状态
 
 
@@ -497,12 +495,12 @@ const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状�
 // 计算属性
 const filteredResults = computed(() => {
   return results.value.filter((r, index) => {
-    // 首先根据忽略状态过滤
-    if (showIgnoredView.value) {
+    // 根据过滤模式进行过滤
+    if (filterMode.value === 'IGNORED') {
       // 显示已忽略的项目
       if (!ignoredSet.value.has(index)) return false
     } else {
-      // 显示未忽略的项目
+      // 其他模式显示未忽略的项目
       if (ignoredSet.value.has(index)) return false
     }
     
@@ -512,6 +510,13 @@ const filteredResults = computed(() => {
     return true
   })
 })
+
+// 计算全部项数量（未忽略）
+const allCount = computed(() => 
+  results.value.filter((r, index) => 
+    !ignoredSet.value.has(index)
+  ).length
+)
 
 // 计算未忽略的删除项数量
 const deleteCount = computed(() => 
@@ -1391,23 +1396,7 @@ const cancelRemark = () => {
   currentRemarkIndex.value = -1
 }
 
-const toggleIgnoredView = () => {
-  showIgnoredView.value = !showIgnoredView.value
-  // 切换视图时重置活动索引和选中状态
-  activeIndex.value = -1
-  selectedDiffIndex.value = null
-  
-  // 更新中间Canvas的差异图标和连接线
-  nextTick(() => {
-    if (middleCanvasInteraction) {
-      middleCanvasInteraction.updateProps({
-        filteredResults: filteredResults.value,
-        selectedDiffIndex: selectedDiffIndex.value
-      })
-      middleCanvasInteraction.render()
-    }
-  })
-}
+// 移除 toggleIgnoredView 函数，现在直接通过选项卡切换
 
 
 
@@ -1416,6 +1405,7 @@ const getTabBarPosition = () => {
   if (filterMode.value === 'ALL') return 0
   if (filterMode.value === 'DELETE') return 100 // 移动一个选项卡的宽度
   if (filterMode.value === 'INSERT') return 200 // 移动两个选项卡的宽度
+  if (filterMode.value === 'IGNORED') return 300 // 移动三个选项卡的宽度
   return 0
 }
 
@@ -2200,7 +2190,7 @@ body.dragging * {
   position: absolute;
   bottom: 0;
   left: 0;
-  width: 33.33%; /* 调整为3个选项卡的宽度 */
+  width: 25%; /* 调整为4个选项卡的宽度 */
   height: 2px;
   background: #1890ff;
   transition: transform 0.3s;
@@ -2457,8 +2447,8 @@ body.dragging * {
 
 /* 差异文本高亮样式 - 参考设计 */
 :deep(.diff-insert) {
-  background-color: #fff2e8;
-  color: #ff9500;
+  background-color: #f6ffed;
+  color: #52c41a;
   padding: 1px 3px;
   border-radius: 3px;
   font-weight: 600;
