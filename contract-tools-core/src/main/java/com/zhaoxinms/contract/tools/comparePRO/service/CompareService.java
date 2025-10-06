@@ -557,6 +557,118 @@ public class CompareService {
 	}
 
 	/**
+	 * 保存用户修改（直接修改后端存储的数据）
+	 */
+	public void saveUserModifications(String taskId, com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest modifications) {
+		System.out.println("💾 直接修改后端数据 - 任务 " + taskId + ": 忽略" + 
+			(modifications.getIgnoredDifferences() != null ? modifications.getIgnoredDifferences().size() : 0) + 
+			"项, 备注" + 
+			(modifications.getRemarks() != null ? modifications.getRemarks().size() : 0) + "项");
+		
+		// 1. 从 frontendResults 获取原始数据
+		Map<String, Object> frontendResult = frontendResults.get(taskId);
+		if (frontendResult == null) {
+			// 尝试从文件读取
+			frontendResult = getRawFrontendResult(taskId);
+			if (frontendResult == null) {
+				throw new RuntimeException("任务 " + taskId + " 的前端结果不存在");
+			}
+		}
+		
+		// 2. 获取差异列表
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> differences = (List<Map<String, Object>>) frontendResult.get("differences");
+		if (differences == null || differences.isEmpty()) {
+			System.out.println("⚠️ 任务 " + taskId + " 没有差异项，无需修改");
+			return;
+		}
+		
+		int originalCount = differences.size();
+		List<Integer> ignoredIndices = modifications.getIgnoredDifferences();
+		Map<Integer, String> remarks = modifications.getRemarks();
+		
+		// 3. 修改 differences 列表（标记忽略项，不删除）
+		for (int i = 0; i < differences.size(); i++) {
+			Map<String, Object> diff = differences.get(i);
+			
+			// 检查是否被忽略 - 标记而不是删除
+			if (ignoredIndices != null && ignoredIndices.contains(i)) {
+				diff.put("ignored", true);
+				System.out.println("  ⊗ 标记差异项 " + i + " 为已忽略");
+			} else {
+				// 移除忽略标记（如果之前被忽略，现在取消忽略）
+				diff.remove("ignored");
+			}
+			
+			// 添加或移除备注
+			if (remarks != null && remarks.containsKey(i)) {
+				String remark = remarks.get(i);
+				diff.put("remark", remark);
+				System.out.println("  📝 为差异项 " + i + " 添加备注: " + remark);
+			} else {
+				// 移除备注（如果之前有备注，现在删除）
+				diff.remove("remark");
+			}
+		}
+		
+		// 4. 重新计算统计信息（只统计未忽略的项）
+		int totalCount = 0;
+		int deleteCount = 0;
+		int insertCount = 0;
+		int ignoredCount = 0;
+		
+		for (Map<String, Object> diff : differences) {
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			if (isIgnored != null && isIgnored) {
+				ignoredCount++;
+				continue; // 跳过忽略项的统计
+			}
+			
+			totalCount++;
+			String operation = (String) diff.get("operation");
+			if ("DELETE".equals(operation)) {
+				deleteCount++;
+			} else if ("INSERT".equals(operation)) {
+				insertCount++;
+			}
+		}
+		
+		frontendResult.put("totalDiffCount", totalCount);
+		frontendResult.put("deleteCount", deleteCount);
+		frontendResult.put("insertCount", insertCount);
+		frontendResult.put("ignoredCount", ignoredCount);
+		
+		System.out.println("✅ 修改已保存: 总" + originalCount + "项, 有效" + totalCount + "项, 已忽略" + ignoredCount + "项");
+		
+		// 6. 保存修改后的数据回 frontendResults 缓存
+		frontendResults.put(taskId, frontendResult);
+		
+		// 7. 保存修改后的数据到文件
+		try {
+			Path jsonPath = getFrontendResultJsonPath(taskId);
+			Files.createDirectories(jsonPath.getParent());
+			byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
+			Files.write(jsonPath, json);
+			System.out.println("💾 数据已持久化到文件: " + jsonPath.toAbsolutePath());
+		} catch (Exception e) {
+			System.err.println("❌ 持久化失败: " + e.getMessage());
+			throw new RuntimeException("保存用户修改到文件失败: " + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * 获取用户修改（从文件重新读取数据即可，因为已经被直接修改过）
+	 */
+	public com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest getUserModifications(String taskId) {
+		// 数据已经被直接修改，返回空对象即可
+		com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest request = 
+			new com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest();
+		request.setIgnoredDifferences(new ArrayList<>());
+		request.setRemarks(new HashMap<>());
+		return request;
+	}
+
+	/**
 	 * 文档图片信息类
 	 */
 	public static class DocumentImageInfo {
@@ -3756,20 +3868,40 @@ public class CompareService {
 		exportResult.put("failedPagesCount", result.getFailedPages() != null ? result.getFailedPages().size() : 0);
 		
 		// 使用保留的原始格式差异数据，如果没有则使用转换后的数据
+		List<Map<String, Object>> differencesToExport;
 		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
-			exportResult.put("differences", result.getFormattedDifferences());
-			logger.info("✅ 使用原始格式的差异数据，包含 {} 个差异项", result.getFormattedDifferences().size());
+			differencesToExport = result.getFormattedDifferences();
+			logger.info("✅ 使用原始格式的差异数据，包含 {} 个差异项", differencesToExport.size());
 		} else {
-			exportResult.put("differences", result.getDifferences() != null ? result.getDifferences() : new ArrayList<>());
-			logger.warn("⚠️ 使用转换后的差异数据，可能格式不匹配");
+			// 转换 DiffBlock 列表为 Map 格式
+			List<DiffBlock> diffBlocks = result.getDifferences();
+			if (diffBlocks != null && !diffBlocks.isEmpty()) {
+				differencesToExport = convertDiffBlocksToMapFormat(diffBlocks, false, null, null);
+				logger.warn("⚠️ 使用转换后的差异数据，已转换为Map格式");
+			} else {
+				differencesToExport = new ArrayList<>();
+				logger.warn("⚠️ 无差异数据可导出");
+			}
 		}
 		
-		// 如果有差异数据，记录总数
-		if (result.getDifferences() != null && !result.getDifferences().isEmpty()) {
-			logger.info("✅ 导出包含 {} 个差异项", result.getDifferences().size());
-		} else {
-			logger.warn("⚠️ 导出的比对结果中无差异数据");
+		// 统计被忽略的差异项（但不过滤掉，保留给前端显示）
+		int ignoredCount = 0;
+		int validCount = 0;
+		for (Map<String, Object> diff : differencesToExport) {
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			if (isIgnored != null && isIgnored) {
+				ignoredCount++;
+			} else {
+				validCount++;
+			}
 		}
+		
+		// 导出全部差异项（包括被忽略的），让前端根据ignored字段控制显示
+		exportResult.put("differences", differencesToExport);
+		
+		// 记录导出统计
+		logger.info("✅ 导出包含 {} 个差异项（有效 {} 项，已忽略 {} 项）", 
+			differencesToExport.size(), validCount, ignoredCount);
 		exportResult.put("oldFileName", result.getOldFileName());
 		exportResult.put("newFileName", result.getNewFileName());
 		exportResult.put("startTime", System.currentTimeMillis()); // 使用当前时间

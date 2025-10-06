@@ -571,6 +571,50 @@ public class GPUCompareController {
     }
 
     /**
+     * 保存用户修改（忽略差异、添加备注）
+     */
+    @PostMapping("/save-user-modifications/{taskId}")
+    public ResponseEntity<Result<String>> saveUserModifications(
+            @PathVariable String taskId,
+            @RequestBody UserModificationsRequest request) {
+        try {
+            compareService.saveUserModifications(taskId, request);
+            return ResponseEntity.ok(Result.success("用户修改已保存", null));
+        } catch (Exception e) {
+            log.error("保存用户修改失败", e);
+            return ResponseEntity.internalServerError().body(Result.error("保存用户修改失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 获取用户修改（页面刷新后恢复状态）
+     */
+    @GetMapping("/get-user-modifications/{taskId}")
+    public ResponseEntity<Result<UserModificationsRequest>> getUserModifications(@PathVariable String taskId) {
+        try {
+            UserModificationsRequest modifications = compareService.getUserModifications(taskId);
+            return ResponseEntity.ok(Result.success("获取用户修改成功", modifications));
+        } catch (Exception e) {
+            log.error("获取用户修改失败", e);
+            return ResponseEntity.internalServerError().body(Result.error("获取用户修改失败: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * 用户修改请求DTO
+     */
+    public static class UserModificationsRequest {
+        private List<Integer> ignoredDifferences;
+        private Map<Integer, String> remarks;
+
+        // Getters and setters
+        public List<Integer> getIgnoredDifferences() { return ignoredDifferences; }
+        public void setIgnoredDifferences(List<Integer> ignoredDifferences) { this.ignoredDifferences = ignoredDifferences; }
+        public Map<Integer, String> getRemarks() { return remarks; }
+        public void setRemarks(Map<Integer, String> remarks) { this.remarks = remarks; }
+    }
+
+    /**
      * 导出请求DTO
      */
     public static class ExportRequest {
