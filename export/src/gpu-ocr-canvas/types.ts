@@ -45,6 +45,8 @@ export interface DifferenceItem {
   newText?: string
   textStartIndexA?: number
   textStartIndexB?: number
+  remark?: string  // 用户添加的备注信息
+  ignored?: boolean  // 是否被忽略
 }
 
 // 位置信息
@@ -83,4 +85,4 @@ export type CanvasMode = 'old' | 'new'
 export type ScrollSide = 'old' | 'new'
 
 // 筛选模式
-export type FilterMode = 'ALL' | 'DELETE' | 'INSERT'
+export type FilterMode = 'ALL' | 'DELETE' | 'INSERT' | 'IGNORED'

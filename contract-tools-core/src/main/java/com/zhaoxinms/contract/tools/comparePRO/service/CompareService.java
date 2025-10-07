@@ -3869,7 +3869,16 @@ public class CompareService {
 			return;
 		}
 		
-		// 创建表格: 6列 (比对文档名称, 序号, 页码, 基准文档内容, 比对文档内容, 差异类型)
+		// 检查是否有备注
+		boolean hasRemark = differences.stream()
+			.anyMatch(diff -> {
+				String remark = (String) diff.get("remark");
+				return remark != null && !remark.isEmpty();
+			});
+		
+		// 创建表格: 根据是否有备注决定列数
+		// 有备注: 6列 (比对文档名称, 序号, 页码, 文档修改内容, 差异类型, 备注)
+		// 无备注: 5列 (比对文档名称, 序号, 页码, 文档修改内容, 差异类型)
 		org.apache.poi.xwpf.usermodel.XWPFTable table = document.createTable();
 		table.setWidth("100%");
 		
@@ -3883,11 +3892,15 @@ public class CompareService {
 		headerRow.addNewTableCell();
 		setCellText(headerRow.getCell(2), "页码", true, true);
 		headerRow.addNewTableCell();
-		setCellText(headerRow.getCell(3), "基准文档内容", true, true);
+		setCellText(headerRow.getCell(3), "文档修改内容", true, true);
 		headerRow.addNewTableCell();
-		setCellText(headerRow.getCell(4), "比对文档内容", true, true);
-		headerRow.addNewTableCell();
-		setCellText(headerRow.getCell(5), "差异类型", true, true);
+		setCellText(headerRow.getCell(4), "差异类型", true, true);
+		
+		// 如果有备注，添加备注列
+		if (hasRemark) {
+			headerRow.addNewTableCell();
+			setCellText(headerRow.getCell(5), "备注", true, true);
+		}
 		
 		// 添加数据行（包括被忽略的差异）
 		for (int i = 0; i < differences.size(); i++) {
@@ -3910,22 +3923,19 @@ public class CompareService {
 			String pageText = pageObj != null ? pageObj.toString() : "";
 			setCellText(row.getCell(2), pageText, false, false, ignored);
 			
-			// 基准文档内容 & 比对文档内容 (需要格式化差异)
-			addFormattedDifferenceContent(row.getCell(3), row.getCell(4), diff, ignored);
+			// 文档修改内容 (合并显示，用背景色高亮差异)
+			addMergedDifferenceContent(row.getCell(3), diff, ignored);
 			
-			// 差异类型（包含备注）
+			// 差异类型
 			String diffType = getDifferenceType(diff);
-			String remark = (String) diff.get("remark");
-			
-			// 在差异类型列中显示类型和备注
-			org.apache.poi.xwpf.usermodel.XWPFTableCell typeCell = row.getCell(5);
+			org.apache.poi.xwpf.usermodel.XWPFTableCell typeCell = row.getCell(4);
 			typeCell.removeParagraph(0);
 			org.apache.poi.xwpf.usermodel.XWPFParagraph typePara = typeCell.addParagraph();
 			
-			// 添加差异类型文本（如果被忽略，显示"已忽略：xxx"）
+			// 添加差异类型文本（如果被忽略，显示"xxx（已忽略）"）
 			org.apache.poi.xwpf.usermodel.XWPFRun typeRun = typePara.createRun();
 			if (ignored) {
-				typeRun.setText("已忽略：" + diffType);
+				typeRun.setText(diffType + "（已忽略）");
 				typeRun.setColor("999999"); // 灰色
 			} else {
 				typeRun.setText(diffType);
@@ -3933,14 +3943,14 @@ public class CompareService {
 			typeRun.setFontFamily("宋体");
 			typeRun.setFontSize(10);
 			
-			// 如果有备注，在同一单元格中换行显示
-			if (remark != null && !remark.isEmpty()) {
-				typeRun.addBreak(); // 换行
-				org.apache.poi.xwpf.usermodel.XWPFRun remarkRun = typePara.createRun();
-				remarkRun.setText("备注：" + remark);
-				remarkRun.setFontFamily("宋体");
-				remarkRun.setFontSize(10);
-				remarkRun.setColor("666666"); // 灰色显示备注
+			// 如果有备注列，填充备注内容
+			if (hasRemark) {
+				String remark = (String) diff.get("remark");
+				if (remark != null && !remark.isEmpty()) {
+					setCellText(row.getCell(5), remark, false, false, ignored);
+				} else {
+					setCellText(row.getCell(5), "", false, false, ignored);
+				}
 			}
 		}
 		
@@ -3976,7 +3986,230 @@ public class CompareService {
 	}
 	
 	/**
+	 * 添加合并的差异内容（使用背景色高亮）
+	 * 显示完整的上下文句子，并只对差异部分进行背景色高亮
+	 */
+	private void addMergedDifferenceContent(
+		org.apache.poi.xwpf.usermodel.XWPFTableCell cell, 
+		Map<String, Object> diff,
+		boolean ignored) {
+		
+		String operation = (String) diff.get("operation");
+		
+		cell.removeParagraph(0);
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para = cell.addParagraph();
+		
+		if ("DELETE".equals(operation)) {
+			// 删除：显示完整的旧文本，对差异部分红色背景高亮
+			String fullText = getFullTextFromDiff(diff, "old");
+			List<Map<String, Object>> diffRanges = getDiffRangesFromDiff(diff, "old");
+			addTextWithHighlight(para, fullText, diffRanges, "FFCCCC", ignored);
+			
+		} else if ("INSERT".equals(operation)) {
+			// 新增：显示完整的新文本，对差异部分绿色背景高亮
+			String fullText = getFullTextFromDiff(diff, "new");
+			List<Map<String, Object>> diffRanges = getDiffRangesFromDiff(diff, "new");
+			addTextWithHighlight(para, fullText, diffRanges, "CCFFCC", ignored);
+			
+		} else if ("MODIFY".equals(operation)) {
+			// 修改：显示"完整旧文本→完整新文本"，差异部分分别用不同背景色
+			String oldFullText = getFullTextFromDiff(diff, "old");
+			List<Map<String, Object>> oldDiffRanges = getDiffRangesFromDiff(diff, "old");
+			addTextWithHighlight(para, oldFullText, oldDiffRanges, "FFCCCC", ignored);
+			
+			// 箭头
+			org.apache.poi.xwpf.usermodel.XWPFRun arrowRun = para.createRun();
+			arrowRun.setText(" → ");
+			arrowRun.setFontFamily("宋体");
+			arrowRun.setFontSize(10);
+			if (ignored) {
+				arrowRun.setColor("999999");
+			}
+			
+			String newFullText = getFullTextFromDiff(diff, "new");
+			List<Map<String, Object>> newDiffRanges = getDiffRangesFromDiff(diff, "new");
+			addTextWithHighlight(para, newFullText, newDiffRanges, "CCFFCC", ignored);
+		}
+	}
+	
+	/**
+	 * 添加带高亮的文本（完整文本 + 差异范围高亮）
+	 */
+	private void addTextWithHighlight(
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para,
+		String fullText,
+		List<Map<String, Object>> diffRanges,
+		String highlightColor,
+		boolean ignored) {
+		
+		if (fullText == null || fullText.isEmpty()) {
+			return;
+		}
+		
+		// 如果没有差异范围，整个文本都是差异
+		if (diffRanges == null || diffRanges.isEmpty()) {
+			org.apache.poi.xwpf.usermodel.XWPFRun run = para.createRun();
+			run.setText(fullText);
+			run.setFontFamily("宋体");
+			run.setFontSize(10);
+			setRunBackgroundColor(run, highlightColor);
+			if (ignored) {
+				run.setColor("999999");
+			}
+			return;
+		}
+		
+		// 按差异范围分段显示
+		int currentPos = 0;
+		for (Map<String, Object> range : diffRanges) {
+			int start = getIntValue(range.get("start"), 0);
+			int end = getIntValue(range.get("end"), fullText.length());
+			
+			// 确保索引有效
+			start = Math.max(0, Math.min(start, fullText.length()));
+			end = Math.max(start, Math.min(end, fullText.length()));
+			
+			// 添加差异前的普通文本
+			if (currentPos < start) {
+				String normalText = fullText.substring(currentPos, start);
+				org.apache.poi.xwpf.usermodel.XWPFRun normalRun = para.createRun();
+				normalRun.setText(normalText);
+				normalRun.setFontFamily("宋体");
+				normalRun.setFontSize(10);
+				if (ignored) {
+					normalRun.setColor("999999");
+				}
+			}
+			
+			// 添加高亮的差异文本
+			if (start < end) {
+				String diffText = fullText.substring(start, end);
+				org.apache.poi.xwpf.usermodel.XWPFRun diffRun = para.createRun();
+				diffRun.setText(diffText);
+				diffRun.setFontFamily("宋体");
+				diffRun.setFontSize(10);
+				setRunBackgroundColor(diffRun, highlightColor);
+				if (ignored) {
+					diffRun.setColor("999999");
+				}
+			}
+			
+			currentPos = end;
+		}
+		
+		// 添加最后剩余的普通文本
+		if (currentPos < fullText.length()) {
+			String remainingText = fullText.substring(currentPos);
+			org.apache.poi.xwpf.usermodel.XWPFRun remainingRun = para.createRun();
+			remainingRun.setText(remainingText);
+			remainingRun.setFontFamily("宋体");
+			remainingRun.setFontSize(10);
+			if (ignored) {
+				remainingRun.setColor("999999");
+			}
+		}
+	}
+	
+	/**
+	 * 从差异项中获取完整文本
+	 */
+	private String getFullTextFromDiff(Map<String, Object> diff, String type) {
+		if ("old".equals(type)) {
+			// 先尝试 allTextA
+			Object allTextA = diff.get("allTextA");
+			if (allTextA != null) {
+				if (allTextA instanceof List) {
+					List<?> textList = (List<?>) allTextA;
+					if (!textList.isEmpty()) {
+						return String.join("", textList.stream()
+							.map(Object::toString)
+							.toArray(String[]::new));
+					}
+				} else {
+					String text = allTextA.toString();
+					if (!text.isEmpty()) {
+						return text;
+					}
+				}
+			}
+			// 回退到 oldText
+			return getTextFromDiff(diff, "old");
+		} else {
+			// 先尝试 allTextB
+			Object allTextB = diff.get("allTextB");
+			if (allTextB != null) {
+				if (allTextB instanceof List) {
+					List<?> textList = (List<?>) allTextB;
+					if (!textList.isEmpty()) {
+						return String.join("", textList.stream()
+							.map(Object::toString)
+							.toArray(String[]::new));
+					}
+				} else {
+					String text = allTextB.toString();
+					if (!text.isEmpty()) {
+						return text;
+					}
+				}
+			}
+			// 回退到 newText
+			return getTextFromDiff(diff, "new");
+		}
+	}
+	
+	/**
+	 * 从差异项中获取差异范围
+	 */
+	@SuppressWarnings("unchecked")
+	private List<Map<String, Object>> getDiffRangesFromDiff(Map<String, Object> diff, String type) {
+		String rangeKey = "old".equals(type) ? "diffRangesA" : "diffRangesB";
+		Object ranges = diff.get(rangeKey);
+		
+		if (ranges instanceof List) {
+			try {
+				return (List<Map<String, Object>>) ranges;
+			} catch (ClassCastException e) {
+				logger.warn("无法转换差异范围: {}", e.getMessage());
+			}
+		}
+		
+		return new ArrayList<>();
+	}
+	
+	/**
+	 * 安全地从Object转换为int
+	 */
+	private int getIntValue(Object obj, int defaultValue) {
+		if (obj == null) {
+			return defaultValue;
+		}
+		if (obj instanceof Number) {
+			return ((Number) obj).intValue();
+		}
+		try {
+			return Integer.parseInt(obj.toString());
+		} catch (NumberFormatException e) {
+			return defaultValue;
+		}
+	}
+	
+	/**
+	 * 设置Run的背景色
+	 */
+	private void setRunBackgroundColor(org.apache.poi.xwpf.usermodel.XWPFRun run, String color) {
+		org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr rPr = run.getCTR().getRPr();
+		if (rPr == null) {
+			rPr = run.getCTR().addNewRPr();
+		}
+		org.openxmlformats.schemas.wordprocessingml.x2006.main.CTShd shd = rPr.addNewShd();
+		shd.setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STShd.CLEAR);
+		shd.setColor("auto");
+		shd.setFill(color);
+	}
+	
+	/**
 	 * 添加格式化的差异内容（支持删除线和下划线，支持忽略标记）
+	 * 保留旧方法以备不时之需
 	 */
 	private void addFormattedDifferenceContent(
 		org.apache.poi.xwpf.usermodel.XWPFTableCell oldCell, 
