@@ -4989,6 +4989,7 @@ public class CompareService {
 		}
 		
 		return charBoxes;
+	}
 
 	/**
 	 * 复制任务图片到临时目录
