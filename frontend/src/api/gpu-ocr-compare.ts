@@ -226,12 +226,36 @@ export function getGPUOCRCompareTaskSummary(taskId: string) {
   })
 }
 
+// 保存用户修改
+export function saveUserModifications(taskId: string, modifications: {
+  ignoredDifferences: number[]
+  remarks: Record<number, string>
+}) {
+  return request({
+    url: `/compare-pro/save-user-modifications/${taskId}`,
+    method: 'post',
+    data: modifications
+  })
+}
+
+// 获取用户修改
+export function getUserModifications(taskId: string) {
+  return request({
+    url: `/compare-pro/get-user-modifications/${taskId}`,
+    method: 'get'
+  })
+}
+
 // 导出比对报告
 export function exportCompareReport(exportData: {
   taskId: string
   formats: string[]
   includeIgnored?: boolean
   includeRemarks?: boolean
+  userModifications?: {
+    ignoredDifferences: number[]
+    remarks: Record<number, string>
+  }
 }) {
   return request({
     url: '/compare-pro/export-report',

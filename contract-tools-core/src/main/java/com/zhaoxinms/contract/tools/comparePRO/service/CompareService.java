@@ -3742,32 +3742,333 @@ public class CompareService {
 	 * 生成DOCX格式报告
 	 */
 	private byte[] generateDOCXReport(CompareResult result, ExportRequest request) throws Exception {
-		// 这里需要实现DOCX报告生成逻辑
-		// 使用Apache POI或者其他DOCX库
+		logger.info("📄 开始生成DOCX格式比对报告");
 		
-		// 临时返回示例内容
-		String content = "比对报告\n\n";
-		content += "任务ID: " + request.getTaskId() + "\n";
-		content += "原文档: " + result.getOldFileName() + "\n";
-		content += "新文档: " + result.getNewFileName() + "\n";
-		content += "差异总数: " + (result.getDifferences() != null ? result.getDifferences().size() : 0) + "\n\n";
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			 org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument()) {
+			
+			// 1. 添加标题
+			org.apache.poi.xwpf.usermodel.XWPFParagraph titlePara = document.createParagraph();
+			titlePara.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+			org.apache.poi.xwpf.usermodel.XWPFRun titleRun = titlePara.createRun();
+			titleRun.setText("合同比对报告");
+			titleRun.setBold(true);
+			titleRun.setFontSize(18);
+			titleRun.setFontFamily("宋体");
+			
+			// 2. 添加基本信息部分
+			addBasicInfo(document, result, request);
+			
+			// 3. 添加差异详细信息标题
+			org.apache.poi.xwpf.usermodel.XWPFParagraph detailTitlePara = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun detailTitleRun = detailTitlePara.createRun();
+			detailTitleRun.setText("差异详细信息");
+			detailTitleRun.setBold(true);
+			detailTitleRun.setFontSize(14);
+			detailTitleRun.setFontFamily("宋体");
+			
+			// 4. 添加差异详细表格
+			addDifferenceTable(document, result, request);
+			
+			// 5. 写入到字节数组
+			document.write(baos);
+			logger.info("✅ DOCX报告生成成功，大小: {} KB", baos.size() / 1024);
+			
+			return baos.toByteArray();
+		}
+	}
+	
+	/**
+	 * 添加基本信息部分
+	 */
+	private void addBasicInfo(org.apache.poi.xwpf.usermodel.XWPFDocument document, CompareResult result, ExportRequest request) {
+		// 获取差异数据（使用保留的原始格式或转换后的数据）
+		List<Map<String, Object>> differences;
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			differences = result.getFormattedDifferences();
+		} else {
+			differences = result.getDifferences() != null ? 
+				convertDiffBlocksToMapFormat(result.getDifferences(), false, null, null) : 
+				new ArrayList<>();
+		}
 		
-		if (result.getDifferences() != null) {
-			for (int i = 0; i < result.getDifferences().size(); i++) {
-				DiffBlock diff = result.getDifferences().get(i);
-				content += "差异 " + (i + 1) + ": " + diff.type + "\n";
-				content += "页面: " + diff.page + "\n";
-				if (diff.oldText != null && !diff.oldText.isEmpty()) {
-					content += "原文: " + diff.oldText + "\n";
-				}
-				if (diff.newText != null && !diff.newText.isEmpty()) {
-					content += "新文: " + diff.newText + "\n";
-				}
-				content += "\n";
+		// 计算有效差异和已忽略差异
+		long validDiffCount = differences.stream()
+			.filter(diff -> {
+				Boolean ignored = (Boolean) diff.get("ignored");
+				return ignored == null || !ignored;
+			})
+			.count();
+		long ignoredDiffCount = differences.size() - validDiffCount;
+		
+		// 比对编号
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p1 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r1 = p1.createRun();
+		r1.setText("比对编号: " + request.getTaskId());
+		r1.setFontFamily("宋体");
+		r1.setFontSize(12);
+		
+		// 比对结果
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p2 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r2 = p2.createRun();
+		r2.setText("比对结果: " + (validDiffCount > 0 ? "有差异" : "无差异"));
+		r2.setFontFamily("宋体");
+		r2.setFontSize(12);
+		
+		// 差异统计（如果有被忽略的项，显示统计信息）
+		if (ignoredDiffCount > 0) {
+			org.apache.poi.xwpf.usermodel.XWPFParagraph p2_1 = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun r2_1 = p2_1.createRun();
+			r2_1.setText("差异统计: 有效差异 " + validDiffCount + " 项，已忽略差异 " + ignoredDiffCount + " 项");
+			r2_1.setFontFamily("宋体");
+			r2_1.setFontSize(12);
+			r2_1.setColor("666666"); // 灰色显示统计信息
+		}
+		
+		// 基准文档名称
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p3 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r3 = p3.createRun();
+		r3.setText("基准文档名称: " + result.getOldFileName());
+		r3.setFontFamily("宋体");
+		r3.setFontSize(12);
+		
+		// 比对创建时间
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p4 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r4 = p4.createRun();
+		java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+		String formattedTime = java.time.LocalDateTime.now().format(formatter);
+		r4.setText("比对创建时间: " + formattedTime);
+		r4.setFontFamily("宋体");
+		r4.setFontSize(12);
+		
+		// 空行
+		document.createParagraph();
+	}
+	
+	/**
+	 * 添加差异详细表格
+	 */
+	private void addDifferenceTable(org.apache.poi.xwpf.usermodel.XWPFDocument document, CompareResult result, ExportRequest request) {
+		// 获取差异数据
+		List<Map<String, Object>> differences;
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			differences = result.getFormattedDifferences();
+		} else {
+			differences = result.getDifferences() != null ? 
+				convertDiffBlocksToMapFormat(result.getDifferences(), false, null, null) : 
+				new ArrayList<>();
+		}
+		
+		// 不再过滤被忽略的差异，显示所有差异（包括被忽略的）
+		if (differences.isEmpty()) {
+			org.apache.poi.xwpf.usermodel.XWPFParagraph noDiffPara = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun noDiffRun = noDiffPara.createRun();
+			noDiffRun.setText("未发现差异");
+			noDiffRun.setFontFamily("宋体");
+			noDiffRun.setFontSize(12);
+			return;
+		}
+		
+		// 创建表格: 6列 (比对文档名称, 序号, 页码, 基准文档内容, 比对文档内容, 差异类型)
+		org.apache.poi.xwpf.usermodel.XWPFTable table = document.createTable();
+		table.setWidth("100%");
+		
+		// 设置表格边框
+		org.apache.poi.xwpf.usermodel.XWPFTableRow headerRow = table.getRow(0);
+		
+		// 表头
+		setCellText(headerRow.getCell(0), "比对文档名称", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(1), "序号", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(2), "页码", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(3), "基准文档内容", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(4), "比对文档内容", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(5), "差异类型", true, true);
+		
+		// 添加数据行（包括被忽略的差异）
+		for (int i = 0; i < differences.size(); i++) {
+			Map<String, Object> diff = differences.get(i);
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			boolean ignored = isIgnored != null && isIgnored;
+			
+			org.apache.poi.xwpf.usermodel.XWPFTableRow row = table.createRow();
+			
+			// 比对文档名称（合并行）
+			if (i == 0) {
+				setCellText(row.getCell(0), result.getNewFileName(), false, false, ignored);
+			}
+			
+			// 序号
+			setCellText(row.getCell(1), String.valueOf(i + 1), false, false, ignored);
+			
+			// 页码
+			Object pageObj = diff.get("page");
+			String pageText = pageObj != null ? pageObj.toString() : "";
+			setCellText(row.getCell(2), pageText, false, false, ignored);
+			
+			// 基准文档内容 & 比对文档内容 (需要格式化差异)
+			addFormattedDifferenceContent(row.getCell(3), row.getCell(4), diff, ignored);
+			
+			// 差异类型（包含备注）
+			String diffType = getDifferenceType(diff);
+			String remark = (String) diff.get("remark");
+			
+			// 在差异类型列中显示类型和备注
+			org.apache.poi.xwpf.usermodel.XWPFTableCell typeCell = row.getCell(5);
+			typeCell.removeParagraph(0);
+			org.apache.poi.xwpf.usermodel.XWPFParagraph typePara = typeCell.addParagraph();
+			
+			// 添加差异类型文本（如果被忽略，显示"已忽略：xxx"）
+			org.apache.poi.xwpf.usermodel.XWPFRun typeRun = typePara.createRun();
+			if (ignored) {
+				typeRun.setText("已忽略：" + diffType);
+				typeRun.setColor("999999"); // 灰色
+			} else {
+				typeRun.setText(diffType);
+			}
+			typeRun.setFontFamily("宋体");
+			typeRun.setFontSize(10);
+			
+			// 如果有备注，在同一单元格中换行显示
+			if (remark != null && !remark.isEmpty()) {
+				typeRun.addBreak(); // 换行
+				org.apache.poi.xwpf.usermodel.XWPFRun remarkRun = typePara.createRun();
+				remarkRun.setText("备注：" + remark);
+				remarkRun.setFontFamily("宋体");
+				remarkRun.setFontSize(10);
+				remarkRun.setColor("666666"); // 灰色显示备注
 			}
 		}
 		
-		return content.getBytes(StandardCharsets.UTF_8);
+		logger.info("✅ 添加了 {} 个差异项到表格（包含已忽略项）", differences.size());
+	}
+	
+	/**
+	 * 设置单元格文本（不带忽略标记）
+	 */
+	private void setCellText(org.apache.poi.xwpf.usermodel.XWPFTableCell cell, String text, boolean bold, boolean center) {
+		setCellText(cell, text, bold, center, false);
+	}
+	
+	/**
+	 * 设置单元格文本（支持忽略标记）
+	 */
+	private void setCellText(org.apache.poi.xwpf.usermodel.XWPFTableCell cell, String text, boolean bold, boolean center, boolean ignored) {
+		cell.removeParagraph(0); // 移除默认段落
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para = cell.addParagraph();
+		if (center) {
+			para.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+		}
+		org.apache.poi.xwpf.usermodel.XWPFRun run = para.createRun();
+		run.setText(text);
+		run.setFontFamily("宋体");
+		run.setFontSize(10);
+		if (bold) {
+			run.setBold(true);
+		}
+		if (ignored) {
+			run.setColor("999999"); // 灰色显示被忽略项
+		}
+	}
+	
+	/**
+	 * 添加格式化的差异内容（支持删除线和下划线，支持忽略标记）
+	 */
+	private void addFormattedDifferenceContent(
+		org.apache.poi.xwpf.usermodel.XWPFTableCell oldCell, 
+		org.apache.poi.xwpf.usermodel.XWPFTableCell newCell, 
+		Map<String, Object> diff,
+		boolean ignored) {
+		
+		String operation = (String) diff.get("operation");
+		String textColor = ignored ? "999999" : "FF0000"; // 被忽略项使用灰色，否则使用红色
+		
+		oldCell.removeParagraph(0);
+		newCell.removeParagraph(0);
+		
+		org.apache.poi.xwpf.usermodel.XWPFParagraph oldPara = oldCell.addParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFParagraph newPara = newCell.addParagraph();
+		
+		if ("DELETE".equals(operation)) {
+			// 删除：旧文档显示删除线，新文档为空
+			String oldText = getTextFromDiff(diff, "old");
+			org.apache.poi.xwpf.usermodel.XWPFRun oldRun = oldPara.createRun();
+			oldRun.setText(oldText);
+			oldRun.setFontFamily("宋体");
+			oldRun.setFontSize(10);
+			oldRun.setStrikeThrough(true);
+			oldRun.setColor(textColor);
+			
+		} else if ("INSERT".equals(operation)) {
+			// 新增：旧文档为空，新文档显示下划线
+			String newText = getTextFromDiff(diff, "new");
+			org.apache.poi.xwpf.usermodel.XWPFRun newRun = newPara.createRun();
+			newRun.setText(newText);
+			newRun.setFontFamily("宋体");
+			newRun.setFontSize(10);
+			newRun.setUnderline(org.apache.poi.xwpf.usermodel.UnderlinePatterns.SINGLE);
+			newRun.setColor(textColor);
+			
+		} else if ("MODIFY".equals(operation)) {
+			// 修改：旧文档删除线，新文档下划线
+			String oldText = getTextFromDiff(diff, "old");
+			String newText = getTextFromDiff(diff, "new");
+			
+			org.apache.poi.xwpf.usermodel.XWPFRun oldRun = oldPara.createRun();
+			oldRun.setText(oldText);
+			oldRun.setFontFamily("宋体");
+			oldRun.setFontSize(10);
+			oldRun.setStrikeThrough(true);
+			oldRun.setColor(textColor);
+			
+			org.apache.poi.xwpf.usermodel.XWPFRun newRun = newPara.createRun();
+			newRun.setText(newText);
+			newRun.setFontFamily("宋体");
+			newRun.setFontSize(10);
+			newRun.setUnderline(org.apache.poi.xwpf.usermodel.UnderlinePatterns.SINGLE);
+			newRun.setColor(textColor);
+		}
+	}
+	
+	/**
+	 * 从差异项中获取文本
+	 */
+	private String getTextFromDiff(Map<String, Object> diff, String type) {
+		if ("old".equals(type)) {
+			Object text = diff.get("oldText");
+			if (text != null && !text.toString().isEmpty()) {
+				return text.toString();
+			}
+			text = diff.get("textA");
+			return text != null ? text.toString() : "";
+		} else {
+			Object text = diff.get("newText");
+			if (text != null && !text.toString().isEmpty()) {
+				return text.toString();
+			}
+			text = diff.get("textB");
+			return text != null ? text.toString() : "";
+		}
+	}
+	
+	/**
+	 * 获取差异类型显示文本
+	 */
+	private String getDifferenceType(Map<String, Object> diff) {
+		String operation = (String) diff.get("operation");
+		if ("DELETE".equals(operation)) {
+			return "删除";
+		} else if ("INSERT".equals(operation)) {
+			return "新增";
+		} else if ("MODIFY".equals(operation)) {
+			return "修改";
+		} else {
+			return operation != null ? operation : "未知";
+		}
 	}
 
 	/**
@@ -3891,7 +4192,7 @@ public class CompareService {
 			Boolean isIgnored = (Boolean) diff.get("ignored");
 			if (isIgnored != null && isIgnored) {
 				ignoredCount++;
-			} else {
+		} else {
 				validCount++;
 			}
 		}

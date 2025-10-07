@@ -281,7 +281,7 @@
                     </el-button>
                   </div> -->
                   <!-- 备注显示框 -->
-                  <!-- <div v-if="hasRemark(indexInAll(i))" class="remark-display-box">
+                  <div v-if="hasRemark(indexInAll(i))" class="remark-display-box">
                     <div class="remark-header" @click.stop="toggleRemarkExpand(indexInAll(i))">
                       <span class="remark-title">备注信息</span>
                       <el-icon class="expand-icon" :class="{ expanded: isRemarkExpanded(indexInAll(i)) }">
@@ -291,7 +291,7 @@
                     <div v-show="isRemarkExpanded(indexInAll(i))" class="remark-content-expanded">
                       {{ getRemark(indexInAll(i)) }}
                     </div>
-                  </div> -->
+                  </div>
                 </div>
               </div>
             </div>
@@ -1526,6 +1526,22 @@ const fetchResult = async (id?: string) => {
       newImageInfo.value = data.newImageInfo
       results.value = data.differences || []
       activeIndex.value = results.value.length > 0 ? 0 : -1
+      
+      // 从后端数据中恢复备注和忽略状态
+      remarksMap.value.clear()
+      ignoredSet.value.clear()
+      results.value.forEach((diff, index) => {
+        // 恢复备注
+        if ((diff as any).remark) {
+          remarksMap.value.set(index, (diff as any).remark)
+          // 自动展开有备注的项
+          remarkExpandedSet.value.add(index)
+        }
+        // 恢复忽略状态
+        if ((diff as any).ignored === true) {
+          ignoredSet.value.add(index)
+        }
+      })
       
       // 设置文件名
       oldFileName.value = data.oldFileName || ''

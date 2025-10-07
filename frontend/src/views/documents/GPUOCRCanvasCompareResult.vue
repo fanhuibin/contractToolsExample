@@ -39,6 +39,16 @@
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
        
+        <el-button 
+          size="small" 
+          type="primary" 
+          @click="saveUserModificationsToBackend" 
+          :loading="savingModifications"
+          :disabled="!hasUnsavedModifications"
+        >
+          <el-icon><DocumentChecked /></el-icon>
+          保存修改
+        </el-button>
         <el-button size="small" type="warning" @click="startDebug" :loading="debugLoading">调试模式</el-button>
         <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
@@ -330,8 +340,8 @@
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, View, Close, EditPen } from '@element-plus/icons-vue'
-import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy } from '@/api/gpu-ocr-compare'
+import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked } from '@element-plus/icons-vue'
+import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
 // 导入GPU OCR Canvas模块
@@ -489,6 +499,28 @@ const currentRemarkIndex = ref(-1)
 const currentRemarkText = ref('')
 // 移除 showIgnoredView，现在使用 filterMode 来控制
 const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状态
+
+// 保存修改状态管理
+const savingModifications = ref(false) // 是否正在保存
+const lastSavedIgnoredSet = ref<Set<number>>(new Set()) // 上次保存的忽略集合
+const lastSavedRemarksMap = ref<Map<number, string>>(new Map()) // 上次保存的备注映射
+
+// 计算是否有未保存的修改
+const hasUnsavedModifications = computed(() => {
+  // 检查忽略集合是否有变化
+  if (ignoredSet.value.size !== lastSavedIgnoredSet.value.size) return true
+  for (const item of ignoredSet.value) {
+    if (!lastSavedIgnoredSet.value.has(item)) return true
+  }
+  
+  // 检查备注映射是否有变化
+  if (remarksMap.value.size !== lastSavedRemarksMap.value.size) return true
+  for (const [key, value] of remarksMap.value) {
+    if (lastSavedRemarksMap.value.get(key) !== value) return true
+  }
+  
+  return false
+})
 
 
 
@@ -1396,6 +1428,57 @@ const cancelRemark = () => {
   currentRemarkIndex.value = -1
 }
 
+// 保存用户修改到后端
+const saveUserModificationsToBackend = async () => {
+  if (!taskId.value) {
+    ElMessage.error('任务ID不存在')
+    return
+  }
+  
+  if (!hasUnsavedModifications.value) {
+    ElMessage.info('没有需要保存的修改')
+    return
+  }
+  
+  savingModifications.value = true
+  
+  try {
+    const modifications = {
+      ignoredDifferences: Array.from(ignoredSet.value),
+      remarks: Object.fromEntries(remarksMap.value)
+    }
+    
+    console.log('🔄 正在保存用户修改...', modifications)
+    
+    const response = await saveUserModificationsAPI(taskId.value, modifications)
+    
+    if ((response as any)?.code === 200) {
+      // 更新上次保存的状态
+      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
+      lastSavedRemarksMap.value = new Map(remarksMap.value)
+      
+      ElMessage.success({
+        message: '修改已保存！被忽略的差异项已从数据中移除，备注已添加到差异项中。',
+        duration: 3000
+      })
+      
+      console.log('✅ 用户修改保存成功')
+      
+      // 保存成功后，重新加载数据以显示最新结果
+      setTimeout(() => {
+        fetchResult(taskId.value)
+      }, 500)
+    } else {
+      throw new Error((response as any)?.message || '保存失败')
+    }
+  } catch (error: any) {
+    console.error('❌ 保存用户修改失败:', error)
+    ElMessage.error(error?.message || '保存修改失败，请稍后重试')
+  } finally {
+    savingModifications.value = false
+  }
+}
+
 // 移除 toggleIgnoredView 函数，现在直接通过选项卡切换
 
 
@@ -1527,6 +1610,28 @@ const fetchResult = async (id: string) => {
       newImageInfo.value = data.newImageInfo
       results.value = data.differences || []
       activeIndex.value = results.value.length > 0 ? 0 : -1
+      
+      // 从后端数据中恢复备注和忽略状态
+      remarksMap.value.clear()
+      ignoredSet.value.clear()
+      results.value.forEach((diff, index) => {
+        // 恢复备注
+        if (diff.remark) {
+          remarksMap.value.set(index, diff.remark)
+          // 自动展开有备注的项
+          remarkExpandedSet.value.add(index)
+        }
+        // 恢复忽略状态
+        if ((diff as any).ignored === true) {
+          ignoredSet.value.add(index)
+        }
+      })
+      
+      // 更新上次保存的状态（因为是从后端加载的，视为已保存状态）
+      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
+      lastSavedRemarksMap.value = new Map(remarksMap.value)
+      
+      console.log('✅ 从后端恢复备注:', remarksMap.value.size, '条')
       
       // 设置文件名
       oldFileName.value = data.oldFileName || ''
