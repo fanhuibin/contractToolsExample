@@ -999,6 +999,39 @@ const getLoaderPosition = (side: 'old' | 'new') => {
   }
 }
 
+// 计算当前可见的页面编号
+const getCurrentVisiblePage = () => {
+  if (!oldCanvasWrapper.value || !oldImageInfo.value) return 1
+  
+  const scrollTop = oldCanvasWrapper.value.scrollTop
+  const baseWidth = getCanvasWidth(oldCanvasWrapper.value)
+  const containerWidth = baseWidth * zoomScale.value
+  const layout = calculatePageLayout(oldImageInfo.value, containerWidth)
+  
+  // 根据滚动位置确定当前页面
+  let currentPageNum = 1
+  for (let i = 0; i < layout.length; i++) {
+    const pageLayout = layout[i]
+    const pageBottom = pageLayout.y + pageLayout.height
+    
+    // 如果滚动位置在当前页面范围内，则这就是当前页
+    if (scrollTop >= pageLayout.y && scrollTop < pageBottom) {
+      currentPageNum = i + 1
+      break
+    }
+    // 如果滚动位置超过当前页底部，继续检查下一页
+    if (scrollTop >= pageBottom && i < layout.length - 1) {
+      continue
+    }
+    // 如果是最后一页且滚动位置超过，则停在最后一页
+    if (i === layout.length - 1) {
+      currentPageNum = layout.length
+    }
+  }
+  
+  return currentPageNum
+}
+
 // Canvas滚动处理由 AdvancedSyncScrollManager 自动处理
 // 这里只需要处理虚拟滚动和UI更新
 const handleScrollUpdate = () => {
@@ -1019,6 +1052,12 @@ const handleScrollUpdate = () => {
     // 滚动时总是更新中间图标和连接线（跟随滚动动态更新）
     if (middleCanvasInteraction) {
       middleCanvasInteraction.renderDiffIcons()
+    }
+    
+    // 更新页码显示（根据滚动位置）
+    const visiblePage = getCurrentVisiblePage()
+    if (visiblePage !== currentPage.value) {
+      currentPage.value = visiblePage
     }
   })
   
