@@ -3,11 +3,6 @@
     <div class="compare-toolbar">
       <div class="left">
         <div class="title">GPU OCR合同比对 (Canvas版本)</div>
-        <div v-if="displayFileNames" class="file-names">
-          <span class="file-name old">{{ oldFileName }}</span>
-          <span class="vs">VS</span>
-          <span class="file-name new">{{ newFileName }}</span>
-        </div>
       </div>
       <div class="center">
         <el-button-group>
@@ -36,6 +31,21 @@
           <span class="page-info">/ {{ totalPages }} 页</span>
           <span class="page-tip">（连续滚动模式）</span>
         </div>
+        
+        <!-- 图片缩放控制 -->
+        <div class="zoom-controls">
+          <el-button size="small" :disabled="zoomScale <= 0.5" @click="zoomOut" title="缩小">
+            <el-icon><ZoomOut /></el-icon>
+          </el-button>
+          <span class="zoom-indicator">{{ Math.round(zoomScale * 100) }}%</span>
+          <el-button size="small" :disabled="zoomScale >= 2.0" @click="zoomIn" title="放大">
+            <el-icon><ZoomIn /></el-icon>
+          </el-button>
+          <el-button size="small" @click="resetZoom" title="重置缩放">
+            <el-icon><FullScreen /></el-icon>
+          </el-button>
+        </div>
+        
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
        
@@ -67,8 +77,7 @@
         <div class="document-box left-box">
           <div class="canvas-pane">
             <div class="canvas-header">
-              <span class="canvas-title">原文档</span>
-              <span class="canvas-subtitle">（只显示删除内容）</span>
+              <span class="canvas-title">原文档：{{ oldFileName || '未知文件' }}</span>
             </div>
             <div class="canvas-container">
               <div class="canvas-wrapper" ref="oldCanvasWrapper">
@@ -119,8 +128,7 @@
         <div class="document-box right-box">
           <div class="canvas-pane">
             <div class="canvas-header">
-              <span class="canvas-title">新文档</span>
-              <span class="canvas-subtitle">（只显示新增内容）</span>
+              <span class="canvas-title">新文档：{{ newFileName || '未知文件' }}</span>
             </div>
             <div class="canvas-container">
               <div class="canvas-wrapper" ref="newCanvasWrapper">
@@ -340,7 +348,7 @@
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked, ZoomIn, ZoomOut, FullScreen } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
@@ -484,6 +492,9 @@ const hasShownProcessingTip = ref(false)
 const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
+
+// 缩放控制
+const zoomScale = ref(1.0) // 默认100%缩放
 
 // 拖拽调整宽度相关状态
 const isDragging = ref(false)
@@ -725,7 +736,9 @@ const renderAllPages = async () => {
   const oldDifferences = results.value.filter(diff => diff.operation === 'DELETE')
   const newDifferences = results.value.filter(diff => diff.operation === 'INSERT')
   
-  const containerWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  // 应用缩放比例到容器宽度
+  const baseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const containerWidth = baseWidth * zoomScale.value
   const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
   
@@ -856,8 +869,11 @@ const updateVisiblePagesRender = async (
 const updateVisibleCanvasesOnScroll = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
 
-  const oldWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const newWidth = getCanvasWidth(newCanvasWrapper.value || null)
+  // 应用缩放比例
+  const oldBaseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const newBaseWidth = getCanvasWidth(newCanvasWrapper.value || null)
+  const oldWidth = oldBaseWidth * zoomScale.value
+  const newWidth = newBaseWidth * zoomScale.value
   const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
 
@@ -871,9 +887,9 @@ const updateVisibleCanvasesOnScroll = async () => {
 const jumpToPage = (pageNum: number) => {
   if (!oldImageInfo.value || !oldCanvasWrapper.value) return
   
-  // 使用记录的Canvas宽度，确保与渲染时一致
+  // 使用记录的Canvas宽度，确保与渲染时一致（已包含缩放）
   const canvasWidth = actualCanvasWidth.value.old
-  const actualWidth = canvasWidth || getCanvasWidth(oldCanvasWrapper.value)
+  const actualWidth = canvasWidth || (getCanvasWidth(oldCanvasWrapper.value) * zoomScale.value)
   
   // 计算目标页面的位置（使用实际Canvas宽度）
   let targetY = 0
@@ -1170,8 +1186,9 @@ const alignCanvasViewerContinuousLocal = (side: 'old' | 'new', pos: any) => {
   if (!wrapper || !imageInfo) return
 
   try {
-    // 使用预计算的布局，确保与渲染一致
-    const containerWidth = getCanvasWidth(wrapper)
+    // 使用预计算的布局，确保与渲染一致（应用缩放）
+    const baseWidth = getCanvasWidth(wrapper)
+    const containerWidth = baseWidth * zoomScale.value
     const layout = calculatePageLayout(imageInfo, containerWidth)
     
     const pageIndex = pos.page - 1 // 转换为0-based索引
@@ -1490,6 +1507,33 @@ const getTabBarPosition = () => {
   if (filterMode.value === 'INSERT') return 200 // 移动两个选项卡的宽度
   if (filterMode.value === 'IGNORED') return 300 // 移动三个选项卡的宽度
   return 0
+}
+
+// 缩放控制方法
+const zoomIn = () => {
+  if (zoomScale.value >= 2.0) return
+  zoomScale.value = Math.min(2.0, zoomScale.value + 0.1)
+  applyZoom()
+}
+
+const zoomOut = () => {
+  if (zoomScale.value <= 0.5) return
+  zoomScale.value = Math.max(0.5, zoomScale.value - 0.1)
+  applyZoom()
+}
+
+const resetZoom = () => {
+  zoomScale.value = 1.0
+  applyZoom()
+}
+
+// 应用缩放到Canvas
+const applyZoom = async () => {
+  // 重新渲染所有页面以应用新的缩放比例
+  await nextTick()
+  if (oldImageInfo.value && newImageInfo.value) {
+    renderAllPages()
+  }
 }
 
 // 拖拽开始
@@ -1972,6 +2016,24 @@ onUnmounted(() => {
   margin-left: 4px;
 }
 
+/* 缩放控制样式 */
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+  padding: 4px 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+}
+
+.zoom-indicator {
+  font-size: 12px;
+  color: #606266;
+  min-width: 40px;
+  text-align: center;
+  font-weight: 500;
+}
 
 .filter-group :deep(.el-radio-button__inner) { 
   padding: 6px 10px; 
