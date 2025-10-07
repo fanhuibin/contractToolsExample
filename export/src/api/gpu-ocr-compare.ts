@@ -1,4 +1,5 @@
 import request from '@/utils/request'
+import { localDataManager } from '@/utils/local-data-manager'
 
 // GPU OCR比对任务状态（增强版，支持智能进度计算）
 export interface GPUOCRCompareTaskStatus {
@@ -128,28 +129,22 @@ export function uploadGPUOCRCompare(formData: FormData) {
 }
 
 // 获取GPU OCR比对任务状态
-export function getGPUOCRCompareTaskStatus(taskId: string) {
-  return request({
-    url: `/compare-pro/task/${taskId}`,
-    method: 'get'
-  })
+export function getGPUOCRCompareTaskStatus(taskId?: string) {
+  // 使用本地数据管理器（忽略taskId，使用固定路径）
+  return localDataManager.getTaskStatus()
 }
 
 
 // 获取Canvas版本的GPU OCR比对结果
-export function getGPUOCRCanvasCompareResult(taskId: string) {
-  return request({
-    url: `/compare-pro/canvas-result/${taskId}`,
-    method: 'get'
-  })
+export function getGPUOCRCanvasCompareResult(taskId?: string) {
+  // 使用本地数据管理器（忽略taskId，使用固定路径）
+  return localDataManager.getCompareResult()
 }
 
 // 获取文档图片信息
 export function getDocumentImages(taskId: string, mode: 'old' | 'new') {
-  return request({
-    url: `/compare-pro/images/${taskId}/${mode}`,
-    method: 'get'
-  })
+  // 使用本地数据管理器（忽略taskId，使用固定路径）
+  return localDataManager.getDocumentImages(mode)
 }
 
 // 获取所有GPU OCR比对任务
@@ -226,36 +221,12 @@ export function getGPUOCRCompareTaskSummary(taskId: string) {
   })
 }
 
-// 保存用户修改
-export function saveUserModifications(taskId: string, modifications: {
-  ignoredDifferences: number[]
-  remarks: Record<number, string>
-}) {
-  return request({
-    url: `/compare-pro/save-user-modifications/${taskId}`,
-    method: 'post',
-    data: modifications
-  })
-}
-
-// 获取用户修改
-export function getUserModifications(taskId: string) {
-  return request({
-    url: `/compare-pro/get-user-modifications/${taskId}`,
-    method: 'get'
-  })
-}
-
 // 导出比对报告
 export function exportCompareReport(exportData: {
   taskId: string
   formats: string[]
   includeIgnored?: boolean
   includeRemarks?: boolean
-  userModifications?: {
-    ignoredDifferences: number[]
-    remarks: Record<number, string>
-  }
 }) {
   return request({
     url: '/compare-pro/export-report',

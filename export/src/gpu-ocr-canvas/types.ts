@@ -45,8 +45,8 @@ export interface DifferenceItem {
   newText?: string
   textStartIndexA?: number
   textStartIndexB?: number
-  remark?: string   // 用户添加的备注信息
-  ignored?: boolean // 是否被用户忽略
+  remark?: string  // 用户添加的备注信息
+  ignored?: boolean  // 是否被忽略
 }
 
 // 位置信息

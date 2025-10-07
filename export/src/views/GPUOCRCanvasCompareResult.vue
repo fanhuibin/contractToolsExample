@@ -3,6 +3,11 @@
     <div class="compare-toolbar">
       <div class="left">
         <div class="title">GPU OCR合同比对 (Canvas版本)</div>
+        <div v-if="displayFileNames" class="file-names">
+          <span class="file-name old">{{ oldFileName }}</span>
+          <span class="vs">VS</span>
+          <span class="file-name new">{{ newFileName }}</span>
+        </div>
       </div>
       <div class="center">
         <el-button-group>
@@ -31,36 +36,11 @@
           <span class="page-info">/ {{ totalPages }} 页</span>
           <span class="page-tip">（连续滚动模式）</span>
         </div>
-        
-        <!-- 图片缩放控制 -->
-        <div class="zoom-controls">
-          <el-button size="small" :disabled="zoomScale <= 0.5" @click="zoomOut" title="缩小">
-            <el-icon><ZoomOut /></el-icon>
-          </el-button>
-          <span class="zoom-indicator">{{ Math.round(zoomScale * 100) }}%</span>
-          <el-button size="small" :disabled="zoomScale >= 2.0" @click="zoomIn" title="放大">
-            <el-icon><ZoomIn /></el-icon>
-          </el-button>
-          <el-button size="small" @click="resetZoom" title="重置缩放">
-            <el-icon><FullScreen /></el-icon>
-          </el-button>
-        </div>
-        
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
        
-        <el-button 
-          size="small" 
-          type="primary" 
-          @click="saveUserModificationsToBackend" 
-          :loading="savingModifications"
-          :disabled="!hasUnsavedModifications"
-        >
-          <el-icon><DocumentChecked /></el-icon>
-          保存修改
-        </el-button>
-        <el-button size="small" type="warning" @click="startDebug" :loading="debugLoading">调试模式</el-button>
-        <el-button size="small" text @click="goBack">返回上传</el-button>
+        <!-- <el-button size="small" type="warning" @click="startDebug" :loading="debugLoading">调试模式</el-button>
+        <el-button size="small" text @click="goBack">返回上传</el-button> -->
       </div>
     </div>
     <div class="compare-body" v-loading="loading">
@@ -77,7 +57,8 @@
         <div class="document-box left-box">
           <div class="canvas-pane">
             <div class="canvas-header">
-              <span class="canvas-title">原文档：{{ oldFileName || '未知文件' }}</span>
+              <span class="canvas-title">原文档</span>
+              <span class="canvas-subtitle">（只显示删除内容）</span>
             </div>
             <div class="canvas-container">
               <div class="canvas-wrapper" ref="oldCanvasWrapper">
@@ -128,7 +109,8 @@
         <div class="document-box right-box">
           <div class="canvas-pane">
             <div class="canvas-header">
-              <span class="canvas-title">新文档：{{ newFileName || '未知文件' }}</span>
+              <span class="canvas-title">新文档</span>
+              <span class="canvas-subtitle">（只显示新增内容）</span>
             </div>
             <div class="canvas-container">
               <div class="canvas-wrapper" ref="newCanvasWrapper">
@@ -201,7 +183,6 @@
           <span class="diff-list-title">
             差异列表
           </span>
-
         </div>
         
         <!-- 差异列表容器 -->
@@ -256,7 +237,7 @@
                       {{ r.operation === 'DELETE' ? '删除' : '新增' }}
                     </span>
                   </div>
-                  <div class="headline-right">
+                  <!-- <div class="headline-right">
                     <el-button 
                       size="small" 
                       type="text" 
@@ -265,7 +246,7 @@
                     >
                       {{ filterMode === 'IGNORED' ? '取消忽略' : '忽略' }}
                     </el-button>
-                  </div>
+                  </div> -->
                 </div>
                 <div class="diff-item-content">
                   <div class="text">
@@ -288,7 +269,7 @@
                   <div class="meta">
                     第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
                   </div>
-                  <div class="diff-item-actions">
+                  <!-- <div class="diff-item-actions">
                     <el-button 
                       size="small" 
                       type="text" 
@@ -298,7 +279,7 @@
                       <el-icon><EditPen /></el-icon>
                       备注
                     </el-button>
-                  </div>
+                  </div> -->
                   <!-- 备注显示框 -->
                   <div v-if="hasRemark(indexInAll(i))" class="remark-display-box">
                     <div class="remark-header" @click.stop="toggleRemarkExpand(indexInAll(i))">
@@ -320,7 +301,7 @@
     </div>
 
     <!-- 备注对话框 -->
-    <el-dialog
+    <!-- <el-dialog
       v-model="showRemarkDialogVisible"
       title="添加备注"
       width="500px"
@@ -340,7 +321,7 @@
           <el-button type="primary" @click="saveRemark">确定</el-button>
         </span>
       </template>
-    </el-dialog>
+    </el-dialog> -->
   </div>
 </template>
 
@@ -348,9 +329,9 @@
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked, ZoomIn, ZoomOut, FullScreen } from '@element-plus/icons-vue'
-import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
-import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
+import { ArrowLeft, ArrowRight, View, Close, EditPen } from '@element-plus/icons-vue'
+import { localDataManager } from '@/utils/local-data-manager'
+import ConcentricLoader from '../components/ConcentricLoader.vue'
 
 // 导入GPU OCR Canvas模块
 import {
@@ -401,7 +382,7 @@ import {
   // 进度计算
   createProgressCalculator,
   type ProgressCalculator
-} from './gpu-ocr-canvas'
+} from '@/gpu-ocr-canvas'
 
 const route = useRoute()
 const router = useRouter()
@@ -414,7 +395,7 @@ const results = ref<DifferenceItem[]>([])
 const activeIndex = ref(-1)
 const expandedSet = ref<Set<number>>(new Set())
 const filterMode = ref<FilterMode>('ALL')
-const taskId = ref('')
+const taskId = ref('current') // 使用固定ID用于兼容
 const compareData = ref<any>(null)
 
 // Canvas相关状态
@@ -429,7 +410,7 @@ const oldCanvasContainer = ref<HTMLElement>()
 const newCanvasContainer = ref<HTMLElement>()
 const oldImageInfo = ref<DocumentImageInfo | null>(null)
 const newImageInfo = ref<DocumentImageInfo | null>(null)
-// 后端返回的图片基路径，避免前端手动拼接导致taskId缺失
+// 使用固定的图片基路径
 const oldImageBaseUrl = ref<string>('')
 const newImageBaseUrl = ref<string>('')
 const currentPage = ref(1)
@@ -476,7 +457,7 @@ const clearPoll = () => {
   }
 }
 
-const schedulePoll = (id: string, delayMs = 1500) => {
+const schedulePoll = (id?: string, delayMs = 1500) => {
   clearPoll()
   pollTimer.value = window.setTimeout(() => {
     checkStatusAndMaybePoll(id)
@@ -493,9 +474,6 @@ const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
-// 缩放控制
-const zoomScale = ref(1.0) // 默认100%缩放
-
 // 拖拽调整宽度相关状态
 const isDragging = ref(false)
 const diffListWidth = ref(500) // 默认宽度500px
@@ -510,28 +488,6 @@ const currentRemarkIndex = ref(-1)
 const currentRemarkText = ref('')
 // 移除 showIgnoredView，现在使用 filterMode 来控制
 const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状态
-
-// 保存修改状态管理
-const savingModifications = ref(false) // 是否正在保存
-const lastSavedIgnoredSet = ref<Set<number>>(new Set()) // 上次保存的忽略集合
-const lastSavedRemarksMap = ref<Map<number, string>>(new Map()) // 上次保存的备注映射
-
-// 计算是否有未保存的修改
-const hasUnsavedModifications = computed(() => {
-  // 检查忽略集合是否有变化
-  if (ignoredSet.value.size !== lastSavedIgnoredSet.value.size) return true
-  for (const item of ignoredSet.value) {
-    if (!lastSavedIgnoredSet.value.has(item)) return true
-  }
-  
-  // 检查备注映射是否有变化
-  if (remarksMap.value.size !== lastSavedRemarksMap.value.size) return true
-  for (const [key, value] of remarksMap.value) {
-    if (lastSavedRemarksMap.value.get(key) !== value) return true
-  }
-  
-  return false
-})
 
 
 
@@ -736,9 +692,7 @@ const renderAllPages = async () => {
   const oldDifferences = results.value.filter(diff => diff.operation === 'DELETE')
   const newDifferences = results.value.filter(diff => diff.operation === 'INSERT')
   
-  // 应用缩放比例到容器宽度
-  const baseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const containerWidth = baseWidth * zoomScale.value
+  const containerWidth = getCanvasWidth(oldCanvasWrapper.value || null)
   const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
   
@@ -869,11 +823,8 @@ const updateVisiblePagesRender = async (
 const updateVisibleCanvasesOnScroll = async () => {
   if (!oldImageInfo.value || !newImageInfo.value) return
 
-  // 应用缩放比例
-  const oldBaseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const newBaseWidth = getCanvasWidth(newCanvasWrapper.value || null)
-  const oldWidth = oldBaseWidth * zoomScale.value
-  const newWidth = newBaseWidth * zoomScale.value
+  const oldWidth = getCanvasWidth(oldCanvasWrapper.value || null)
+  const newWidth = getCanvasWidth(newCanvasWrapper.value || null)
   const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
 
@@ -887,9 +838,9 @@ const updateVisibleCanvasesOnScroll = async () => {
 const jumpToPage = (pageNum: number) => {
   if (!oldImageInfo.value || !oldCanvasWrapper.value) return
   
-  // 使用记录的Canvas宽度，确保与渲染时一致（已包含缩放）
+  // 使用记录的Canvas宽度，确保与渲染时一致
   const canvasWidth = actualCanvasWidth.value.old
-  const actualWidth = canvasWidth || (getCanvasWidth(oldCanvasWrapper.value) * zoomScale.value)
+  const actualWidth = canvasWidth || getCanvasWidth(oldCanvasWrapper.value)
   
   // 计算目标页面的位置（使用实际Canvas宽度）
   let targetY = 0
@@ -999,39 +950,6 @@ const getLoaderPosition = (side: 'old' | 'new') => {
   }
 }
 
-// 计算当前可见的页面编号
-const getCurrentVisiblePage = () => {
-  if (!oldCanvasWrapper.value || !oldImageInfo.value) return 1
-  
-  const scrollTop = oldCanvasWrapper.value.scrollTop
-  const baseWidth = getCanvasWidth(oldCanvasWrapper.value)
-  const containerWidth = baseWidth * zoomScale.value
-  const layout = calculatePageLayout(oldImageInfo.value, containerWidth)
-  
-  // 根据滚动位置确定当前页面
-  let currentPageNum = 1
-  for (let i = 0; i < layout.length; i++) {
-    const pageLayout = layout[i]
-    const pageBottom = pageLayout.y + pageLayout.height
-    
-    // 如果滚动位置在当前页面范围内，则这就是当前页
-    if (scrollTop >= pageLayout.y && scrollTop < pageBottom) {
-      currentPageNum = i + 1
-      break
-    }
-    // 如果滚动位置超过当前页底部，继续检查下一页
-    if (scrollTop >= pageBottom && i < layout.length - 1) {
-      continue
-    }
-    // 如果是最后一页且滚动位置超过，则停在最后一页
-    if (i === layout.length - 1) {
-      currentPageNum = layout.length
-    }
-  }
-  
-  return currentPageNum
-}
-
 // Canvas滚动处理由 AdvancedSyncScrollManager 自动处理
 // 这里只需要处理虚拟滚动和UI更新
 const handleScrollUpdate = () => {
@@ -1052,12 +970,6 @@ const handleScrollUpdate = () => {
     // 滚动时总是更新中间图标和连接线（跟随滚动动态更新）
     if (middleCanvasInteraction) {
       middleCanvasInteraction.renderDiffIcons()
-    }
-    
-    // 更新页码显示（根据滚动位置）
-    const visiblePage = getCurrentVisiblePage()
-    if (visiblePage !== currentPage.value) {
-      currentPage.value = visiblePage
     }
   })
   
@@ -1225,9 +1137,8 @@ const alignCanvasViewerContinuousLocal = (side: 'old' | 'new', pos: any) => {
   if (!wrapper || !imageInfo) return
 
   try {
-    // 使用预计算的布局，确保与渲染一致（应用缩放）
-    const baseWidth = getCanvasWidth(wrapper)
-    const containerWidth = baseWidth * zoomScale.value
+    // 使用预计算的布局，确保与渲染一致
+    const containerWidth = getCanvasWidth(wrapper)
     const layout = calculatePageLayout(imageInfo, containerWidth)
     
     const pageIndex = pos.page - 1 // 转换为0-based索引
@@ -1484,57 +1395,6 @@ const cancelRemark = () => {
   currentRemarkIndex.value = -1
 }
 
-// 保存用户修改到后端
-const saveUserModificationsToBackend = async () => {
-  if (!taskId.value) {
-    ElMessage.error('任务ID不存在')
-    return
-  }
-  
-  if (!hasUnsavedModifications.value) {
-    ElMessage.info('没有需要保存的修改')
-    return
-  }
-  
-  savingModifications.value = true
-  
-  try {
-    const modifications = {
-      ignoredDifferences: Array.from(ignoredSet.value),
-      remarks: Object.fromEntries(remarksMap.value)
-    }
-    
-    console.log('🔄 正在保存用户修改...', modifications)
-    
-    const response = await saveUserModificationsAPI(taskId.value, modifications)
-    
-    if ((response as any)?.code === 200) {
-      // 更新上次保存的状态
-      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
-      lastSavedRemarksMap.value = new Map(remarksMap.value)
-      
-      ElMessage.success({
-        message: '修改已保存！被忽略的差异项已从数据中移除，备注已添加到差异项中。',
-        duration: 3000
-      })
-      
-      console.log('✅ 用户修改保存成功')
-      
-      // 保存成功后，重新加载数据以显示最新结果
-      setTimeout(() => {
-        fetchResult(taskId.value)
-      }, 500)
-    } else {
-      throw new Error((response as any)?.message || '保存失败')
-    }
-  } catch (error: any) {
-    console.error('❌ 保存用户修改失败:', error)
-    ElMessage.error(error?.message || '保存修改失败，请稍后重试')
-  } finally {
-    savingModifications.value = false
-  }
-}
-
 // 移除 toggleIgnoredView 函数，现在直接通过选项卡切换
 
 
@@ -1546,33 +1406,6 @@ const getTabBarPosition = () => {
   if (filterMode.value === 'INSERT') return 200 // 移动两个选项卡的宽度
   if (filterMode.value === 'IGNORED') return 300 // 移动三个选项卡的宽度
   return 0
-}
-
-// 缩放控制方法
-const zoomIn = () => {
-  if (zoomScale.value >= 2.0) return
-  zoomScale.value = Math.min(2.0, zoomScale.value + 0.1)
-  applyZoom()
-}
-
-const zoomOut = () => {
-  if (zoomScale.value <= 0.5) return
-  zoomScale.value = Math.max(0.5, zoomScale.value - 0.1)
-  applyZoom()
-}
-
-const resetZoom = () => {
-  zoomScale.value = 1.0
-  applyZoom()
-}
-
-// 应用缩放到Canvas
-const applyZoom = async () => {
-  // 重新渲染所有页面以应用新的缩放比例
-  await nextTick()
-  if (oldImageInfo.value && newImageInfo.value) {
-    renderAllPages()
-  }
 }
 
 // 拖拽开始
@@ -1615,9 +1448,9 @@ const handleDragEnd = () => {
 }
 
 
-const checkStatusAndMaybePoll = async (id: string) => {
+const checkStatusAndMaybePoll = async (id?: string) => {
   try {
-    const res = await getGPUOCRCompareTaskStatus(id)
+    const res = await localDataManager.getTaskStatus()
     const code = (res as any)?.code
     const data = (res as any)?.data
     
@@ -1659,7 +1492,7 @@ const checkStatusAndMaybePoll = async (id: string) => {
 }
 
 // 获取Canvas比对结果
-const fetchResult = async (id: string) => {
+const fetchResult = async (id?: string) => {
   if (!id) return
   
   if (id === 'pending') {
@@ -1671,7 +1504,7 @@ const fetchResult = async (id: string) => {
   
   loading.value = true
   try {
-    const res = await getGPUOCRCanvasCompareResult(id)
+    const res = await localDataManager.getCompareResult()
 
     if ((res as any)?.code === 202) {
       viewerLoading.value = true
@@ -1699,8 +1532,8 @@ const fetchResult = async (id: string) => {
       ignoredSet.value.clear()
       results.value.forEach((diff, index) => {
         // 恢复备注
-        if (diff.remark) {
-          remarksMap.value.set(index, diff.remark)
+        if ((diff as any).remark) {
+          remarksMap.value.set(index, (diff as any).remark)
           // 自动展开有备注的项
           remarkExpandedSet.value.add(index)
         }
@@ -1709,12 +1542,6 @@ const fetchResult = async (id: string) => {
           ignoredSet.value.add(index)
         }
       })
-      
-      // 更新上次保存的状态（因为是从后端加载的，视为已保存状态）
-      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
-      lastSavedRemarksMap.value = new Map(remarksMap.value)
-      
-      console.log('✅ 从后端恢复备注:', remarksMap.value.size, '条')
       
       // 设置文件名
       oldFileName.value = data.oldFileName || ''
@@ -1822,6 +1649,10 @@ const fetchResult = async (id: string) => {
 const startDebug = async () => {
   debugLoading.value = true
   try {
+    // 在export项目中，调试功能暂时不可用
+    ElMessage.warning('调试功能在离线模式下不可用')
+    return
+    /*
     const res = await debugGPUCompareLegacy({
       oldOcrTaskId: '', // 这里需要从当前任务获取
       newOcrTaskId: '', // 这里需要从当前任务获取
@@ -1843,6 +1674,7 @@ const startDebug = async () => {
     ElMessage.success('调试比对任务已提交，正在处理中...')
     router.push({ name: 'GPUOCRCanvasCompareResult', params: { taskId: newTaskId } }).catch(() => {})
 
+    */
   } catch (e: any) {
     console.error('调试比对失败:', e)
     ElMessage.error(e?.message || '调试比对任务提交失败')
@@ -1873,10 +1705,9 @@ watch(filterMode, () => {
 })
 
 
-// 监听路由参数变化
+// 监听路由参数变化（适用于没有taskId的路由）
 watch(() => route.params.taskId, (newId) => {
   if (typeof newId === 'string' && newId) {
-    taskId.value = newId  // 设置taskId
     clearPoll()
     if (newId === 'pending') {
       viewerLoading.value = true
@@ -1884,6 +1715,9 @@ watch(() => route.params.taskId, (newId) => {
     } else {
       checkStatusAndMaybePoll(newId)
     }
+  } else {
+    // 如果没有taskId，直接加载内嵌数据
+    checkStatusAndMaybePoll('current')
   }
 })
 
@@ -1918,7 +1752,6 @@ onMounted(() => {
   
   const id = route.params.taskId as string
   if (id) {
-    taskId.value = id  // 设置taskId
     clearPoll()
     if (id === 'pending') {
       viewerLoading.value = true
@@ -1926,6 +1759,9 @@ onMounted(() => {
     } else {
       checkStatusAndMaybePoll(id)
     }
+  } else {
+    // 如果没有taskId，直接加载内嵌数据
+    checkStatusAndMaybePoll('current')
   }
 })
 
@@ -2055,24 +1891,6 @@ onUnmounted(() => {
   margin-left: 4px;
 }
 
-/* 缩放控制样式 */
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 8px;
-  padding: 4px 8px;
-  background: #f5f7fa;
-  border-radius: 4px;
-}
-
-.zoom-indicator {
-  font-size: 12px;
-  color: #606266;
-  min-width: 40px;
-  text-align: center;
-  font-weight: 500;
-}
 
 .filter-group :deep(.el-radio-button__inner) { 
   padding: 6px 10px; 

@@ -5,10 +5,14 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -356,7 +360,42 @@ public class CompareService {
                 task.setOldFileName((String) resultData.get("oldFileName"));
                 task.setNewFileName((String) resultData.get("newFileName"));
                 task.setStatus(CompareTask.Status.COMPLETED);
-                // 不再需要设置PDF URL，全部使用画布显示
+                
+                // 从result.json中恢复时间信息
+                try {
+                    // 读取开始时间
+                    String startTimeStr = (String) resultData.get("startTime");
+                    if (startTimeStr != null) {
+                        task.setStartTime(java.time.LocalDateTime.parse(startTimeStr));
+                        logger.debug("从文件恢复开始时间: {}", startTimeStr);
+                    }
+                    
+                    // 读取结束时间（如果存在）
+                    String endTimeStr = (String) resultData.get("endTime");
+                    if (endTimeStr != null) {
+                        task.setEndTime(java.time.LocalDateTime.parse(endTimeStr));
+                        logger.debug("从文件恢复结束时间: {}", endTimeStr);
+                    }
+                    
+                    // 读取总耗时（如果存在）
+                    Object totalDurationObj = resultData.get("totalDuration");
+                    if (totalDurationObj != null) {
+                        Long totalDuration = null;
+                        if (totalDurationObj instanceof Number) {
+                            totalDuration = ((Number) totalDurationObj).longValue();
+                        }
+                        if (totalDuration != null) {
+                            task.setTotalDuration(totalDuration);
+                            logger.debug("从文件恢复总耗时: {}ms", totalDuration);
+                        }
+                    }
+                    
+                    logger.info("✅ 从result.json恢复任务时间信息: {}", taskId);
+                    
+                } catch (Exception e) {
+                    logger.warn("恢复任务时间信息时出错，使用默认值: {}", e.getMessage());
+                }
+                
                 return task;
             }
             
@@ -403,7 +442,25 @@ public class CompareService {
             return result;
         }
 
-        // 如果没有找到完整结果（可能是旧任务），构造一个基本的返回结果
+        // 如果没有找到完整结果，尝试从文件中加载并转换为CompareResult
+        try {
+            Map<String, Object> rawData = getRawFrontendResult(taskId);
+            if (rawData != null) {
+                logger.info("🔍 从文件加载原始比对结果，转换为CompareResult对象");
+                result = convertRawDataToCompareResult(rawData, taskId);
+                logger.info("✅ 成功转换，差异数量: {}", 
+                    result.getDifferences() != null ? result.getDifferences().size() : 0);
+                
+                // 将结果放入缓存以便后续使用
+                results.put(taskId, result);
+                return result;
+            }
+        } catch (Exception e) {
+            logger.error("从文件加载并转换比对结果失败: {}", e.getMessage());
+        }
+
+        // 如果文件也不存在，构造一个基本的返回结果
+        logger.warn("⚠️ 未找到比对结果文件，创建空的结果对象");
         result = new CompareResult(taskId);
         result.setOldFileName(task.getOldFileName());
         result.setNewFileName(task.getNewFileName());
@@ -509,6 +566,118 @@ public class CompareService {
 		}
 
 		return canvasResult;
+	}
+
+	/**
+	 * 保存用户修改（直接修改后端存储的数据）
+	 */
+	public void saveUserModifications(String taskId, com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest modifications) {
+		System.out.println("💾 直接修改后端数据 - 任务 " + taskId + ": 忽略" + 
+			(modifications.getIgnoredDifferences() != null ? modifications.getIgnoredDifferences().size() : 0) + 
+			"项, 备注" + 
+			(modifications.getRemarks() != null ? modifications.getRemarks().size() : 0) + "项");
+		
+		// 1. 从 frontendResults 获取原始数据
+		Map<String, Object> frontendResult = frontendResults.get(taskId);
+		if (frontendResult == null) {
+			// 尝试从文件读取
+			frontendResult = getRawFrontendResult(taskId);
+			if (frontendResult == null) {
+				throw new RuntimeException("任务 " + taskId + " 的前端结果不存在");
+			}
+		}
+		
+		// 2. 获取差异列表
+		@SuppressWarnings("unchecked")
+		List<Map<String, Object>> differences = (List<Map<String, Object>>) frontendResult.get("differences");
+		if (differences == null || differences.isEmpty()) {
+			System.out.println("⚠️ 任务 " + taskId + " 没有差异项，无需修改");
+			return;
+		}
+		
+		int originalCount = differences.size();
+		List<Integer> ignoredIndices = modifications.getIgnoredDifferences();
+		Map<Integer, String> remarks = modifications.getRemarks();
+		
+		// 3. 修改 differences 列表（标记忽略项，不删除）
+		for (int i = 0; i < differences.size(); i++) {
+			Map<String, Object> diff = differences.get(i);
+			
+			// 检查是否被忽略 - 标记而不是删除
+			if (ignoredIndices != null && ignoredIndices.contains(i)) {
+				diff.put("ignored", true);
+				System.out.println("  ⊗ 标记差异项 " + i + " 为已忽略");
+			} else {
+				// 移除忽略标记（如果之前被忽略，现在取消忽略）
+				diff.remove("ignored");
+			}
+			
+			// 添加或移除备注
+			if (remarks != null && remarks.containsKey(i)) {
+				String remark = remarks.get(i);
+				diff.put("remark", remark);
+				System.out.println("  📝 为差异项 " + i + " 添加备注: " + remark);
+			} else {
+				// 移除备注（如果之前有备注，现在删除）
+				diff.remove("remark");
+			}
+		}
+		
+		// 4. 重新计算统计信息（只统计未忽略的项）
+		int totalCount = 0;
+		int deleteCount = 0;
+		int insertCount = 0;
+		int ignoredCount = 0;
+		
+		for (Map<String, Object> diff : differences) {
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			if (isIgnored != null && isIgnored) {
+				ignoredCount++;
+				continue; // 跳过忽略项的统计
+			}
+			
+			totalCount++;
+			String operation = (String) diff.get("operation");
+			if ("DELETE".equals(operation)) {
+				deleteCount++;
+			} else if ("INSERT".equals(operation)) {
+				insertCount++;
+			}
+		}
+		
+		frontendResult.put("totalDiffCount", totalCount);
+		frontendResult.put("deleteCount", deleteCount);
+		frontendResult.put("insertCount", insertCount);
+		frontendResult.put("ignoredCount", ignoredCount);
+		
+		System.out.println("✅ 修改已保存: 总" + originalCount + "项, 有效" + totalCount + "项, 已忽略" + ignoredCount + "项");
+		
+		// 6. 保存修改后的数据回 frontendResults 缓存
+		frontendResults.put(taskId, frontendResult);
+		
+		// 7. 保存修改后的数据到文件
+		try {
+			Path jsonPath = getFrontendResultJsonPath(taskId);
+			Files.createDirectories(jsonPath.getParent());
+			byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
+			Files.write(jsonPath, json);
+			System.out.println("💾 数据已持久化到文件: " + jsonPath.toAbsolutePath());
+		} catch (Exception e) {
+			System.err.println("❌ 持久化失败: " + e.getMessage());
+			throw new RuntimeException("保存用户修改到文件失败: " + e.getMessage(), e);
+		}
+	}
+
+	/**
+	 * 获取用户修改（从文件重新读取数据即可，因为已经被直接修改过）
+	 */
+	public com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest getUserModifications(String taskId) {
+		// 数据已经被直接修改，返回空对象即可
+		com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest request = 
+			new com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest();
+		request.setIgnoredDifferences(new ArrayList<>());
+		request.setRemarks(new HashMap<>());
+		return request;
 	}
 
 	/**
@@ -724,6 +893,9 @@ public class CompareService {
         // 设置任务开始时间
         task.setStartTime(java.time.LocalDateTime.now());
         
+        // 在方法开始处定义frontendResult，以便在整个方法中使用
+        Map<String, Object> frontendResult = null;
+        
         // 记录文档基本信息
         Path oldPath = Paths.get(oldFilePath);
         Path newPath = Paths.get(newFilePath);
@@ -938,7 +1110,7 @@ public class CompareService {
 
                 // 创建包装对象用于返回前端期望的格式
                 // 创建前端结果对象的信息通过进度管理器输出
-                Map<String, Object> frontendResult = new HashMap<>();
+                frontendResult = new HashMap<>();
                 frontendResult.put("taskId", task.getTaskId());
                 frontendResult.put("oldFileName", task.getOldFileName());
                 frontendResult.put("newFileName", task.getNewFileName());
@@ -979,18 +1151,7 @@ public class CompareService {
                 // 保存前端格式的结果
                 // 保存结果到缓存的信息通过进度管理器输出
                 results.put(task.getTaskId(), result);
-                frontendResults.put(task.getTaskId(), frontendResult);
-
-                // 持久化写入磁盘，供前端或服务重启后读取
-                try {
-                    Path jsonPath = getFrontendResultJsonPath(task.getTaskId());
-                    Files.createDirectories(jsonPath.getParent());
-                    byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
-                    Files.write(jsonPath, json);
-                    progressManager.logStepDetail("前端结果已写入文件: {}", jsonPath.toAbsolutePath());
-                } catch (Exception ioEx) {
-                    progressManager.logError("写入前端结果JSON失败: " + ioEx.getMessage(), ioEx);
-                }
+                // 暂时不保存frontendResult，等时间信息完整后再保存
 
                 progressManager.logStepDetail("比对结果保存完成");
             } catch (Exception ex) {
@@ -1015,8 +1176,37 @@ public class CompareService {
             task.setStatus(CompareTask.Status.COMPLETED);
             progressManager.completeStep(TaskStep.TASK_COMPLETE);
             
-            // 完成任务并同步统计信息
+            // 完成任务并同步统计信息（包括设置endTime）
             progressManager.completeTask();
+            
+            // 现在时间信息已完整，更新frontendResult并保存到文件
+            if (frontendResult != null) {
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+            }
+            
+            // 保存包含完整时间信息的frontendResult
+            frontendResults.put(task.getTaskId(), frontendResult);
+            
+            // 持久化写入磁盘，供前端或服务重启后读取
+            try {
+                Path jsonPath = getFrontendResultJsonPath(task.getTaskId());
+                Files.createDirectories(jsonPath.getParent());
+                byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
+                Files.write(jsonPath, json);
+                progressManager.logStepDetail("✅ 前端结果已写入文件（包含完整时间信息）: {}", jsonPath.toAbsolutePath());
+                logger.info("✅ 任务时间信息已持久化: startTime={}, endTime={}, duration={}ms", 
+                    task.getStartTime(), task.getEndTime(), task.getTotalDuration());
+            } catch (Exception ioEx) {
+                progressManager.logError("写入前端结果JSON失败: " + ioEx.getMessage(), ioEx);
+            }
             
             // 输出任务完成总结
             progressManager.logTaskSummary();
@@ -1282,7 +1472,29 @@ public class CompareService {
 			// 保存前端格式的结果（Debug模式使用原始任务ID）
                 // 保存结果到缓存的信息通过进度管理器输出
 			results.put(originalTaskId, result);
-			frontendResults.put(originalTaskId, frontendResult);
+			// 暂时不保存frontendResult，等时间信息完整后再保存
+
+            task.setStatus(CompareTask.Status.COMPLETED);
+            task.updateProgress(8, "调试比对完成");
+            
+            // 完成任务并同步统计信息（包括设置endTime）
+            progressManager.completeTask();
+            
+            // 现在时间信息已完整，更新frontendResult并保存到文件
+            if (frontendResult != null) {
+                if (task.getTotalDuration() != null) {
+                    frontendResult.put("totalDuration", task.getTotalDuration());
+                }
+                if (task.getStartTime() != null) {
+                    frontendResult.put("startTime", task.getStartTime().toString());
+                }
+                if (task.getEndTime() != null) {
+                    frontendResult.put("endTime", task.getEndTime().toString());
+                }
+            }
+            
+            // 保存包含完整时间信息的frontendResult
+            frontendResults.put(originalTaskId, frontendResult);
 
             // 调试模式也需要生成前端结果文件，供前端查看
                 try {
@@ -3413,83 +3625,728 @@ public class CompareService {
 	}
 
 	/**
-	 * 生成HTML格式报告（ZIP包）
+	 * 生成HTML格式报告（ZIP包）- 基于export项目模板的完整实现
+	 * 实现和 embed-json-data.cjs 一样的JSON内嵌逻辑和自动化打包功能
 	 */
 	private byte[] generateHTMLReport(CompareResult result, ExportRequest request) throws Exception {
 		try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-			// 这里需要实现HTML报告生成逻辑
-			// 参考cankao文件夹中的HTML结构
+			String taskId = request.getTaskId();
+			long startTime = System.currentTimeMillis();
 			
-			// 创建ZIP文件包含：
-			// 1. index.html - 主页面
-			// 2. antd.css, table.css - 样式文件  
-			// 3. index.js - JavaScript文件
-			// 4. image/ - 图片文件夹
+			logger.info("🔄 Java后端 - 开始HTML自动化导出流程");
+			logger.info("📋 任务信息: ID={}, 原文档={}, 新文档={}", taskId, result.getOldFileName(), result.getNewFileName());
 			
-			String htmlContent = generateHTMLContent(result, request);
-			String cssContent = generateCSSContent();
-			String jsContent = generateJSContent(result);
+			// 1. 获取文件根目录和模板路径
+			String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+			String templatePath = resolveTemplatePath(uploadRootPath);
+			String tempDirPath = resolveTempDirPath(uploadRootPath, taskId);
 			
-			// 使用Java的ZipOutputStream创建ZIP
-			java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+			logger.info("📁 路径配置:");
+			logger.info("  - 文件根目录: {}", uploadRootPath);
+			logger.info("  - HTML模板: {}", templatePath);
+			logger.info("  - 临时目录: {}", tempDirPath);
 			
-			// 添加HTML文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("index.html"));
-			zos.write(htmlContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
+			Path tempDir = Paths.get(tempDirPath);
+			Files.createDirectories(tempDir);
 			
-			// 添加CSS文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("antd.css"));
-			zos.write(cssContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			zos.putNextEntry(new java.util.zip.ZipEntry("table.css"));
-			zos.write(generateTableCSS().getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			// 添加JS文件
-			zos.putNextEntry(new java.util.zip.ZipEntry("index.js"));
-			zos.write(jsContent.getBytes(StandardCharsets.UTF_8));
-			zos.closeEntry();
-			
-			// 添加图片文件
-			addImagesToZip(zos, result);
-			
-			zos.close();
-			return baos.toByteArray();
+			try {
+				// 2. 准备JSON数据（和 embed-json-data.cjs 相同的数据结构）
+				logger.info("📊 准备JSON数据...");
+				String compareResultJson = generateCompareResultJsonForExport(result);
+				// 使用增强的任务状态生成方法（根据实际情况生成完整数据）
+				String taskStatusJson = generateTaskStatusJsonFromCompareResult(result, request, compareResultJson);
+				
+				// 输出数据统计（和前端脚本一样的格式）
+				logDataStatistics(result, taskStatusJson, compareResultJson);
+				
+				// 3. 读取HTML模板文件
+				logger.info("📄 读取HTML模板文件: {}", templatePath);
+				Path templateFile = Paths.get(templatePath);
+				
+				if (!Files.exists(templateFile)) {
+					throw new RuntimeException("HTML模板文件不存在: " + templatePath + 
+						"，请确保模板文件存在于: {文件根目录}/templates/export/index.html");
+				}
+				
+				String htmlTemplate = Files.readString(templateFile, StandardCharsets.UTF_8);
+				logger.info("✅ 读取HTML模板文件成功 (大小: {} KB)", Files.size(templateFile) / 1024);
+				
+				// 4. 执行JSON数据内嵌（和 embed-json-data.cjs 完全相同的逻辑）
+				logger.info("🔧 执行JSON数据内嵌...");
+				String finalHtml = embedJsonDataIntoHtml(htmlTemplate, taskStatusJson, compareResultJson);
+				logger.info("✅ JSON数据内嵌完成 (内嵌数据大小: {} KB)", 
+					(taskStatusJson.length() + compareResultJson.length()) / 1024);
+				
+				// 5. 自动化复制和替换图片文件
+				logger.info("🖼️ 自动化处理图片文件...");
+				int copiedImages = copyAndReplaceTaskImages(taskId, tempDir);
+				logger.info("✅ 图片文件处理完成 (复制了 {} 个图片文件)", copiedImages);
+				
+				// 6. 创建自动化ZIP包
+				logger.info("📦 创建自动化ZIP包...");
+				java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(baos);
+				
+				// 添加内嵌后的HTML文件
+				zos.putNextEntry(new java.util.zip.ZipEntry("index.html"));
+				zos.write(finalHtml.getBytes(StandardCharsets.UTF_8));
+				zos.closeEntry();
+				logger.info("  ✓ 添加HTML文件到ZIP (大小: {} KB)", finalHtml.getBytes(StandardCharsets.UTF_8).length / 1024);
+				
+				// 添加图片文件到ZIP（保持和前端一致的目录结构）
+				int zipImages = addTempImagesToZip(zos, tempDir);
+				logger.info("  ✓ 添加图片文件到ZIP (数量: {})", zipImages);
+				
+				zos.close();
+				
+				long duration = System.currentTimeMillis() - startTime;
+				logger.info("🎉 Java后端 - HTML自动化导出完成!");
+				logger.info("📈 导出统计: 耗时 {}ms, ZIP大小 {} KB", duration, baos.size() / 1024);
+				
+				return baos.toByteArray();
+				
+			} finally {
+				// 7. 清理临时文件夹
+				deleteTempDirectory(tempDir);
+				logger.info("🧹 临时文件夹已清理");
+			}
 		}
+	}
+	
+	/**
+	 * 解析HTML模板文件路径（基于文件根目录）
+	 */
+	private String resolveTemplatePath(String uploadRootPath) {
+		Path templatePath = Paths.get(uploadRootPath, "templates", "export", "index.html");
+		return templatePath.toAbsolutePath().toString();
+	}
+	
+	
+	/**
+	 * 解析临时目录路径（基于文件根目录）
+	 */
+	private String resolveTempDirPath(String uploadRootPath, String taskId) {
+		Path tempPath = Paths.get(uploadRootPath, "html-export-temp", taskId + "-" + System.currentTimeMillis());
+		return tempPath.toAbsolutePath().toString();
+	}
+	
+	/**
+	 * 输出数据统计信息（和 embed-json-data.cjs 相同的格式）
+	 */
+	private void logDataStatistics(CompareResult result, String taskStatusJson, String compareResultJson) {
+		logger.info("📊 数据统计:");
+		logger.info("  - 任务状态: {} vs {}", result.getOldFileName(), result.getNewFileName());
+		
+		// 解析比对结果以获取页面总数
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			JsonNode compareData = mapper.readTree(compareResultJson);
+			int oldPages = compareData.path("oldImageInfo").path("totalPages").asInt(0);
+			int newPages = compareData.path("newImageInfo").path("totalPages").asInt(0);
+			int differences = compareData.path("differences").size();
+			int failedPages = compareData.path("failedPagesCount").asInt(0);
+			
+			logger.info("  - 页面总数: 原文档 {} 页, 新文档 {} 页", oldPages, newPages);
+			logger.info("  - 差异数量: {} 个", differences);
+			logger.info("  - 失败页面: {} 个", failedPages);
+			logger.info("  - JSON大小: 任务状态 {} KB, 比对结果 {} KB", 
+				taskStatusJson.length() / 1024, compareResultJson.length() / 1024);
+		} catch (Exception e) {
+			logger.warn("解析数据统计时出错: {}", e.getMessage());
+		}
+	}
+	
+	/**
+	 * 将JSON数据内嵌到HTML中（和 embed-json-data.cjs 完全相同的逻辑）
+	 */
+	private String embedJsonDataIntoHtml(String htmlTemplate, String taskStatusJson, String compareResultJson) {
+		// 创建内嵌脚本（和前端脚本完全相同的格式）
+		String inlineScript = String.format(
+			"<script>\n" +
+			"// 内联数据，避免file://协议的CORS问题\n" +
+			"// 由 Java后端自动生成，逻辑等同于 export/embed-json-data.cjs\n" +
+			"window.TASK_STATUS_DATA = %s;\n" +
+			"window.COMPARE_RESULT_DATA = %s;\n" +
+			"console.log('内嵌数据已加载:', { taskStatus: window.TASK_STATUS_DATA, compareResult: window.COMPARE_RESULT_DATA });\n" +
+			"</script>",
+			taskStatusJson,
+			compareResultJson
+		);
+		
+		// 检查是否已经包含内嵌数据（和前端脚本相同的逻辑）
+		if (htmlTemplate.contains("window.TASK_STATUS_DATA")) {
+			logger.info("⚠️ HTML文件已包含内嵌数据，将替换现有数据");
+			// 移除现有的内嵌脚本
+			htmlTemplate = htmlTemplate.replaceAll("<script>[\\s\\S]*?window\\.TASK_STATUS_DATA[\\s\\S]*?</script>", "");
+		}
+		
+		// 将脚本插入到</head>标签之前（和前端脚本相同的逻辑）
+		return htmlTemplate.replace("</head>", inlineScript + "\n</head>");
 	}
 
 	/**
 	 * 生成DOCX格式报告
 	 */
 	private byte[] generateDOCXReport(CompareResult result, ExportRequest request) throws Exception {
-		// 这里需要实现DOCX报告生成逻辑
-		// 使用Apache POI或者其他DOCX库
+		logger.info("📄 开始生成DOCX格式比对报告");
 		
-		// 临时返回示例内容
-		String content = "比对报告\n\n";
-		content += "任务ID: " + request.getTaskId() + "\n";
-		content += "原文档: " + result.getOldFileName() + "\n";
-		content += "新文档: " + result.getNewFileName() + "\n";
-		content += "差异总数: " + (result.getDifferences() != null ? result.getDifferences().size() : 0) + "\n\n";
+		try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			 org.apache.poi.xwpf.usermodel.XWPFDocument document = new org.apache.poi.xwpf.usermodel.XWPFDocument()) {
+			
+			// 1. 添加标题
+			org.apache.poi.xwpf.usermodel.XWPFParagraph titlePara = document.createParagraph();
+			titlePara.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+			org.apache.poi.xwpf.usermodel.XWPFRun titleRun = titlePara.createRun();
+			titleRun.setText("合同比对报告");
+			titleRun.setBold(true);
+			titleRun.setFontSize(18);
+			titleRun.setFontFamily("宋体");
+			
+			// 2. 添加基本信息部分
+			addBasicInfo(document, result, request);
+			
+			// 3. 添加差异详细信息标题
+			org.apache.poi.xwpf.usermodel.XWPFParagraph detailTitlePara = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun detailTitleRun = detailTitlePara.createRun();
+			detailTitleRun.setText("差异详细信息");
+			detailTitleRun.setBold(true);
+			detailTitleRun.setFontSize(14);
+			detailTitleRun.setFontFamily("宋体");
+			
+			// 4. 添加差异详细表格
+			addDifferenceTable(document, result, request);
+			
+			// 5. 写入到字节数组
+			document.write(baos);
+			logger.info("✅ DOCX报告生成成功，大小: {} KB", baos.size() / 1024);
+			
+			return baos.toByteArray();
+		}
+	}
+	
+	/**
+	 * 添加基本信息部分
+	 */
+	private void addBasicInfo(org.apache.poi.xwpf.usermodel.XWPFDocument document, CompareResult result, ExportRequest request) {
+		// 获取差异数据（使用保留的原始格式或转换后的数据）
+		List<Map<String, Object>> differences;
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			differences = result.getFormattedDifferences();
+		} else {
+			differences = result.getDifferences() != null ? 
+				convertDiffBlocksToMapFormat(result.getDifferences(), false, null, null) : 
+				new ArrayList<>();
+		}
 		
-		if (result.getDifferences() != null) {
-			for (int i = 0; i < result.getDifferences().size(); i++) {
-				DiffBlock diff = result.getDifferences().get(i);
-				content += "差异 " + (i + 1) + ": " + diff.type + "\n";
-				content += "页面: " + diff.page + "\n";
-				if (diff.oldText != null && !diff.oldText.isEmpty()) {
-					content += "原文: " + diff.oldText + "\n";
+		// 计算有效差异和已忽略差异
+		long validDiffCount = differences.stream()
+			.filter(diff -> {
+				Boolean ignored = (Boolean) diff.get("ignored");
+				return ignored == null || !ignored;
+			})
+			.count();
+		long ignoredDiffCount = differences.size() - validDiffCount;
+		
+		// 比对编号
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p1 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r1 = p1.createRun();
+		r1.setText("比对编号: " + request.getTaskId());
+		r1.setFontFamily("宋体");
+		r1.setFontSize(12);
+		
+		// 比对结果
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p2 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r2 = p2.createRun();
+		r2.setText("比对结果: " + (validDiffCount > 0 ? "有差异" : "无差异"));
+		r2.setFontFamily("宋体");
+		r2.setFontSize(12);
+		
+		// 差异统计（如果有被忽略的项，显示统计信息）
+		if (ignoredDiffCount > 0) {
+			org.apache.poi.xwpf.usermodel.XWPFParagraph p2_1 = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun r2_1 = p2_1.createRun();
+			r2_1.setText("差异统计: 有效差异 " + validDiffCount + " 项，已忽略差异 " + ignoredDiffCount + " 项");
+			r2_1.setFontFamily("宋体");
+			r2_1.setFontSize(12);
+			r2_1.setColor("666666"); // 灰色显示统计信息
+		}
+		
+		// 基准文档名称
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p3 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r3 = p3.createRun();
+		r3.setText("基准文档名称: " + result.getOldFileName());
+		r3.setFontFamily("宋体");
+		r3.setFontSize(12);
+		
+		// 比对创建时间
+		org.apache.poi.xwpf.usermodel.XWPFParagraph p4 = document.createParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFRun r4 = p4.createRun();
+		java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+		String formattedTime = java.time.LocalDateTime.now().format(formatter);
+		r4.setText("比对创建时间: " + formattedTime);
+		r4.setFontFamily("宋体");
+		r4.setFontSize(12);
+		
+		// 空行
+		document.createParagraph();
+	}
+	
+	/**
+	 * 添加差异详细表格
+	 */
+	private void addDifferenceTable(org.apache.poi.xwpf.usermodel.XWPFDocument document, CompareResult result, ExportRequest request) {
+		// 获取差异数据
+		List<Map<String, Object>> differences;
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			differences = result.getFormattedDifferences();
+		} else {
+			differences = result.getDifferences() != null ? 
+				convertDiffBlocksToMapFormat(result.getDifferences(), false, null, null) : 
+				new ArrayList<>();
+		}
+		
+		// 不再过滤被忽略的差异，显示所有差异（包括被忽略的）
+		if (differences.isEmpty()) {
+			org.apache.poi.xwpf.usermodel.XWPFParagraph noDiffPara = document.createParagraph();
+			org.apache.poi.xwpf.usermodel.XWPFRun noDiffRun = noDiffPara.createRun();
+			noDiffRun.setText("未发现差异");
+			noDiffRun.setFontFamily("宋体");
+			noDiffRun.setFontSize(12);
+			return;
+		}
+		
+		// 检查是否有备注
+		boolean hasRemark = differences.stream()
+			.anyMatch(diff -> {
+				String remark = (String) diff.get("remark");
+				return remark != null && !remark.isEmpty();
+			});
+		
+		// 创建表格: 根据是否有备注决定列数
+		// 有备注: 6列 (比对文档名称, 序号, 页码, 文档修改内容, 差异类型, 备注)
+		// 无备注: 5列 (比对文档名称, 序号, 页码, 文档修改内容, 差异类型)
+		org.apache.poi.xwpf.usermodel.XWPFTable table = document.createTable();
+		table.setWidth("100%");
+		
+		// 设置表格边框
+		org.apache.poi.xwpf.usermodel.XWPFTableRow headerRow = table.getRow(0);
+		
+		// 表头
+		setCellText(headerRow.getCell(0), "比对文档名称", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(1), "序号", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(2), "页码", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(3), "文档修改内容", true, true);
+		headerRow.addNewTableCell();
+		setCellText(headerRow.getCell(4), "差异类型", true, true);
+		
+		// 如果有备注，添加备注列
+		if (hasRemark) {
+			headerRow.addNewTableCell();
+			setCellText(headerRow.getCell(5), "备注", true, true);
+		}
+		
+		// 添加数据行（包括被忽略的差异）
+		for (int i = 0; i < differences.size(); i++) {
+			Map<String, Object> diff = differences.get(i);
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			boolean ignored = isIgnored != null && isIgnored;
+			
+			org.apache.poi.xwpf.usermodel.XWPFTableRow row = table.createRow();
+			
+			// 比对文档名称（合并行）
+			if (i == 0) {
+				setCellText(row.getCell(0), result.getNewFileName(), false, false, ignored);
+			}
+			
+			// 序号
+			setCellText(row.getCell(1), String.valueOf(i + 1), false, false, ignored);
+			
+			// 页码
+			Object pageObj = diff.get("page");
+			String pageText = pageObj != null ? pageObj.toString() : "";
+			setCellText(row.getCell(2), pageText, false, false, ignored);
+			
+			// 文档修改内容 (合并显示，用背景色高亮差异)
+			addMergedDifferenceContent(row.getCell(3), diff, ignored);
+			
+			// 差异类型
+			String diffType = getDifferenceType(diff);
+			org.apache.poi.xwpf.usermodel.XWPFTableCell typeCell = row.getCell(4);
+			typeCell.removeParagraph(0);
+			org.apache.poi.xwpf.usermodel.XWPFParagraph typePara = typeCell.addParagraph();
+			
+			// 添加差异类型文本（如果被忽略，显示"xxx（已忽略）"）
+			org.apache.poi.xwpf.usermodel.XWPFRun typeRun = typePara.createRun();
+			if (ignored) {
+				typeRun.setText(diffType + "（已忽略）");
+				typeRun.setColor("999999"); // 灰色
+			} else {
+				typeRun.setText(diffType);
+			}
+			typeRun.setFontFamily("宋体");
+			typeRun.setFontSize(10);
+			
+			// 如果有备注列，填充备注内容
+			if (hasRemark) {
+				String remark = (String) diff.get("remark");
+				if (remark != null && !remark.isEmpty()) {
+					setCellText(row.getCell(5), remark, false, false, ignored);
+				} else {
+					setCellText(row.getCell(5), "", false, false, ignored);
 				}
-				if (diff.newText != null && !diff.newText.isEmpty()) {
-					content += "新文: " + diff.newText + "\n";
-				}
-				content += "\n";
 			}
 		}
 		
-		return content.getBytes(StandardCharsets.UTF_8);
+		logger.info("✅ 添加了 {} 个差异项到表格（包含已忽略项）", differences.size());
+	}
+	
+	/**
+	 * 设置单元格文本（不带忽略标记）
+	 */
+	private void setCellText(org.apache.poi.xwpf.usermodel.XWPFTableCell cell, String text, boolean bold, boolean center) {
+		setCellText(cell, text, bold, center, false);
+	}
+	
+	/**
+	 * 设置单元格文本（支持忽略标记）
+	 */
+	private void setCellText(org.apache.poi.xwpf.usermodel.XWPFTableCell cell, String text, boolean bold, boolean center, boolean ignored) {
+		cell.removeParagraph(0); // 移除默认段落
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para = cell.addParagraph();
+		if (center) {
+			para.setAlignment(org.apache.poi.xwpf.usermodel.ParagraphAlignment.CENTER);
+		}
+		org.apache.poi.xwpf.usermodel.XWPFRun run = para.createRun();
+		run.setText(text);
+		run.setFontFamily("宋体");
+		run.setFontSize(10);
+		if (bold) {
+			run.setBold(true);
+		}
+		if (ignored) {
+			run.setColor("999999"); // 灰色显示被忽略项
+		}
+	}
+	
+	/**
+	 * 添加合并的差异内容（使用背景色高亮）
+	 * 显示完整的上下文句子，并只对差异部分进行背景色高亮
+	 */
+	private void addMergedDifferenceContent(
+		org.apache.poi.xwpf.usermodel.XWPFTableCell cell, 
+		Map<String, Object> diff,
+		boolean ignored) {
+		
+		String operation = (String) diff.get("operation");
+		
+		cell.removeParagraph(0);
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para = cell.addParagraph();
+		
+		if ("DELETE".equals(operation)) {
+			// 删除：显示完整的旧文本，对差异部分红色背景高亮
+			String fullText = getFullTextFromDiff(diff, "old");
+			List<Map<String, Object>> diffRanges = getDiffRangesFromDiff(diff, "old");
+			addTextWithHighlight(para, fullText, diffRanges, "FFCCCC", ignored);
+			
+		} else if ("INSERT".equals(operation)) {
+			// 新增：显示完整的新文本，对差异部分绿色背景高亮
+			String fullText = getFullTextFromDiff(diff, "new");
+			List<Map<String, Object>> diffRanges = getDiffRangesFromDiff(diff, "new");
+			addTextWithHighlight(para, fullText, diffRanges, "CCFFCC", ignored);
+			
+		} else if ("MODIFY".equals(operation)) {
+			// 修改：显示"完整旧文本→完整新文本"，差异部分分别用不同背景色
+			String oldFullText = getFullTextFromDiff(diff, "old");
+			List<Map<String, Object>> oldDiffRanges = getDiffRangesFromDiff(diff, "old");
+			addTextWithHighlight(para, oldFullText, oldDiffRanges, "FFCCCC", ignored);
+			
+			// 箭头
+			org.apache.poi.xwpf.usermodel.XWPFRun arrowRun = para.createRun();
+			arrowRun.setText(" → ");
+			arrowRun.setFontFamily("宋体");
+			arrowRun.setFontSize(10);
+			if (ignored) {
+				arrowRun.setColor("999999");
+			}
+			
+			String newFullText = getFullTextFromDiff(diff, "new");
+			List<Map<String, Object>> newDiffRanges = getDiffRangesFromDiff(diff, "new");
+			addTextWithHighlight(para, newFullText, newDiffRanges, "CCFFCC", ignored);
+		}
+	}
+	
+	/**
+	 * 添加带高亮的文本（完整文本 + 差异范围高亮）
+	 */
+	private void addTextWithHighlight(
+		org.apache.poi.xwpf.usermodel.XWPFParagraph para,
+		String fullText,
+		List<Map<String, Object>> diffRanges,
+		String highlightColor,
+		boolean ignored) {
+		
+		if (fullText == null || fullText.isEmpty()) {
+			return;
+		}
+		
+		// 如果没有差异范围，整个文本都是差异
+		if (diffRanges == null || diffRanges.isEmpty()) {
+			org.apache.poi.xwpf.usermodel.XWPFRun run = para.createRun();
+			run.setText(fullText);
+			run.setFontFamily("宋体");
+			run.setFontSize(10);
+			setRunBackgroundColor(run, highlightColor);
+			if (ignored) {
+				run.setColor("999999");
+			}
+			return;
+		}
+		
+		// 按差异范围分段显示
+		int currentPos = 0;
+		for (Map<String, Object> range : diffRanges) {
+			int start = getIntValue(range.get("start"), 0);
+			int end = getIntValue(range.get("end"), fullText.length());
+			
+			// 确保索引有效
+			start = Math.max(0, Math.min(start, fullText.length()));
+			end = Math.max(start, Math.min(end, fullText.length()));
+			
+			// 添加差异前的普通文本
+			if (currentPos < start) {
+				String normalText = fullText.substring(currentPos, start);
+				org.apache.poi.xwpf.usermodel.XWPFRun normalRun = para.createRun();
+				normalRun.setText(normalText);
+				normalRun.setFontFamily("宋体");
+				normalRun.setFontSize(10);
+				if (ignored) {
+					normalRun.setColor("999999");
+				}
+			}
+			
+			// 添加高亮的差异文本
+			if (start < end) {
+				String diffText = fullText.substring(start, end);
+				org.apache.poi.xwpf.usermodel.XWPFRun diffRun = para.createRun();
+				diffRun.setText(diffText);
+				diffRun.setFontFamily("宋体");
+				diffRun.setFontSize(10);
+				setRunBackgroundColor(diffRun, highlightColor);
+				if (ignored) {
+					diffRun.setColor("999999");
+				}
+			}
+			
+			currentPos = end;
+		}
+		
+		// 添加最后剩余的普通文本
+		if (currentPos < fullText.length()) {
+			String remainingText = fullText.substring(currentPos);
+			org.apache.poi.xwpf.usermodel.XWPFRun remainingRun = para.createRun();
+			remainingRun.setText(remainingText);
+			remainingRun.setFontFamily("宋体");
+			remainingRun.setFontSize(10);
+			if (ignored) {
+				remainingRun.setColor("999999");
+			}
+		}
+	}
+	
+	/**
+	 * 从差异项中获取完整文本
+	 */
+	private String getFullTextFromDiff(Map<String, Object> diff, String type) {
+		if ("old".equals(type)) {
+			// 先尝试 allTextA
+			Object allTextA = diff.get("allTextA");
+			if (allTextA != null) {
+				if (allTextA instanceof List) {
+					List<?> textList = (List<?>) allTextA;
+					if (!textList.isEmpty()) {
+						return String.join("", textList.stream()
+							.map(Object::toString)
+							.toArray(String[]::new));
+					}
+				} else {
+					String text = allTextA.toString();
+					if (!text.isEmpty()) {
+						return text;
+					}
+				}
+			}
+			// 回退到 oldText
+			return getTextFromDiff(diff, "old");
+		} else {
+			// 先尝试 allTextB
+			Object allTextB = diff.get("allTextB");
+			if (allTextB != null) {
+				if (allTextB instanceof List) {
+					List<?> textList = (List<?>) allTextB;
+					if (!textList.isEmpty()) {
+						return String.join("", textList.stream()
+							.map(Object::toString)
+							.toArray(String[]::new));
+					}
+				} else {
+					String text = allTextB.toString();
+					if (!text.isEmpty()) {
+						return text;
+					}
+				}
+			}
+			// 回退到 newText
+			return getTextFromDiff(diff, "new");
+		}
+	}
+	
+	/**
+	 * 从差异项中获取差异范围
+	 */
+	@SuppressWarnings("unchecked")
+	private List<Map<String, Object>> getDiffRangesFromDiff(Map<String, Object> diff, String type) {
+		String rangeKey = "old".equals(type) ? "diffRangesA" : "diffRangesB";
+		Object ranges = diff.get(rangeKey);
+		
+		if (ranges instanceof List) {
+			try {
+				return (List<Map<String, Object>>) ranges;
+			} catch (ClassCastException e) {
+				logger.warn("无法转换差异范围: {}", e.getMessage());
+			}
+		}
+		
+		return new ArrayList<>();
+	}
+	
+	/**
+	 * 安全地从Object转换为int
+	 */
+	private int getIntValue(Object obj, int defaultValue) {
+		if (obj == null) {
+			return defaultValue;
+		}
+		if (obj instanceof Number) {
+			return ((Number) obj).intValue();
+		}
+		try {
+			return Integer.parseInt(obj.toString());
+		} catch (NumberFormatException e) {
+			return defaultValue;
+		}
+	}
+	
+	/**
+	 * 设置Run的背景色
+	 */
+	private void setRunBackgroundColor(org.apache.poi.xwpf.usermodel.XWPFRun run, String color) {
+		org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr rPr = run.getCTR().getRPr();
+		if (rPr == null) {
+			rPr = run.getCTR().addNewRPr();
+		}
+		org.openxmlformats.schemas.wordprocessingml.x2006.main.CTShd shd = rPr.addNewShd();
+		shd.setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STShd.CLEAR);
+		shd.setColor("auto");
+		shd.setFill(color);
+	}
+	
+	/**
+	 * 添加格式化的差异内容（支持删除线和下划线，支持忽略标记）
+	 * 保留旧方法以备不时之需
+	 */
+	private void addFormattedDifferenceContent(
+		org.apache.poi.xwpf.usermodel.XWPFTableCell oldCell, 
+		org.apache.poi.xwpf.usermodel.XWPFTableCell newCell, 
+		Map<String, Object> diff,
+		boolean ignored) {
+		
+		String operation = (String) diff.get("operation");
+		String textColor = ignored ? "999999" : "FF0000"; // 被忽略项使用灰色，否则使用红色
+		
+		oldCell.removeParagraph(0);
+		newCell.removeParagraph(0);
+		
+		org.apache.poi.xwpf.usermodel.XWPFParagraph oldPara = oldCell.addParagraph();
+		org.apache.poi.xwpf.usermodel.XWPFParagraph newPara = newCell.addParagraph();
+		
+		if ("DELETE".equals(operation)) {
+			// 删除：旧文档显示删除线，新文档为空
+			String oldText = getTextFromDiff(diff, "old");
+			org.apache.poi.xwpf.usermodel.XWPFRun oldRun = oldPara.createRun();
+			oldRun.setText(oldText);
+			oldRun.setFontFamily("宋体");
+			oldRun.setFontSize(10);
+			oldRun.setStrikeThrough(true);
+			oldRun.setColor(textColor);
+			
+		} else if ("INSERT".equals(operation)) {
+			// 新增：旧文档为空，新文档显示下划线
+			String newText = getTextFromDiff(diff, "new");
+			org.apache.poi.xwpf.usermodel.XWPFRun newRun = newPara.createRun();
+			newRun.setText(newText);
+			newRun.setFontFamily("宋体");
+			newRun.setFontSize(10);
+			newRun.setUnderline(org.apache.poi.xwpf.usermodel.UnderlinePatterns.SINGLE);
+			newRun.setColor(textColor);
+			
+		} else if ("MODIFY".equals(operation)) {
+			// 修改：旧文档删除线，新文档下划线
+			String oldText = getTextFromDiff(diff, "old");
+			String newText = getTextFromDiff(diff, "new");
+			
+			org.apache.poi.xwpf.usermodel.XWPFRun oldRun = oldPara.createRun();
+			oldRun.setText(oldText);
+			oldRun.setFontFamily("宋体");
+			oldRun.setFontSize(10);
+			oldRun.setStrikeThrough(true);
+			oldRun.setColor(textColor);
+			
+			org.apache.poi.xwpf.usermodel.XWPFRun newRun = newPara.createRun();
+			newRun.setText(newText);
+			newRun.setFontFamily("宋体");
+			newRun.setFontSize(10);
+			newRun.setUnderline(org.apache.poi.xwpf.usermodel.UnderlinePatterns.SINGLE);
+			newRun.setColor(textColor);
+		}
+	}
+	
+	/**
+	 * 从差异项中获取文本
+	 */
+	private String getTextFromDiff(Map<String, Object> diff, String type) {
+		if ("old".equals(type)) {
+			Object text = diff.get("oldText");
+			if (text != null && !text.toString().isEmpty()) {
+				return text.toString();
+			}
+			text = diff.get("textA");
+			return text != null ? text.toString() : "";
+		} else {
+			Object text = diff.get("newText");
+			if (text != null && !text.toString().isEmpty()) {
+				return text.toString();
+			}
+			text = diff.get("textB");
+			return text != null ? text.toString() : "";
+		}
+	}
+	
+	/**
+	 * 获取差异类型显示文本
+	 */
+	private String getDifferenceType(Map<String, Object> diff) {
+		String operation = (String) diff.get("operation");
+		if ("DELETE".equals(operation)) {
+			return "删除";
+		} else if ("INSERT".equals(operation)) {
+			return "新增";
+		} else if ("MODIFY".equals(operation)) {
+			return "修改";
+		} else {
+			return operation != null ? operation : "未知";
+		}
 	}
 
 	/**
@@ -3518,6 +4375,248 @@ public class CompareService {
 			zos.close();
 			return baos.toByteArray();
 		}
+	}
+
+	/**
+	 * 生成适用于export的任务状态JSON
+	 */
+	/**
+	 * 从比对结果生成任务状态JSON（增强版本，根据实际情况生成完整数据）
+	 */
+	private String generateTaskStatusJsonFromCompareResult(CompareResult result, ExportRequest request, String compareResultJson) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			
+			// 解析比对结果以获取页面信息
+			JsonNode compareData = mapper.readTree(compareResultJson);
+			int oldPages = compareData.path("oldImageInfo").path("totalPages").asInt(0);
+			int newPages = compareData.path("newImageInfo").path("totalPages").asInt(0);
+			int totalPages = Math.max(oldPages, newPages);
+			
+			// 生成默认的完成状态
+			Map<String, Object> taskStatus = new HashMap<>();
+			String now = java.time.Instant.now().toString();
+			
+			taskStatus.put("taskId", request.getTaskId());
+			taskStatus.put("status", "COMPLETED");
+			taskStatus.put("progress", 100);
+			taskStatus.put("progressPercentage", 100);
+			taskStatus.put("currentStep", 10);
+			taskStatus.put("totalSteps", 8);
+			taskStatus.put("currentStepDescription", "已完成所有比对任务");
+			taskStatus.put("currentStepDesc", "任务完成");
+			taskStatus.put("statusDescription", "比对完成");
+			taskStatus.put("progressDescription", "比对完成");
+			taskStatus.put("oldFileName", result.getOldFileName());
+			taskStatus.put("newFileName", result.getNewFileName());
+			taskStatus.put("totalPages", totalPages);
+			taskStatus.put("oldDocPages", oldPages);
+			taskStatus.put("newDocPages", newPages);
+			taskStatus.put("currentPageOld", oldPages);
+			taskStatus.put("currentPageNew", newPages);
+			taskStatus.put("completedPagesOld", oldPages);
+			taskStatus.put("completedPagesNew", newPages);
+			taskStatus.put("failedPages", new ArrayList<>());
+			taskStatus.put("failedPagesCount", 0);
+			taskStatus.put("createdTime", now);
+			taskStatus.put("startTime", now);
+			taskStatus.put("updatedTime", now);
+			taskStatus.put("endTime", now);
+			taskStatus.put("totalDuration", 0);
+			taskStatus.put("estimatedTotalTime", "0秒");
+			taskStatus.put("remainingTime", "0秒");
+			
+			logger.info("✅ 从比对结果生成任务状态: {} 页 (原文档: {}, 新文档: {})", totalPages, oldPages, newPages);
+			
+			return mapper.writeValueAsString(taskStatus);
+		} catch (Exception e) {
+			throw new RuntimeException("从比对结果生成任务状态JSON失败", e);
+		}
+	}
+	
+	/**
+	 * 生成适用于export的比对结果JSON
+	 */
+	private String generateCompareResultJsonForExport(CompareResult result) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			Map<String, Object> exportResult = new HashMap<>();
+			
+		// 基本信息
+		exportResult.put("failedPages", result.getFailedPages() != null ? result.getFailedPages() : new ArrayList<>());
+		exportResult.put("failedPagesCount", result.getFailedPages() != null ? result.getFailedPages().size() : 0);
+		
+		// 使用保留的原始格式差异数据，如果没有则使用转换后的数据
+		List<Map<String, Object>> differencesToExport;
+		if (result.getFormattedDifferences() != null && !result.getFormattedDifferences().isEmpty()) {
+			differencesToExport = result.getFormattedDifferences();
+			logger.info("✅ 使用原始格式的差异数据，包含 {} 个差异项", differencesToExport.size());
+		} else {
+			// 转换 DiffBlock 列表为 Map 格式
+			List<DiffBlock> diffBlocks = result.getDifferences();
+			if (diffBlocks != null && !diffBlocks.isEmpty()) {
+				differencesToExport = convertDiffBlocksToMapFormat(diffBlocks, false, null, null);
+				logger.warn("⚠️ 使用转换后的差异数据，已转换为Map格式");
+			} else {
+				differencesToExport = new ArrayList<>();
+				logger.warn("⚠️ 无差异数据可导出");
+			}
+		}
+		
+		// 统计被忽略的差异项（但不过滤掉，保留给前端显示）
+		int ignoredCount = 0;
+		int validCount = 0;
+		for (Map<String, Object> diff : differencesToExport) {
+			Boolean isIgnored = (Boolean) diff.get("ignored");
+			if (isIgnored != null && isIgnored) {
+				ignoredCount++;
+		} else {
+				validCount++;
+			}
+		}
+		
+		// 导出全部差异项（包括被忽略的），让前端根据ignored字段控制显示
+		exportResult.put("differences", differencesToExport);
+		
+		// 记录导出统计
+		logger.info("✅ 导出包含 {} 个差异项（有效 {} 项，已忽略 {} 项）", 
+			differencesToExport.size(), validCount, ignoredCount);
+		exportResult.put("oldFileName", result.getOldFileName());
+		exportResult.put("newFileName", result.getNewFileName());
+		exportResult.put("startTime", System.currentTimeMillis()); // 使用当前时间
+		
+		// 图片信息 - 从实际文件动态获取图片信息
+		exportResult.put("oldImageInfo", generateActualImageInfo("old", result.getTaskId()));
+		exportResult.put("newImageInfo", generateActualImageInfo("new", result.getTaskId()));
+			
+		// 图片基路径供Vue组件使用
+		exportResult.put("oldImageBaseUrl", "./data/current/images/old");
+		exportResult.put("newImageBaseUrl", "./data/current/images/new");
+			
+			return mapper.writeValueAsString(exportResult);
+		} catch (Exception e) {
+			throw new RuntimeException("生成比对结果JSON失败", e);
+		}
+	}
+
+	/**
+	 * 从实际文件动态获取图片信息（基于yml配置的文件根目录）
+	 */
+	private Map<String, Object> generateActualImageInfo(String mode, String taskId) {
+		Map<String, Object> info = new HashMap<>();
+		List<Map<String, Object>> pages = new ArrayList<>();
+		
+		// 使用配置的文件根目录，参考存图片的逻辑
+		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+		Path actualImageDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+		
+		logger.info("🔍 读取图片目录: {}", actualImageDir);
+		
+		if (!Files.exists(actualImageDir) || !Files.isDirectory(actualImageDir)) {
+			logger.warn("⚠️ 图片目录不存在: {}，返回空图片信息", actualImageDir);
+			info.put("totalPages", 0);
+			info.put("pages", pages);
+			return info;
+		}
+		
+		// 读取实际的图片文件
+		try {
+			// 先尝试新格式 (page-N.png)
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, "page-*.png")) {
+				for (Path imagePath : stream) {
+					int pageNum = extractPageNumber(imagePath.getFileName().toString(), "page-", ".png");
+					if (pageNum > 0) {
+						Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
+						pages.add(page);
+					}
+				}
+			}
+			
+			// 如果没有找到新格式，尝试旧格式 (old_N.png, new_N.png)
+			if (pages.isEmpty()) {
+				try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, mode + "_*.png")) {
+					for (Path imagePath : stream) {
+						int pageNum = extractPageNumber(imagePath.getFileName().toString(), mode + "_", ".png");
+						if (pageNum > 0) {
+							Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
+							pages.add(page);
+						}
+					}
+				}
+			}
+			
+		} catch (IOException e) {
+			logger.error("读取图片文件时出错: {}", e.getMessage());
+			info.put("totalPages", 0);
+			info.put("pages", new ArrayList<>());
+			return info;
+		}
+		
+		// 按页码排序
+		pages.sort((a, b) -> {
+			Integer pageA = (Integer) a.get("pageNum");
+			Integer pageB = (Integer) b.get("pageNum");
+			return Integer.compare(pageA, pageB);
+		});
+		
+		info.put("totalPages", pages.size());
+		info.put("pages", pages);
+		
+		logger.info("✅ 实际获取 {} 图片信息: {} 页", mode, pages.size());
+		return info;
+	}
+	
+	/**
+	 * 创建单页图片信息
+	 */
+	private Map<String, Object> createPageInfo(int pageNum, String mode, Path imagePath) {
+		Map<String, Object> page = new HashMap<>();
+		page.put("pageNum", pageNum);
+		page.put("imageUrl", String.format("./data/current/images/%s/page-%d.png", mode, pageNum));
+		
+		// 尝试获取实际图片尺寸
+		try {
+			if (Files.exists(imagePath)) {
+				// 使用 Java 内置的图片读取功能获取尺寸
+				java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imagePath.toFile());
+				if (image != null) {
+					page.put("width", image.getWidth());
+					page.put("height", image.getHeight());
+					logger.debug("获取图片尺寸: {} -> {}x{}", imagePath.getFileName(), image.getWidth(), image.getHeight());
+				} else {
+					// 如果无法读取图片，使用默认尺寸
+					page.put("width", 1322);
+					page.put("height", 1870);
+					logger.warn("无法读取图片 {}，使用默认尺寸", imagePath.getFileName());
+				}
+			} else {
+				// 文件不存在，使用默认尺寸
+				page.put("width", 1322);
+				page.put("height", 1870);
+			}
+		} catch (Exception e) {
+			// 读取图片出错，使用默认尺寸
+			page.put("width", 1322);
+			page.put("height", 1870);
+			logger.warn("读取图片 {} 尺寸时出错: {}，使用默认尺寸", imagePath.getFileName(), e.getMessage());
+		}
+		
+		return page;
+	}
+	
+	/**
+	 * 从文件名中提取页码
+	 */
+	private int extractPageNumber(String fileName, String prefix, String suffix) {
+		try {
+			if (fileName.startsWith(prefix) && fileName.endsWith(suffix)) {
+				String numberPart = fileName.substring(prefix.length(), fileName.length() - suffix.length());
+				return Integer.parseInt(numberPart);
+			}
+		} catch (NumberFormatException e) {
+			logger.warn("无法从文件名 {} 提取页码", fileName);
+		}
+		return -1;
 	}
 
 	/**
@@ -3890,5 +4989,419 @@ public class CompareService {
 		}
 		
 		return charBoxes;
+
+	/**
+	 * 复制任务图片到临时目录
+	 */
+	/**
+	 * 自动化复制和替换任务图片（增强版本，支持自动化替换）
+	 */
+	private int copyAndReplaceTaskImages(String taskId, Path tempDir) throws IOException {
+		return copyTaskImagesToTemp(taskId, tempDir);
+	}
+	
+	/**
+	 * 复制任务图片到临时目录
+	 */
+	private int copyTaskImagesToTemp(String taskId, Path tempDir) throws IOException {
+		String projectRoot = System.getProperty("user.dir");
+		
+		logger.info("  🔍 搜索任务图片文件，任务ID: {}", taskId);
+		
+		// 创建图片目录 - 按照前端期望的路径结构（和 embed-json-data.cjs 一致）
+		Path oldImagesDir = tempDir.resolve("data").resolve("current").resolve("images").resolve("old");
+		Path newImagesDir = tempDir.resolve("data").resolve("current").resolve("images").resolve("new");
+		Files.createDirectories(oldImagesDir);
+		Files.createDirectories(newImagesDir);
+		logger.info("  📁 创建目录结构: data/current/images/{{old,new}}");
+		
+		// 复制图片文件 - 根据当前工作目录调整路径
+		String[] possiblePaths;
+		if (projectRoot.endsWith("contract-tools-sdk")) {
+			// 当前在contract-tools-sdk目录下
+			possiblePaths = new String[] {
+				projectRoot + "/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/uploads/compare-pro/" + taskId,
+				projectRoot + "/../uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/../backend/uploads/compare-pro/tasks/" + taskId
+			};
+		} else {
+			// 当前在项目根目录下
+			possiblePaths = new String[] {
+				projectRoot + "/contract-tools-sdk/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/sdk/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/backend/uploads/compare-pro/tasks/" + taskId,
+				projectRoot + "/contract-tools-sdk/uploads/compare-pro/" + taskId,
+				projectRoot + "/uploads/compare-pro/" + taskId
+			};
+		}
+		
+		for (String basePath : possiblePaths) {
+			Path taskPath = Paths.get(basePath);
+			if (Files.exists(taskPath)) {
+				logger.info("  ✓ 找到任务图片目录: {}", basePath);
+				int copiedCount = copyTaskImagesFromPath(taskPath, oldImagesDir, newImagesDir);
+				logger.info("  ✅ 自动化复制完成: {} 个图片文件", copiedCount);
+				return copiedCount;
+			} else {
+				logger.debug("  ✗ 路径不存在: {}", basePath);
+			}
+		}
+		
+		logger.warn("  ⚠️ 未找到任务图片文件，任务ID: {}，将使用默认图片", taskId);
+		return 0;
+	}
+
+	/**
+	 * 从指定路径复制任务图片（返回复制的图片数量）
+	 */
+	private int copyTaskImagesFromPath(Path taskPath, Path oldImagesDir, Path newImagesDir) throws IOException {
+		int totalCopied = 0;
+		
+		// 检查是否存在images子目录结构
+		Path oldImagesPath = taskPath.resolve("images").resolve("old");
+		Path newImagesPath = taskPath.resolve("images").resolve("new");
+		
+		if (Files.exists(oldImagesPath)) {
+			// 新的目录结构：tasks/{taskId}/images/old/page-N.png
+			logger.info("  📂 使用新的图片目录结构: {}", oldImagesPath);
+			int oldCopied = copyImagesFromDirectory(oldImagesPath, oldImagesDir, "page-*.png");
+			int newCopied = copyImagesFromDirectory(newImagesPath, newImagesDir, "page-*.png");
+			totalCopied = oldCopied + newCopied;
+			logger.info("    ✓ 原文档图片: {} 个, 新文档图片: {} 个", oldCopied, newCopied);
+		} else {
+			// 旧的文件结构：tasks/{taskId}/old_*.png, new_*.png
+			logger.info("  📂 使用旧的图片文件结构: {}", taskPath);
+			
+			// 复制原文档图片
+			int oldPageNum = 1;
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "old_*.png")) {
+				for (Path imagePath : stream) {
+					Files.copy(imagePath, oldImagesDir.resolve("page-" + oldPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
+					oldPageNum++;
+					totalCopied++;
+				}
+			}
+			
+			// 复制新文档图片
+			int newPageNum = 1;
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "new_*.png")) {
+				for (Path imagePath : stream) {
+					Files.copy(imagePath, newImagesDir.resolve("page-" + newPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
+					newPageNum++;
+					totalCopied++;
+				}
+			}
+			
+			logger.info("    ✓ 原文档图片: {} 个, 新文档图片: {} 个", oldPageNum - 1, newPageNum - 1);
+		}
+		
+		return totalCopied;
+	}
+	
+	/**
+	 * 从指定目录复制图片文件（返回复制的数量）
+	 */
+	private int copyImagesFromDirectory(Path sourceDir, Path targetDir, String pattern) throws IOException {
+		if (!Files.exists(sourceDir)) {
+			logger.warn("    ✗ 源图片目录不存在: {}", sourceDir);
+			return 0;
+		}
+		
+		int copiedCount = 0;
+		try (DirectoryStream<Path> stream = Files.newDirectoryStream(sourceDir, pattern)) {
+			for (Path imagePath : stream) {
+				String fileName = imagePath.getFileName().toString();
+				Files.copy(imagePath, targetDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
+				copiedCount++;
+				logger.debug("      复制图片: {} -> {}", fileName, targetDir.resolve(fileName));
+			}
+		}
+		
+		return copiedCount;
+	}
+
+	/**
+	 * 将临时目录中的图片添加到ZIP（返回添加的文件数量）
+	 */
+	private int addTempImagesToZip(java.util.zip.ZipOutputStream zos, Path tempDir) throws IOException {
+		Path dataDir = tempDir.resolve("data");
+		if (!Files.exists(dataDir)) {
+			logger.warn("  ✗ 数据目录不存在: {}", dataDir);
+			return 0;
+		}
+		
+		final int[] addedCount = {0}; // 使用数组来在lambda中修改值
+		
+		try {
+			Files.walk(dataDir)
+				.filter(Files::isRegularFile)
+				.forEach(imagePath -> {
+					try {
+						String relativePath = tempDir.relativize(imagePath).toString().replace("\\", "/");
+						zos.putNextEntry(new java.util.zip.ZipEntry(relativePath));
+						Files.copy(imagePath, zos);
+						zos.closeEntry();
+						addedCount[0]++;
+						logger.debug("    添加到ZIP: {}", relativePath);
+					} catch (IOException e) {
+						throw new RuntimeException("添加图片到ZIP失败: " + imagePath, e);
+					}
+				});
+		} catch (IOException e) {
+			throw new IOException("遍历数据目录失败: " + dataDir, e);
+		}
+		
+		return addedCount[0];
+	}
+
+	/**
+	 * 删除临时目录
+	 */
+	private void deleteTempDirectory(Path tempDir) {
+		try {
+			if (Files.exists(tempDir)) {
+				Files.walk(tempDir)
+					.map(Path::toFile)
+					.sorted((o1, o2) -> -o1.compareTo(o2))
+					.forEach(File::delete);
+			}
+		} catch (IOException e) {
+			logger.warn("清理临时目录失败: {}", tempDir, e);
+		}
+	}
+
+	/**
+	 * 将原始JSON数据转换为CompareResult对象
+	 * 处理字段不一致的问题，确保数据完整性
+	 */
+	private CompareResult convertRawDataToCompareResult(Map<String, Object> rawData, String taskId) {
+		CompareResult result = new CompareResult(taskId);
+		
+		try {
+			// 基本信息
+			result.setOldFileName((String) rawData.get("oldFileName"));
+			result.setNewFileName((String) rawData.get("newFileName"));
+			result.setTotalDiffCount((Integer) rawData.getOrDefault("totalDiffCount", 0));
+			
+			// 失败页面信息
+			@SuppressWarnings("unchecked")
+			List<String> failedPages = (List<String>) rawData.getOrDefault("failedPages", new ArrayList<>());
+			result.setFailedPages(failedPages);
+			
+			// 差异数据 - 保留原始格式供前端使用
+			@SuppressWarnings("unchecked")
+			List<Map<String, Object>> rawDifferences = (List<Map<String, Object>>) rawData.get("differences");
+			if (rawDifferences != null && !rawDifferences.isEmpty()) {
+				// 将原始差异数据转换为DiffBlock对象（用于统计）
+				List<DiffBlock> differences = convertRawDifferencesToDiffBlocks(rawDifferences);
+				result.setDifferences(differences);
+				
+				// 同时保留原始格式的差异数据（用于前端显示）
+				result.setFormattedDifferences(rawDifferences);
+				logger.info("🔄 转换了 {} 个差异项，保留原始格式供前端使用", differences.size());
+			}
+			
+			// 计算统计信息
+			if (result.getDifferences() != null) {
+				int deleteCount = 0, insertCount = 0;
+				for (DiffBlock diff : result.getDifferences()) {
+					if (diff.type == DiffBlock.DiffType.DELETED) {
+						deleteCount++;
+					} else if (diff.type == DiffBlock.DiffType.ADDED) {
+						insertCount++;
+					}
+				}
+				result.setDeleteCount(deleteCount);
+				result.setInsertCount(insertCount);
+			}
+			
+			// 生成摘要
+			result.generateSummary();
+			
+			logger.info("✅ CompareResult转换完成: 差异{}个, 删除{}个, 新增{}个", 
+				result.getTotalDiffCount(), result.getDeleteCount(), result.getInsertCount());
+				
+		} catch (Exception e) {
+			logger.error("转换原始数据为CompareResult时出错: {}", e.getMessage());
+			throw new RuntimeException("数据转换失败", e);
+		}
+		
+		return result;
+	}
+	
+	/**
+	 * 将原始差异数据转换为DiffBlock对象列表
+	 */
+	@SuppressWarnings("unchecked")
+	private List<DiffBlock> convertRawDifferencesToDiffBlocks(List<Map<String, Object>> rawDifferences) {
+		List<DiffBlock> differences = new ArrayList<>();
+		
+		for (Map<String, Object> rawDiff : rawDifferences) {
+			try {
+				DiffBlock diff = new DiffBlock();
+				
+				// 基本信息
+				diff.page = (Integer) rawDiff.getOrDefault("page", 1);
+				String operation = (String) rawDiff.getOrDefault("operation", "UNKNOWN");
+				diff.oldText = (String) rawDiff.getOrDefault("oldText", "");
+				diff.newText = (String) rawDiff.getOrDefault("newText", "");
+				
+				// 坐标信息
+				if (rawDiff.containsKey("oldBbox")) {
+					List<Double> bbox = (List<Double>) rawDiff.get("oldBbox");
+					if (bbox != null && bbox.size() >= 4) {
+						// 转换List<Double>为double[]
+						double[] bboxArray = new double[4];
+						for (int i = 0; i < 4; i++) {
+							bboxArray[i] = bbox.get(i);
+						}
+						// 创建oldBboxes列表
+						if (diff.oldBboxes == null) {
+							diff.oldBboxes = new ArrayList<>();
+						}
+						diff.oldBboxes.add(bboxArray);
+					}
+				}
+				
+				if (rawDiff.containsKey("newBbox")) {
+					List<Double> bbox = (List<Double>) rawDiff.get("newBbox");
+					if (bbox != null && bbox.size() >= 4) {
+						// 转换List<Double>为double[]
+						double[] bboxArray = new double[4];
+						for (int i = 0; i < 4; i++) {
+							bboxArray[i] = bbox.get(i);
+						}
+						// 创建newBboxes列表
+						if (diff.newBboxes == null) {
+							diff.newBboxes = new ArrayList<>();
+						}
+						diff.newBboxes.add(bboxArray);
+					}
+				}
+				
+				// 设置类型
+				if ("DELETE".equals(operation)) {
+					diff.type = DiffBlock.DiffType.DELETED;
+				} else if ("INSERT".equals(operation)) {
+					diff.type = DiffBlock.DiffType.ADDED;
+				} else {
+					diff.type = DiffBlock.DiffType.MODIFIED;
+				}
+				
+				differences.add(diff);
+				
+			} catch (Exception e) {
+				logger.warn("转换单个差异项时出错，跳过: {}", e.getMessage());
+			}
+		}
+		
+		return differences;
+	}
+
+	/**
+	 * 将DiffBlock对象转换为前端期望的JSON格式
+	 * 确保字段名和数据结构与前端Vue组件完全匹配
+	 */
+	private Map<String, Object> convertDiffBlockToFrontendFormat(DiffBlock diff) {
+		Map<String, Object> frontendDiff = new HashMap<>();
+		
+		// 基本信息
+		frontendDiff.put("page", diff.page);
+		frontendDiff.put("oldText", diff.oldText != null ? diff.oldText : "");
+		frontendDiff.put("newText", diff.newText != null ? diff.newText : "");
+		
+		// 操作类型 - 转换为前端期望的格式
+		String operation = "UNKNOWN";
+		if (diff.type == DiffBlock.DiffType.DELETED) {
+			operation = "DELETE";
+		} else if (diff.type == DiffBlock.DiffType.ADDED) {
+			operation = "INSERT";
+		} else if (diff.type == DiffBlock.DiffType.MODIFIED) {
+			operation = "MODIFY";
+		}
+		frontendDiff.put("operation", operation);
+		
+		// 页面信息 - 设置具体的页码
+		if (diff.pageA != null && !diff.pageA.isEmpty()) {
+			frontendDiff.put("pageA", diff.pageA.get(0));
+			frontendDiff.put("pageAList", diff.pageA);
+		} else {
+			frontendDiff.put("pageA", diff.page);
+			frontendDiff.put("pageAList", List.of(diff.page));
+		}
+		
+		if (diff.pageB != null && !diff.pageB.isEmpty()) {
+			frontendDiff.put("pageB", diff.pageB.get(0));
+			frontendDiff.put("pageBList", diff.pageB);
+		} else {
+			frontendDiff.put("pageB", diff.page);
+			frontendDiff.put("pageBList", List.of(diff.page));
+		}
+		
+		// 坐标信息 - 转换为前端期望的单个bbox格式
+		if (diff.oldBboxes != null && !diff.oldBboxes.isEmpty()) {
+			frontendDiff.put("oldBbox", diff.oldBboxes.get(0)); // 前端期望单个bbox
+			frontendDiff.put("oldBboxes", diff.oldBboxes);       // 保留数组格式以防需要
+		}
+		
+		if (diff.newBboxes != null && !diff.newBboxes.isEmpty()) {
+			frontendDiff.put("newBbox", diff.newBboxes.get(0)); // 前端期望单个bbox
+			frontendDiff.put("newBboxes", diff.newBboxes);       // 保留数组格式以防需要
+		}
+		
+		// 文本信息
+		frontendDiff.put("textStartIndexA", diff.textStartIndexA);
+		frontendDiff.put("textStartIndexB", diff.textStartIndexB);
+		
+		// 完整文本信息
+		if (diff.allTextA != null && !diff.allTextA.isEmpty()) {
+			frontendDiff.put("allTextA", diff.allTextA);
+		} else {
+			frontendDiff.put("allTextA", diff.oldText != null ? List.of(diff.oldText) : new ArrayList<>());
+		}
+		
+		if (diff.allTextB != null && !diff.allTextB.isEmpty()) {
+			frontendDiff.put("allTextB", diff.allTextB);
+		} else {
+			frontendDiff.put("allTextB", diff.newText != null ? List.of(diff.newText) : new ArrayList<>());
+		}
+		
+		// 差异范围信息 - 如果没有则创建默认的
+		if (diff.diffRangesA != null) {
+			frontendDiff.put("diffRangesA", diff.diffRangesA);
+		} else if (diff.oldText != null && !diff.oldText.isEmpty()) {
+			// 创建默认的差异范围
+			Map<String, Object> range = new HashMap<>();
+			range.put("start", 0);
+			range.put("end", diff.oldText.length());
+			range.put("type", "DIFF");
+			frontendDiff.put("diffRangesA", List.of(range));
+		} else {
+			frontendDiff.put("diffRangesA", new ArrayList<>());
+		}
+		
+		if (diff.diffRangesB != null) {
+			frontendDiff.put("diffRangesB", diff.diffRangesB);
+		} else if (diff.newText != null && !diff.newText.isEmpty()) {
+			// 创建默认的差异范围
+			Map<String, Object> range = new HashMap<>();
+			range.put("start", 0);
+			range.put("end", diff.newText.length());
+			range.put("type", "DIFF");
+			frontendDiff.put("diffRangesB", List.of(range));
+		} else {
+			frontendDiff.put("diffRangesB", new ArrayList<>());
+		}
+		
+		// 上一个位置信息 - 如果没有则设置为null或默认值
+		frontendDiff.put("prevOldBbox", diff.prevOldBboxes != null && !diff.prevOldBboxes.isEmpty() ? 
+			diff.prevOldBboxes.get(0) : null);
+		frontendDiff.put("prevNewBbox", diff.prevNewBboxes != null && !diff.prevNewBboxes.isEmpty() ? 
+			diff.prevNewBboxes.get(0) : null);
+		
+		logger.debug("转换差异项: {} -> {}", operation, frontendDiff);
+		return frontendDiff;
 	}
 }

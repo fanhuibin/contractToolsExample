@@ -1,0 +1,1023 @@
+{
+  "failedPages": [],
+  "failedPagesCount": 0,
+  "differences": [
+    {
+      "pageB": 2,
+      "pageA": 2,
+      "pageAList": [
+        2
+      ],
+      "oldBboxes": [
+        [
+          275,
+          202,
+          573,
+          1542
+        ]
+      ],
+      "prevNewBbox": [
+        275,
+        202,
+        570,
+        1449
+      ],
+      "oldBbox": [
+        275,
+        202,
+        573,
+        1542
+      ],
+      "diffRangesA": [
+        {
+          "start": 211,
+          "end": 227,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "27. 有关税费28. 合同生效",
+      "diffRangesB": [],
+      "pageBList": [
+        2
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        275,
+        202,
+        573,
+        1542
+      ],
+      "allTextB": [],
+      "page": 2,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 126,
+      "allTextA": [
+        "1. 定义2. 合同范围3. 价款支付4. 技术规范及标准5. 使用合同文件和资料6. 知识产权、7. 交货验收8. 包装9. 检验、安装、调试10. 运输11. 保险12. 伴随服务13. 备件14. 保证15. 索赔16. 通知17. 合同修改18. 分包和转让19. 卖方履约延误20. 误期赔偿费21. 卖方其他违约责任22. 违约合同终止23. 不可抗力24. 因破产而终止合同25. 争端的解决26. 适用法律27. 有关税费28. 合同生效附件: 材料详细技术参数表"
+      ]
+    },
+    {
+      "pageB": 3,
+      "pageA": 3,
+      "pageAList": [
+        3
+      ],
+      "oldBboxes": [
+        [
+          225,
+          720,
+          1123,
+          815
+        ]
+      ],
+      "prevNewBbox": [
+        224,
+        525,
+        1124,
+        620
+      ],
+      "oldBbox": [
+        225,
+        720,
+        1123,
+        815
+      ],
+      "diffRangesA": [
+        {
+          "start": 0,
+          "end": 2,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "3 ",
+      "diffRangesB": [],
+      "pageBList": [
+        3
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        225,
+        591,
+        1123,
+        685
+      ],
+      "allTextB": [],
+      "page": 3,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 574,
+      "allTextA": [
+        "3 “货物”系指卖方根据合同规定须向买方提供的保证正常运行的一切设备、机械、图纸、装箱资料及其他材料。"
+      ]
+    },
+    {
+      "pageB": 3,
+      "pageA": 3,
+      "pageAList": [
+        3
+      ],
+      "newBboxes": [
+        [
+          224,
+          654,
+          1110,
+          750
+        ]
+      ],
+      "prevNewBbox": [
+        224,
+        525,
+        1124,
+        620
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 0,
+          "end": 1,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        3
+      ],
+      "newText": "③",
+      "prevOldBbox": [
+        225,
+        720,
+        1123,
+        815
+      ],
+      "allTextB": [
+        "③“货物”系指卖方根据合同规定须向买方提供的保证正常运行的一切设备、机械、图纸、装箱资料及其他材料。"
+      ],
+      "newBbox": [
+        224,
+        654,
+        1110,
+        750
+      ],
+      "page": 3,
+      "textStartIndexB": 559,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    },
+    {
+      "pageB": 3,
+      "pageA": 3,
+      "pageAList": [
+        3
+      ],
+      "newBboxes": [
+        [
+          224,
+          1333,
+          1193,
+          1729
+        ]
+      ],
+      "prevNewBbox": [
+        224,
+        1333,
+        1193,
+        1729
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 61,
+          "end": 78,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        3
+      ],
+      "newText": " 总计：RMB ¥31321132",
+      "prevOldBbox": [
+        224,
+        1396,
+        1194,
+        1728
+      ],
+      "allTextB": [
+        "序号 货物名称 规格型号 产地 数量 单价 合计 备注 1 达撒 Sdsadas 达撒 32 23 23123 2 3 4 总计：RMB ¥31321132"
+      ],
+      "newBbox": [
+        224,
+        1333,
+        1193,
+        1729
+      ],
+      "page": 3,
+      "textStartIndexB": 823,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    },
+    {
+      "pageB": 4,
+      "pageA": 4,
+      "pageAList": [
+        4
+      ],
+      "oldBboxes": [
+        [
+          226,
+          465,
+          1122,
+          556
+        ]
+      ],
+      "prevNewBbox": [
+        225,
+        399,
+        1123,
+        490
+      ],
+      "oldBbox": [
+        226,
+        465,
+        1122,
+        556
+      ],
+      "diffRangesA": [
+        {
+          "start": 26,
+          "end": 29,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "3%即",
+      "diffRangesB": [],
+      "pageBList": [
+        4
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        226,
+        465,
+        1122,
+        556
+      ],
+      "allTextB": [],
+      "page": 4,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 984,
+      "allTextA": [
+        "3.1 买方应在合同生效后支付给卖方合同总价的___3%即叁拾叁万叁仟元整___元，作为合同预付款。"
+      ]
+    },
+    {
+      "pageB": 4,
+      "pageA": 4,
+      "pageAList": [
+        4
+      ],
+      "newBboxes": [
+        [
+          225,
+          399,
+          1123,
+          490
+        ]
+      ],
+      "prevNewBbox": [
+        225,
+        399,
+        1123,
+        490
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 26,
+          "end": 30,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        4
+      ],
+      "newText": "即___",
+      "prevOldBbox": [
+        226,
+        465,
+        1122,
+        556
+      ],
+      "allTextB": [
+        "3.1 买方应在合同生效后支付给卖方合同总价的___即___叁拾叁万叁仟元整元，作为合同预付款。"
+      ],
+      "newBbox": [
+        225,
+        399,
+        1123,
+        490
+      ],
+      "page": 4,
+      "textStartIndexB": 985,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    },
+    {
+      "pageB": 4,
+      "pageA": 4,
+      "pageAList": [
+        4
+      ],
+      "oldBboxes": [
+        [
+          226,
+          918,
+          1122,
+          1203
+        ]
+      ],
+      "prevNewBbox": [
+        225,
+        852,
+        1123,
+        944
+      ],
+      "oldBbox": [
+        226,
+        918,
+        1122,
+        1203
+      ],
+      "diffRangesA": [
+        {
+          "start": 42,
+          "end": 44,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "4 ",
+      "diffRangesB": [],
+      "pageBList": [
+        4
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        226,
+        918,
+        1122,
+        1203
+      ],
+      "allTextB": [],
+      "page": 4,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 1147,
+      "allTextA": [
+        "3.4 质保金为合同金额的 3%即___大撒大撒___元，待设备调试完毕验收合格后 4 年期满后付清。买方以___萨达撒___形式预付货款，同时卖方银行开具以买方为受益人的与预付货款相同金额即 23 元的银行履约保函一份正本和一份副本，保函于卖方收到预付款时生效。"
+      ]
+    },
+    {
+      "pageB": 4,
+      "pageA": 4,
+      "pageAList": [
+        4
+      ],
+      "newBboxes": [
+        [
+          225,
+          852,
+          1123,
+          944
+        ]
+      ],
+      "prevNewBbox": [
+        225,
+        852,
+        1123,
+        944
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 44,
+          "end": 47,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        4
+      ],
+      "newText": "__4",
+      "prevOldBbox": [
+        226,
+        918,
+        1122,
+        1203
+      ],
+      "allTextB": [
+        "3.4 质保金为合同金额的___3%即___大撒大撒___元，待设备调试完毕验收合格后___4年期满后付清。"
+      ],
+      "newBbox": [
+        225,
+        852,
+        1123,
+        944
+      ],
+      "page": 4,
+      "textStartIndexB": 1153,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    },
+    {
+      "pageB": 12,
+      "pageA": 12,
+      "pageAList": [
+        12
+      ],
+      "oldBboxes": [
+        [
+          224,
+          1109,
+          1126,
+          1267
+        ]
+      ],
+      "prevNewBbox": [
+        225,
+        1046,
+        1124,
+        1202
+      ],
+      "oldBbox": [
+        224,
+        1109,
+        1126,
+        1267
+      ],
+      "diffRangesA": [
+        {
+          "start": 21,
+          "end": 22,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "任",
+      "diffRangesB": [],
+      "pageBList": [
+        12
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        224,
+        1109,
+        1126,
+        1267
+      ],
+      "allTextB": [],
+      "page": 12,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 6730,
+      "allTextA": [
+        "24.1 如果卖方破产或无清偿能力，买方可任在任何时候以书面形式通知卖方，提出终止合同而不给卖方补偿。该终止合同将不损害或影响买方已经采取或将要采取的任何行动或补救措施的权力。"
+      ]
+    },
+    {
+      "pageB": 13,
+      "pageA": 13,
+      "pageAList": [
+        13
+      ],
+      "oldBboxes": [
+        [
+          222,
+          1040,
+          312,
+          1072
+        ]
+      ],
+      "prevNewBbox": [
+        222,
+        982,
+        310,
+        1014
+      ],
+      "oldBbox": [
+        222,
+        1040,
+        312,
+        1072
+      ],
+      "diffRangesA": [
+        {
+          "start": 1,
+          "end": 3,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": " �",
+      "diffRangesB": [],
+      "pageBList": [
+        13
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        222,
+        1040,
+        312,
+        1072
+      ],
+      "allTextB": [],
+      "page": 13,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 7254,
+      "allTextA": [
+        "传 �真："
+      ]
+    },
+    {
+      "pageB": 13,
+      "pageA": 13,
+      "pageAList": [
+        13
+      ],
+      "oldBboxes": [
+        [
+          674,
+          1040,
+          764,
+          1072
+        ]
+      ],
+      "prevNewBbox": [
+        675,
+        982,
+        759,
+        1014
+      ],
+      "oldBbox": [
+        674,
+        1040,
+        764,
+        1072
+      ],
+      "diffRangesA": [
+        {
+          "start": 1,
+          "end": 3,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": " �",
+      "diffRangesB": [],
+      "pageBList": [
+        13
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        674,
+        1040,
+        764,
+        1072
+      ],
+      "allTextB": [],
+      "page": 13,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 7259,
+      "allTextA": [
+        "传 �真："
+      ]
+    },
+    {
+      "pageB": 13,
+      "pageA": 13,
+      "pageAList": [
+        13,
+        13
+      ],
+      "oldBboxes": [
+        [
+          222,
+          1168,
+          312,
+          1200
+        ],
+        [
+          674,
+          1168,
+          764,
+          1200
+        ]
+      ],
+      "prevNewBbox": [
+        222,
+        1112,
+        310,
+        1144
+      ],
+      "oldBbox": [
+        222,
+        1168,
+        312,
+        1200
+      ],
+      "diffRangesA": [
+        {
+          "start": 1,
+          "end": 6,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": " 号：帐 ",
+      "diffRangesB": [],
+      "pageBList": [
+        13
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        222,
+        1168,
+        312,
+        1200
+      ],
+      "allTextB": [],
+      "page": 13,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 7274,
+      "allTextA": [
+        "账 号：",
+        "帐 号："
+      ]
+    },
+    {
+      "pageB": 13,
+      "pageA": 13,
+      "pageAList": [
+        13
+      ],
+      "newBboxes": [
+        [
+          222,
+          1112,
+          310,
+          1144
+        ],
+        [
+          675,
+          1112,
+          759,
+          1144
+        ]
+      ],
+      "prevNewBbox": [
+        222,
+        1112,
+        310,
+        1144
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 1,
+          "end": 4,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        13,
+        13
+      ],
+      "newText": "号：账",
+      "prevOldBbox": [
+        674,
+        1168,
+        764,
+        1200
+      ],
+      "allTextB": [
+        "账号：",
+        "账号："
+      ],
+      "newBbox": [
+        222,
+        1112,
+        310,
+        1144
+      ],
+      "page": 13,
+      "textStartIndexB": 7290,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    },
+    {
+      "pageB": 13,
+      "pageA": 14,
+      "pageAList": [
+        14
+      ],
+      "oldBboxes": [
+        [
+          276,
+          210,
+          378,
+          241
+        ]
+      ],
+      "prevNewBbox": [
+        279,
+        1686,
+        332,
+        1716
+      ],
+      "oldBbox": [
+        276,
+        210,
+        378,
+        241
+      ],
+      "diffRangesA": [
+        {
+          "start": 0,
+          "end": 5,
+          "type": "DIFF"
+        }
+      ],
+      "oldText": "邮政编码：",
+      "diffRangesB": [],
+      "pageBList": [
+        13
+      ],
+      "newText": "",
+      "prevOldBbox": [
+        274,
+        145,
+        336,
+        178
+      ],
+      "allTextB": [],
+      "page": 14,
+      "textStartIndexB": 0,
+      "operation": "DELETE",
+      "textStartIndexA": 7387,
+      "allTextA": [
+        "邮政编码："
+      ]
+    },
+    {
+      "pageB": 14,
+      "pageA": 14,
+      "pageAList": [
+        14
+      ],
+      "newBboxes": [
+        [
+          274,
+          144,
+          381,
+          178
+        ],
+        [
+          772,
+          144,
+          961,
+          178
+        ]
+      ],
+      "prevNewBbox": [
+        274,
+        144,
+        381,
+        178
+      ],
+      "diffRangesA": [],
+      "oldText": "",
+      "diffRangesB": [
+        {
+          "start": 4,
+          "end": 10,
+          "type": "DIFF"
+        }
+      ],
+      "pageBList": [
+        14,
+        14
+      ],
+      "newText": "：邮政编码：",
+      "prevOldBbox": [
+        775,
+        210,
+        957,
+        241
+      ],
+      "allTextB": [
+        "邮政编码：",
+        "邮政编码： 124000"
+      ],
+      "newBbox": [
+        274,
+        144,
+        381,
+        178
+      ],
+      "page": 14,
+      "textStartIndexB": 7424,
+      "operation": "INSERT",
+      "textStartIndexA": 0,
+      "allTextA": []
+    }
+  ],
+  "newFileName": "1采购合同范本 (1).pdf",
+  "startTime": "2025-09-28T10:43:22.838856100",
+  "taskId": "458c1c47-f5fc-4798-b506-cfee0536c869",
+  "oldFileName": "1采购合同范本.pdf",
+  "totalDiffCount": 15,
+  "oldImageInfo": {
+    "pages": [
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-1.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 1
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-2.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 2
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-3.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 3
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-4.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 4
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-5.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 5
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-6.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 6
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-7.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 7
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-8.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 8
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-9.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 9
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-10.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 10
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-11.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 11
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-12.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 12
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-13.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 13
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/old/page-14.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 14
+      }
+    ],
+    "totalPages": 14
+  },
+  "newImageInfo": {
+    "pages": [
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-1.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 1
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-2.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 2
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-3.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 3
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-4.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 4
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-5.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 5
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-6.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 6
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-7.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 7
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-8.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 8
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-9.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 9
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-10.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 10
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-11.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 11
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-12.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 12
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-13.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 13
+      },
+      {
+        "imageUrl": "/data/tasks/458c1c47-f5fc-4798-b506-cfee0536c869/images/new/page-14.png",
+        "width": 1322,
+        "height": 1870,
+        "pageNum": 14
+      }
+    ],
+    "totalPages": 14
+  }
+}
