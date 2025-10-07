@@ -16,7 +16,7 @@ public class CompareOptions {
     private String watermarkRemovalStrength = "smart"; // default, extended, loose, smart
     
     // OCR服务选择
-    private String ocrServiceType = "dotsocr"; // dotsocr, thirdparty
+    private String ocrServiceType = "mineru"; // dotsocr, thirdparty, mineru（默认使用MinerU）
 
     public CompareOptions() {}
 
@@ -117,5 +117,12 @@ public class CompareOptions {
      */
     public boolean isUseDotsOcr() {
         return "dotsocr".equalsIgnoreCase(ocrServiceType);
+    }
+
+    /**
+     * 判断是否使用MinerU OCR服务
+     */
+    public boolean isUseMinerU() {
+        return "mineru".equalsIgnoreCase(ocrServiceType);
     }
 }

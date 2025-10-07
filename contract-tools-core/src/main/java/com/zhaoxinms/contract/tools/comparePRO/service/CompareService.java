@@ -99,6 +99,9 @@ public class CompareService {
     @Autowired
     private CompareTaskQueue taskQueue;
     
+    @Autowired(required = false)
+    private MinerUOCRService mineruOcrService;
+    
     @Autowired
     private DiffBlockValidationUtil diffBlockValidationUtil;
 
@@ -120,6 +123,15 @@ public class CompareService {
 		// 调整任务队列的最大线程数
 		taskQueue.adjustMaxPoolSize(gpuOcrConfig.getParallelThreads());
 		System.out.println("GPU OCR比对服务初始化完成，最大并发线程数: " + gpuOcrConfig.getParallelThreads());
+        
+        // 检查MinerU服务
+        if (mineruOcrService != null) {
+            System.out.println("✅ MinerU OCR服务已注入并可用");
+            System.out.println("   MinerU API: " + gpuOcrConfig.getMineru().getApiUrl());
+            System.out.println("   Backend: " + gpuOcrConfig.getMineru().getBackend());
+        } else {
+            System.out.println("⚠️  MinerU OCR服务未注入（可选）");
+        }
         
         // 启动时加载已完成的任务到内存中
         loadCompletedTasks();
@@ -724,11 +736,34 @@ public class CompareService {
             // 步骤1: 初始化
             progressManager.startStep(TaskStep.INIT);
             
+            // 如果options为null，使用默认配置
+            if (options == null) {
+                options = CompareOptions.createDefault();
+            }
+            
+            // 【关键】使用配置文件中的OCR服务，忽略前端传递的值
+            String configuredOcrService = gpuOcrConfig.getDefaultOcrService();
+            options.setOcrServiceType(configuredOcrService);
+            
+            System.out.println("🔍 OCR服务配置: " + configuredOcrService);
+            progressManager.logStepDetail("使用配置文件指定的OCR服务: {}", configuredOcrService);
+            
             // 根据options选择OCR服务
-            boolean useThirdPartyOcr = options != null && options.isUseThirdPartyOcr();
+            boolean useThirdPartyOcr = options.isUseThirdPartyOcr();
+            boolean useMinerU = options.isUseMinerU();
             DotsOcrClient client = null;
             
-            if (useThirdPartyOcr) {
+            System.out.println("🔍 DEBUG: 最终判断 - useMinerU = " + useMinerU + ", useThirdPartyOcr = " + useThirdPartyOcr);
+            System.out.println("🔍 DEBUG: mineruOcrService == null? " + (mineruOcrService == null));
+            
+            if (useMinerU) {
+                // 使用MinerU OCR
+                if (mineruOcrService == null) {
+                    throw new RuntimeException("MinerU服务未启用，请检查配置");
+                }
+                System.out.println("✅ DEBUG: 将使用MinerU OCR服务");
+                progressManager.logStepDetail("✅ 使用MinerU OCR服务");
+            } else if (useThirdPartyOcr) {
                 // 验证第三方OCR服务是否可用
                 if (thirdPartyOcrService == null) {
                     throw new RuntimeException("第三方OCR服务未启用，请检查配置：zxcm.compare.third-party-ocr.enabled=true");
@@ -736,11 +771,13 @@ public class CompareService {
                 if (!thirdPartyOcrService.isAvailable()) {
                     throw new RuntimeException("第三方OCR服务不可用，请检查API密钥和网络连接");
                 }
+                System.out.println("📌 DEBUG: 将使用第三方OCR服务");
                 progressManager.logStepDetail("使用第三方OCR服务 (阿里云Dashscope)");
             } else {
                 // 使用DotsOCR服务
                 client = new DotsOcrClient.Builder().baseUrl(gpuOcrConfig.getOcrBaseUrl())
                         .defaultModel(gpuOcrConfig.getOcrModel()).build();
+                System.out.println("❌ DEBUG: 将使用DotsOCR服务");
                 progressManager.logStepDetail("使用DotsOCR服务");
             }
             
@@ -767,7 +804,11 @@ public class CompareService {
             // 注意：图片保存和去水印已集成到OCR识别流程中
             
 			RecognitionResult resultA;
-			if (useThirdPartyOcr) {
+			if (options.isUseMinerU()) {
+			    // 使用MinerU OCR
+			    progressManager.logStepDetail("使用MinerU OCR识别原文档");
+			    resultA = recognizePdfWithMinerU(oldPath, options, progressManager, task.getTaskId(), "old", task);
+			} else if (useThirdPartyOcr) {
 			    resultA = recognizePdfAsCharSeqWithThirdParty(oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
 			} else {
 			    resultA = recognizePdfAsCharSeq(client, oldPath, null, false, options, progressManager, task.getTaskId(), "old", task);
@@ -781,7 +822,11 @@ public class CompareService {
             // 注意：图片保存和去水印已集成到OCR识别流程中
 
 			RecognitionResult resultB;
-			if (useThirdPartyOcr) {
+			if (options.isUseMinerU()) {
+			    // 使用MinerU OCR
+			    progressManager.logStepDetail("使用MinerU OCR识别新文档");
+			    resultB = recognizePdfWithMinerU(newPath, options, progressManager, task.getTaskId(), "new", task);
+			} else if (useThirdPartyOcr) {
 			    resultB = recognizePdfAsCharSeqWithThirdParty(newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
 			} else {
 			    resultB = recognizePdfAsCharSeq(client, newPath, null, false, options, progressManager, task.getTaskId(), "new", task);
@@ -3613,5 +3658,237 @@ public class CompareService {
 		} catch (Exception e) {
 			logger.warn("添加图片到ZIP时出错: " + e.getMessage());
 		}
+	}
+	
+	/**
+	 * 使用MinerU OCR识别PDF文档
+	 * 
+	 * @param pdfPath PDF文件路径
+	 * @param options 比对选项
+	 * @param progressManager 进度管理器
+	 * @param taskId 任务ID
+	 * @param docMode 文档模式（old/new）
+	 * @param task 任务对象
+	 * @return 识别结果
+	 */
+	private RecognitionResult recognizePdfWithMinerU(
+			Path pdfPath, 
+			CompareOptions options,
+			CompareTaskProgressManager progressManager,
+			String taskId,
+			String docMode,
+			CompareTask task) {
+		
+		List<CharBox> charBoxes = new ArrayList<>();
+		List<String> failedPages = new ArrayList<>();
+		int totalPages = 0;
+		
+		try {
+			if (mineruOcrService == null) {
+				throw new RuntimeException("MinerU服务未初始化");
+			}
+			
+			// 准备输出目录
+			Path taskDir = Paths.get(gpuOcrConfig.getUploadPath(), "compare-pro", "tasks", taskId);
+			java.io.File outputDir = taskDir.toFile();
+			if (!outputDir.exists()) {
+				outputDir.mkdirs();
+			}
+			
+			// 调用MinerU识别，返回dots.ocr兼容的PageLayout格式
+			TextExtractionUtil.PageLayout[] layouts = mineruOcrService.recognizePdf(
+				pdfPath.toFile(),
+				taskId,
+				outputDir,
+				docMode,
+				options
+			);
+			
+			totalPages = layouts.length;
+			
+			// 使用与dots.ocr完全相同的处理逻辑
+			// TextExtractionUtil.parseTextAndPositionsFromResults 会将PageLayout转为CharBox
+			charBoxes = TextExtractionUtil.parseTextAndPositionsFromResults(layouts);
+			
+			// 保存抽取的全文（与dots.ocr相同格式）
+			saveExtractedText(layouts, pdfPath);
+			
+			// 保存每页的JSON（调试用）
+			savePageLayoutsJson(layouts, outputDir, docMode);
+			
+			progressManager.logStepDetail("MinerU识别完成: {}页, {}个CharBox", totalPages, charBoxes.size());
+			
+		} catch (Exception e) {
+			logger.error("MinerU识别失败: " + e.getMessage(), e);
+			// 记录所有页面为失败
+			for (int i = 0; i < totalPages; i++) {
+				failedPages.add(pdfPath.getFileName() + "-第" + (i + 1) + "页: " + e.getMessage());
+			}
+		}
+		
+		return new RecognitionResult(charBoxes, failedPages, totalPages);
+	}
+	
+	/**
+	 * 保存抽取的全文（与dots.ocr格式相同）
+	 */
+	private void saveExtractedText(TextExtractionUtil.PageLayout[] layouts, Path pdfPath) {
+		try {
+			// 使用正确的方法名：extractTextFromResults 和 extractTextWithPageMarkers
+			String extractedWithPages = TextExtractionUtil.extractTextWithPageMarkers(layouts);
+			String extractedNoPages = TextExtractionUtil.extractTextFromResults(layouts);
+			
+			String txtOut = pdfPath.toAbsolutePath().toString() + ".extracted.txt";
+			String txtOutCompare = pdfPath.toAbsolutePath().toString() + ".extracted.compare.txt";
+			
+			Files.write(Path.of(txtOut), extractedWithPages.getBytes(StandardCharsets.UTF_8));
+			Files.write(Path.of(txtOutCompare), extractedNoPages.getBytes(StandardCharsets.UTF_8));
+			
+			System.out.println("Extracted text saved: " + txtOut);
+			System.out.println("Extracted text (no page markers) saved: " + txtOutCompare);
+		} catch (Exception e) {
+			System.err.println("Failed to write extracted text: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * 保存每页的PageLayout为JSON（调试用，与dots.ocr格式相同）
+	 */
+	private void savePageLayoutsJson(TextExtractionUtil.PageLayout[] layouts, java.io.File outputDir, String docMode) {
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			java.io.File jsonDir = new java.io.File(outputDir, "ocr_pages");
+			if (!jsonDir.exists()) {
+				jsonDir.mkdirs();
+			}
+			
+			for (int i = 0; i < layouts.length; i++) {
+				TextExtractionUtil.PageLayout layout = layouts[i];
+				if (layout == null) continue;
+				
+			// 构建JSON对象
+			Map<String, Object> pageJson = new HashMap<>();
+			pageJson.put("page", layout.page);
+			pageJson.put("imgW", layout.imageWidth);
+			pageJson.put("imgH", layout.imageHeight);
+				
+				// 转换items为JSON友好格式
+				List<Map<String, Object>> itemsJson = new ArrayList<>();
+				if (layout.items != null) {
+					for (TextExtractionUtil.LayoutItem item : layout.items) {
+						Map<String, Object> itemMap = new HashMap<>();
+						itemMap.put("bbox", item.bbox);
+						itemMap.put("category", item.category);
+						itemMap.put("text", item.text);
+						itemsJson.add(itemMap);
+					}
+				}
+				pageJson.put("items", itemsJson);
+				pageJson.put("itemCount", itemsJson.size());
+				
+				// 保存到文件
+				String fileName = String.format("%s_page_%03d.json", docMode, layout.page);
+				java.io.File jsonFile = new java.io.File(jsonDir, fileName);
+				mapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, pageJson);
+			}
+			
+			System.out.println("📄 MinerU每页JSON已保存到: " + jsonDir.getAbsolutePath() + " (共" + layouts.length + "页)");
+		} catch (Exception e) {
+			System.err.println("保存每页JSON失败: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * 【已废弃】不再需要，现在MinerU直接返回PageLayout格式
+	 * 使用TextExtractionUtil.parseTextAndPositionsFromResults统一处理
+	 */
+	@Deprecated
+	private List<CharBox> convertToCharBoxList_DEPRECATED(Map<String, Object> item, int pageIdx) {
+		List<CharBox> charBoxes = new ArrayList<>();
+		
+		try {
+			// 检查是否有listItems（列表类型）
+			@SuppressWarnings("unchecked")
+			List<String> listItems = (List<String>) item.get("listItems");
+			
+			if (listItems != null && !listItems.isEmpty()) {
+				// 处理列表类型：展开每个列表项
+				int[] bbox = (int[]) item.get("bbox");
+				if (bbox == null || bbox.length < 4) {
+					return charBoxes;
+				}
+				
+				// 计算每个列表项的大致高度
+				double totalHeight = bbox[3] - bbox[1];
+				double itemHeight = totalHeight / listItems.size();
+				
+				// 为每个列表项创建CharBox
+				for (int itemIdx = 0; itemIdx < listItems.size(); itemIdx++) {
+					String itemText = listItems.get(itemIdx);
+					if (itemText == null || itemText.isEmpty()) {
+						continue;
+					}
+					
+					// 计算列表项的bbox（垂直方向平均分配）
+					int[] itemBbox = new int[4];
+					itemBbox[0] = bbox[0];
+					itemBbox[1] = (int) (bbox[1] + itemIdx * itemHeight);
+					itemBbox[2] = bbox[2];
+					itemBbox[3] = (int) (bbox[1] + (itemIdx + 1) * itemHeight);
+					
+				// 将列表项拆分为字符
+				charBoxes.addAll(splitTextToCharBoxes_DEPRECATED(itemText, itemBbox, pageIdx));
+				}
+				
+				return charBoxes;
+			}
+			
+			// 处理普通文本
+			String text = (String) item.get("text");
+			int[] bbox = (int[]) item.get("bbox");
+			
+			if (text == null || text.isEmpty() || bbox == null || bbox.length < 4) {
+				return charBoxes;
+			}
+			
+		// 将文本拆分为字符
+		charBoxes.addAll(splitTextToCharBoxes_DEPRECATED(text, bbox, pageIdx));
+			
+		} catch (Exception e) {
+			logger.warn("转换CharBox失败: " + e.getMessage());
+		}
+		
+		return charBoxes;
+	}
+	
+	/**
+	 * 【已废弃】不再需要，现在MinerU直接返回PageLayout格式
+	 * 使用TextExtractionUtil.layoutToCharSequence统一处理
+	 */
+	@Deprecated
+	private List<CharBox> splitTextToCharBoxes_DEPRECATED(String text, int[] bbox, int pageIdx) {
+		List<CharBox> charBoxes = new ArrayList<>();
+		
+		if (text == null || text.isEmpty() || bbox == null || bbox.length < 4) {
+			return charBoxes;
+		}
+		
+		// 转换为double[] bbox（CharBox需要double[]）
+		double[] charBbox = new double[]{
+			(double) bbox[0],
+			(double) bbox[1],
+			(double) bbox[2],
+			(double) bbox[3]
+		};
+		
+		// 为每个字符创建CharBox，所有字符共享相同的bbox
+		// 这与dots.ocr的处理方式一致
+		for (int i = 0; i < text.length(); i++) {
+			char ch = text.charAt(i);
+			CharBox charBox = new CharBox(pageIdx, ch, charBbox, "text");
+			charBoxes.add(charBox);
+		}
+		
+		return charBoxes;
 	}
 }

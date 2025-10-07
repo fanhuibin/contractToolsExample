@@ -1,0 +1,1202 @@
+package com.zhaoxinms.contract.tools.comparePRO.service;
+
+import java.awt.image.BufferedImage;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import javax.imageio.ImageIO;
+
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhaoxinms.contract.tools.comparePRO.config.ZxOcrConfig;
+import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
+import com.zhaoxinms.contract.tools.comparePRO.util.MinerUCoordinateConverter;
+import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
+
+import lombok.extern.slf4j.Slf4j;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+/**
+ * 基于MinerU的OCR识别服务
+ * 用于合同比对功能
+ * 
+ * @author zhaoxin
+ * @date 2025-10-07
+ */
+@Slf4j
+@Service
+public class MinerUOCRService {
+    
+    @Autowired
+    private ZxOcrConfig zxOcrConfig;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    /**
+     * 识别PDF并返回dots.ocr兼容的格式
+     * 
+     * @param pdfFile PDF文件
+     * @param taskId 任务ID
+     * @param outputDir 输出目录
+     * @param docMode 文档模式（old/new）
+     * @param options 比对选项（包含页眉页脚设置）
+     * @return PageLayout数组（与dots.ocr格式完全一致）
+     */
+    public TextExtractionUtil.PageLayout[] recognizePdf(
+            File pdfFile, 
+            String taskId, 
+            File outputDir,
+            String docMode,
+            CompareOptions options) throws Exception {
+        
+        log.info("使用MinerU识别PDF: {}, 任务ID: {}, 模式: {}", pdfFile.getName(), taskId, docMode);
+        
+        long startTime = System.currentTimeMillis();
+        
+        // 并行处理：1. 提交PDF到MinerU识别  2. 拆分PDF为图片
+        CompletableFuture<String> recognitionFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                log.info("并行处理：提交PDF识别和生成图片");
+                return callMinerUAPI(pdfFile);
+            } catch (Exception e) {
+                throw new RuntimeException("MinerU识别失败", e);
+            }
+        });
+        
+        CompletableFuture<List<Map<String, Object>>> imagesFuture = CompletableFuture.supplyAsync(() -> {
+            try {
+                return generatePageImages(pdfFile, outputDir, taskId, docMode);
+            } catch (Exception e) {
+                throw new RuntimeException("生成页面图片失败", e);
+            }
+        });
+        
+        // 等待两个任务完成
+        String apiResult = recognitionFuture.get();
+        List<Map<String, Object>> pageImages = imagesFuture.get();
+        
+        log.info("MinerU识别完成，解析结果...");
+        
+        // 保存MinerU原始响应JSON
+        saveRawResponse(apiResult, outputDir, taskId, docMode);
+        
+        // 保存格式化的 content_list（方便调试 bbox）
+        saveFormattedContentList(apiResult, outputDir, taskId, docMode);
+        
+        // 转换为dots.ocr兼容的PageLayout格式
+        TextExtractionUtil.PageLayout[] layouts = convertToPageLayouts(apiResult, pageImages, pdfFile, options);
+        
+        long endTime = System.currentTimeMillis();
+        log.info("MinerU OCR识别完成，共{}页，耗时{}ms", layouts.length, endTime - startTime);
+        
+        return layouts;
+    }
+    
+    /**
+     * 调用MinerU API进行识别
+     */
+    private String callMinerUAPI(File pdfFile) throws Exception {
+        String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
+        
+        ZxOcrConfig.MinerUConfig mineruConfig = zxOcrConfig.getMineru();
+        URL url = new URL(mineruConfig.getApiUrl() + "/file_parse");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setDoOutput(true);
+        conn.setDoInput(true);
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+        conn.setConnectTimeout(60000);
+        conn.setReadTimeout(1800000);
+        
+        // 构建请求体
+        try (OutputStream os = conn.getOutputStream();
+             PrintWriter writer = new PrintWriter(new OutputStreamWriter(os, "UTF-8"), true)) {
+            
+            // 添加文件
+            writer.append("--").append(boundary).append("\r\n");
+            writer.append("Content-Disposition: form-data; name=\"files\"; filename=\"")
+                  .append(pdfFile.getName()).append("\"\r\n");
+            writer.append("Content-Type: application/pdf\r\n\r\n");
+            writer.flush();
+            
+            try (FileInputStream fis = new FileInputStream(pdfFile)) {
+                byte[] buffer = new byte[4096];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+            }
+            os.flush();
+            writer.append("\r\n");
+            
+            // 设置backend
+            writer.append("--").append(boundary).append("\r\n");
+            writer.append("Content-Disposition: form-data; name=\"backend\"\r\n\r\n");
+            writer.append(mineruConfig.getBackend()).append("\r\n");
+            
+            // 如果使用vlm-http-client，添加server_url
+            if ("vlm-http-client".equals(mineruConfig.getBackend())) {
+                writer.append("--").append(boundary).append("\r\n");
+                writer.append("Content-Disposition: form-data; name=\"server_url\"\r\n\r\n");
+                writer.append(mineruConfig.getVllmServerUrl()).append("\r\n");
+            }
+            
+            // 返回content_list
+            writer.append("--").append(boundary).append("\r\n");
+            writer.append("Content-Disposition: form-data; name=\"return_content_list\"\r\n\r\n");
+            writer.append("true\r\n");
+            
+            writer.append("--").append(boundary).append("--\r\n");
+            writer.flush();
+        }
+        
+        // 读取响应
+        int responseCode = conn.getResponseCode();
+        StringBuilder response = new StringBuilder();
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(
+                    responseCode == 200 ? conn.getInputStream() : conn.getErrorStream(),
+                    "UTF-8"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                response.append(line).append("\n");
+            }
+        }
+        conn.disconnect();
+        
+        if (responseCode != 200) {
+            throw new IOException("MinerU API调用失败，状态码: " + responseCode + "\n" + response.toString());
+        }
+        
+        return response.toString();
+    }
+    
+    /**
+     * 生成PDF页面图片（缓存优化 + 串行渲染）
+     * 
+     * 注意：PDFRenderer 不是线程安全的，必须使用串行渲染
+     * 
+     * @param pdfFile PDF文件
+     * @param outputDir 输出目录（任务目录）
+     * @param taskId 任务ID
+     * @param docMode 文档模式（old/new）
+     */
+    private List<Map<String, Object>> generatePageImages(File pdfFile, File outputDir, String taskId, String docMode) throws IOException {
+        List<Map<String, Object>> pageImages = new ArrayList<>();
+        
+        // 图片保存到 images/old 或 images/new 目录
+        File imagesDir = new File(outputDir, "images/" + docMode);
+        if (!imagesDir.exists()) {
+            imagesDir.mkdirs();
+        }
+        
+        int renderDpi = zxOcrConfig.getRenderDpi();
+        long startTime = System.currentTimeMillis();
+        
+        try (PDDocument document = PDDocument.load(pdfFile)) {
+            PDFRenderer renderer = new PDFRenderer(document);
+            int pageCount = document.getNumberOfPages();
+            
+            log.info("开始生成{}个页面图片，DPI: {}", pageCount, renderDpi);
+            
+            int cachedCount = 0;
+            int renderedCount = 0;
+            
+            // PDFRenderer 不是线程安全的，必须串行处理
+            for (int i = 0; i < pageCount; i++) {
+                File imageFile = new File(imagesDir, "page-" + (i + 1) + ".png");
+                BufferedImage image;
+                
+                // 缓存检查：如果图片已存在且可读取，直接复用
+                if (imageFile.exists()) {
+                    try {
+                        image = ImageIO.read(imageFile);
+                        if (image != null) {
+                            log.debug("复用已有图片: {}, 尺寸: {}x{}", 
+                                imageFile.getName(), image.getWidth(), image.getHeight());
+                            cachedCount++;
+                        } else {
+                            // 文件损坏，重新生成
+                            log.warn("图片文件损坏，重新生成: {}", imageFile.getName());
+                            image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                            ImageIO.write(image, "PNG", imageFile);
+                            log.debug("重新生成页面图片: {}, 尺寸: {}x{}", 
+                                imageFile.getName(), image.getWidth(), image.getHeight());
+                            renderedCount++;
+                        }
+                    } catch (IOException e) {
+                        // 读取失败，重新生成
+                        log.warn("读取已有图片失败，重新生成: {}, 原因: {}", 
+                            imageFile.getName(), e.getMessage());
+                        image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                        ImageIO.write(image, "PNG", imageFile);
+                        log.debug("重新生成页面图片: {}, 尺寸: {}x{}", 
+                            imageFile.getName(), image.getWidth(), image.getHeight());
+                        renderedCount++;
+                    }
+                } else {
+                    // 生成新图片
+                    image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                    ImageIO.write(image, "PNG", imageFile);
+                    log.debug("生成页面图片: {}, 尺寸: {}x{}", 
+                        imageFile.getName(), image.getWidth(), image.getHeight());
+                    renderedCount++;
+                }
+                
+                // 构建页面信息
+                Map<String, Object> pageInfo = new HashMap<>();
+                pageInfo.put("pageIndex", i);
+                pageInfo.put("imagePath", imageFile.getAbsolutePath());
+                pageInfo.put("imageWidth", image.getWidth());
+                pageInfo.put("imageHeight", image.getHeight());
+                pageImages.add(pageInfo);
+            }
+            
+            long endTime = System.currentTimeMillis();
+            log.info("页面图片生成完成，共{}页（缓存{}页，渲染{}页），耗时{}ms（平均每页{}ms）", 
+                pageCount, cachedCount, renderedCount, endTime - startTime, (endTime - startTime) / pageCount);
+        }
+        
+        return pageImages;
+    }
+    
+    /**
+     * 解析MinerU结果并转换为标准格式
+     */
+    private Map<String, Object> parseMinerUResult(
+            String apiResult, 
+            List<Map<String, Object>> pageImages, 
+            File pdfFile,
+            CompareOptions options) throws Exception {
+        
+        JsonNode root = objectMapper.readTree(apiResult);
+        
+        // 提取content_list
+        JsonNode contentListNode = extractContentList(root);
+        if (contentListNode == null || !contentListNode.isArray()) {
+            throw new Exception("未找到有效的content_list数据");
+        }
+        
+        // 获取每页的PDF尺寸（用于坐标转换）
+        Map<Integer, double[]> pdfPageSizes = new HashMap<>();
+        for (Map<String, Object> pageImage : pageImages) {
+            int pageIdx = (Integer) pageImage.get("pageIndex");
+            double[] pdfSize = MinerUCoordinateConverter.getPdfPageSize(pdfFile, pageIdx);
+            pdfPageSizes.put(pageIdx, pdfSize);
+            pageImage.put("pdfWidth", pdfSize[0]);
+            pageImage.put("pdfHeight", pdfSize[1]);
+        }
+        
+        // 按页面组织数据
+        Map<Integer, List<Map<String, Object>>> pageData = new HashMap<>();
+        
+        for (JsonNode item : contentListNode) {
+            int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
+            
+            // 过滤页眉页脚（根据CompareOptions的设置）
+            if (options.isIgnoreHeaderFooter()) {
+                boolean isFiltered = isHeaderFooterOrPageNumber(item);
+                
+                if (isFiltered) {
+                    String itemType = item.has("type") ? item.get("type").asText() : "unknown";
+                    String itemText = "";
+                    if (item.has("text")) {
+                        itemText = item.get("text").asText();
+                        if (itemText.length() > 30) itemText = itemText.substring(0, 30) + "...";
+                    } else if (item.has("list_items")) {
+                        itemText = "[LIST with " + item.get("list_items").size() + " items]";
+                    }
+                    
+                    log.info("🚫 过滤 MinerU 识别的页眉页脚 - 第{}页, 类型:{}, 内容:{}", pageIdx + 1, itemType, itemText);
+                    continue;
+                }
+            }
+            
+            // 转换坐标
+            Map<String, Object> charBoxData = convertMinerUToCharBox(
+                item, 
+                pageImages.get(pageIdx),
+                pdfPageSizes.get(pageIdx)
+            );
+            
+            if (!pageData.containsKey(pageIdx)) {
+                pageData.put(pageIdx, new ArrayList<>());
+            }
+            pageData.get(pageIdx).add(charBoxData);
+        }
+        
+        // 构建最终结果
+        Map<String, Object> result = new HashMap<>();
+        result.put("fileName", pdfFile.getName());
+        result.put("totalPages", pageImages.size());
+        result.put("pageData", pageData);
+        result.put("pageImages", pageImages);
+        
+        return result;
+    }
+    
+    /**
+     * 提取content_list字段
+     */
+    private JsonNode extractContentList(JsonNode root) throws Exception {
+        // 先从results中查找
+        JsonNode resultsNode = root.get("results");
+        if (resultsNode != null && resultsNode.isObject()) {
+            JsonNode firstResult = resultsNode.elements().next();
+            if (firstResult != null) {
+                JsonNode contentListNode = firstResult.get("content_list");
+                if (contentListNode != null) {
+                    if (contentListNode.isTextual()) {
+                        return objectMapper.readTree(contentListNode.asText());
+                    }
+                    return contentListNode;
+                }
+            }
+        }
+        
+        // 直接从根节点查找
+        JsonNode contentListNode = root.get("content_list");
+        if (contentListNode != null) {
+            if (contentListNode.isTextual()) {
+                return objectMapper.readTree(contentListNode.asText());
+            }
+            return contentListNode;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 转换MinerU结果为dots.ocr兼容的PageLayout格式
+     * 
+     * 【重要】返回的格式与dots.ocr完全一致，可以复用所有后续处理逻辑
+     */
+    private TextExtractionUtil.PageLayout[] convertToPageLayouts(
+            String apiResult,
+            List<Map<String, Object>> pageImages,
+            File pdfFile,
+            CompareOptions options) throws Exception {
+        
+        JsonNode root = objectMapper.readTree(apiResult);
+        JsonNode contentListNode = extractContentList(root);
+        if (contentListNode == null || !contentListNode.isArray()) {
+            throw new Exception("未找到有效的content_list数据");
+        }
+        
+        // 获取PDF尺寸信息
+        int totalPages = pageImages.size();
+        Map<Integer, double[]> pdfPageSizes = new HashMap<>();
+        Map<Integer, Map<String, Object>> pageImageMap = new HashMap<>();
+        
+        for (Map<String, Object> pageImage : pageImages) {
+            int pageIdx = (Integer) pageImage.get("pageIndex");
+            double[] pdfSize = MinerUCoordinateConverter.getPdfPageSize(pdfFile, pageIdx);
+            pdfPageSizes.put(pageIdx, pdfSize);
+            pageImageMap.put(pageIdx, pageImage);
+        }
+        
+        // 按页面组织LayoutItem
+        Map<Integer, List<TextExtractionUtil.LayoutItem>> pageLayoutItems = new HashMap<>();
+        
+        for (JsonNode item : contentListNode) {
+            int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
+            
+            // 过滤页眉页脚
+            if (options.isIgnoreHeaderFooter() && isHeaderFooterOrPageNumber(item)) {
+                String itemType = item.has("type") ? item.get("type").asText() : "unknown";
+                log.debug("🚫 过滤 MinerU 识别的页眉页脚 - 第{}页, 类型:{}", pageIdx + 1, itemType);
+                continue;
+            }
+            
+            // 转换为LayoutItem
+            List<TextExtractionUtil.LayoutItem> items = convertToLayoutItems(
+                item,
+                pageImageMap.get(pageIdx),
+                pdfPageSizes.get(pageIdx)
+            );
+            
+            if (!pageLayoutItems.containsKey(pageIdx)) {
+                pageLayoutItems.put(pageIdx, new ArrayList<>());
+            }
+            pageLayoutItems.get(pageIdx).addAll(items);
+        }
+        
+        // 构建PageLayout数组
+        TextExtractionUtil.PageLayout[] layouts = new TextExtractionUtil.PageLayout[totalPages];
+        for (int i = 0; i < totalPages; i++) {
+            List<TextExtractionUtil.LayoutItem> items = pageLayoutItems.getOrDefault(i, new ArrayList<>());
+            Map<String, Object> pageImage = pageImageMap.get(i);
+            int imgW = (Integer) pageImage.get("imageWidth");
+            int imgH = (Integer) pageImage.get("imageHeight");
+            
+            // 注意：MinerU 的 page_idx 是 0-based，但 PageLayout.page 应该是 1-based（与 dots.ocr 一致）
+            layouts[i] = new TextExtractionUtil.PageLayout(i + 1, items, imgW, imgH);
+        }
+        
+        return layouts;
+    }
+    
+    /**
+     * 转换MinerU的item为LayoutItem列表
+     * 处理所有类型：普通文本、列表、表格、图片、代码等
+     */
+    private List<TextExtractionUtil.LayoutItem> convertToLayoutItems(
+            JsonNode item,
+            Map<String, Object> pageImage,
+            double[] pdfPageSize) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        
+        int imageWidth = (Integer) pageImage.get("imageWidth");
+        int imageHeight = (Integer) pageImage.get("imageHeight");
+        double pdfWidth = pdfPageSize[0];
+        double pdfHeight = pdfPageSize[1];
+        
+        String itemType = item.has("type") ? item.get("type").asText() : "";
+        
+        log.debug("处理 MinerU 内容项，类型: {}", itemType);
+        
+        // 处理表格类型
+        if ("table".equals(itemType)) {
+            log.info("🔍 检测到表格类型");
+            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理图片类型
+        else if ("image".equals(itemType)) {
+            items.addAll(handleImageItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理代码类型
+        else if ("code".equals(itemType)) {
+            items.addAll(handleCodeItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理列表类型
+        else if ("list".equals(itemType) || item.has("list_items")) {
+            items.addAll(handleListItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理公式类型
+        else if ("isolate_formula".equals(itemType) || "isolated".equals(itemType)) {
+            items.addAll(handleFormulaItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理标题类型（作为文本处理，但可以区分）
+        else if ("title".equals(itemType)) {
+            items.addAll(handleTextItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        // 处理普通文本
+        else if (item.has("text")) {
+            items.addAll(handleTextItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+        }
+        
+        return items;
+    }
+    
+    /**
+     * 处理表格类型的内容
+     * 包括 table_caption, table_body, table_footnote
+     */
+    private List<TextExtractionUtil.LayoutItem> handleTableItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        JsonNode bboxNode = item.get("bbox");
+        
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            log.warn("⚠️  表格缺少 bbox 信息");
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        log.info("📊 处理表格项，bbox: [{}, {}, {}, {}]", imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3]);
+        
+        // 1. 处理 table_caption（如果有）
+        if (item.has("table_caption")) {
+            JsonNode captionNode = item.get("table_caption");
+            if (captionNode.isArray() && captionNode.size() > 0) {
+                for (JsonNode caption : captionNode) {
+                    String captionText = caption.asText().trim();
+                    if (!captionText.isEmpty()) {
+                        // 表格标题放在表格上方
+                        double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.1; // 估计标题高度
+                        double[] captionBbox = new double[]{
+                            imageBbox[0],
+                            imageBbox[1],
+                            imageBbox[2],
+                            imageBbox[1] + captionHeight
+                        };
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                    }
+                }
+            }
+        }
+        
+        // 2. 处理 table_body (HTML格式需要去除标签)
+        if (item.has("table_body")) {
+            String tableBody = item.get("table_body").asText();
+            log.debug("表格原始HTML长度: {}", tableBody.length());
+            // 去除HTML标签，转换为纯文本
+            String cleanText = removeHtmlTags(tableBody);
+            log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
+                cleanText.length(), 
+                cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
+            if (!cleanText.trim().isEmpty()) {
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", cleanText));
+            }
+        } else {
+            log.warn("⚠️  表格缺少 table_body 字段");
+        }
+        
+        // 3. 处理 table_footnote（如果有）
+        if (item.has("table_footnote")) {
+            JsonNode footnoteNode = item.get("table_footnote");
+            if (footnoteNode.isArray() && footnoteNode.size() > 0) {
+                for (JsonNode footnote : footnoteNode) {
+                    String footnoteText = footnote.asText().trim();
+                    if (!footnoteText.isEmpty()) {
+                        // 表格注释放在表格下方
+                        double footnoteHeight = (imageBbox[3] - imageBbox[1]) * 0.1;
+                        double[] footnoteBbox = new double[]{
+                            imageBbox[0],
+                            imageBbox[3] - footnoteHeight,
+                            imageBbox[2],
+                            imageBbox[3]
+                        };
+                        items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", footnoteText + "\n"));
+                    }
+                }
+            }
+        }
+        
+        return items;
+    }
+    
+    /**
+     * 处理图片类型的内容
+     * 包括 figure_caption
+     */
+    private List<TextExtractionUtil.LayoutItem> handleImageItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        JsonNode bboxNode = item.get("bbox");
+        
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 处理 figure_caption（如果有）
+        if (item.has("figure_caption")) {
+            JsonNode captionNode = item.get("figure_caption");
+            if (captionNode.isArray() && captionNode.size() > 0) {
+                for (JsonNode caption : captionNode) {
+                    String captionText = caption.asText().trim();
+                    if (!captionText.isEmpty()) {
+                        // 图片说明文字
+                        double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.15;
+                        double[] captionBbox = new double[]{
+                            imageBbox[0],
+                            imageBbox[3] - captionHeight,
+                            imageBbox[2],
+                            imageBbox[3]
+                        };
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                    }
+                }
+            }
+        }
+        
+        // 注意：图片本身不提取文本，只提取caption
+        log.debug("处理图片，bbox: [{}, {}, {}, {}]", imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3]);
+        
+        return items;
+    }
+    
+    /**
+     * 处理代码类型的内容
+     * 包括 code_caption 和 code_body
+     */
+    private List<TextExtractionUtil.LayoutItem> handleCodeItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        JsonNode bboxNode = item.get("bbox");
+        
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 1. 处理 code_caption（如果有）
+        if (item.has("code_caption")) {
+            JsonNode captionNode = item.get("code_caption");
+            if (captionNode.isArray() && captionNode.size() > 0) {
+                for (JsonNode caption : captionNode) {
+                    String captionText = caption.asText().trim();
+                    if (!captionText.isEmpty()) {
+                        double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.1;
+                        double[] captionBbox = new double[]{
+                            imageBbox[0],
+                            imageBbox[1],
+                            imageBbox[2],
+                            imageBbox[1] + captionHeight
+                        };
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                    }
+                }
+            }
+        }
+        
+        // 2. 处理 code_body
+        if (item.has("code_body")) {
+            String codeBody = item.get("code_body").asText();
+            if (!codeBody.trim().isEmpty()) {
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", codeBody + "\n"));
+            }
+        }
+        
+        return items;
+    }
+    
+    /**
+     * 处理列表类型的内容
+     */
+    private List<TextExtractionUtil.LayoutItem> handleListItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        JsonNode listItemsNode = item.get("list_items");
+        
+        if (listItemsNode == null || !listItemsNode.isArray()) {
+            return items;
+        }
+        
+        JsonNode bboxNode = item.get("bbox");
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 计算每个列表项的高度
+        double totalHeight = imageBbox[3] - imageBbox[1];
+        double itemHeight = totalHeight / listItemsNode.size();
+        
+        // 为每个列表项创建LayoutItem
+        for (int i = 0; i < listItemsNode.size(); i++) {
+            String itemText = listItemsNode.get(i).asText();
+            
+            // 计算列表项bbox
+            double[] itemBbox = new double[]{
+                imageBbox[0],
+                imageBbox[1] + i * itemHeight,
+                imageBbox[2],
+                imageBbox[1] + (i + 1) * itemHeight
+            };
+            
+            items.add(new TextExtractionUtil.LayoutItem(itemBbox, "Text", itemText + "\n"));
+        }
+        
+        return items;
+    }
+    
+    /**
+     * 处理普通文本类型的内容
+     */
+    private List<TextExtractionUtil.LayoutItem> handleTextItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        String text = item.get("text").asText();
+        JsonNode bboxNode = item.get("bbox");
+        
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", text));
+        
+        return items;
+    }
+    
+    /**
+     * 处理公式类型的内容
+     * 包括 isolate_formula（行间公式）和 formula_caption（公式标号）
+     */
+    private List<TextExtractionUtil.LayoutItem> handleFormulaItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight) {
+        
+        List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
+        JsonNode bboxNode = item.get("bbox");
+        
+        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+            return items;
+        }
+        
+        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 处理公式内容（LaTeX格式）
+        if (item.has("latex_text")) {
+            String latexText = item.get("latex_text").asText();
+            if (!latexText.trim().isEmpty()) {
+                // 保持LaTeX格式，便于后续处理
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", latexText + "\n"));
+            }
+        } else if (item.has("text")) {
+            String text = item.get("text").asText();
+            if (!text.trim().isEmpty()) {
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", text + "\n"));
+            }
+        }
+        
+        // 处理公式标号（如果有）
+        if (item.has("formula_caption")) {
+            JsonNode captionNode = item.get("formula_caption");
+            if (captionNode.isArray() && captionNode.size() > 0) {
+                for (JsonNode caption : captionNode) {
+                    String captionText = caption.asText().trim();
+                    if (!captionText.isEmpty()) {
+                        double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.1;
+                        double[] captionBbox = new double[]{
+                            imageBbox[2] - 50,  // 通常公式标号在右侧
+                            imageBbox[1],
+                            imageBbox[2],
+                            imageBbox[1] + captionHeight
+                        };
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "text", captionText));
+                    }
+                }
+            }
+        }
+        
+        return items;
+    }
+    
+    /**
+     * 从JsonNode提取bbox坐标
+     */
+    private double[] extractBbox(JsonNode bboxNode, double pdfWidth, double pdfHeight) {
+        double[] bbox = new double[]{
+            bboxNode.get(0).asDouble(),
+            bboxNode.get(1).asDouble(),
+            bboxNode.get(2).asDouble(),
+            bboxNode.get(3).asDouble()
+        };
+        
+        // MinerU 使用 1000x1000 归一化坐标系统
+        // 不应该用 PDF 尺寸来限制坐标！
+        // 坐标范围应该是 0-1000，而不是 0-pdfWidth/pdfHeight
+        final double MINERU_MAX = 1000.0;
+        
+        // 只修正明显异常的坐标（例如负数或超出1000）
+        bbox[0] = Math.max(0, Math.min(bbox[0], MINERU_MAX));
+        bbox[1] = Math.max(0, Math.min(bbox[1], MINERU_MAX));
+        bbox[2] = Math.max(bbox[0], Math.min(bbox[2], MINERU_MAX));
+        bbox[3] = Math.max(bbox[1], Math.min(bbox[3], MINERU_MAX));
+        
+        return bbox;
+    }
+    
+    /**
+     * 转换并验证bbox坐标
+     */
+    private double[] convertAndValidateBbox(
+            double[] mineruBbox,
+            double pdfWidth, double pdfHeight,
+            int imageWidth, int imageHeight) {
+        
+        // 转换坐标
+        int[] imageBbox = MinerUCoordinateConverter.convertToImageCoordinates(
+            mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 修正可能的舍入误差
+        if (!MinerUCoordinateConverter.isValidBbox(imageBbox, imageWidth, imageHeight)) {
+            imageBbox = MinerUCoordinateConverter.clampBbox(imageBbox, imageWidth, imageHeight);
+        }
+        
+        return new double[]{
+            (double) imageBbox[0],
+            (double) imageBbox[1],
+            (double) imageBbox[2],
+            (double) imageBbox[3]
+        };
+    }
+    
+    /**
+     * 去除HTML标签，将表格HTML转换为纯文本
+     * 参考 dots.ocr 的处理方式
+     * 
+     * @param html HTML格式的表格内容
+     * @return 纯文本内容
+     */
+    private String removeHtmlTags(String html) {
+        if (html == null || html.trim().isEmpty()) {
+            return "";
+        }
+        
+        // 1. 替换 <br>、<br/>、</tr> 为换行符
+        String text = html.replaceAll("(?i)<br\\s*/?>", "\n");
+        text = text.replaceAll("(?i)</tr>", "\n");
+        
+        // 2. 替换 <td>、<th> 的结束标签为制表符或空格
+        text = text.replaceAll("(?i)</td>", "\t");
+        text = text.replaceAll("(?i)</th>", "\t");
+        
+        // 3. 移除所有其他HTML标签
+        text = text.replaceAll("<[^>]+>", "");
+        
+        // 4. 解码HTML实体
+        text = text.replace("&nbsp;", " ");
+        text = text.replace("&lt;", "<");
+        text = text.replace("&gt;", ">");
+        text = text.replace("&amp;", "&");
+        text = text.replace("&quot;", "\"");
+        text = text.replace("&apos;", "'");
+        
+        // 5. 清理多余的空白
+        text = text.replaceAll("[ \\t]+", " ");  // 多个空格/制表符合并
+        text = text.replaceAll("\\n\\s*\\n", "\n");  // 多个换行合并
+        
+        return text.trim();
+    }
+    
+    /**
+     * 判断是否为页眉页脚或页码
+     * 
+     * 【重要】仅基于MinerU明确识别的类型进行过滤，不根据位置过滤
+     * MinerU已经通过VLM AI模型识别出内容类型，我们应该信任它的判断
+     * 
+     * 过滤以下类型（参考MinerU文档的discarded_blocks）：
+     * - header: 页眉
+     * - footer: 页脚
+     * - page_number: 页码
+     * - aside_text: 旁注文本
+     * - page_footnote: 页面脚注
+     * 
+     * 其他所有类型（包括list, text, table, image, code等）都保留
+     * 
+     * @param item MinerU识别的内容块
+     * @return true表示应该过滤，false表示保留
+     */
+    private boolean isHeaderFooterOrPageNumber(JsonNode item) {
+        String type = item.has("type") ? item.get("type").asText() : "";
+        
+        // 仅基于MinerU识别的类型判断，过滤所有丢弃类型
+        return "header".equals(type) 
+            || "footer".equals(type) 
+            || "page_number".equals(type)
+            || "aside_text".equals(type)
+            || "page_footnote".equals(type);
+    }
+    
+    /**
+     * 转换MinerU坐标系到图片坐标系
+     */
+    private Map<String, Object> convertMinerUToCharBox(
+            JsonNode item, 
+            Map<String, Object> pageImage,
+            double[] pdfPageSize) {
+        
+        Map<String, Object> charBox = new HashMap<>();
+        
+        int imageWidth = (Integer) pageImage.get("imageWidth");
+        int imageHeight = (Integer) pageImage.get("imageHeight");
+        double pdfWidth = pdfPageSize[0];
+        double pdfHeight = pdfPageSize[1];
+        
+        // 提取bbox
+        if (item.has("bbox")) {
+            JsonNode bboxNode = item.get("bbox");
+            if (bboxNode.isArray() && bboxNode.size() >= 4) {
+                double[] mineruBbox = new double[4];
+                mineruBbox[0] = bboxNode.get(0).asDouble();
+                mineruBbox[1] = bboxNode.get(1).asDouble();
+                mineruBbox[2] = bboxNode.get(2).asDouble();
+                mineruBbox[3] = bboxNode.get(3).asDouble();
+                
+                // MinerU 使用 1000x1000 归一化坐标，不应该和 PDF 尺寸比较
+                // 只检查是否在 0-1000 范围内
+                final double MINERU_MAX = 1000.0;
+                if (mineruBbox[2] > MINERU_MAX || mineruBbox[3] > MINERU_MAX) {
+                    log.warn("⚠️  MinerU 坐标异常（超出1000）: [{}, {}, {}, {}]", 
+                        mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
+                    
+                    // 修正到 0-1000 范围
+                    mineruBbox[0] = Math.max(0, Math.min(mineruBbox[0], MINERU_MAX));
+                    mineruBbox[1] = Math.max(0, Math.min(mineruBbox[1], MINERU_MAX));
+                    mineruBbox[2] = Math.max(mineruBbox[0], Math.min(mineruBbox[2], MINERU_MAX));
+                    mineruBbox[3] = Math.max(mineruBbox[1], Math.min(mineruBbox[3], MINERU_MAX));
+                    
+                    log.warn("   修正后: [{}, {}, {}, {}]", 
+                        mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
+                }
+                
+                // 使用坐标转换工具进行转换
+                int[] imageBbox = MinerUCoordinateConverter.convertToImageCoordinates(
+                    mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+                
+                // 再次验证并修正坐标（防止浮点数舍入误差）
+                if (!MinerUCoordinateConverter.isValidBbox(imageBbox, imageWidth, imageHeight)) {
+                    log.debug("转换后坐标微调: {} -> ", imageBbox);
+                    imageBbox = MinerUCoordinateConverter.clampBbox(imageBbox, imageWidth, imageHeight);
+                    log.debug("{}", imageBbox);
+                }
+                
+                charBox.put("bbox", imageBbox);
+            }
+        }
+        
+        // 提取文本
+        if (item.has("text")) {
+            charBox.put("text", item.get("text").asText());
+        }
+        
+        // 提取类型
+        if (item.has("type")) {
+            charBox.put("type", item.get("type").asText());
+        }
+        
+        // 提取text_level
+        if (item.has("text_level")) {
+            charBox.put("textLevel", item.get("text_level").asInt());
+        }
+        
+        // 提取list_items（如果是列表类型）
+        if (item.has("list_items")) {
+            JsonNode listItemsNode = item.get("list_items");
+            List<String> listItems = new ArrayList<>();
+            if (listItemsNode.isArray()) {
+                for (JsonNode listItem : listItemsNode) {
+                    listItems.add(listItem.asText());
+                }
+            }
+            charBox.put("listItems", listItems);
+        }
+        
+        return charBox;
+    }
+    
+    /**
+     * 保存MinerU原始响应JSON
+     */
+    private void saveRawResponse(String apiResult, File outputDir, String taskId, String docMode) {
+        try {
+            // 创建ocr目录
+            File ocrDir = new File(outputDir, "ocr");
+            if (!ocrDir.exists()) {
+                ocrDir.mkdirs();
+            }
+            
+            // 保存原始响应
+            File rawFile = new File(ocrDir, String.format("mineru_raw_%s.json", docMode));
+            JsonNode jsonNode = objectMapper.readTree(apiResult);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(rawFile, jsonNode);
+            
+            log.info("保存MinerU原始响应: {}", rawFile.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("保存MinerU原始响应失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 保存格式化的 content_list（方便调试 bbox）
+     */
+    private void saveFormattedContentList(String apiResult, File outputDir, String taskId, String docMode) {
+        try {
+            // 创建ocr目录
+            File ocrDir = new File(outputDir, "ocr");
+            if (!ocrDir.exists()) {
+                ocrDir.mkdirs();
+            }
+            
+            JsonNode root = objectMapper.readTree(apiResult);
+            JsonNode contentListNode = extractContentList(root);
+            
+            if (contentListNode != null && contentListNode.isArray()) {
+                // 保存格式化的 content_list
+                File contentListFile = new File(ocrDir, String.format("mineru_content_list_%s.json", docMode));
+                objectMapper.writerWithDefaultPrettyPrinter().writeValue(contentListFile, contentListNode);
+                
+                log.info("保存格式化的 content_list: {}, 共{}个内容项", 
+                    contentListFile.getAbsolutePath(), contentListNode.size());
+                
+                // 额外保存一个带统计信息的版本
+                saveContentListWithStats(contentListNode, ocrDir, docMode);
+            }
+        } catch (Exception e) {
+            log.warn("保存格式化 content_list 失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 保存带统计信息的 content_list
+     */
+    private void saveContentListWithStats(JsonNode contentListNode, File ocrDir, String docMode) {
+        try {
+            File statsFile = new File(ocrDir, String.format("mineru_content_list_%s_stats.txt", docMode));
+            
+            StringBuilder stats = new StringBuilder();
+            stats.append("=".repeat(80)).append("\n");
+            stats.append("MinerU Content List 统计信息\n");
+            stats.append("=".repeat(80)).append("\n\n");
+            
+            // 统计各类型数量
+            Map<String, Integer> typeCount = new HashMap<>();
+            Map<Integer, Integer> pageCount = new HashMap<>();
+            
+            for (JsonNode item : contentListNode) {
+                String type = item.has("type") ? item.get("type").asText() : "unknown";
+                int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
+                
+                typeCount.put(type, typeCount.getOrDefault(type, 0) + 1);
+                pageCount.put(pageIdx, pageCount.getOrDefault(pageIdx, 0) + 1);
+            }
+            
+            stats.append("总内容项数: ").append(contentListNode.size()).append("\n\n");
+            
+            stats.append("按类型统计:\n");
+            stats.append("-".repeat(40)).append("\n");
+            typeCount.entrySet().stream()
+                .sorted((a, b) -> b.getValue().compareTo(a.getValue()))
+                .forEach(entry -> stats.append(String.format("  %-20s: %d\n", entry.getKey(), entry.getValue())));
+            
+            stats.append("\n按页面统计:\n");
+            stats.append("-".repeat(40)).append("\n");
+            pageCount.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> stats.append(String.format("  第%d页: %d个内容项\n", entry.getKey() + 1, entry.getValue())));
+            
+            stats.append("\n").append("=".repeat(80)).append("\n");
+            stats.append("详细内容项信息\n");
+            stats.append("=".repeat(80)).append("\n\n");
+            
+            // 详细列出每个内容项
+            int index = 0;
+            for (JsonNode item : contentListNode) {
+                index++;
+                String type = item.has("type") ? item.get("type").asText() : "unknown";
+                int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
+                
+                stats.append(String.format("[%d] 第%d页 - 类型: %s\n", index, pageIdx + 1, type));
+                
+                // bbox 信息
+                if (item.has("bbox")) {
+                    JsonNode bbox = item.get("bbox");
+                    if (bbox.isArray() && bbox.size() >= 4) {
+                        stats.append(String.format("    bbox: [%.1f, %.1f, %.1f, %.1f]\n",
+                            bbox.get(0).asDouble(),
+                            bbox.get(1).asDouble(),
+                            bbox.get(2).asDouble(),
+                            bbox.get(3).asDouble()));
+                        
+                        // 计算宽高
+                        double width = bbox.get(2).asDouble() - bbox.get(0).asDouble();
+                        double height = bbox.get(3).asDouble() - bbox.get(1).asDouble();
+                        stats.append(String.format("    尺寸: %.1f x %.1f\n", width, height));
+                    }
+                }
+                
+                // 文本预览
+                if (item.has("text")) {
+                    String text = item.get("text").asText();
+                    String preview = text.length() > 100 ? text.substring(0, 100) + "..." : text;
+                    stats.append("    文本: ").append(preview).append("\n");
+                } else if (item.has("list_items")) {
+                    JsonNode listItems = item.get("list_items");
+                    stats.append("    列表项数: ").append(listItems.size()).append("\n");
+                    if (listItems.size() > 0) {
+                        String firstItem = listItems.get(0).asText();
+                        String preview = firstItem.length() > 50 ? firstItem.substring(0, 50) + "..." : firstItem;
+                        stats.append("    第一项: ").append(preview).append("\n");
+                    }
+                } else if (item.has("table_body")) {
+                    String tableBody = item.get("table_body").asText();
+                    stats.append("    表格HTML长度: ").append(tableBody.length()).append("\n");
+                }
+                
+                // sub_type
+                if (item.has("sub_type")) {
+                    stats.append("    子类型: ").append(item.get("sub_type").asText()).append("\n");
+                }
+                
+                stats.append("\n");
+            }
+            
+            java.nio.file.Files.write(statsFile.toPath(), stats.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            
+            log.info("保存 content_list 统计信息: {}", statsFile.getAbsolutePath());
+        } catch (Exception e) {
+            log.warn("保存统计信息失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 保存处理后的结果JSON
+     * 
+     * @param result 处理后的结果数据
+     * @param outputDir 输出目录
+     * @param taskId 任务ID
+     * @param docMode 文档模式（old/new）
+     * @param suffix 文件名后缀（如 "filtered" 或 "unfiltered"）
+     */
+    private void saveProcessedResult(Map<String, Object> result, File outputDir, String taskId, String docMode, String suffix) {
+        try {
+            // 创建ocr目录
+            File ocrDir = new File(outputDir, "ocr");
+            if (!ocrDir.exists()) {
+                ocrDir.mkdirs();
+            }
+            
+            // 保存处理后的结果
+            String fileName = String.format("mineru_processed_%s_%s.json", docMode, suffix);
+            File processedFile = new File(ocrDir, fileName);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(processedFile, result);
+            
+            int totalBlocks = 0;
+            @SuppressWarnings("unchecked")
+            Map<Integer, List<Map<String, Object>>> pageData = 
+                (Map<Integer, List<Map<String, Object>>>) result.get("pageData");
+            if (pageData != null) {
+                for (List<Map<String, Object>> blocks : pageData.values()) {
+                    totalBlocks += blocks.size();
+                }
+            }
+            
+            log.info("保存MinerU处理后结果 ({}): {}, 共{}个内容块", 
+                suffix, processedFile.getAbsolutePath(), totalBlocks);
+        } catch (Exception e) {
+            log.warn("保存MinerU处理后结果失败 ({}): {}", suffix, e.getMessage());
+        }
+    }
+}
+

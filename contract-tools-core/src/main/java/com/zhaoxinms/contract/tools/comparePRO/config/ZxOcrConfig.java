@@ -9,6 +9,13 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConfigurationProperties(prefix = "zxcm.compare.zxocr")
 public class ZxOcrConfig {
+    
+    /**
+     * 默认OCR服务类型（全局配置）
+     * 可选值: mineru, dotsocr, thirdparty
+     * 默认: mineru
+     */
+    private String defaultOcrService = "mineru";
 
     /**
      * 调试模式文件路径
@@ -66,6 +73,11 @@ public class ZxOcrConfig {
     private HallucinationValidation hallucinationValidation = new HallucinationValidation();
 
     /**
+     * MinerU OCR配置
+     */
+    private MinerUConfig mineru = new MinerUConfig();
+
+    /**
      * 幻觉校验配置内部类
      */
     public static class HallucinationValidation {
@@ -103,6 +115,14 @@ public class ZxOcrConfig {
                     ", pageThresholdMultiplier=" + pageThresholdMultiplier +
                     '}';
         }
+    }
+
+    public String getDefaultOcrService() {
+        return defaultOcrService;
+    }
+
+    public void setDefaultOcrService(String defaultOcrService) {
+        this.defaultOcrService = defaultOcrService;
     }
 
     public String getDebugFilePath() {
@@ -191,5 +211,66 @@ public class ZxOcrConfig {
 
     public void setHallucinationValidation(HallucinationValidation hallucinationValidation) {
         this.hallucinationValidation = hallucinationValidation;
+    }
+
+    public MinerUConfig getMineru() {
+        return mineru;
+    }
+
+    public void setMineru(MinerUConfig mineru) {
+        this.mineru = mineru;
+    }
+
+    /**
+     * MinerU配置内部类
+     */
+    public static class MinerUConfig {
+        /**
+         * MinerU API地址
+         */
+        private String apiUrl = "http://192.168.0.100:8000";
+
+        /**
+         * vLLM Server地址
+         */
+        private String vllmServerUrl = "http://192.168.0.100:30000";
+
+        /**
+         * Backend模式：pipeline, vlm-http-client, vlm-vllm-async-engine等
+         */
+        private String backend = "vlm-http-client";
+
+        public String getApiUrl() {
+            return apiUrl;
+        }
+
+        public void setApiUrl(String apiUrl) {
+            this.apiUrl = apiUrl;
+        }
+
+        public String getVllmServerUrl() {
+            return vllmServerUrl;
+        }
+
+        public void setVllmServerUrl(String vllmServerUrl) {
+            this.vllmServerUrl = vllmServerUrl;
+        }
+
+        public String getBackend() {
+            return backend;
+        }
+
+        public void setBackend(String backend) {
+            this.backend = backend;
+        }
+
+        @Override
+        public String toString() {
+            return "MinerUConfig{" +
+                    "apiUrl='" + apiUrl + '\'' +
+                    ", vllmServerUrl='" + vllmServerUrl + '\'' +
+                    ", backend='" + backend + '\'' +
+                    '}';
+        }
     }
 }

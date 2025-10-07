@@ -99,6 +99,10 @@ zxcm:
   compare:
     # ZXOCR配置（原GPU OCR）
     zxocr:
+      # 默认OCR工具选择（全局配置，优先级高于前端传递）
+      # 可选值: mineru, dotsocr, thirdparty
+      default-ocr-service: mineru
+      
       # OCR服务配置
       ocr-base-url: http://192.168.0.100:8000
       ocr-model: model
@@ -109,7 +113,7 @@ zxcm:
       save-ocr-images: true
       
       # 图像处理配置
-      render-dpi: 160
+      render-dpi: 150
       min-pixels: 3136
       max-pixels: 11289600
       
@@ -186,7 +190,7 @@ zxcm:
 
     # RapidOCR配置
     rapidocr:
-      enabled: true
+      enabled: false  # 禁用RapidOCR
       base-url: http://192.168.0.100:9005
       timeout: PT2M  # 2分钟超时
       verbose-logging: false
@@ -194,3 +198,9 @@ zxcm:
       default-use-detection: true
       default-use-classification: true
       default-use-recognition: true
+      
+    # MinerU OCR配置
+    mineru:
+      api-url: http://192.168.0.100:8000  # MinerU Web API地址
+      vllm-server-url: http://192.168.0.100:30000  # vLLM Server地址
+      backend: vlm-http-client  # 后端模式：pipeline, vlm-http-client等
