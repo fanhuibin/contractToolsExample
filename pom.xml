@@ -41,6 +41,7 @@
         <module>contract-tools-auth</module>
         <module>contract-tools-backend</module>
         <module>contract-tools-sdk</module>
+        <module>contract-tools-extract</module>
     </modules>
 
     <!-- 依赖管理 -->
@@ -64,6 +65,11 @@
             <dependency>
                 <groupId>com.zhaoxinms</groupId>
                 <artifactId>contract-tools-auth</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.zhaoxinms</groupId>
+                <artifactId>contract-tools-extract</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -1,10 +1,12 @@
 package com.zhaoxinms.contract.tools.auth.annotation;
 
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
+
 import java.lang.annotation.*;
 
 /**
- * 功能授权注解
- * 用于标记需要特定功能授权的方法或类
+ * 模块授权注解
+ * 标记在方法上，表示该方法需要特定的模块授权才能访问
  */
 @Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
@@ -12,12 +14,20 @@ import java.lang.annotation.*;
 public @interface RequireFeature {
     
     /**
-     * 需要的功能名称
+     * 需要的模块类型
+     * @return 模块类型
      */
-    String value();
+    ModuleType module();
     
     /**
-     * 授权失败时的错误消息
+     * 需要的功能名称（兼容旧版本）
+     * @return 功能名称
      */
-    String message() default "当前功能需要授权";
+    String value() default "";
+    
+    /**
+     * 当授权失败时的错误消息
+     * @return 错误消息
+     */
+    String message() default "权限不足，无法访问该功能";
 }

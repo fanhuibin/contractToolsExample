@@ -1,0 +1,56 @@
+{
+  "failedPages" : [ ],
+  "failedPagesCount" : 0,
+  "differences" : [ {
+    "pageB" : 1,
+    "pageA" : 1,
+    "pageAList" : [ 1 ],
+    "newBboxes" : [ [ 197.0, 164.0, 286.0, 190.0 ] ],
+    "prevNewBbox" : [ 197.0, 164.0, 286.0, 190.0 ],
+    "diffRangesA" : [ ],
+    "oldText" : "",
+    "diffRangesB" : [ {
+      "start" : 1,
+      "end" : 2,
+      "type" : "DIFF"
+    } ],
+    "pageBList" : [ 1 ],
+    "newText" : "试",
+    "prevOldBbox" : [ 197.0, 165.0, 427.0, 189.0 ],
+    "allTextB" : [ "测试 123" ],
+    "newBbox" : [ 197.0, 164.0, 286.0, 190.0 ],
+    "page" : 1,
+    "textStartIndexB" : 0,
+    "operation" : "INSERT",
+    "textStartIndexA" : 0,
+    "allTextA" : [ ]
+  }, {
+    "pageB" : 1,
+    "pageA" : 1,
+    "pageAList" : [ 1 ],
+    "oldBboxes" : [ [ 197.0, 165.0, 427.0, 189.0 ] ],
+    "prevNewBbox" : [ 197.0, 164.0, 286.0, 190.0 ],
+    "oldBbox" : [ 197.0, 165.0, 427.0, 189.0 ],
+    "diffRangesA" : [ {
+      "start" : 5,
+      "end" : 13,
+      "type" : "DIFF"
+    } ],
+    "oldText" : " 我要新增内容了",
+    "diffRangesB" : [ ],
+    "pageBList" : [ 1 ],
+    "newText" : "",
+    "prevOldBbox" : [ 197.0, 165.0, 427.0, 189.0 ],
+    "allTextB" : [ ],
+    "page" : 1,
+    "textStartIndexB" : 0,
+    "operation" : "DELETE",
+    "textStartIndexA" : 0,
+    "allTextA" : [ "测 123 我要新增内容了" ]
+  } ],
+  "newFileName" : "新建 DOCX 文档.pdf",
+  "startTime" : "2025-09-29T16:40:20.486249700",
+  "taskId" : "7cb00d85-1afe-42f5-82c2-e94731130f57",
+  "oldFileName" : "新建 DOCX 文档(1).pdf",
+  "totalDiffCount" : 2
+}

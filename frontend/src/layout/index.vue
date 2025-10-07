@@ -87,6 +87,7 @@ const menuItems = [
   { key: '/home', icon: () => h(HomeOutlined), label: '首页' },
   { key: '/auto-fulfillment', icon: () => h(FileSearchOutlined), label: '自动履约任务' },
   { key: '/contract-extract', icon: () => h(FileTextOutlined), label: '合同抽取' },
+  { key: '/info-extract', icon: () => h(FileSearchOutlined), label: '智能信息提取' },
   { key: '/contract-review', icon: () => h(ProfileOutlined), label: '合同智能审核' },
   { key: '/onlyoffice', icon: () => h(ApartmentOutlined), label: 'OnlyOffice预览' },
   { key: '/compare', icon: () => h(SnippetsOutlined), label: 'PDF合同比对' },

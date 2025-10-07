@@ -25,13 +25,18 @@ zhaoxin-contract-tool-set/
 - **打包方式**：普通jar包
 
 ### 2. contract-tools-auth（授权管理模块）
-- **用途**：提供基础的授权码检查和功能授权管理
+- **用途**：提供完整的License授权验证和模块级权限控制
 - **特点**：
   - 可选模块，通过配置启用/禁用
   - 不依赖Spring Security，轻量级实现
-  - 支持功能级别的授权检查
+  - 支持6个核心业务模块的独立授权控制
+  - 数字签名验证，确保License安全性
+  - 硬件绑定支持（MAC地址、CPU序列号、主板序列号）
   - 提供注解式授权验证（@RequireFeature）
-  - 自动配置，零侵入集成
+  - AOP切面自动拦截未授权访问
+  - REST API接口查询授权状态
+  - 命令行工具生成License文件
+- **支持模块**：合同模板设计、合同合成、合同比对PRO、合同信息抽取、合同智能审核、履约任务生成
 - **打包方式**：普通jar包
 
 ### 3. contract-tools-backend（独立后端应用）
@@ -166,36 +171,84 @@ mvn clean install
 ```yaml
 zhaoxin:
   auth:
-    enabled: true              # 启用授权功能
+    enabled: true                    # 启用授权功能
     license:
-      code: "your-license-code"           # 授权码
-      expiration: 1735689600000           # 授权过期时间（毫秒时间戳）
-      features: ["*"]                     # 授权的功能列表，"*"表示所有功能
-      max-users: -1                       # 最大用户数，-1表示无限制
+      filePath: "license.dat"        # License文件路径
+      hardwareBound: true            # 是否启用硬件绑定
+    signature:
+      publicKey: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."  # 公钥内容
+      # 或者使用文件路径
+      publicKeyPath: "public.key"
 ```
+
+**支持的业务模块**：
+
+| 模块代码 | 模块名称 | 主要功能 |
+|---------|---------|---------|
+| `contract_template_design` | 合同模板设计模块 | 模板创建、编辑、预览 |
+| `contract_synthesis` | 合同合成模块 | 合同生成、合并、数据绑定 |
+| `contract_compare_pro` | 合同比对PRO模块 | GPU OCR比对、智能差异分析 |
+| `contract_info_extraction` | 合同信息抽取模块 | 实体识别、关键信息提取 |
+| `contract_intelligent_review` | 合同智能审核模块 | 风险分析、合规检查 |
+| `performance_task_generation` | 履约任务生成模块 | 任务生成、调度、提醒 |
 
 **重要说明**：
 - 当 `zhaoxin.auth.enabled=false` 或未配置时，系统会：
   - 跳过所有授权检查
-  - 自动配置CORS支持，允许跨域访问
   - 所有API接口无需授权即可访问
 - 当 `zhaoxin.auth.enabled=true` 时，系统会：
-  - 启用授权码检查
-  - 支持功能级别的授权控制
-  - 提供 `@RequireFeature` 注解进行方法级授权检查
+  - 启用License文件验证
+  - 支持模块级别的授权控制
+  - 数字签名验证确保License安全性
+  - 硬件绑定防止License被复制使用
 
 **使用示例**：
+
+控制器级别授权：
 ```java
 @RestController
-public class MyController {
+@RequestMapping("/api/template")
+@RequireFeature(module = ModuleType.CONTRACT_TEMPLATE_DESIGN, message = "合同模板设计模块需要授权")
+public class TemplateController {
+    // 整个控制器需要模板设计模块权限
+}
+```
+
+方法级别授权：
+```java
+@RestController
+public class ContractController {
     
-    @RequireFeature("advanced-ocr")
-    @PostMapping("/advanced-compare")
-    public Result advancedCompare() {
-        // 需要 "advanced-ocr" 功能授权
-        return Result.success();
+    @RequireFeature(module = ModuleType.CONTRACT_COMPARE_PRO, message = "合同比对功能需要授权")
+    @PostMapping("/compare")
+    public ResponseEntity<?> compareContract() {
+        // 需要合同比对PRO模块权限
+        return ResponseEntity.ok("比对结果");
     }
 }
+```
+
+编程式检查：
+```java
+@Service
+public class BusinessService {
+    
+    @Autowired
+    private LicenseService licenseService;
+    
+    public void processContract() {
+        if (!licenseService.hasModulePermission(ModuleType.CONTRACT_TEMPLATE_DESIGN)) {
+            throw new RuntimeException("无合同模板设计模块权限");
+        }
+        // 执行业务逻辑
+    }
+}
+```
+
+**License生成工具**：
+```bash
+# 使用命令行工具
+java -cp contract-tools-auth-1.0.0.jar com.zhaoxinms.contract.tools.auth.generator.LicenseGeneratorCLI
 ```
 
 ### 数据库配置（SDK和后端应用）

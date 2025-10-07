@@ -1,6 +1,8 @@
 package com.zhaoxinms.contract.tools.auth.aspect;
 
 import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.core.utils.CommonUtils;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.auth.service.LicenseService;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -25,15 +27,29 @@ public class LicenseAspect {
 
     @Around("@annotation(requireFeature)")
     public Object checkFeatureAuthorization(ProceedingJoinPoint joinPoint, RequireFeature requireFeature) throws Throwable {
-        String feature = requireFeature.value();
-        
-        if (!licenseService.hasFeature(feature)) {
-            String message = requireFeature.message();
-            log.warn("功能 '{}' 授权检查失败: {}", feature, message);
-            throw new RuntimeException(message + ": " + feature);
+        // 优先检查模块授权
+        ModuleType moduleType = requireFeature.module();
+        if (moduleType != null) {
+            if (!licenseService.hasModulePermission(moduleType)) {
+                String message = requireFeature.message();
+                log.warn("模块 '{}' 授权检查失败: {}", moduleType.getName(), message);
+                throw new RuntimeException(message + ": " + moduleType.getName());
+            }
+            log.debug("模块 '{}' 授权检查通过", moduleType.getName());
+        } else if (CommonUtils.isNotEmpty(requireFeature.value())) {
+            // 兼容旧版本的功能授权检查
+            String feature = requireFeature.value();
+            if (!licenseService.hasFeature(feature)) {
+                String message = requireFeature.message();
+                log.warn("功能 '{}' 授权检查失败: {}", feature, message);
+                throw new RuntimeException(message + ": " + feature);
+            }
+            log.debug("功能 '{}' 授权检查通过", feature);
+        } else {
+            log.warn("@RequireFeature注解必须指定module或value参数");
+            throw new RuntimeException("授权配置错误");
         }
         
-        log.debug("功能 '{}' 授权检查通过", feature);
         return joinPoint.proceed();
     }
     

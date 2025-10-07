@@ -3,44 +3,84 @@ package com.zhaoxinms.contract.tools.auth.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 /**
- * 授权模块配置属性
- * 简化版本，只包含基础的授权检查配置
+ * 认证配置属性
  */
 @Data
 @ConfigurationProperties(prefix = "zhaoxin.auth")
 public class AuthProperties {
     
     /**
-     * 是否启用授权功能
+     * 是否启用认证
      */
     private boolean enabled = false;
     
     /**
-     * 授权码配置
+     * 许可证配置
      */
     private License license = new License();
+    
+    /**
+     * 签名配置
+     */
+    private Signature signature = new Signature();
     
     @Data
     public static class License {
         /**
-         * 授权码
+         * 许可证代码
          */
         private String code;
         
         /**
-         * 授权过期时间（毫秒时间戳）
+         * 许可证文件路径
          */
-        private long expiration = 0;
+        private String filePath = "license.dat";
         
         /**
-         * 授权的功能列表
+         * 到期时间
          */
-        private String[] features = new String[0];
+        private LocalDateTime expiration;
         
         /**
-         * 最大用户数量
+         * 授权功能列表（模块代码）
          */
-        private int maxUsers = -1; // -1表示无限制
+        private List<String> modules;
+        
+        /**
+         * 最大用户数
+         */
+        private Integer maxUsers = 1;
+        
+        /**
+         * 是否绑定硬件
+         */
+        private Boolean hardwareBound = true;
+    }
+    
+    @Data
+    public static class Signature {
+        /**
+         * 公钥字符串（用于验证签名）
+         */
+        private String publicKey;
+        
+        /**
+         * 私钥字符串（用于生成签名，仅在生成license时使用）
+         */
+        private String privateKey;
+        
+        /**
+         * 公钥文件路径
+         */
+        private String publicKeyPath = "public.key";
+        
+        /**
+         * 私钥文件路径
+         */
+        private String privateKeyPath = "private.key";
     }
 }

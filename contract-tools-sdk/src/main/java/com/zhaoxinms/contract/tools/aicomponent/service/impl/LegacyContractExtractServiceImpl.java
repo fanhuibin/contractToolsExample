@@ -36,8 +36,8 @@ import java.util.Random;
  * @author zhaoxinms
  */
 @Slf4j
-@Service
-public class ContractExtractServiceImpl implements ContractExtractService {
+@Service("legacyContractExtractServiceImpl")
+public class LegacyContractExtractServiceImpl implements ContractExtractService {
 
     @Autowired
     private AiProperties aiProperties;

@@ -1,4 +1,111 @@
 ## 会话总结 - 2025-01-15
+
+### 2025-09-30 - 修复OCR结果合并逻辑，按bbox组织文本
+
+**问题描述：**
+- 原始第三方OCR增强识别中，文本是逐字符追加到fullText的，导致所有文字连在一起
+- 应该在OCR识别阶段就按bbox分组组织文本，不同bbox之间用换行符分隔
+- 参考合同比对功能的逻辑，每个bbox应该作为独立的一行
+
+**修复内容：**
+
+1. **第三方OCR增强识别优化** (`contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/service/UnifiedOCRService.java`)
+   - 修改 `recognizeWithThirdPartyOCREnhanced()` 方法中的文本组织逻辑
+   - 删除逐字符追加：`fullText.append(compareCharBox.ch)`
+   - 新增bbox分组逻辑：按bbox坐标分组，每个bbox的文本独占一行
+   - 添加页面分隔符：`--- 第X页 ---`
+
+2. **文本组织规则**
+   - **页面分隔**：每页开始添加 `--- 第X页 ---` 标记
+   - **bbox分组**：根据bbox坐标 `[x1, y1, x2, y2]` 创建唯一键进行分组
+   - **文本合并**：同一bbox内的字符合并为一个文本块
+   - **换行分隔**：每个bbox的文本内容独占一行
+
+3. **技术实现**
+   ```java
+   // 按bbox坐标分组
+   Map<String, StringBuilder> bboxTextMap = new LinkedHashMap<>();
+   String bboxKey = String.format("%.0f_%.0f_%.0f_%.0f", 
+       bbox[0], bbox[1], bbox[2], bbox[3]);
+   
+   // 将分组后的文本按行组织
+   for (StringBuilder bboxText : bboxTextMap.values()) {
+       fullText.append(bboxText.toString().trim()).append("\n");
+   }
+   ```
+
+**修复前后对比：**
+
+**修复前（逐字符追加）：**
+```
+甲方：委托代理人：乙方：委托代理人：银行账号：开户行：23 WXC 2025-03-06签订日期：15点59分
+```
+
+**修复后（按bbox分组）：**
+```
+--- 第6页 ---
+甲方：
+委托代理人：
+乙方：
+委托代理人：
+银行账号：
+开户行：
+23 WXC 2025-03-06
+签订日期：15点59分
+```
+
+**技术细节：**
+- 使用 `LinkedHashMap` 保持bbox的原始顺序
+- bbox键格式：`x1_y1_x2_y2`，确保相同位置的字符归为一组
+- 过滤空白文本，只保留有意义的内容
+- 添加详细日志记录bbox数量和字符数量
+
+**用户体验提升：**
+- LangExtract处理结构化的文本，提取准确性显著提高
+- 前端文本模式显示清晰，每个文本块独占一行
+- 保持了原文档的逻辑结构和阅读顺序
+- 便于文本高亮和位置定位功能的实现
+
+### 2025-09-30 - 修复文本模式默认高亮显示问题
+
+**问题描述：**
+- 文本模式中被提取的内容应该默认就与普通文本有明显的视觉区别
+- 之前的高亮逻辑存在冲突，导致默认高亮被清除
+
+**修复内容：**
+
+1. **分离高亮逻辑** (`frontend/src/views/extract/components/TextViewer.vue`)
+   - 将 `updateHighlights()` 重命名为 `updateBboxHighlights()`，专门处理bbox映射高亮
+   - 使用不同的CSS类名区分不同类型的高亮：
+     - `extraction-highlight`: 提取结果高亮（蓝色渐变）
+     - `bbox-highlight`: bbox映射高亮（紫色渐变）
+     - `selected-highlight`: 选中高亮（红色渐变）
+     - `search-highlight`: 搜索高亮（绿色）
+
+2. **优化高亮管理**
+   - `addDefaultHighlights()` 方法不再调用会清空所有高亮的方法
+   - 清除高亮时只清除对应类型，保留其他类型的高亮
+   - 添加详细的控制台日志，便于调试高亮显示问题
+
+3. **改进监听逻辑**
+   - 为不同的props添加独立的watch监听器
+   - 确保在数据变化时正确调用对应的高亮更新方法
+
+4. **视觉设计优化**
+   - 提取结果高亮：蓝色渐变背景，轻微边框和阴影
+   - bbox映射高亮：紫色渐变背景，与提取高亮区分
+   - 悬停效果：颜色加深，轻微上移动画
+   - 选中效果：红色突出，脉冲动画
+
+**技术细节：**
+- 修复了高亮范围类型定义，支持更多属性字段
+- 添加调试日志，显示高亮添加过程和数量统计
+- 确保不同类型的高亮可以共存，互不干扰
+
+**用户体验提升：**
+- 文本模式加载后，所有提取内容立即以蓝色高亮显示
+- 点击右侧提取项时，对应文本变为红色高亮并自动滚动定位
+- 高亮样式更加美观，层次分明，交互反馈更好
 \n+### 2025-09-17 GPU OCR 连接线锚点与新增连线渲染（Canvas版）
 **会话主要目的**: 在 `canvas-container` 内为旧/新文档各新增一条红色连接线，使其与中轴 `center-marker` 美观衔接并随滚动实时刷新。
 
@@ -5263,3 +5370,387 @@ const getTruncatedText = (allTextList: string[], diffRanges: any[], type: 'inser
 #### 风险与注意事项
 - 触控板/手势可能不触发 `wheel`，如遇不随动需另行适配 `pointer/touch` 事件策略。
 - `wheelActiveSide` 的时间窗口（150ms）可按体验调优。
+
+### 2025-09-30 修复：图像模式404错误
+
+#### 问题描述
+用户报告图像模式无法显示图片，提示"图像加载失败"，网络请求显示404错误：
+`GET http://localhost:3000/api/extract/files/tasks/{taskId}/images/page-1.png 404 (Not Found)`
+
+#### 根本原因
+1. **缺少图像生成** - OCR识别过程中没有生成PDF页面图像文件
+2. **缺少文件访问接口** - 后端没有提供图像文件的访问端点  
+3. **路径映射冲突** - 存在重复的文件访问控制器导致Spring路径冲突
+
+#### 解决方案
+1. **图像生成功能**
+   - 新增 `generateAndSaveImages()` 方法：将PDF转换为PNG图像并保存
+   - 新增 `getTotalPages()` 方法：获取PDF实际页数
+   - 修改DotsOCR增强识别：在识别过程中生成页面图像
+
+2. **文件访问接口**
+   - 新增端点：`GET /api/extract/files/tasks/{taskId}/images/{fileName}`
+   - 安全检查：防止路径遍历攻击
+   - 缓存优化：设置1小时缓存头
+
+3. **解决路径冲突**
+   - 删除重复的 `ExtractFileController` 类
+   - 统一在 `ContractInfoExtractController` 中处理文件访问
+
+#### 涉及文件
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/service/UnifiedOCRService.java`
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/extract/controller/ContractInfoExtractController.java`
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/extract/controller/EnhancedExtractController.java`
+
+#### 技术实现
+```java
+// 图像生成逻辑
+private String generateAndSaveImages(File pdfFile, String taskId) {
+    File imagesDir = new File("uploads/extract-tasks/" + taskId + "/images");
+    try (PDDocument document = PDDocument.load(pdfFile)) {
+        PDFRenderer renderer = new PDFRenderer(document);
+        for (int i = 0; i < document.getNumberOfPages(); i++) {
+            BufferedImage image = renderer.renderImageWithDPI(i, 200, ImageType.RGB);
+            File imageFile = new File(imagesDir, "page-" + (i + 1) + ".png");
+            ImageIO.write(image, "PNG", imageFile);
+        }
+    }
+}
+```
+
+#### 文件结构
+```
+uploads/extract-tasks/{taskId}/
+├── images/
+│   ├── page-1.png (200 DPI)
+│   ├── page-2.png  
+│   └── page-N.png
+├── ocr_result.txt
+├── ocr_metadata.json
+└── extract_result.json
+```
+
+#### 用户体验提升
+- Canvas模式可以正常显示PDF页面图像
+- 高质量图像渲染（200 DPI），确保清晰度
+- 多页PDF正确显示页数和页面切换功能
+- 图像缓存机制，提高加载速度
+- 安全的文件访问，防止路径遍历攻击
+
+### 2025-09-30 改进：Canvas图片模式全面优化
+
+#### 问题描述
+用户要求参考合同比对功能改进Canvas图片模式，包括：
+1. 修改图片显示区域和右侧的比例，防止右侧被挤压
+2. 实现图片连续滚动显示，页面间有间隔
+3. 获取并标记提取内容的bbox信息
+4. 实现点击右侧定位到左侧图片对应位置的功能
+
+#### 解决方案
+
+**1. 布局比例优化**
+- 修改双栏布局：左侧占2/3，右侧占1/3
+- 设置右侧最小宽度300px，最大宽度500px
+- 整体容器高度设为70vh，避免内容被挤压
+
+**2. 后端API扩展**
+- 新增 `GET /api/extract/charboxes/{taskId}` 获取CharBox数据
+- 新增 `GET /api/extract/bbox-mappings/{taskId}` 获取位置映射数据
+- CharBox数据已在OCR识别时保存到 `char_boxes.json`
+
+**3. Canvas标记功能**
+- 新增 `drawExtractionBboxes()` 方法绘制提取内容边框
+- 新增 `findBboxesForCharInterval()` 方法根据字符区间查找bbox
+- 使用绿色边框标记提取内容，区别于其他高亮颜色
+- 支持多页面的bbox标记和高亮
+
+**4. 点击定位功能**
+- 新增 `navigateToExtraction()` 方法实现定位
+- 新增 `highlightExtractionBboxes()` 方法高亮特定提取内容
+- 点击右侧提取结果时，自动切换到对应页面并高亮bbox
+- 支持跨页面的内容定位
+
+#### 涉及文件
+- `frontend/src/views/extract/EnhancedContractInfoExtract.vue` - 主页面布局和交互
+- `frontend/src/views/extract/components/CanvasViewer.vue` - Canvas显示和标记
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/extract/controller/ContractInfoExtractController.java` - 后端API
+- `frontend/src/api/extract.ts` - 前端API定义
+
+#### 技术实现
+```javascript
+// Canvas标记提取内容
+const drawExtractionBboxes = () => {
+  props.extractions.forEach((extraction) => {
+    if (extraction.charInterval) {
+      const bboxes = findBboxesForCharInterval(extraction.charInterval)
+      bboxes.forEach(bboxInfo => {
+        if (bboxInfo.page === currentPage.value) {
+          drawBbox(bboxInfo, 'rgba(67, 194, 58, 0.2)', 'rgba(67, 194, 58, 0.8)', 2)
+        }
+      })
+    }
+  })
+}
+
+// 点击定位功能
+const navigateToExtraction = (extraction: any) => {
+  const bboxes = findBboxesForCharInterval(extraction.charInterval)
+  if (bboxes.length > 0) {
+    const firstBbox = bboxes[0]
+    if (firstBbox.page !== currentPage.value) {
+      currentPage.value = firstBbox.page
+      setTimeout(() => highlightExtractionBboxes([extraction]), 100)
+    } else {
+      highlightExtractionBboxes([extraction])
+    }
+  }
+}
+```
+
+#### 用户体验提升
+- **布局优化**：图片区域更宽敞，右侧不再被挤压出页面
+- **可视化标记**：提取内容在图片中用绿色边框清晰标记
+- **智能定位**：点击提取结果自动定位到对应页面和位置
+- **多页支持**：完整支持多页PDF的浏览和标记
+- **交互友好**：高亮效果明显，便于用户识别和操作
+
+### 2025-09-30 修复：Canvas模式细节优化
+
+#### 问题描述
+用户报告了三个具体问题：
+1. CharBox数据加载完成显示为0，无法显示提取内容的位置标记
+2. 图片渲染需要按照div宽高控制，默认100%宽度，高度自适应
+3. 统计信息（提取项目数、文档页数、识别字符数）不需要，要求删除
+
+#### 根本原因分析
+1. **CharBox数据缺失**：DotsOCR增强识别方法中，CharBox被初始化为空ArrayList，但没有实际填充数据
+2. **图片尺寸问题**：Canvas元素没有设置响应式尺寸控制
+3. **界面冗余**：统计信息对用户价值不大，影响界面简洁性
+
+#### 解决方案
+
+**1. CharBox数据生成**
+- 新增 `convertJsonOcrResultToPlainTextAndCharBoxes()` 方法
+- 解析DotsOCR的JSON格式输出，为每个字符创建CharBox
+- 正确处理页码信息和bbox坐标
+- 同时生成纯文本和CharBox数据
+
+**2. 图片尺寸控制**
+- 为Canvas元素添加 `max-width: 100%` 和 `height: auto`
+- 确保图片在容器内自适应显示
+- 保持图片比例不变形
+
+**3. 界面简化**
+- 删除统计信息显示部分
+- 保持界面简洁，聚焦核心功能
+
+#### 技术实现
+```java
+// DotsOCR CharBox数据生成
+private String convertJsonOcrResultToPlainTextAndCharBoxes(String jsonOcrResult, List<CharBox> charBoxes) {
+    for (String line : lines) {
+        if (line.startsWith("[{") && line.endsWith("}]")) {
+            List<Map<String, Object>> bboxList = mapper.readValue(line, List.class);
+            
+            for (Map<String, Object> bboxMap : bboxList) {
+                String text = (String) bboxMap.get("text");
+                List<Number> bboxArray = (List<Number>) bboxMap.get("bbox");
+                
+                // 为每个字符创建CharBox
+                for (int i = 0; i < text.length(); i++) {
+                    CharBox charBox = new CharBox(
+                        currentPage,
+                        String.valueOf(text.charAt(i)),
+                        bbox.clone(),
+                        category
+                    );
+                    charBoxes.add(charBox);
+                }
+            }
+        }
+    }
+}
+```
+
+```css
+/* Canvas响应式尺寸控制 */
+canvas {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+```
+
+#### 涉及文件
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/ocr/service/UnifiedOCRService.java`
+- `frontend/src/views/extract/components/CanvasViewer.vue`
+- `frontend/src/views/extract/EnhancedContractInfoExtract.vue`
+
+#### 用户体验提升
+- **位置标记恢复**：CharBox数据正常生成，提取内容可以在图片中正确标记
+- **图片显示优化**：图片按容器宽度自适应，高度按比例缩放，显示效果更好
+- **界面简洁**：删除冗余统计信息，界面更加简洁专注
+- **功能完整**：Canvas模式的核心功能（图片显示、内容标记、点击定位）全部正常工作
+
+### 2025-09-30 修复：历史任务"任务不存在"错误
+
+#### 问题描述
+用户打开历史提取结果时提示："任务不存在: extract_20250930_164617_700_cf6891f2"
+
+#### 根本原因分析
+1. **缺失方法实现**：`ContractExtractServiceImpl`类中缺少`getTaskStatus()`方法的实现
+2. **内存状态丢失**：服务重启后，内存中的`taskStatus`映射被清空，历史任务状态丢失
+3. **文件状态缺失**：任务完成后没有保存状态到文件系统，无法从持久化存储恢复
+
+#### 解决方案
+
+**1. 实现getTaskStatus方法**
+- 添加`getTaskStatus()`方法的完整实现
+- 优先从内存获取，内存中没有时从文件系统加载
+- 确保接口契约得到正确履行
+
+**2. 文件系统状态恢复**
+- 新增`loadTaskStatusFromFile()`方法
+- 支持从`task_status.json`文件加载保存的状态
+- 如果状态文件不存在但任务目录存在，创建默认完成状态
+
+**3. 智能状态推断**
+- 从`extract_result.json`文件推断任务类型和状态
+- 为历史任务创建合理的默认状态信息
+- 确保历史任务能正常访问和显示
+
+#### 技术实现
+```java
+@Override
+public Map<String, Object> getTaskStatus(String taskId) {
+    Map<String, Object> status = taskStatus.get(taskId);
+    if (status == null) {
+        // 尝试从文件系统加载任务状态
+        return loadTaskStatusFromFile(taskId);
+    }
+    return status;
+}
+
+private Map<String, Object> loadTaskStatusFromFile(String taskId) {
+    File taskDir = new File("uploads/extract-tasks/" + taskId);
+    File statusFile = new File(taskDir, "task_status.json");
+    
+    if (!statusFile.exists() && taskDir.exists()) {
+        // 为历史任务创建默认完成状态
+        Map<String, Object> status = new HashMap<>();
+        status.put("taskId", taskId);
+        status.put("status", "completed");
+        status.put("message", "提取完成");
+        status.put("progress", 100);
+        
+        // 从结果文件获取更多信息
+        File resultFile = new File(taskDir, "extract_result.json");
+        if (resultFile.exists()) {
+            Map<String, Object> resultData = objectMapper.readValue(resultJson, Map.class);
+            status.put("schemaType", resultData.getOrDefault("schemaType", "unknown"));
+        }
+        
+        return status;
+    }
+    
+    // 从文件加载保存的状态
+    return objectMapper.readValue(statusFile, Map.class);
+}
+```
+
+#### 涉及文件
+- `contract-tools-sdk/src/main/java/com/zhaoxinms/contract/tools/extract/service/impl/ContractExtractServiceImpl.java`
+
+#### 用户体验提升
+- **历史任务恢复**：服务重启后历史提取结果仍可正常访问
+- **状态持久化**：任务状态信息得到正确保存和恢复
+- **错误消除**：不再出现"任务不存在"的错误提示
+- **数据完整性**：历史任务的所有信息都能正确显示和使用
+
+---
+
+## Canvas图像模式bbox标记精度优化
+
+### 问题描述
+用户反馈Canvas图像模式中bbox标记位置不准确，且标记效果不够美观，需要参考合同比对的实现逻辑进行优化。
+
+### 解决方案
+
+#### 1. 参考合同比对的渲染算法
+```javascript
+// 绘制提取内容的bbox（参考合同比对实现）
+const drawExtractionBbox = (ctx: CanvasRenderingContext2D, bboxInfo: any, page: any, isHighlighted: boolean = false) => {
+  if (!bboxInfo.bbox || bboxInfo.bbox.length < 4) return
+  
+  const [x1, y1, x2, y2] = bboxInfo.bbox
+  
+  // 计算缩放比例（参考合同比对的精确算法）
+  const scale = page.width / page.actualWidth
+  
+  // 计算在Canvas上的精确位置
+  const x = Math.round(x1 * scale)
+  const y = Math.round(y1 * scale)
+  const width = Math.round((x2 - x1) * scale)
+  const height = Math.round((y2 - y1) * scale)
+  
+  if (isHighlighted) {
+    // 高亮状态：更强的视觉效果
+    ctx.fillStyle = 'rgba(103, 194, 58, 0.4)' // INSERT.HIGHLIGHT
+    ctx.fillRect(x, y, width, height)
+    
+    ctx.strokeStyle = '#67c23a' // INSERT.STROKE
+    ctx.lineWidth = 3
+    ctx.strokeRect(x, y, width, height)
+  } else {
+    // 普通状态：半透明效果
+    ctx.fillStyle = 'rgba(103, 194, 58, 0.1)' // INSERT.FILL
+    ctx.fillRect(x, y, width, height)
+    
+    ctx.strokeStyle = '#67c23a' // INSERT.STROKE
+    ctx.lineWidth = 2
+    ctx.strokeRect(x, y, width, height)
+  }
+}
+```
+
+#### 2. 优化坐标转换精度
+- **统一缩放算法**：使用 `scale = page.width / page.actualWidth` 单一缩放比例
+- **精确像素定位**：使用 `Math.round()` 确保像素对齐
+- **边界检查**：确保bbox在Canvas范围内才进行绘制
+
+#### 3. 半透明效果实现
+参考合同比对的颜色配置：
+- **普通状态**：`rgba(103, 194, 58, 0.1)` 填充 + `#67c23a` 边框
+- **高亮状态**：`rgba(103, 194, 58, 0.4)` 填充 + `#67c23a` 加粗边框
+- **层次分明**：普通2px边框，高亮3px边框
+
+#### 4. 点击检测优化
+```javascript
+// 查找指定位置的bbox（参考合同比对的精确算法）
+const findBboxAtPosition = (x: number, y: number, pageIndex: number): any => {
+  const page = pageLayout.value[pageIndex]
+  if (!page) return null
+  
+  // 使用统一的缩放比例
+  const scale = page.width / page.actualWidth
+  
+  // 转换为原始图像坐标
+  const imageX = x / scale
+  const imageY = y / scale
+  
+  // 精确的点击检测
+  if (imageX >= x1 && imageX <= x2 && imageY >= y1 && imageY <= y2) {
+    return bboxInfo
+  }
+}
+```
+
+#### 涉及文件
+- `frontend/src/views/extract/components/CanvasViewer.vue`
+
+#### 优化效果
+- ✅ **位置精确**：bbox标记与文本内容精确对齐
+- ✅ **视觉美观**：半透明绿色效果，与合同比对保持一致
+- ✅ **交互精准**：点击检测精度大幅提升
+- ✅ **层次清晰**：普通标记和高亮标记有明显区别
+- ✅ **性能优化**：使用高效的坐标转换算法

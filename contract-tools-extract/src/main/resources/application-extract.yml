@@ -1,0 +1,31 @@
+# 文本提取模块配置示例
+zhaoxin:
+  extract:
+    enabled: true
+    aliyun:
+      # 阿里云API Key (必须配置)
+      api-key: "${ALIYUN_API_KEY:}"
+      # 使用的模型，可选: qwen-turbo, qwen-plus, qwen-max, qwen-max-1201, qwen-max-longcontext
+      model: qwen-plus
+      # 连接超时时间（秒）
+      connect-timeout: 30
+      # 读取超时时间（秒）
+      read-timeout: 60
+    default-options:
+      # 默认输出格式: json, yaml
+      format: json
+      # 温度参数 (0.0-1.0)，越低结果越确定
+      temperature: 0.1
+      # 最大token数量
+      max-tokens: 2000
+      # 置信度阈值 (0.0-1.0)
+      confidence-threshold: 0.5
+      # 是否快速失败
+      fail-fast: false
+
+# 日志配置
+logging:
+  level:
+    com.zhaoxinms.contract.tools.extract: INFO
+    # 开启调试模式查看详细日志
+    # com.zhaoxinms.contract.tools.extract: DEBUG

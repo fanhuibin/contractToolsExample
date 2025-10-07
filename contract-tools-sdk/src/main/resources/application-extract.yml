@@ -1,0 +1,76 @@
+# 信息提取和OCR配置
+extract:
+  # 默认配置
+  defaults:
+    schema-type: contract
+    extraction-passes: 3
+    enable-chunking: false
+    max-char-buffer: 2000
+    enable-visualization: true
+    llm-provider: auto
+
+# 文本提取配置
+zhaoxin:
+  extract:
+    enabled: true    
+    aliyun:
+      api-key: sk-2c162cad693a4aa5b1f96c2bfcf2a56a
+      model: qwen-plus 
+      endpoint: 
+      connect-timeout: 30
+      read-timeout: 60
+    default-options:
+      format: json
+      temperature: 0.1
+      max-tokens: 4000 
+      confidence-threshold: 0.5
+      fail-fast: false
+
+# 统一OCR服务配置（基于合同比对中成熟的实现）
+zxcm:
+  # OCR提供者选择: dotsocr, qwen/aliyun/third-party, rapidocr
+  ocr:
+    provider: dotsocr
+  
+  # 合同比对配置（与OCR共用）
+  compare:
+    # DotSOCR配置（主要OCR服务）
+    zxocr:
+      ocr-base-url: ${OCR_DOTSOCR_ENDPOINT:http://192.168.0.100:8000}
+      ocr-model: ${OCR_DOTSOCR_MODEL:model}
+      render-dpi: ${OCR_DOTSOCR_RENDER_DPI:160}
+      parallel-threads: 4
+      upload-path: ./uploads
+      result-path: ./uploads/ocr-compare/results
+      min-pixels: 3136
+      max-pixels: 11289600
+      save-ocr-images: ${OCR_SAVE_IMAGES:true}
+      
+    # 阿里云通义千问OCR配置（第三方OCR）
+    third-party-ocr:
+      enabled: ${OCR_QWEN_ENABLED:false}
+      base-url: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      api-key: ${OCR_QWEN_API_KEY:${zhaoxin.extract.aliyun.api-key}}
+      default-model: qwen3-vl-235b-a22b-instruct
+      timeout: PT2M
+      max-concurrency: 5
+      verbose-logging: false
+      min-pixels: 524288
+      max-pixels: 2097152
+      image-processing:
+        render-dpi: ${OCR_QWEN_RENDER_DPI:160}
+        save-ocr-images: true
+        
+    # RapidOCR配置（备用OCR服务）
+    rapidocr:
+      enabled: ${OCR_RAPID_ENABLED:true}
+      base-url: ${OCR_RAPID_ENDPOINT:http://192.168.0.100:9005}
+      timeout: PT2M
+      verbose-logging: false
+      max-concurrency: 10
+      default-use-detection: true
+      default-use-classification: true
+      default-use-recognition: true
+    
+# LangExtract配置（已迁移到上面的 zhaoxin.extract 配置中）
+# 注意：extract-config.yml 已废弃，使用 Spring Boot 配置

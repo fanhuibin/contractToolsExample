@@ -12,59 +12,46 @@ spring:
   config:
     import:
       - classpath:application-ai.yml
+      - classpath:application-extract.yml
   servlet:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
       enabled: true
-  # Flyway（启用DB迁移，加载依赖Jar中的 db/migration 脚本）
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-    baseline-on-migrate: true
-    validate-on-migrate: true
-  
-  # 数据库配置
+
+  # 数据库配置（固定数据源）
   datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/contract_tools?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
+    username: root
+    password: root
     type: com.alibaba.druid.pool.DruidDataSource
-    dynamic:
-      primary: master
-      datasource:
-        master:
-          driverClassName: com.mysql.cj.jdbc.Driver
-          url: jdbc:mysql://localhost:3306/contract_tools?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
-          username: root
-          password: root
-      druid:
-        initialSize: 5
-        minIdle: 10
-        maxActive: 200
-        maxWait: 60000
-        timeBetweenEvictionRunsMillis: 60000
-        minEvictableIdleTimeMillis: 300000
-        maxEvictableIdleTimeMillis: 900000
-        validationQuery: SELECT 1 FROM DUAL
-        testWhileIdle: true
-        testOnBorrow: true
-        testOnReturn: false
-        filters: stat
-        webStatFilter:
-          enabled: true
-        statViewServlet:
-          enabled: true
-          url-pattern: /druid/*
-          login-username: admin
-          login-password: admin
+    druid:
+      initial-size: 5
+      min-idle: 10
+      max-active: 200
+      max-wait: 60000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      max-evictable-idle-time-millis: 900000
+      validation-query: SELECT 1 FROM DUAL
+      test-while-idle: true
+      test-on-borrow: true
+      test-on-return: false
+      filters: stat
+      web-stat-filter:
+        enabled: true
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin
+
+# 文件上传配置
+file:
+  upload:
+    root-path: ./uploads
   
-  # JPA配置
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect
-        format_sql: true
 
 # 日志配置
 logging:

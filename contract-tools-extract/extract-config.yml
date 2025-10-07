@@ -1,0 +1,12 @@
+---
+provider: "ollama"
+aliyun:
+  apiKey: "sk-2c162cad693a4aa5b1f96c2bfcf2a56a"
+  model: "qwen-plus"
+  temperature: 0.1
+  maxTokens: 4000
+ollama:
+  baseUrl: "http://192.168.0.100:11434/"
+  model: "deepseek-r1:8b"
+  temperature: 0.1
+  maxTokens: 4000
