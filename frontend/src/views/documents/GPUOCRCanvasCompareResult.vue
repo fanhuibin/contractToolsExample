@@ -746,7 +746,7 @@ const renderAllPages = async () => {
   actualCanvasWidth.value.old = containerWidth
   actualCanvasWidth.value.new = containerWidth
   
-  // 设置容器总高度（需要包含最后一页的pageSpacing，因为分隔带占用了空间）
+  // 设置容器总高度和宽度（需要包含最后一页的pageSpacing，因为分隔带占用了空间）
   const oldLastPage = oldLayout[oldLayout.length - 1]
   const newLastPage = newLayout[newLayout.length - 1]
   const oldTotalHeight = oldLastPage ? (oldLastPage.y + oldLastPage.height + CANVAS_CONFIG.PAGE_SPACING) : 0
@@ -754,10 +754,12 @@ const renderAllPages = async () => {
   
   if (oldCanvasContainer.value) {
     oldCanvasContainer.value.style.height = `${oldTotalHeight}px`
+    oldCanvasContainer.value.style.width = `${containerWidth}px` // 设置宽度以支持横向滚动
     oldCanvasContainer.value.style.position = 'relative'
   }
   if (newCanvasContainer.value) {
     newCanvasContainer.value.style.height = `${newTotalHeight}px`
+    newCanvasContainer.value.style.width = `${containerWidth}px` // 设置宽度以支持横向滚动
     newCanvasContainer.value.style.position = 'relative'
   }
   
