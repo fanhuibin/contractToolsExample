@@ -65,10 +65,14 @@ export async function renderPageToCanvas(
   }
   
   // 加载并绘制图片
-  // 优先使用后端提供的baseUrl，fallback为手动拼接
-  const imageUrl = baseUrl 
-    ? `${baseUrl}/page-${pageIndex + 1}.png`
-    : `/api/compare-pro/files/tasks/${taskId}/images/${mode}/page-${pageIndex + 1}.png`
+  // 优先使用后端返回的 imageUrl（支持动态扩展名 .jpg/.png）
+  // fallback 1: 使用 baseUrl 拼接
+  // fallback 2: 手动拼接（默认 .png）
+  const imageUrl = pageInfo.imageUrl
+    ? pageInfo.imageUrl
+    : baseUrl 
+      ? `${baseUrl}/page-${pageIndex + 1}.png`
+      : `/api/compare-pro/files/tasks/${taskId}/images/${mode}/page-${pageIndex + 1}.png`
   
   
   try {
@@ -80,6 +84,10 @@ export async function renderPageToCanvas(
     }
     
     if (image) {
+      // 使用高质量图片缩放算法，减少缩放后的模糊
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      
       ctx.drawImage(image, 0, 0, canvasWidth, scaledHeight)
       
       // 直接使用预处理过的页面差异数据进行绘制

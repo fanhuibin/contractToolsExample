@@ -12,9 +12,10 @@ export interface PageLayout {
 
 // 图片信息
 export interface PageImageInfo {
+  pageNumber: number  // 页码（1-based）
   width: number
   height: number
-  imageUrl?: string
+  imageUrl?: string  // 图片URL（支持 .jpg/.png 等格式）
 }
 
 // 文档图片信息

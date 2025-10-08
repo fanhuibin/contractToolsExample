@@ -7,6 +7,9 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
@@ -211,9 +214,17 @@ public class MinerUOCRService {
             int cachedCount = 0;
             int renderedCount = 0;
             
+            // 获取图片格式配置（PNG 或 JPEG）
+            String imageFormat = zxOcrConfig.getImageFormat() != null ? 
+                zxOcrConfig.getImageFormat().toUpperCase() : "PNG";
+            float jpegQuality = zxOcrConfig.getJpegQuality();
+            String imageExt = imageFormat.equalsIgnoreCase("JPEG") ? ".jpg" : ".png";
+            
+            log.info("图片格式: {}, JPEG质量: {}", imageFormat, jpegQuality);
+            
             // PDFRenderer 不是线程安全的，必须串行处理
             for (int i = 0; i < pageCount; i++) {
-                File imageFile = new File(imagesDir, "page-" + (i + 1) + ".png");
+                File imageFile = new File(imagesDir, "page-" + (i + 1) + imageExt);
                 BufferedImage image;
                 
                 // 缓存检查：如果图片已存在且可读取，直接复用
@@ -221,16 +232,18 @@ public class MinerUOCRService {
                     try {
                         image = ImageIO.read(imageFile);
                         if (image != null) {
-                            log.debug("复用已有图片: {}, 尺寸: {}x{}", 
-                                imageFile.getName(), image.getWidth(), image.getHeight());
+                            log.debug("复用已有图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                                imageFile.getName(), image.getWidth(), image.getHeight(),
+                                imageFile.length() / 1024);
                             cachedCount++;
                         } else {
                             // 文件损坏，重新生成
                             log.warn("图片文件损坏，重新生成: {}", imageFile.getName());
                             image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
-                            ImageIO.write(image, "PNG", imageFile);
-                            log.debug("重新生成页面图片: {}, 尺寸: {}x{}", 
-                                imageFile.getName(), image.getWidth(), image.getHeight());
+                            saveImage(image, imageFile, imageFormat, jpegQuality);
+                            log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                                imageFile.getName(), image.getWidth(), image.getHeight(),
+                                imageFile.length() / 1024);
                             renderedCount++;
                         }
                     } catch (IOException e) {
@@ -238,17 +251,19 @@ public class MinerUOCRService {
                         log.warn("读取已有图片失败，重新生成: {}, 原因: {}", 
                             imageFile.getName(), e.getMessage());
                         image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
-                        ImageIO.write(image, "PNG", imageFile);
-                        log.debug("重新生成页面图片: {}, 尺寸: {}x{}", 
-                            imageFile.getName(), image.getWidth(), image.getHeight());
+                        saveImage(image, imageFile, imageFormat, jpegQuality);
+                        log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                            imageFile.getName(), image.getWidth(), image.getHeight(),
+                            imageFile.length() / 1024);
                         renderedCount++;
                     }
                 } else {
                     // 生成新图片
                     image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
-                    ImageIO.write(image, "PNG", imageFile);
-                    log.debug("生成页面图片: {}, 尺寸: {}x{}", 
-                        imageFile.getName(), image.getWidth(), image.getHeight());
+                    saveImage(image, imageFile, imageFormat, jpegQuality);
+                    log.debug("生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                        imageFile.getName(), image.getWidth(), image.getHeight(),
+                        imageFile.length() / 1024);
                     renderedCount++;
                 }
                 
@@ -535,7 +550,9 @@ public class MinerUOCRService {
                             imageBbox[2],
                             imageBbox[1] + captionHeight
                         };
-                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                        // 转换 LaTeX 格式为可读文本
+                        String readableCaptionText = convertLatexToReadableText(captionText);
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", readableCaptionText + "\n"));
                     }
                 }
             }
@@ -547,6 +564,8 @@ public class MinerUOCRService {
             log.debug("表格原始HTML长度: {}", tableBody.length());
             // 去除HTML标签，转换为纯文本
             String cleanText = removeHtmlTags(tableBody);
+            // 转换 LaTeX 格式为可读文本
+            cleanText = convertLatexToReadableText(cleanText);
             log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
                 cleanText.length(), 
                 cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
@@ -572,7 +591,9 @@ public class MinerUOCRService {
                             imageBbox[2],
                             imageBbox[3]
                         };
-                        items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", footnoteText + "\n"));
+                        // 转换 LaTeX 格式为可读文本
+                        String readableFootnoteText = convertLatexToReadableText(footnoteText);
+                        items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", readableFootnoteText + "\n"));
                     }
                 }
             }
@@ -615,7 +636,9 @@ public class MinerUOCRService {
                             imageBbox[2],
                             imageBbox[3]
                         };
-                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                        // 转换 LaTeX 格式为可读文本
+                        String readableCaptionText = convertLatexToReadableText(captionText);
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", readableCaptionText + "\n"));
                     }
                 }
             }
@@ -660,7 +683,9 @@ public class MinerUOCRService {
                             imageBbox[2],
                             imageBbox[1] + captionHeight
                         };
-                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", captionText + "\n"));
+                        // 转换 LaTeX 格式为可读文本
+                        String readableCaptionText = convertLatexToReadableText(captionText);
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", readableCaptionText + "\n"));
                     }
                 }
             }
@@ -670,7 +695,9 @@ public class MinerUOCRService {
         if (item.has("code_body")) {
             String codeBody = item.get("code_body").asText();
             if (!codeBody.trim().isEmpty()) {
-                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", codeBody + "\n"));
+                // 转换 LaTeX 格式为可读文本
+                String readableCodeBody = convertLatexToReadableText(codeBody);
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", readableCodeBody + "\n"));
             }
         }
         
@@ -716,7 +743,10 @@ public class MinerUOCRService {
                 imageBbox[1] + (i + 1) * itemHeight
             };
             
-            items.add(new TextExtractionUtil.LayoutItem(itemBbox, "Text", itemText + "\n"));
+            // 转换 LaTeX 格式为可读文本
+            String readableItemText = convertLatexToReadableText(itemText);
+            
+            items.add(new TextExtractionUtil.LayoutItem(itemBbox, "Text", readableItemText + "\n"));
         }
         
         return items;
@@ -741,7 +771,10 @@ public class MinerUOCRService {
         double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
         double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
         
-        items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", text));
+        // 转换 LaTeX/Markdown 格式为可读文本
+        String cleanText = convertLatexToReadableText(text);
+        
+        items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", cleanText));
         
         return items;
     }
@@ -769,13 +802,16 @@ public class MinerUOCRService {
         if (item.has("latex_text")) {
             String latexText = item.get("latex_text").asText();
             if (!latexText.trim().isEmpty()) {
-                // 保持LaTeX格式，便于后续处理
-                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", latexText + "\n"));
+                // 转换 LaTeX 格式为可读文本
+                String readableText = convertLatexToReadableText(latexText);
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", readableText + "\n"));
             }
         } else if (item.has("text")) {
             String text = item.get("text").asText();
             if (!text.trim().isEmpty()) {
-                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", text + "\n"));
+                // 转换 LaTeX 格式为可读文本
+                String readableText = convertLatexToReadableText(text);
+                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Formula", readableText + "\n"));
             }
         }
         
@@ -793,7 +829,9 @@ public class MinerUOCRService {
                             imageBbox[2],
                             imageBbox[1] + captionHeight
                         };
-                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "text", captionText));
+                        // 转换公式标号中的 LaTeX 格式
+                        String readableCaptionText = convertLatexToReadableText(captionText);
+                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "text", readableCaptionText));
                     }
                 }
             }
@@ -1197,6 +1235,242 @@ public class MinerUOCRService {
         } catch (Exception e) {
             log.warn("保存MinerU处理后结果失败 ({}): {}", suffix, e.getMessage());
         }
+    }
+    
+    /**
+     * 将 LaTeX/Markdown 格式转换为人类可读的纯文本
+     * 参考 dots.ocr 的公式处理方式
+     * 
+     * 关键设计：只处理 $...$ 或 $$...$$ 包裹的公式内容
+     * 
+     * @param text 包含 LaTeX/Markdown 格式的文本
+     * @return 转换后的纯文本
+     */
+    private String convertLatexToReadableText(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        
+        while (i < text.length()) {
+            // 检查是否是行间公式 $$...$$
+            if (i < text.length() - 1 && text.charAt(i) == '$' && text.charAt(i + 1) == '$') {
+                int endPos = text.indexOf("$$", i + 2);
+                if (endPos != -1) {
+                    // 提取公式内容（不包括 $$ 符号）
+                    String formula = text.substring(i + 2, endPos);
+                    // 转换公式内容
+                    String converted = convertLatexFormula(formula);
+                    result.append(converted);
+                    i = endPos + 2;  // 跳过结束的 $$
+                    continue;
+                }
+            }
+            
+            // 检查是否是行内公式 $...$
+            if (text.charAt(i) == '$') {
+                int endPos = text.indexOf('$', i + 1);
+                if (endPos != -1) {
+                    // 提取公式内容（不包括 $ 符号）
+                    String formula = text.substring(i + 1, endPos);
+                    // 转换公式内容
+                    String converted = convertLatexFormula(formula);
+                    result.append(converted);
+                    i = endPos + 1;  // 跳过结束的 $
+                    continue;
+                }
+            }
+            
+            // 不是公式，直接添加字符
+            result.append(text.charAt(i));
+            i++;
+        }
+        
+        String finalResult = result.toString();
+        
+        // 处理公式外的一些通用格式（如连续反斜杠、千分号等）
+        finalResult = finalResult.replace("\\text‰", "‰");
+        finalResult = finalResult.replaceAll("\\\\{4,}", "");  // 清理连续的多个反斜杠（4个或以上）
+        finalResult = finalResult.replaceAll("\\s+", " ");
+        finalResult = finalResult.trim();
+        
+        return finalResult;
+    }
+    
+    /**
+     * 保存图片（支持 PNG 和 JPEG 格式）
+     * 
+     * @param image 图片对象
+     * @param imageFile 输出文件
+     * @param format 图片格式（PNG 或 JPEG）
+     * @param jpegQuality JPEG 质量（0.0-1.0）
+     */
+    private void saveImage(BufferedImage image, File imageFile, String format, float jpegQuality) throws IOException {
+        if ("JPEG".equalsIgnoreCase(format) || "JPG".equalsIgnoreCase(format)) {
+            // 保存为 JPEG 格式，使用指定质量
+            ImageWriter writer = ImageIO.getImageWritersByFormatName("JPEG").next();
+            ImageWriteParam writeParam = writer.getDefaultWriteParam();
+            writeParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            writeParam.setCompressionQuality(jpegQuality);
+            
+            try (ImageOutputStream outputStream = ImageIO.createImageOutputStream(imageFile)) {
+                writer.setOutput(outputStream);
+                writer.write(null, new javax.imageio.IIOImage(image, null, null), writeParam);
+            } finally {
+                writer.dispose();
+            }
+        } else {
+            // 保存为 PNG 格式（无损）
+            ImageIO.write(image, "PNG", imageFile);
+        }
+    }
+    
+    /**
+     * 转换 LaTeX 公式内容（不包括 $ 符号）
+     * 
+     * @param formula 公式内容
+     * @return 转换后的可读文本
+     */
+    private String convertLatexFormula(String formula) {
+        String result = formula;
+        
+        // 0. 先处理双反斜杠的特殊情况（在公式内常见）
+        // \\% -> \% -> %
+        // \\sim -> \sim -> ~
+        result = result.replace("\\\\%", "PLACEHOLDER_PERCENT");
+        result = result.replace("\\\\sim", "PLACEHOLDER_SIM");
+        result = result.replace("\\\\cdot", "PLACEHOLDER_CDOT");
+        result = result.replace("\\\\,", "PLACEHOLDER_THINSPACE");
+        result = result.replace("\\\\:", "PLACEHOLDER_MEDSPACE");
+        result = result.replace("\\\\;", "PLACEHOLDER_THICKSPACE");
+        result = result.replace("\\\\quad", "PLACEHOLDER_QUAD");
+        result = result.replace("\\\\qquad", "PLACEHOLDER_QQUAD");
+        result = result.replace("\\\\ ", "PLACEHOLDER_SPACE");
+        result = result.replace("\\\\\\\\", "PLACEHOLDER_DOUBLEBACKSLASH");
+        
+        // 1. 处理分数 \frac{a}{b} 转为 a/b
+        result = result.replaceAll("\\\\frac\\s*\\{([^}]+)\\}\\s*\\{([^}]+)\\}", "$1/$2");
+        // 处理简写的分数 \frac12 -> 1/2, \frac34 -> 3/4
+        result = result.replaceAll("\\\\frac(\\d)(\\d)", "$1/$2");
+        
+        // 2. 处理常见的 LaTeX 数学符号
+        // 希腊字母
+        result = result.replaceAll("\\\\Phi\\b", "Φ");
+        result = result.replaceAll("\\\\phi\\b", "φ");
+        result = result.replaceAll("\\\\alpha\\b", "α");
+        result = result.replaceAll("\\\\beta\\b", "β");
+        result = result.replaceAll("\\\\gamma\\b", "γ");
+        result = result.replaceAll("\\\\Gamma\\b", "Γ");
+        result = result.replaceAll("\\\\delta\\b", "δ");
+        result = result.replaceAll("\\\\Delta\\b", "Δ");
+        result = result.replaceAll("\\\\epsilon\\b", "ε");
+        result = result.replaceAll("\\\\theta\\b", "θ");
+        result = result.replaceAll("\\\\Theta\\b", "Θ");
+        result = result.replaceAll("\\\\lambda\\b", "λ");
+        result = result.replaceAll("\\\\Lambda\\b", "Λ");
+        result = result.replaceAll("\\\\mu\\b", "μ");
+        result = result.replaceAll("\\\\pi\\b", "π");
+        result = result.replaceAll("\\\\Pi\\b", "Π");
+        result = result.replaceAll("\\\\sigma\\b", "σ");
+        result = result.replaceAll("\\\\Sigma\\b", "Σ");
+        result = result.replaceAll("\\\\omega\\b", "ω");
+        result = result.replaceAll("\\\\Omega\\b", "Ω");
+        
+        // 3. 处理比较符号
+        result = result.replaceAll("\\\\leq\\b", "≤");
+        result = result.replaceAll("\\\\geq\\b", "≥");
+        result = result.replaceAll("\\\\neq\\b", "≠");
+        result = result.replaceAll("\\\\approx\\b", "≈");
+        result = result.replaceAll("\\\\equiv\\b", "≡");
+        result = result.replaceAll("\\\\times\\b", "×");
+        result = result.replaceAll("\\\\div\\b", "÷");
+        result = result.replaceAll("\\\\pm\\b", "±");
+        result = result.replaceAll("\\\\mp\\b", "∓");
+        
+        // 4. 处理特殊数学符号
+        result = result.replaceAll("\\\\sim\\b", "~");
+        result = result.replaceAll("\\\\cdot\\b", "·");
+        result = result.replaceAll("\\\\circ\\b", "°");
+        result = result.replaceAll("\\\\infty\\b", "∞");
+        result = result.replaceAll("\\\\partial\\b", "∂");
+        result = result.replaceAll("\\\\nabla\\b", "∇");
+        
+        // 5. 处理求和、积分等符号
+        result = result.replaceAll("\\\\sum\\b", "∑");
+        result = result.replaceAll("\\\\int\\b", "∫");
+        result = result.replaceAll("\\\\prod\\b", "∏");
+        result = result.replaceAll("\\\\lim\\b", "lim");
+        
+        // 6. 处理平方根
+        result = result.replaceAll("\\\\sqrt\\{([^}]+)\\}", "√($1)");
+        result = result.replaceAll("\\\\sqrt\\[([^]]+)\\]\\{([^}]+)\\}", "$1√($2)");
+        
+        // 7. 处理箭头
+        result = result.replaceAll("\\\\rightarrow\\b", "→");
+        result = result.replaceAll("\\\\leftarrow\\b", "←");
+        result = result.replaceAll("\\\\Rightarrow\\b", "⇒");
+        result = result.replaceAll("\\\\Leftarrow\\b", "⇐");
+        result = result.replaceAll("\\\\leftrightarrow\\b", "↔");
+        result = result.replaceAll("\\\\Leftrightarrow\\b", "⇔");
+        
+        // 8. 处理下标 _{...} 和 ^{...}
+        result = result.replaceAll("_\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\^\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("_([a-zA-Z0-9])", "$1");
+        result = result.replaceAll("\\^([a-zA-Z0-9])", "$1");
+        
+        // 9. 处理文本命令
+        result = result.replaceAll("\\\\text\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\text([^a-zA-Z])", "$1");
+        result = result.replaceAll("\\\\mathbb\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\mathcal\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\mathcalL", "L");
+        result = result.replaceAll("\\\\mathrm\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\textbf\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\textit\\{([^}]+)\\}", "$1");
+        
+        // 10. 处理下划线
+        result = result.replaceAll("\\\\underline\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("\\\\underline\\s+", "");
+        
+        // 11. 处理左右括号
+        result = result.replaceAll("\\\\left\\(", "(");
+        result = result.replaceAll("\\\\right\\)", ")");
+        result = result.replaceAll("\\\\left\\[", "[");
+        result = result.replaceAll("\\\\right\\]", "]");
+        result = result.replaceAll("\\\\left\\{", "{");
+        result = result.replaceAll("\\\\right\\}", "}");
+        result = result.replaceAll("\\\\left\\|", "|");
+        result = result.replaceAll("\\\\right\\|", "|");
+        
+        // 12. 恢复占位符
+        result = result.replace("PLACEHOLDER_PERCENT", "%");
+        result = result.replace("PLACEHOLDER_SIM", "~");
+        result = result.replace("PLACEHOLDER_CDOT", "·");
+        result = result.replace("PLACEHOLDER_THINSPACE", " ");
+        result = result.replace("PLACEHOLDER_MEDSPACE", " ");
+        result = result.replace("PLACEHOLDER_THICKSPACE", " ");
+        result = result.replace("PLACEHOLDER_QUAD", " ");
+        result = result.replace("PLACEHOLDER_QQUAD", "  ");
+        result = result.replace("PLACEHOLDER_SPACE", " ");
+        result = result.replace("PLACEHOLDER_DOUBLEBACKSLASH", "");
+        
+        // 13. 处理特殊符号（单反斜杠的情况）
+        result = result.replace("\\%", "%");
+        result = result.replace("\\&", "&");
+        result = result.replace("\\#", "#");
+        result = result.replace("\\_", "_");
+        result = result.replace("\\$", "$");
+        result = result.replace("\\{", "{");
+        result = result.replace("\\}", "}");
+        
+        // 14. 清理多余的空格
+        result = result.replaceAll("\\s+", " ");
+        result = result.trim();
+        
+        return result;
     }
 }
 

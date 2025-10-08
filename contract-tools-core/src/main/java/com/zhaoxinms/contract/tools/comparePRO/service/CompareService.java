@@ -766,41 +766,52 @@ public class CompareService {
 	 * 获取文档图片信息
 	 */
 	public DocumentImageInfo getDocumentImageInfo(String taskId, String mode) throws Exception {
-		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+		// 使用 gpuOcrConfig 的 uploadPath，与生成图片时保持一致
+		String uploadRootPath = gpuOcrConfig.getUploadPath();
 		Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+
+		logger.info("🔍 获取图片信息 - taskId: {}, mode: {}, 路径: {}", taskId, mode, imagesDir);
 
 		if (!Files.exists(imagesDir)) {
 			// 列出父目录内容，帮助调试
 			Path parentDir = imagesDir.getParent();
 			if (Files.exists(parentDir)) {
-				logger.debug("父目录存在，内容如下:");
+				logger.warn("  ⚠️ 图片目录不存在，但父目录存在: {}", imagesDir);
+				logger.debug("  📂 父目录内容:");
 				try (var stream = Files.list(parentDir)) {
-					stream.forEach(path -> logger.debug("  - {}", path.getFileName()));
+					stream.forEach(path -> logger.debug("    - {}", path.getFileName()));
 				}
-                } else {
-				logger.debug("父目录也不存在: {}", parentDir);
+            } else {
+				logger.warn("  ⚠️ 父目录也不存在: {}", parentDir);
 			}
 			throw new RuntimeException("图片目录不存在: " + imagesDir);
 		}
 
-		// 获取所有页面图片
+		// 获取所有页面图片（支持 PNG、JPG、JPEG）
 		List<Path> imageFiles = new ArrayList<>();
 		try (var stream = Files.list(imagesDir)) {
-			stream.filter(path -> path.toString().toLowerCase().endsWith(".png"))
-					.filter(path -> path.getFileName().toString().startsWith("page-")).sorted((a, b) -> {
-						// 按页码排序
-						String aName = a.getFileName().toString();
-						String bName = b.getFileName().toString();
-						int aPage = extractPageNumber(aName);
-						int bPage = extractPageNumber(bName);
-						return Integer.compare(aPage, bPage);
-					}).forEach(imageFiles::add);
+			stream.filter(path -> {
+				String fileName = path.toString().toLowerCase();
+				return fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg");
+			})
+			.filter(path -> path.getFileName().toString().startsWith("page-"))
+			.sorted((a, b) -> {
+				// 按页码排序
+				String aName = a.getFileName().toString();
+				String bName = b.getFileName().toString();
+				int aPage = extractPageNumber(aName);
+				int bPage = extractPageNumber(bName);
+				return Integer.compare(aPage, bPage);
+			})
+			.forEach(imageFiles::add);
 		}
+		
+		logger.info("  ✅ 找到 {} 个图片文件", imageFiles.size());
 
 		DocumentImageInfo docInfo = new DocumentImageInfo(imageFiles.size());
 
 		String baseUploadPath = "/api/compare-pro/files";
-		String baseUrl = baseUploadPath + "/compare-pro/tasks/" + taskId + "/images/" + mode;
+		String baseUrl = baseUploadPath + "/tasks/" + taskId + "/images/" + mode;
 
 		for (Path imagePath : imageFiles) {
 			String fileName = imagePath.getFileName().toString();
@@ -815,15 +826,19 @@ public class CompareService {
 				String imageUrl = baseUrl + "/" + fileName;
 				PageImageInfo pageInfo = new PageImageInfo(pageNumber, imageUrl, width, height);
 				docInfo.addPage(pageInfo);
+				
+				logger.debug("    页面 {}: {} ({}x{})", pageNumber, fileName, width, height);
 
 			} catch (Exception e) {
-				System.err.println("读取图片尺寸失败: " + imagePath + ", error=" + e.getMessage());
+				logger.error("  ❌ 读取图片尺寸失败: {}, error: {}", imagePath, e.getMessage());
 				// 使用默认尺寸
 				String imageUrl = baseUrl + "/" + fileName;
 				PageImageInfo pageInfo = new PageImageInfo(pageNumber, imageUrl, 1000, 1400);
 				docInfo.addPage(pageInfo);
 			}
 		}
+		
+		logger.info("  🎉 成功获取 {} 页的图片信息", docInfo.getTotalPages());
 
 		return docInfo;
 	}
@@ -4506,11 +4521,11 @@ public class CompareService {
 		Map<String, Object> info = new HashMap<>();
 		List<Map<String, Object>> pages = new ArrayList<>();
 		
-		// 使用配置的文件根目录，参考存图片的逻辑
-		String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
+		// 使用 gpuOcrConfig 的 uploadPath，与生成图片时保持一致
+		String uploadRootPath = gpuOcrConfig.getUploadPath();
 		Path actualImageDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
 		
-		logger.info("🔍 读取图片目录: {}", actualImageDir);
+		logger.info("🔍 读取图片目录: {} (uploadPath: {})", actualImageDir, uploadRootPath);
 		
 		if (!Files.exists(actualImageDir) || !Files.isDirectory(actualImageDir)) {
 			logger.warn("⚠️ 图片目录不存在: {}，返回空图片信息", actualImageDir);
@@ -4519,27 +4534,41 @@ public class CompareService {
 			return info;
 		}
 		
-		// 读取实际的图片文件
+		// 读取实际的图片文件（支持 PNG 和 JPEG）
 		try {
-			// 先尝试新格式 (page-N.png)
-			try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, "page-*.png")) {
+			// 先尝试新格式 (page-N.png 或 page-N.jpg)
+			logger.info("  📂 扫描图片文件: {}", actualImageDir);
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, "page-*.*")) {
 				for (Path imagePath : stream) {
-					int pageNum = extractPageNumber(imagePath.getFileName().toString(), "page-", ".png");
-					if (pageNum > 0) {
-						Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
-						pages.add(page);
-					}
-				}
-			}
-			
-			// 如果没有找到新格式，尝试旧格式 (old_N.png, new_N.png)
-			if (pages.isEmpty()) {
-				try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, mode + "_*.png")) {
-					for (Path imagePath : stream) {
-						int pageNum = extractPageNumber(imagePath.getFileName().toString(), mode + "_", ".png");
+					String fileName = imagePath.getFileName().toString();
+					logger.debug("    找到文件: {}", fileName);
+					String fileNameLower = fileName.toLowerCase();
+					if (fileNameLower.endsWith(".png") || fileNameLower.endsWith(".jpg") || fileNameLower.endsWith(".jpeg")) {
+						// 提取页码（去掉扩展名）
+						String ext = fileName.substring(fileName.lastIndexOf("."));
+						int pageNum = extractPageNumber(fileNameLower, "page-", ext.toLowerCase());
 						if (pageNum > 0) {
 							Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
 							pages.add(page);
+							logger.debug("      ✓ 添加页面: {}, pageNum: {}", fileName, pageNum);
+						}
+					}
+				}
+			}
+			logger.info("  ✅ 找到 {} 个图片文件", pages.size());
+			
+			// 如果没有找到新格式，尝试旧格式 (old_N.png/jpg, new_N.png/jpg)
+			if (pages.isEmpty()) {
+				try (DirectoryStream<Path> stream = Files.newDirectoryStream(actualImageDir, mode + "_*.*")) {
+					for (Path imagePath : stream) {
+						String fileName = imagePath.getFileName().toString().toLowerCase();
+						if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+							String ext = fileName.substring(fileName.lastIndexOf("."));
+							int pageNum = extractPageNumber(fileName, mode + "_", ext);
+							if (pageNum > 0) {
+								Map<String, Object> page = createPageInfo(pageNum, mode, imagePath);
+								pages.add(page);
+							}
 						}
 					}
 				}
@@ -4572,7 +4601,11 @@ public class CompareService {
 	private Map<String, Object> createPageInfo(int pageNum, String mode, Path imagePath) {
 		Map<String, Object> page = new HashMap<>();
 		page.put("pageNum", pageNum);
-		page.put("imageUrl", String.format("./data/current/images/%s/page-%d.png", mode, pageNum));
+		
+		// 根据实际文件扩展名生成 URL
+		String fileName = imagePath.getFileName().toString();
+		String ext = fileName.substring(fileName.lastIndexOf("."));
+		page.put("imageUrl", String.format("./data/current/images/%s/page-%d%s", mode, pageNum, ext));
 		
 		// 尝试获取实际图片尺寸
 		try {
@@ -5065,33 +5098,41 @@ public class CompareService {
 		Path newImagesPath = taskPath.resolve("images").resolve("new");
 		
 		if (Files.exists(oldImagesPath)) {
-			// 新的目录结构：tasks/{taskId}/images/old/page-N.png
+			// 新的目录结构：tasks/{taskId}/images/old/page-N.png 或 page-N.jpg
 			logger.info("  📂 使用新的图片目录结构: {}", oldImagesPath);
-			int oldCopied = copyImagesFromDirectory(oldImagesPath, oldImagesDir, "page-*.png");
-			int newCopied = copyImagesFromDirectory(newImagesPath, newImagesDir, "page-*.png");
+			int oldCopied = copyImagesFromDirectory(oldImagesPath, oldImagesDir, "page-*.*");
+			int newCopied = copyImagesFromDirectory(newImagesPath, newImagesDir, "page-*.*");
 			totalCopied = oldCopied + newCopied;
 			logger.info("    ✓ 原文档图片: {} 个, 新文档图片: {} 个", oldCopied, newCopied);
 		} else {
-			// 旧的文件结构：tasks/{taskId}/old_*.png, new_*.png
+			// 旧的文件结构：tasks/{taskId}/old_*.png/jpg, new_*.png/jpg
 			logger.info("  📂 使用旧的图片文件结构: {}", taskPath);
 			
-			// 复制原文档图片
+			// 复制原文档图片（支持 PNG 和 JPEG）
 			int oldPageNum = 1;
-			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "old_*.png")) {
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "old_*.*")) {
 				for (Path imagePath : stream) {
-					Files.copy(imagePath, oldImagesDir.resolve("page-" + oldPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
-					oldPageNum++;
-					totalCopied++;
+					String fileName = imagePath.getFileName().toString().toLowerCase();
+					if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+						String ext = fileName.substring(fileName.lastIndexOf("."));
+						Files.copy(imagePath, oldImagesDir.resolve("page-" + oldPageNum + ext), StandardCopyOption.REPLACE_EXISTING);
+						oldPageNum++;
+						totalCopied++;
+					}
 				}
 			}
 			
-			// 复制新文档图片
+			// 复制新文档图片（支持 PNG 和 JPEG）
 			int newPageNum = 1;
-			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "new_*.png")) {
+			try (DirectoryStream<Path> stream = Files.newDirectoryStream(taskPath, "new_*.*")) {
 				for (Path imagePath : stream) {
-					Files.copy(imagePath, newImagesDir.resolve("page-" + newPageNum + ".png"), StandardCopyOption.REPLACE_EXISTING);
-					newPageNum++;
-					totalCopied++;
+					String fileName = imagePath.getFileName().toString().toLowerCase();
+					if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+						String ext = fileName.substring(fileName.lastIndexOf("."));
+						Files.copy(imagePath, newImagesDir.resolve("page-" + newPageNum + ext), StandardCopyOption.REPLACE_EXISTING);
+						newPageNum++;
+						totalCopied++;
+					}
 				}
 			}
 			
@@ -5113,10 +5154,13 @@ public class CompareService {
 		int copiedCount = 0;
 		try (DirectoryStream<Path> stream = Files.newDirectoryStream(sourceDir, pattern)) {
 			for (Path imagePath : stream) {
-				String fileName = imagePath.getFileName().toString();
-				Files.copy(imagePath, targetDir.resolve(fileName), StandardCopyOption.REPLACE_EXISTING);
-				copiedCount++;
-				logger.debug("      复制图片: {} -> {}", fileName, targetDir.resolve(fileName));
+				String fileName = imagePath.getFileName().toString().toLowerCase();
+				// 只复制图片文件（PNG 和 JPEG）
+				if (fileName.endsWith(".png") || fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+					Files.copy(imagePath, targetDir.resolve(imagePath.getFileName().toString()), StandardCopyOption.REPLACE_EXISTING);
+					copiedCount++;
+					logger.debug("      复制图片: {} -> {}", fileName, targetDir.resolve(imagePath.getFileName().toString()));
+				}
 			}
 		}
 		
