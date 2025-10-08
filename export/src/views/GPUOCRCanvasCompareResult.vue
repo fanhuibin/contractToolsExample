@@ -476,7 +476,7 @@ const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
 // 拖拽调整宽度相关状态
 const isDragging = ref(false)
-const diffListWidth = ref(500) // 默认宽度500px
+const diffListWidth = ref(300) // 默认宽度300px (原500px的3/5)
 const dragStartX = ref(0)
 const dragStartWidth = ref(0)
 
