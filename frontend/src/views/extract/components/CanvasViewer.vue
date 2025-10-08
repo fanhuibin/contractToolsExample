@@ -2,24 +2,25 @@
   <div class="canvas-viewer">
     <!-- 页面控制 -->
     <div class="page-controls">
-      <a-button-group size="small">
-        <a-button @click="previousPage" :disabled="currentPage <= 1">
-          <LeftOutlined />
-        </a-button>
+      <el-button-group size="small">
+        <el-button @click="previousPage" :disabled="currentPage <= 1">
+          <el-icon><ArrowLeft /></el-icon>
+        </el-button>
         
-        <a-input-number 
-          v-model:value="currentPage" 
+        <el-input-number 
+          v-model="currentPage" 
           :min="1" 
           :max="totalPages"
           size="small"
           style="width: 80px;"
           @change="onPageChange"
+          controls-position="right"
         />
         
-        <a-button @click="nextPage" :disabled="currentPage >= totalPages">
-          <RightOutlined />
-        </a-button>
-      </a-button-group>
+        <el-button @click="nextPage" :disabled="currentPage >= totalPages">
+          <el-icon><ArrowRight /></el-icon>
+        </el-button>
+      </el-button-group>
       
       <span class="page-info">共 {{ totalPages }} 页</span>
     </div>
@@ -63,55 +64,55 @@
       
       <!-- 加载状态 -->
       <div class="loading-overlay" v-if="loading">
-        <a-spin size="large" tip="加载页面图像..." />
+        <el-loading-spinner size="large" text="加载页面图像..." />
       </div>
       
       <!-- 错误状态 -->
       <div class="error-overlay" v-if="error">
-        <a-result
-          status="error"
+        <el-result
+          icon="error"
           :title="error"
           sub-title="无法加载页面图像"
         >
           <template #extra>
-            <a-button type="primary" @click="retryLoad">重试</a-button>
+            <el-button type="primary" @click="retryLoad">重试</el-button>
           </template>
-        </a-result>
+        </el-result>
       </div>
     </div>
 
     <!-- 缩放控制 -->
     <div class="zoom-controls">
-      <a-button-group size="small">
-        <a-button @click="zoomOut" :disabled="scale <= 0.2">
-          <MinusOutlined />
-        </a-button>
+      <el-button-group size="small">
+        <el-button @click="zoomOut" :disabled="scale <= 0.2">
+          <el-icon><Minus /></el-icon>
+        </el-button>
         
-        <a-button @click="resetZoom">
+        <el-button @click="resetZoom">
           {{ Math.round(scale * 100) }}%
-        </a-button>
+        </el-button>
         
-        <a-button @click="zoomIn" :disabled="scale >= 3.0">
-          <PlusOutlined />
-        </a-button>
+        <el-button @click="zoomIn" :disabled="scale >= 3.0">
+          <el-icon><Plus /></el-icon>
+        </el-button>
         
-        <a-button @click="fitToWidth" type="text">
+        <el-button @click="fitToWidth" text>
           适合宽度
-        </a-button>
-      </a-button-group>
+        </el-button>
+      </el-button-group>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { message } from 'ant-design-vue'
+import { ElMessage } from 'element-plus'
 import { 
-  LeftOutlined, 
-  RightOutlined, 
-  MinusOutlined, 
-  PlusOutlined 
-} from '@ant-design/icons-vue'
+  ArrowLeft, 
+  ArrowRight, 
+  Minus, 
+  Plus 
+} from '@element-plus/icons-vue'
 
 // Props定义
 interface Props {

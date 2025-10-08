@@ -1,9 +1,12 @@
 <template>
   <div class="new-template">
+    <PageHeader 
+      title="新建模板"
+      description="上传Word文档模板，设置模板信息后即可进入设计"
+      :icon="DocumentAdd"
+    />
+
     <el-card>
-      <template #header>
-        <div class="card-header">新建模板</div>
-      </template>
       <div class="body">
         <el-form label-width="100px" :inline="false" @submit.prevent>
           <el-form-item label="上传docx">
@@ -40,7 +43,9 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { DocumentAdd } from '@element-plus/icons-vue'
 import { uploadTemplateDocx } from '@/api/templateDesign'
+import { PageHeader } from '@/components/common'
 
 const router = useRouter()
 const loading = ref(false)

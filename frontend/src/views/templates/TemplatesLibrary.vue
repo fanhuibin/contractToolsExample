@@ -1,16 +1,20 @@
 <template>
   <div class="templates-lib">
-    <el-card>
-      <template #header>
-        <div class="header">
-          <div class="title">模板库</div>
-          <div class="tools">
-            <el-input v-model="keyword" placeholder="搜索名称/分类" clearable style="width: 220px;" @keyup.enter="fetchList" />
-            <el-button @click="fetchList">搜索</el-button>
-            <el-button type="primary" @click="goNew">新建模板</el-button>
-          </div>
+    <PageHeader 
+      title="模板库"
+      description="管理合同模板，设计模板元素并用于合同合成"
+      :icon="FolderOpened"
+    >
+      <template #actions>
+        <div class="header-tools">
+          <el-input v-model="keyword" placeholder="搜索名称/分类" clearable style="width: 220px;" @keyup.enter="fetchList" />
+          <el-button @click="fetchList">搜索</el-button>
+          <el-button type="primary" @click="goNew">新建模板</el-button>
         </div>
       </template>
+    </PageHeader>
+
+    <el-card>
       <el-table :data="filtered" v-loading="loading" style="width:100%">
         <el-table-column prop="templateId" label="模板ID" width="180" />
         <el-table-column prop="fileId" label="文件ID" width="180" />
@@ -24,7 +28,11 @@
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!loading && filtered.length === 0" description="暂无模板" />
+      <EmptyState 
+        v-if="!loading && filtered.length === 0"
+        title="暂无模板"
+        description="还没有创建任何模板，点击上方"新建模板"开始创建"
+      />
     </el-card>
 
     <el-dialog v-model="viewVisible" title="查看元素" width="860px" append-to-body :lock-scroll="false">
@@ -51,7 +59,9 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { FolderOpened } from '@element-plus/icons-vue'
 import { listTemplateDesigns, getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { PageHeader, EmptyState } from '@/components/common'
 
 const router = useRouter()
 const loading = ref(false)

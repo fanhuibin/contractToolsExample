@@ -1,18 +1,10 @@
 <template>
   <div class="contract-review-page">
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <el-card class="page-header-card">
-          <div class="page-header">
-            <div class="header-content">
-              <h2><el-icon class="header-icon"><Document /></el-icon>合同智能审核</h2>
-              <p>上传合同文件，选择审核清单，系统将进行智能风险预审并返回结果。</p>
-            </div>
-            <div class="header-decoration"></div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <PageHeader 
+      title="合同智能审核"
+      description="上传合同文件，选择审核清单，系统将进行智能风险预审并返回结果。"
+      :icon="Document"
+    />
 
     <el-row :gutter="20" class="main-content">
       <!-- Main -->
@@ -276,6 +268,7 @@ import riskApi from '@/api/ai/risk'
 import { useRouter } from 'vue-router'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import RiskCardPanel from '@/components/ai/RiskCardPanel.vue' // 引入新组件
+import { PageHeader } from '@/components/common'
 
 // 轻量内嵌的条款库选择器（最小实现：只提供选择和预览功能）
 const RiskLibraryEmbed = defineAsyncComponent(() => import('./RiskLibraryEmbed.vue'))

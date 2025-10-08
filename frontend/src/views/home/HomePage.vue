@@ -96,41 +96,41 @@ const handleServiceAction = (service: any) => {
 
 <style scoped>
 .home-page {
-  max-width: 1600px; /* 增加页面最大宽度，为合同组件区域提供更多空间 */
+  max-width: var(--zx-container-2xl);
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 var(--zx-spacing-xl);
 }
 
 /* 英雄区域 */
 .hero-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 60px;
+  gap: var(--zx-spacing-5xl);
   align-items: center;
-  padding: 80px 0;
+  padding: var(--zx-spacing-5xl) 0;
   min-height: 500px;
-  max-width: 1200px; /* 限制英雄区域最大宽度，保持原有尺寸 */
-  margin: 0 auto; /* 英雄区域居中 */
+  max-width: var(--zx-container-xl);
+  margin: 0 auto;
 }
 
 .hero-content {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--zx-spacing-2xl);
 }
 
 .hero-title {
-  font-size: 48px;
-  font-weight: 700;
-  color: #303133;
-  line-height: 1.2;
+  font-size: var(--zx-font-5xl);
+  font-weight: var(--zx-font-bold);
+  color: var(--zx-text-primary);
+  line-height: var(--zx-leading-tight);
   margin: 0;
 }
 
 .hero-subtitle {
-  font-size: 18px;
-  color: #606266;
-  line-height: 1.6;
+  font-size: var(--zx-font-xl);
+  color: var(--zx-text-regular);
+  line-height: var(--zx-leading-relaxed);
   margin: 0;
 }
 
@@ -145,30 +145,28 @@ const handleServiceAction = (service: any) => {
 .hero-image img {
   max-width: 100%;
   height: auto;
-  border-radius: 8px;
+  border-radius: var(--zx-radius-lg);
 }
-
-/* 统计数据区域已移除 */
 
 /* 服务展示区域 */
 .services-section {
-  margin: 60px 0;
-  width: 100%; /* 确保服务区域占满可用宽度 */
+  margin: var(--zx-spacing-5xl) 0;
+  width: 100%;
 }
 
 .section-title {
-  font-size: 32px;
-  font-weight: 600;
-  color: #303133;
+  font-size: var(--zx-font-4xl);
+  font-weight: var(--zx-font-semibold);
+  color: var(--zx-text-primary);
   text-align: center;
-  margin-bottom: 48px;
+  margin-bottom: var(--zx-spacing-4xl);
 }
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr); /* 桌面端固定5列 */
-  gap: 32px; /* 增加卡片间距，让整体更宽 */
-  max-width: 100%; /* 确保网格占满容器宽度 */
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--zx-spacing-3xl);
+  max-width: 100%;
 }
 
 /* 特色功能区域已移除 */
@@ -177,57 +175,35 @@ const handleServiceAction = (service: any) => {
 @media (max-width: 768px) {
   .hero-section {
     grid-template-columns: 1fr;
-    gap: 40px;
-    padding: 40px 0;
+    gap: var(--zx-spacing-3xl);
+    padding: var(--zx-spacing-3xl) 0;
     text-align: center;
   }
   
   .hero-title {
-    font-size: 36px;
-  }
-  
-
-  
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 24px;
-  }
-  
-  .stat-item {
-    flex-direction: column;
-    text-align: center;
-    gap: 8px;
+    font-size: var(--zx-font-4xl);
   }
   
   .services-grid {
-    grid-template-columns: repeat(2, 1fr); /* 平板两列 */
-  }
-  
-  .features-grid {
-    grid-template-columns: 1fr;
-    padding: 0 20px;
+    grid-template-columns: repeat(2, 1fr);
   }
 }
 
 @media (max-width: 480px) {
   .home-page {
-    padding: 0 12px;
+    padding: 0 var(--zx-spacing-md);
   }
   
   .hero-title {
-    font-size: 28px;
+    font-size: var(--zx-font-3xl);
   }
   
   .hero-subtitle {
-    font-size: 16px;
+    font-size: var(--zx-font-lg);
   }
   
-  .stats-grid {
+  .services-grid {
     grid-template-columns: 1fr;
-  }
-  
-  .stats-section {
-    padding: 24px;
   }
 }
 </style>

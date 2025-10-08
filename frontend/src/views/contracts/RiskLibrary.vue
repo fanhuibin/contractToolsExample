@@ -1,18 +1,20 @@
 <template>
   <div class="risk-lib-page">
+    <PageHeader 
+      title="合同智能审核 · 条款库"
+      description="管理审核条款、风险点和审核方案"
+      :icon="DocumentChecked"
+    >
+      <template #actions>
+        <el-button size="small" type="primary" @click="goBack">返回</el-button>
+        <el-switch v-model="manageMode" active-text="管理模式" size="small" />
+      </template>
+    </PageHeader>
+
     <el-row :gutter="16">
       <!-- 左侧：条款树与筛选（加宽至 10/24） -->
       <el-col :span="10" class="left-col">
         <el-card class="side-card">
-          <template #header>
-            <div class="card-header between">
-              <span>合同智能审核 · 条款库</span>
-              <div class="header-actions">
-                <el-button size="small" type="primary" link @click="goBack">返回</el-button>
-                <el-switch v-model="manageMode" active-text="管理模式" size="small" />
-              </div>
-            </div>
-          </template>
           <div class="toolbar">
             <el-input v-model="keyword" placeholder="搜索提示/风险点/算法类型/编号" clearable @input="loadTree" />
             <div class="toolbar-row">
@@ -54,6 +56,11 @@
                 <el-table-column prop="pointName" label="风险点"/>
                 <el-table-column prop="algorithmType" label="算法类型" width="240"/>
               </el-table>
+              <EmptyState 
+                v-if="previewList.length === 0"
+                title="暂无清单"
+                description="请在左侧勾选条款后生成清单"
+              />
             </el-tab-pane>
             <el-tab-pane label="方案管理" name="profiles">
               <div class="pane-toolbar">
@@ -197,8 +204,10 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive, computed, h } from 'vue'
 import { useRouter } from 'vue-router'
+import { DocumentChecked } from '@element-plus/icons-vue'
 import riskApi from '@/api/ai/risk'
 import { ElMessage, ElMessageBox, ElDropdown, ElDropdownMenu, ElDropdownItem, ElButton } from 'element-plus'
+import { PageHeader, EmptyState } from '@/components/common'
 
 const treeRef = ref()
 const treeData = ref<any[]>([])

@@ -1,0 +1,310 @@
+/**
+ * 肇新合同工具集 - 全局样式入口
+ * Global Styles Entry Point
+ */
+
+// 1. 导入设计令牌（变量）
+@import './variables/design-tokens.scss';
+
+// 2. 基础样式
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  font-family: var(--zx-font-family);
+  font-size: var(--zx-font-base);
+  line-height: var(--zx-leading-normal);
+  color: var(--zx-text-primary);
+  background-color: var(--zx-bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  height: 100%;
+}
+
+// 3. 滚动条样式
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--zx-bg-lighter);
+  border-radius: var(--zx-radius-sm);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--zx-border-base);
+  border-radius: var(--zx-radius-sm);
+  transition: background var(--zx-transition-fast);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--zx-text-secondary);
+}
+
+// 4. 通用工具类
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+// 间距工具类
+.m-0 { margin: 0 !important; }
+.mt-xs { margin-top: var(--zx-spacing-xs) !important; }
+.mt-sm { margin-top: var(--zx-spacing-sm) !important; }
+.mt-md { margin-top: var(--zx-spacing-md) !important; }
+.mt-lg { margin-top: var(--zx-spacing-lg) !important; }
+.mt-xl { margin-top: var(--zx-spacing-xl) !important; }
+
+.mb-xs { margin-bottom: var(--zx-spacing-xs) !important; }
+.mb-sm { margin-bottom: var(--zx-spacing-sm) !important; }
+.mb-md { margin-bottom: var(--zx-spacing-md) !important; }
+.mb-lg { margin-bottom: var(--zx-spacing-lg) !important; }
+.mb-xl { margin-bottom: var(--zx-spacing-xl) !important; }
+
+.p-0 { padding: 0 !important; }
+.pt-xs { padding-top: var(--zx-spacing-xs) !important; }
+.pt-sm { padding-top: var(--zx-spacing-sm) !important; }
+.pt-md { padding-top: var(--zx-spacing-md) !important; }
+.pt-lg { padding-top: var(--zx-spacing-lg) !important; }
+
+.pb-xs { padding-bottom: var(--zx-spacing-xs) !important; }
+.pb-sm { padding-bottom: var(--zx-spacing-sm) !important; }
+.pb-md { padding-bottom: var(--zx-spacing-md) !important; }
+.pb-lg { padding-bottom: var(--zx-spacing-lg) !important; }
+
+// 5. 卡片通用样式
+.card-hoverable {
+  transition: all var(--zx-transition-base);
+  cursor: pointer;
+  
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--zx-shadow-lg);
+  }
+}
+
+// 6. 按钮增强样式
+.btn-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--zx-spacing-sm);
+}
+
+// 7. 页面容器
+.page-container {
+  padding: var(--zx-spacing-xl);
+  max-width: var(--zx-container-xl);
+  margin: 0 auto;
+}
+
+.page-container-fluid {
+  padding: var(--zx-spacing-xl);
+  width: 100%;
+}
+
+// 8. 动画效果
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+// 动画类
+.animate-fade-in {
+  animation: fadeIn var(--zx-transition-base) var(--zx-ease-out);
+}
+
+.animate-slide-in {
+  animation: slideIn var(--zx-transition-base) var(--zx-ease-out);
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.4s var(--zx-ease-bounce);
+}
+
+.animate-pulse {
+  animation: pulse 2s var(--zx-ease-in-out) infinite;
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+// 9. 响应式断点
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == xs {
+    @media (max-width: 480px) { @content; }
+  }
+  @else if $breakpoint == sm {
+    @media (max-width: 768px) { @content; }
+  }
+  @else if $breakpoint == md {
+    @media (max-width: 992px) { @content; }
+  }
+  @else if $breakpoint == lg {
+    @media (max-width: 1200px) { @content; }
+  }
+  @else if $breakpoint == xl {
+    @media (min-width: 1920px) { @content; }
+  }
+}
+
+// 10. Element Plus 样式覆盖
+.el-card {
+  border-radius: var(--zx-radius-lg);
+  box-shadow: var(--zx-shadow-sm);
+  
+  &:hover {
+    box-shadow: var(--zx-shadow-md);
+  }
+}
+
+.el-button {
+  border-radius: var(--zx-radius-base);
+  transition: all var(--zx-transition-base);
+  
+  &:hover {
+    transform: translateY(-1px);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+}
+
+// 11. 文本截断
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.text-ellipsis-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.text-ellipsis-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+// 12. 状态标签颜色增强
+.status-success {
+  color: var(--zx-success);
+  background-color: var(--zx-success-lighter);
+  padding: 2px 8px;
+  border-radius: var(--zx-radius-sm);
+}
+
+.status-warning {
+  color: var(--zx-warning);
+  background-color: var(--zx-warning-lighter);
+  padding: 2px 8px;
+  border-radius: var(--zx-radius-sm);
+}
+
+.status-danger {
+  color: var(--zx-danger);
+  background-color: var(--zx-danger-lighter);
+  padding: 2px 8px;
+  border-radius: var(--zx-radius-sm);
+}
+
+.status-info {
+  color: var(--zx-info);
+  background-color: var(--zx-info-lighter);
+  padding: 2px 8px;
+  border-radius: var(--zx-radius-sm);
+}
+
