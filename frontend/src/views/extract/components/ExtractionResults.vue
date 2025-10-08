@@ -5,18 +5,18 @@
       <h4>提取结果 ({{ extractions.length }} 项)</h4>
       
       <div class="header-actions">
-        <a-select 
-          v-model:value="filterType" 
+        <el-select 
+          v-model="filterType" 
           size="small" 
           style="width: 120px;"
           @change="onFilterChange"
         >
-          <a-select-option value="all">全部</a-select-option>
-          <a-select-option value="contract">合同信息</a-select-option>
-          <a-select-option value="party">当事人</a-select-option>
-          <a-select-option value="amount">金额</a-select-option>
-          <a-select-option value="date">日期</a-select-option>
-        </a-select>
+          <el-option value="all" label="全部" />
+          <el-option value="contract" label="合同信息" />
+          <el-option value="party" label="当事人" />
+          <el-option value="amount" label="金额" />
+          <el-option value="date" label="日期" />
+        </el-select>
         
       </div>
     </div>
@@ -39,12 +39,12 @@
         <div class="item-header">
           <div class="item-title">
             <span class="field-name">{{ extraction.fieldName || extraction.name }}</span>
-            <a-tag 
-              :color="getFieldTypeColor(getFieldTypeFromName(extraction.field || extraction.fieldName || extraction.name))" 
+            <el-tag 
+              :type="getFieldTypeColor(getFieldTypeFromName(extraction.field || extraction.fieldName || extraction.name))" 
               size="small"
             >
               {{ getFieldTypeLabel(getFieldTypeFromName(extraction.field || extraction.fieldName || extraction.name)) }}
-            </a-tag>
+            </el-tag>
           </div>
           
           <div class="item-meta">
@@ -52,15 +52,15 @@
               置信度: {{ Math.round(extraction.confidence * 100) }}%
             </span>
             
-            <a-tooltip title="查看详情">
-              <a-button 
-                type="text" 
+            <el-tooltip content="查看详情">
+              <el-button 
+                text 
                 size="small" 
                 @click.stop="showExtractionDetail(extraction)"
               >
-                <info-circle-outlined />
-              </a-button>
-            </a-tooltip>
+                <el-icon><InfoFilled /></el-icon>
+              </el-button>
+            </el-tooltip>
           </div>
         </div>
 
@@ -72,97 +72,93 @@
           
           <!-- 原文位置信息 -->
           <div class="source-info" v-if="extraction.charInterval && extraction.charInterval.startPos !== undefined">
-            <a-tag size="small" color="blue">
+            <el-tag size="small" type="primary">
               位置: {{ extraction.charInterval.startPos }}-{{ extraction.charInterval.endPos }}
-            </a-tag>
+            </el-tag>
           </div>
         </div>
 
         <!-- 验证状态 -->
         <div class="validation-status" v-if="extraction.validationStatus">
-          <a-tag 
-            :color="getValidationColor(extraction.validationStatus)"
+          <el-tag 
+            :type="getValidationColor(extraction.validationStatus)"
             size="small"
           >
             {{ getValidationLabel(extraction.validationStatus) }}
-          </a-tag>
+          </el-tag>
         </div>
       </div>
       
       <!-- 空状态 -->
       <div class="empty-state" v-if="filteredExtractions.length === 0">
-        <a-empty 
-          description="暂无提取结果"
-          :image="Empty.PRESENTED_IMAGE_SIMPLE"
-        />
+        <el-empty description="暂无提取结果" />
       </div>
     </div>
 
     <!-- 提取详情弹窗 -->
-    <a-modal
-      v-model:open="detailModalVisible"
+    <el-dialog
+      v-model="detailModalVisible"
       title="提取详情"
-      :footer="null"
       width="600px"
     >
       <div v-if="selectedExtraction">
-        <a-descriptions :column="1" bordered size="small">
-          <a-descriptions-item label="字段名称">
+        <el-descriptions :column="1" border size="small">
+          <el-descriptions-item label="字段名称">
             {{ selectedExtraction.fieldName || selectedExtraction.name }}
-          </a-descriptions-item>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="字段类型">
-            <a-tag :color="getFieldTypeColor(selectedExtraction.fieldType)">
+          <el-descriptions-item label="字段类型">
+            <el-tag :type="getFieldTypeColor(selectedExtraction.fieldType)">
               {{ getFieldTypeLabel(selectedExtraction.fieldType) }}
-            </a-tag>
-          </a-descriptions-item>
+            </el-tag>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="提取值">
+          <el-descriptions-item label="提取值">
             <div class="detail-value">
               {{ formatExtractionValue(selectedExtraction.value) }}
             </div>
-          </a-descriptions-item>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="置信度" v-if="selectedExtraction.confidence">
-            <a-progress 
-              :percent="Math.round(selectedExtraction.confidence * 100)" 
-              size="small"
-              :stroke-color="getConfidenceColor(selectedExtraction.confidence)"
+          <el-descriptions-item label="置信度" v-if="selectedExtraction.confidence">
+            <el-progress 
+              :percentage="Math.round(selectedExtraction.confidence * 100)" 
+              :stroke-width="12"
+              :color="getConfidenceColor(selectedExtraction.confidence)"
             />
-          </a-descriptions-item>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="字符区间" v-if="selectedExtraction.charInterval">
+          <el-descriptions-item label="字符区间" v-if="selectedExtraction.charInterval">
             <div class="char-intervals">
-              <a-tag 
+              <el-tag 
                 size="small"
-                color="blue"
+                type="primary"
               >
                 {{ selectedExtraction.charInterval.startPos }} - {{ selectedExtraction.charInterval.endPos }}
-              </a-tag>
+              </el-tag>
             </div>
-          </a-descriptions-item>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="原文内容" v-if="selectedExtraction.charInterval && selectedExtraction.charInterval.sourceText">
+          <el-descriptions-item label="原文内容" v-if="selectedExtraction.charInterval && selectedExtraction.charInterval.sourceText">
             <div class="source-text">
               "{{ selectedExtraction.charInterval.sourceText }}"
             </div>
-          </a-descriptions-item>
+          </el-descriptions-item>
           
-          <a-descriptions-item label="验证状态" v-if="selectedExtraction.validationStatus">
-            <a-tag :color="getValidationColor(selectedExtraction.validationStatus)">
+          <el-descriptions-item label="验证状态" v-if="selectedExtraction.validationStatus">
+            <el-tag :type="getValidationColor(selectedExtraction.validationStatus)">
               {{ getValidationLabel(selectedExtraction.validationStatus) }}
-            </a-tag>
-          </a-descriptions-item>
-        </a-descriptions>
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
       </div>
-    </a-modal>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { message, Empty } from 'ant-design-vue'
-import { InfoCircleOutlined } from '@ant-design/icons-vue'
+import { ElMessage } from 'element-plus'
+import { InfoFilled } from '@element-plus/icons-vue'
 
 // Props
 interface Props {
@@ -318,18 +314,18 @@ const getFieldTypeFromName = (fieldName: string): string => {
 }
 
 // 样式相关方法
-const getFieldTypeColor = (fieldType: string): string => {
-  const colorMap: Record<string, string> = {
-    'contract': 'blue',
-    'party': 'green',
-    'amount': 'orange',
-    'date': 'purple',
-    'text': 'default',
-    'number': 'cyan',
-    'boolean': 'magenta'
+const getFieldTypeColor = (fieldType: string): '' | 'success' | 'info' | 'warning' | 'danger' => {
+  const colorMap: Record<string, '' | 'success' | 'info' | 'warning' | 'danger'> = {
+    'contract': 'info',
+    'party': 'success',
+    'amount': 'warning',
+    'date': '',
+    'text': '',
+    'number': 'info',
+    'boolean': 'danger'
   }
   
-  return colorMap[fieldType?.toLowerCase()] || 'default'
+  return colorMap[fieldType?.toLowerCase()] || ''
 }
 
 const getFieldTypeLabel = (fieldType: string): string => {
@@ -346,15 +342,15 @@ const getFieldTypeLabel = (fieldType: string): string => {
   return labelMap[fieldType?.toLowerCase()] || fieldType || '未知'
 }
 
-const getValidationColor = (status: string): string => {
-  const colorMap: Record<string, string> = {
-    'validated': 'green',
-    'warning': 'orange',
-    'error': 'red',
-    'pending': 'blue'
+const getValidationColor = (status: string): '' | 'success' | 'info' | 'warning' | 'danger' => {
+  const colorMap: Record<string, '' | 'success' | 'info' | 'warning' | 'danger'> = {
+    'validated': 'success',
+    'warning': 'warning',
+    'error': 'danger',
+    'pending': 'info'
   }
   
-  return colorMap[status?.toLowerCase()] || 'default'
+  return colorMap[status?.toLowerCase()] || ''
 }
 
 const getValidationLabel = (status: string): string => {

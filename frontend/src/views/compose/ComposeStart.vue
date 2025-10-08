@@ -1,14 +1,10 @@
 <template>
   <div class="compose-start">
-    <el-card class="page-header-card">
-      <div class="page-header">
-        <div class="header-content">
-          <h2><el-icon class="header-icon"><Document /></el-icon>智能合同合成</h2>
-          <p>请选择“新建模板”或“模板库”，完成设计后进入合同合成。</p>
-        </div>
-        <div class="header-decoration"></div>
-      </div>
-    </el-card>
+    <PageHeader 
+      title="智能合同合成" 
+      description='请选择"新建模板"或"模板库"，完成设计后进入合同合成。'
+      :icon="Document"
+    />
     <div class="cards">
       <el-card class="card">
         <template #header>
@@ -38,65 +34,67 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { Document } from '@element-plus/icons-vue'
+import { PageHeader } from '@/components/common'
+
 const router = useRouter()
 function goNewTemplate() { router.push('/templates/new') }
 function goTemplates() { router.push('/templates') }
 </script>
 
 <style scoped>
-.compose-start { padding: 16px; }
-.page-header-card { 
-  border-radius: 8px; 
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
-  overflow: hidden;
-  transition: all 0.3s ease;
-  margin-bottom: 12px;
+.compose-start { 
+  padding: var(--zx-spacing-lg); 
 }
-.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
-.page-header { 
-  padding: 16px 20px; 
-  position: relative; 
-  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
+
+.cards { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: var(--zx-spacing-lg); 
 }
-.header-content { position: relative; z-index: 2; }
-.header-decoration { 
-  position: absolute; 
-  top: 0; 
-  right: 0; 
-  width: 150px; 
-  height: 100%; 
-  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
-  opacity: 0.5;
-  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
+
+.card { 
+  border-radius: var(--zx-radius-xl); 
 }
-.page-header h2 { 
-  margin: 0; 
-  font-size: 26px; 
-  color: var(--el-color-primary-dark-2); 
+
+.card-title { 
+  font-weight: var(--zx-font-semibold); 
+}
+
+.cover { 
+  height: 120px; 
+  border-radius: var(--zx-radius-lg); 
   display: flex; 
-  align-items: center;
-  font-weight: 600;
+  align-items: center; 
+  justify-content: center; 
+  font-weight: var(--zx-font-semibold); 
+  margin-bottom: var(--zx-spacing-md); 
 }
-.header-icon { 
-  margin-right: 10px; 
-  font-size: 24px; 
-  color: var(--el-color-primary);
+
+.cover-new { 
+  background: linear-gradient(135deg, #e6f4ff, #f0f5ff); 
+  color: #1677ff; 
 }
-.page-header p { 
-  margin: 10px 0 0; 
-  color: #606266; 
-  font-size: 15px; 
-  max-width: 80%;
+
+.cover-existing { 
+  background: linear-gradient(135deg, #fffbe6, #fff1f0); 
+  color: #fa8c16; 
 }
-.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.card { border-radius: 10px; }
-.card-title { font-weight: 600; }
-.cover { height: 120px; border-radius: 8px; display:flex; align-items:center; justify-content:center; font-weight: 600; margin-bottom: 12px; }
-.cover-new { background: linear-gradient(135deg,#e6f4ff,#f0f5ff); color:#1677ff; }
-.cover-existing { background: linear-gradient(135deg,#fffbe6,#fff1f0); color:#fa8c16; }
-.desc { color: #606266; margin-bottom: 12px; }
-.actions { display:flex; gap: 12px; }
-@media (max-width: 960px) { .cards { grid-template-columns: 1fr; } }
+
+.desc { 
+  color: var(--zx-text-regular); 
+  margin-bottom: var(--zx-spacing-md); 
+}
+
+.actions { 
+  display: flex; 
+  gap: var(--zx-spacing-md); 
+}
+
+@media (max-width: 960px) { 
+  .cards { 
+    grid-template-columns: 1fr; 
+  } 
+}
 </style>
 
 

@@ -1,14 +1,10 @@
 <template>
   <div class="compare-page">
-    <el-card class="page-header-card mb12">
-      <div class="page-header">
-        <div class="header-content">
-          <h2><i class="el-icon header-icon"></i>PDF合同比对</h2>
-          <p>上传两个版本或提供两个URL，系统将对比差异并给出结果。</p>
-        </div>
-        <div class="header-decoration"></div>
-      </div>
-    </el-card>
+    <PageHeader 
+      title="PDF合同比对"
+      description="上传两个版本或提供两个URL，系统将对比差异并给出结果。"
+      :icon="DocumentCopy"
+    />
     <el-card class="mb12">
       <template #header>上传文件比对</template>
       <el-form :inline="true" class="form-inline">
@@ -74,7 +70,9 @@
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { DocumentCopy } from '@element-plus/icons-vue'
 import { uploadCompare, compareByUrls } from '@/api/compare'
+import { PageHeader } from '@/components/common'
 
 const oldInput = ref<HTMLInputElement | null>(null)
 const newInput = ref<HTMLInputElement | null>(null)

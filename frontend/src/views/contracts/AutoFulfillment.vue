@@ -1,18 +1,10 @@
 <template>
   <div class="auto-fulfillment">
-    <el-row :gutter="20" style="margin-bottom: 20px;">
-      <el-col :span="24">
-        <el-card class="page-header-card">
-          <div class="page-header">
-            <div class="header-content">
-              <h2><el-icon class="header-icon"><Document /></el-icon>自动履约任务</h2>
-              <p>上传合同文件，选择识别模板，系统将执行自动履约任务并输出结果。</p>
-            </div>
-            <div class="header-decoration"></div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <PageHeader 
+      title="自动履约任务"
+      description="上传合同文件，选择识别模板，系统将执行自动履约任务并输出结果。"
+      :icon="Document"
+    />
     <el-row :gutter="20">
       <el-col :span="16">
         <el-card class="main-content-card">
@@ -193,6 +185,7 @@ import { ref, computed, onMounted, getCurrentInstance, watch } from 'vue'
 import { UploadFilled, Document, CaretRight, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/api/ai'
+import { PageHeader } from '@/components/common'
 
 const selectedFile = ref<File | null>(null)
 const uploading = ref(false)

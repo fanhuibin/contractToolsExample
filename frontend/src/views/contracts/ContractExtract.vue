@@ -1,21 +1,14 @@
 <template>
   <div class="contract-extract-page">
-    <el-row :gutter="20">
-      <el-col :span="24">
-        <el-card class="page-header-card">
-          <div class="page-header">
-            <div class="header-content">
-              <h2><el-icon class="header-icon"><Document /></el-icon>合同信息提取</h2>
-              <p>上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。</p>
-            </div>
-            <div class="actions">
-              <el-button type="primary" @click="goRuleSettings">提取规则设置</el-button>
-            </div>
-            <div class="header-decoration"></div>
-          </div>
-        </el-card>
-      </el-col>
-    </el-row>
+    <PageHeader 
+      title="合同信息提取"
+      description="上传合同文件，利用AI自动提取关键信息。您可以自定义需要提取的字段。"
+      :icon="Document"
+    >
+      <template #actions>
+        <el-button type="primary" @click="goRuleSettings">提取规则设置</el-button>
+      </template>
+    </PageHeader>
     
     <el-row :gutter="20" class="main-content">
       <el-col :span="24">
@@ -60,6 +53,7 @@ import { ref } from 'vue';
 import ContractExtractor from '@/components/ai/ContractExtractor.vue';
 import { InfoFilled, Document } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus'
+import { PageHeader } from '@/components/common'
 
 const activeCollapse = ref('');
 const extractorRef = ref<any>(null)

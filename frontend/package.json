@@ -13,9 +13,7 @@
     "test:console-ui": "playwright test tests/console-monitor.spec.ts --ui"
   },
   "dependencies": {
-    "@ant-design/icons-vue": "^7.0.1",
     "@element-plus/icons-vue": "^2.1.0",
-    "ant-design-vue": "^4.0.0",
     "axios": "^1.4.0",
     "element-plus": "^2.3.8",
     "pinia": "^2.1.6",
@@ -31,6 +29,7 @@
     "@vue/tsconfig": "^0.4.0",
     "eslint": "^8.45.0",
     "eslint-plugin-vue": "^9.15.1",
+    "sass": "^1.93.2",
     "typescript": "~5.1.6",
     "vite": "^4.4.5",
     "vue-tsc": "^1.8.5"

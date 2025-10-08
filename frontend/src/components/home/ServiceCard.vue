@@ -55,30 +55,30 @@ const handleImageError = (event: Event) => {
 </script>
 
 <style scoped>
-/* 基于设计系统的样式规范 */
+/* 使用设计系统的样式变量 */
 .service-card {
-  background: #FFFFFF; /* colors.background.component */
-  border-radius: 8px; /* borderRadius.large */
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1); /* shadows.base */
+  background: var(--zx-bg-white);
+  border-radius: var(--zx-radius-lg);
+  box-shadow: var(--zx-shadow-base);
   overflow: hidden;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all var(--zx-transition-base);
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid #EBEEF5; /* colors.border.lighter */
+  border: 1px solid var(--zx-border-lighter);
 }
 
 .service-card:hover {
-  transform: scale(1.05);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .15); /* shadows.dark */
-  border-color: #409EFF; /* colors.primary.main */
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: var(--zx-shadow-lg);
+  border-color: var(--zx-primary);
 }
 
 .service-image {
   height: 200px;
   overflow: hidden;
-  background: #F5F7FA; /* colors.background.hover */
+  background: var(--zx-bg-light);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -88,7 +88,7 @@ const handleImageError = (event: Event) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
+  transition: transform var(--zx-transition-base);
 }
 
 .service-card:hover .service-image img {
@@ -96,41 +96,41 @@ const handleImageError = (event: Event) => {
 }
 
 .service-content {
-  padding: 24px; /* spacing.lg */
+  padding: var(--zx-spacing-2xl);
   flex: 1;
   display: flex;
   flex-direction: column;
 }
 
 .service-title {
-  font-size: 18px; /* typography.fontSize.large */
-  font-weight: 500; /* typography.fontWeight.medium */
-  margin-bottom: 12px; /* spacing.sm */
-  color: #303133; /* colors.text.primary */
+  font-size: var(--zx-font-xl);
+  font-weight: var(--zx-font-medium);
+  margin-bottom: var(--zx-spacing-md);
+  color: var(--zx-text-primary);
 }
 
 .service-description {
-  color: #606266; /* colors.text.regular */
-  line-height: 1.6;
-  margin-bottom: 20px;
+  color: var(--zx-text-regular);
+  line-height: var(--zx-leading-relaxed);
+  margin-bottom: var(--zx-spacing-xl);
   flex: 1;
-  font-size: 14px; /* typography.fontSize.base */
+  font-size: var(--zx-font-base);
 }
 
 .service-button {
   align-self: flex-start;
-  background-color: #409EFF; /* colors.primary.main */
-  border-color: #409EFF; /* colors.primary.main */
-  color: #FFFFFF; /* colors.primary.text */
-  border-radius: 4px; /* borderRadius.base */
-  padding: 10px 20px; /* button.sizes.padding.medium */
-  font-size: 14px; /* typography.fontSize.base */
-  transition: all 0.3s ease;
+  background-color: var(--zx-primary);
+  border-color: var(--zx-primary);
+  color: #FFFFFF;
+  border-radius: var(--zx-radius-base);
+  padding: 10px 20px;
+  font-size: var(--zx-font-base);
+  transition: all var(--zx-transition-base);
 }
 
 .service-button:hover {
-  background-color: #66B1FF; /* colors.primary.light */
-  border-color: #66B1FF; /* colors.primary.light */
+  background-color: var(--zx-primary-light-2);
+  border-color: var(--zx-primary-light-2);
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(64, 158, 255, 0.3);
 }

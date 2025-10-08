@@ -1,0 +1,213 @@
+/**
+ * 肇新合同工具集 - 设计令牌
+ * Design Tokens for Zhaoxin Contract Tool Set
+ * 
+ * 这个文件定义了整个应用的设计变量，包括颜色、间距、字体等
+ * 所有组件和页面都应该使用这些变量，而不是硬编码的值
+ */
+
+:root {
+  /* ==================== 颜色系统 ==================== */
+  
+  /* 主色系 - Primary */
+  --zx-primary: #409EFF;
+  --zx-primary-light-1: #53a8ff;
+  --zx-primary-light-2: #66b1ff;
+  --zx-primary-light-3: #79bbff;
+  --zx-primary-light-4: #8cc5ff;
+  --zx-primary-light-5: #a0cfff;
+  --zx-primary-light-6: #b3d8ff;
+  --zx-primary-light-7: #c6e2ff;
+  --zx-primary-light-8: #d9ecff;
+  --zx-primary-light-9: #ecf5ff;
+  --zx-primary-dark-1: #3a8ee6;
+  --zx-primary-dark-2: #337ecc;
+  
+  /* 功能色 - Functional Colors */
+  --zx-success: #67C23A;
+  --zx-success-light: #85ce61;
+  --zx-success-lighter: #f0f9ff;
+  --zx-success-dark: #5daf34;
+  
+  --zx-warning: #E6A23C;
+  --zx-warning-light: #ebb563;
+  --zx-warning-lighter: #fdf6ec;
+  --zx-warning-dark: #cf9236;
+  
+  --zx-danger: #F56C6C;
+  --zx-danger-light: #f78989;
+  --zx-danger-lighter: #fef0f0;
+  --zx-danger-dark: #dd6161;
+  
+  --zx-info: #909399;
+  --zx-info-light: #a6a9ad;
+  --zx-info-lighter: #f4f4f5;
+  --zx-info-dark: #82848a;
+  
+  /* 中性色 - Neutral Colors */
+  --zx-text-primary: #303133;
+  --zx-text-regular: #606266;
+  --zx-text-secondary: #909399;
+  --zx-text-placeholder: #C0C4CC;
+  --zx-text-disabled: #D3D4D6;
+  
+  /* 边框色 - Border Colors */
+  --zx-border-base: #DCDFE6;
+  --zx-border-light: #E4E7ED;
+  --zx-border-lighter: #EBEEF5;
+  --zx-border-extra-light: #F2F6FC;
+  
+  /* 背景色 - Background Colors */
+  --zx-bg-page: #F5F7FA;
+  --zx-bg-white: #FFFFFF;
+  --zx-bg-light: #F5F7FA;
+  --zx-bg-lighter: #FAFAFA;
+  --zx-bg-hover: #F5F7FA;
+  --zx-bg-disabled: #F5F7FA;
+  
+  /* 遮罩色 - Overlay */
+  --zx-mask: rgba(0, 0, 0, 0.5);
+  --zx-mask-light: rgba(0, 0, 0, 0.3);
+  
+  /* ==================== 渐变色 ==================== */
+  
+  /* 主题渐变 */
+  --zx-gradient-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --zx-gradient-success: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+  --zx-gradient-warning: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+  --zx-gradient-danger: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+  --zx-gradient-info: linear-gradient(135deg, #e0e7ff 0%, #cfd9ff 100%);
+  
+  /* 装饰渐变 */
+  --zx-gradient-page-header: linear-gradient(135deg, var(--zx-primary-light-7), var(--zx-primary-light-9));
+  --zx-gradient-card-decoration: linear-gradient(135deg, transparent, rgba(64, 158, 255, 0.05));
+  
+  /* ==================== 间距系统 ==================== */
+  
+  --zx-spacing-xs: 4px;
+  --zx-spacing-sm: 8px;
+  --zx-spacing-md: 12px;
+  --zx-spacing-lg: 16px;
+  --zx-spacing-xl: 20px;
+  --zx-spacing-2xl: 24px;
+  --zx-spacing-3xl: 32px;
+  --zx-spacing-4xl: 48px;
+  --zx-spacing-5xl: 64px;
+  
+  /* ==================== 字体系统 ==================== */
+  
+  /* 字体家族 */
+  --zx-font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', '微软雅黑', Arial, sans-serif;
+  --zx-font-family-code: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+  
+  /* 字体大小 */
+  --zx-font-xs: 12px;
+  --zx-font-sm: 13px;
+  --zx-font-base: 14px;
+  --zx-font-lg: 16px;
+  --zx-font-xl: 18px;
+  --zx-font-2xl: 20px;
+  --zx-font-3xl: 24px;
+  --zx-font-4xl: 32px;
+  --zx-font-5xl: 48px;
+  
+  /* 行高 */
+  --zx-leading-none: 1;
+  --zx-leading-tight: 1.25;
+  --zx-leading-snug: 1.375;
+  --zx-leading-normal: 1.5;
+  --zx-leading-relaxed: 1.625;
+  --zx-leading-loose: 2;
+  
+  /* 字重 */
+  --zx-font-thin: 100;
+  --zx-font-light: 300;
+  --zx-font-normal: 400;
+  --zx-font-medium: 500;
+  --zx-font-semibold: 600;
+  --zx-font-bold: 700;
+  --zx-font-extrabold: 800;
+  --zx-font-black: 900;
+  
+  /* ==================== 圆角系统 ==================== */
+  
+  --zx-radius-none: 0;
+  --zx-radius-sm: 2px;
+  --zx-radius-base: 4px;
+  --zx-radius-md: 6px;
+  --zx-radius-lg: 8px;
+  --zx-radius-xl: 12px;
+  --zx-radius-2xl: 16px;
+  --zx-radius-full: 9999px;
+  
+  /* ==================== 阴影系统 ==================== */
+  
+  --zx-shadow-none: none;
+  --zx-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --zx-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --zx-shadow-base: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --zx-shadow-md: 0 6px 16px rgba(0, 0, 0, 0.12);
+  --zx-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --zx-shadow-xl: 0 12px 40px rgba(0, 0, 0, 0.2);
+  --zx-shadow-2xl: 0 20px 60px rgba(0, 0, 0, 0.25);
+  
+  /* ==================== 动画系统 ==================== */
+  
+  /* 过渡时长 */
+  --zx-transition-fast: 0.15s;
+  --zx-transition-base: 0.3s;
+  --zx-transition-slow: 0.5s;
+  
+  /* 缓动函数 */
+  --zx-ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --zx-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --zx-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --zx-ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  
+  /* ==================== Z-index 层级 ==================== */
+  
+  --zx-z-base: 1;
+  --zx-z-dropdown: 1000;
+  --zx-z-sticky: 1020;
+  --zx-z-fixed: 1030;
+  --zx-z-modal-backdrop: 1040;
+  --zx-z-modal: 1050;
+  --zx-z-popover: 1060;
+  --zx-z-tooltip: 1070;
+  --zx-z-notification: 1080;
+  --zx-z-top: 9999;
+  
+  /* ==================== 布局系统 ==================== */
+  
+  /* 容器宽度 */
+  --zx-container-sm: 640px;
+  --zx-container-md: 768px;
+  --zx-container-lg: 1024px;
+  --zx-container-xl: 1280px;
+  --zx-container-2xl: 1536px;
+  
+  /* 侧边栏宽度 */
+  --zx-sidebar-width: 220px;
+  --zx-sidebar-collapsed-width: 64px;
+  
+  /* 头部高度 */
+  --zx-header-height: 60px;
+  --zx-toolbar-height: 56px;
+}
+
+/* ==================== 暗色模式（可选） ==================== */
+[data-theme="dark"] {
+  --zx-bg-page: #141414;
+  --zx-bg-white: #1f1f1f;
+  --zx-bg-light: #262626;
+  
+  --zx-text-primary: #ffffff;
+  --zx-text-regular: #d9d9d9;
+  --zx-text-secondary: #a6a6a6;
+  --zx-text-placeholder: #737373;
+  
+  --zx-border-base: #434343;
+  --zx-border-light: #303030;
+  --zx-border-lighter: #262626;
+}
+

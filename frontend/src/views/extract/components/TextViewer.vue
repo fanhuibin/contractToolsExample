@@ -2,40 +2,47 @@
   <div class="text-viewer">
     <!-- 工具栏 -->
     <div class="toolbar">
-      <a-input-search
-        v-model:value="searchText"
+      <el-input
+        v-model="searchText"
         placeholder="搜索文本..."
         size="small"
         style="width: 200px;"
-        @search="onSearch"
-        @change="onSearchChange"
-      />
+        @input="onSearchChange"
+        @keyup.enter="onSearch"
+        clearable
+      >
+        <template #suffix>
+          <el-icon class="el-input__icon" style="cursor: pointer;" @click="onSearch">
+            <Search />
+          </el-icon>
+        </template>
+      </el-input>
       
       <div class="search-results" v-if="searchResults.length > 0">
         <span class="search-count">
           {{ currentSearchIndex + 1 }} / {{ searchResults.length }}
         </span>
         
-        <a-button-group size="small">
-          <a-button 
+        <el-button-group size="small">
+          <el-button 
             @click="previousSearchResult" 
             :disabled="searchResults.length === 0"
           >
-            <up-outlined />
-          </a-button>
+            <el-icon><ArrowUp /></el-icon>
+          </el-button>
           
-          <a-button 
+          <el-button 
             @click="nextSearchResult" 
             :disabled="searchResults.length === 0"
           >
-            <down-outlined />
-          </a-button>
-        </a-button-group>
+            <el-icon><ArrowDown /></el-icon>
+          </el-button>
+        </el-button-group>
       </div>
       
       <div class="view-options">
-        <a-checkbox v-model:checked="showLineNumbers">显示行号</a-checkbox>
-        <a-checkbox v-model:checked="wordWrap" :disabled="true" style="margin-left: 8px;">自动换行</a-checkbox>
+        <el-checkbox v-model="showLineNumbers">显示行号</el-checkbox>
+        <el-checkbox v-model="wordWrap" :disabled="true" style="margin-left: 8px;">自动换行</el-checkbox>
       </div>
     </div>
 
@@ -85,7 +92,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
-import { UpOutlined, DownOutlined } from '@ant-design/icons-vue'
+import { ArrowUp, ArrowDown, Search } from '@element-plus/icons-vue'
 
 // Props
 interface Props {

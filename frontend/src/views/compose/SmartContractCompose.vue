@@ -11,7 +11,9 @@
     </el-card>
 
     <div class="steps-wrapper">
-      <a-steps :current="currentStep" size="small" :items="steps" @change="onStepChange" progress-dot />
+      <el-steps :active="currentStep" @change="onStepChange">
+        <el-step v-for="(step, index) in steps" :key="index" :title="step.title" :description="step.description" />
+      </el-steps>
     </div>
 
     <div class="steps-content">

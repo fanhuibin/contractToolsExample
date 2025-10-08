@@ -1,20 +1,17 @@
 <template>
   <div class="gpu-ocr-compare-page">
-    <!-- 1:1 复刻 Compare 页的页眉卡片 -->
-    <el-card class="page-header-card mb12">
-      <div class="page-header">
-        <div class="header-content">
-          <h2><el-icon class="header-icon"><Search /></el-icon>GPU OCR合同比对</h2>
-          <p>通过视觉大模型进行ocr比对，支持pdf格式文档。</p>
-        </div>
-        <div class="header-decoration"></div>
-      </div>
-    </el-card>
+    <PageHeader 
+      title="合同比对" 
+      description="通过视觉大模型进行合同比对，支持pdf格式文档。"
+      :icon="Search"
+      tag="专业版"
+      tag-type="success"
+    />
 
     <el-card class="mb12">
       <template #header>
         <div class="card-header">
-          <span>GPU OCR文档比对</span>
+          <span>文档比对</span>
           <el-tag type="success" size="small">专业版</el-tag>
         </div>
       </template>
@@ -47,7 +44,7 @@
           :loading="uploading"
           :disabled="!oldFile || !newFile"
         >
-          开始GPU OCR比对
+          开始比对
         </el-button>
 
         <el-button type="info" @click="settingsOpen = true" icon="Setting">比对设置</el-button>
@@ -162,14 +159,14 @@
                 v-if="scope.row.resultUrl"
                 size="small"
                 type="success"
-                :icon="DownloadOutlined"
+                :icon="Download"
                 @click="downloadResult(scope.row.taskId)"
                 title="下载结果"
               />
               <el-button
                 size="small"
                 type="danger"
-                :icon="DeleteOutlined"
+                :icon="Delete"
                 @click="deleteTask(scope.row.taskId)"
                 title="删除任务"
               />
@@ -315,8 +312,8 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, EditPen } from '@element-plus/icons-vue'
-import { DownloadOutlined, DeleteOutlined } from '@ant-design/icons-vue'
+import { Search, EditPen, Download, Delete } from '@element-plus/icons-vue'
+import { PageHeader } from '@/components/common'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -993,49 +990,7 @@ const confirmExport = async () => {
   }
 }
 
-/* 1:1 复刻 Compare 页的页眉样式 */
-.page-header-card { 
-  border-radius: 8px; 
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
-.page-header { 
-  padding: 16px 20px; 
-  position: relative; 
-  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
-}
-.header-content { position: relative; z-index: 2; }
-.header-decoration { 
-  position: absolute; 
-  top: 0; 
-  right: 0; 
-  width: 150px; 
-  height: 100%; 
-  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
-  opacity: 0.5;
-  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
-}
-.page-header h2 { 
-  margin: 0; 
-  font-size: 26px; 
-  color: var(--el-color-primary-dark-2); 
-  display: flex; 
-  align-items: center;
-  font-weight: 600;
-}
-.header-icon { 
-  margin-right: 10px; 
-  font-size: 24px; 
-  color: var(--el-color-primary);
-}
-.page-header p { 
-  margin: 10px 0 0; 
-  color: #606266; 
-  font-size: 15px; 
-  max-width: 80%;
-}
+/* 页眉样式已移至通用组件PageHeader */
 
 .setting-hint {
   font-size: 12px;

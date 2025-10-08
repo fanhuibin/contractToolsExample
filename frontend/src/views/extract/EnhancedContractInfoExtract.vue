@@ -1,94 +1,86 @@
 <template>
   <div class="enhanced-extract-container">
-    <a-card :bordered="false">
-      <template #title>
+    <el-card :shadow="never">
+      <template #header>
         <div class="card-title">
-          <a-button 
-            type="text" 
+          <el-button 
+            text 
             @click="goBack"
             style="margin-right: 12px;"
           >
-            <template #icon>
-              <ArrowLeftOutlined />
-            </template>
+            <el-icon><ArrowLeft /></el-icon>
             返回
-          </a-button>
+          </el-button>
           智能合同信息提取 - 增强版
         </div>
       </template>
       <!-- 文件上传区域 -->
       <div class="upload-section" v-if="!taskId">
-        <a-upload-dragger
-          name="file"
+        <el-upload
+          drag
           :multiple="false"
           accept=".pdf"
           :before-upload="beforeUpload"
-          :show-upload-list="false"
-          @drop="handleDrop"
+          :show-file-list="false"
+          :auto-upload="false"
         >
-          <p class="ant-upload-drag-icon">
-            <inbox-outlined />
-          </p>
-          <p class="ant-upload-text">点击或拖拽PDF文件到此区域上传</p>
-          <p class="ant-upload-hint">
-            支持PDF格式文件，系统将自动进行OCR识别和信息提取
-          </p>
-        </a-upload-dragger>
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">点击或拖拽PDF文件到此区域上传</div>
+          <div class="el-upload__tip">支持PDF格式文件，系统将自动进行OCR识别和信息提取</div>
+        </el-upload>
 
         <!-- 提取选项 -->
         <div class="extract-options" style="margin-top: 24px;">
-          <a-form layout="inline">
-            <a-form-item label="提取模式">
-              <a-select v-model:value="extractOptions.schemaType" style="width: 200px;">
-                <a-select-option value="contract">合同信息</a-select-option>
-                <a-select-option value="invoice">发票信息</a-select-option>
-                <a-select-option value="custom">自定义</a-select-option>
-              </a-select>
-            </a-form-item>
+          <el-form :inline="true">
+            <el-form-item label="提取模式">
+              <el-select v-model="extractOptions.schemaType" style="width: 200px;">
+                <el-option value="contract" label="合同信息" />
+                <el-option value="invoice" label="发票信息" />
+                <el-option value="custom" label="自定义" />
+              </el-select>
+            </el-form-item>
             
-            <a-form-item label="OCR引擎">
-              <a-select v-model:value="ocrProvider" style="width: 120px;">
-                <a-select-option value="dotsocr">DotSOCR</a-select-option>
-                <a-select-option value="qwen">通义千问</a-select-option>
-                <a-select-option value="rapidocr">RapidOCR</a-select-option>
-              </a-select>
-            </a-form-item>
-          </a-form>
+            <el-form-item label="OCR引擎">
+              <el-select v-model="ocrProvider" style="width: 120px;">
+                <el-option value="dotsocr" label="DotSOCR" />
+                <el-option value="qwen" label="通义千问" />
+                <el-option value="rapidocr" label="RapidOCR" />
+              </el-select>
+            </el-form-item>
+          </el-form>
         </div>
       </div>
 
       <!-- 处理进度 -->
       <div class="progress-section" v-if="taskId && !isCompleted">
-        <a-progress 
-          :percent="progress" 
+        <el-progress 
+          :percentage="progress" 
           :status="progressStatus"
-          :show-info="true"
         />
         <p class="progress-text">{{ statusMessage }}</p>
         
         <!-- 处理步骤指示器 -->
-        <a-steps 
-          :current="currentStep" 
-          size="small" 
+        <el-steps 
+          :active="currentStep" 
+          :process-status="progressStatus === 'exception' ? 'error' : 'process'"
           style="margin-top: 16px;"
-          :status="progressStatus === 'exception' ? 'error' : 'process'"
         >
-          <a-step title="文件上传" description="上传PDF文件" />
-          <a-step title="OCR识别" description="提取文字和位置信息" />
-          <a-step title="位置映射" description="建立文字位置索引" />
-          <a-step title="信息提取" description="智能提取关键信息" />
-          <a-step title="结果生成" description="生成可视化结果" />
-        </a-steps>
+          <el-step title="文件上传" description="上传PDF文件" />
+          <el-step title="OCR识别" description="提取文字和位置信息" />
+          <el-step title="位置映射" description="建立文字位置索引" />
+          <el-step title="信息提取" description="智能提取关键信息" />
+          <el-step title="结果生成" description="生成可视化结果" />
+        </el-steps>
       </div>
 
       <!-- 增强结果显示 -->
       <div class="enhanced-result-section" v-if="isCompleted && extractResult">
         <!-- 显示模式切换 -->
         <div class="display-controls" style="margin-bottom: 16px;">
-          <a-radio-group v-model:value="displayMode" button-style="solid">
-            <a-radio-button value="canvas">图片模式</a-radio-button>
-            <a-radio-button value="text">文本模式</a-radio-button>
-          </a-radio-group>
+          <el-radio-group v-model="displayMode">
+            <el-radio-button value="canvas">图片模式</el-radio-button>
+            <el-radio-button value="text">文本模式</el-radio-button>
+          </el-radio-group>
           
         </div>
 
@@ -96,12 +88,11 @@
         <div class="dual-panel-layout">
           <!-- 左侧面板 -->
           <div class="left-panel">
-            <a-card 
-              :title="displayMode === 'canvas' ? '文档图像' : '文档文本'" 
-              size="small"
+            <el-card 
               class="canvas-card"
               :body-style="{ padding: '12px' }"
             >
+              <template #header>{{ displayMode === 'canvas' ? '文档图像' : '文档文本' }}</template>
               <!-- Canvas模式 -->
               <div v-if="displayMode === 'canvas'" class="canvas-container">
                 <canvas-viewer 
@@ -125,24 +116,23 @@
                   @text-click="onTextClick"
                 />
               </div>
-            </a-card>
+            </el-card>
           </div>
 
           <!-- 右侧面板 -->
           <div class="right-panel">
-            <a-card 
-              title="提取结果" 
-              size="small"
+            <el-card 
               class="results-card"
               :body-style="{ padding: '12px' }"
             >
+              <template #header>提取结果</template>
               <extraction-results 
                 ref="extractionResults"
                 :extractions="extractResult.extractions"
                 :schema-type="extractResult.schemaType"
                 @extraction-click="onExtractionClick"
               />
-            </a-card>
+            </el-card>
           </div>
         </div>
 
@@ -150,22 +140,22 @@
 
       <!-- 错误显示 -->
       <div class="error-section" v-if="error">
-        <a-alert
-          :message="error"
+        <el-alert
+          :title="error"
           type="error"
           show-icon
           closable
           @close="error = ''"
         />
       </div>
-    </a-card>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted } from 'vue'
-import { message } from 'ant-design-vue'
-import { InboxOutlined, ArrowLeftOutlined } from '@ant-design/icons-vue'
+import { ElMessage } from 'element-plus'
+import { UploadFilled, ArrowLeft } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import { uploadFileEnhanced, getTaskStatus, getEnhancedTaskResult, getTaskCharBoxes, getTaskBboxMappings } from '@/api/extract'
 import CanvasViewer from './components/CanvasViewer.vue'
@@ -220,12 +210,12 @@ const stepMapping = computed(() => ({
 // 文件上传前处理
 const beforeUpload = (file: File): boolean => {
   if (!file.name.toLowerCase().endsWith('.pdf')) {
-    message.error('只支持PDF格式文件')
+    ElMessage.error('只支持PDF格式文件')
     return false
   }
   
   if (file.size > 50 * 1024 * 1024) { // 50MB
-    message.error('文件大小不能超过50MB')
+    ElMessage.error('文件大小不能超过50MB')
     return false
   }
   
@@ -254,7 +244,7 @@ const handleFileUpload = async (file: File) => {
     
     if (response.code === 200) {
       taskId.value = response.data.taskId
-      message.success('文件上传成功，开始提取...')
+      ElMessage.success('文件上传成功，开始提取...')
       startPolling()
     } else {
       throw new Error(response.message || '上传失败')
@@ -263,7 +253,7 @@ const handleFileUpload = async (file: File) => {
   } catch (err: any) {
     error.value = err.message || '上传失败'
     progressStatus.value = 'exception'
-    message.error(error.value)
+    ElMessage.error(error.value)
   }
 }
 
@@ -330,13 +320,13 @@ const loadResults = async () => {
         console.warn('CharBox数据加载失败:', charBoxErr)
       }
       
-      message.success('结果加载完成')
+      ElMessage.success('结果加载完成')
     } else {
       throw new Error(resultResponse.message || '加载结果失败')
     }
   } catch (err: any) {
     error.value = err.message || '加载结果失败'
-    message.error(error.value)
+    ElMessage.error(error.value)
   }
 }
 
