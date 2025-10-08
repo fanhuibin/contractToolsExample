@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import com.zhaoxinms.contract.tools.common.Result;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareUrlRequest;
+import com.zhaoxinms.contract.tools.comparePRO.service.CompareImageService;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
@@ -42,6 +43,9 @@ public class GPUCompareController {
 
     @Autowired
     private CompareService compareService;
+    
+    @Autowired
+    private CompareImageService imageService;
     
     @Autowired
     private ProgressCalculator progressCalculator;
@@ -324,46 +328,6 @@ public class GPUCompareController {
     }
 
     /**
-     * 调试模式：使用已有的OCR任务ID进行比对
-     */
-    @PostMapping("/debug-compare")
-    public ResponseEntity<Result<Map<String, String>>> debugCompare(@RequestBody Map<String, Object> request) {
-        try {
-            String taskId = (String) request.get("taskId");
-            @SuppressWarnings("unchecked")
-            Map<String, Object> optionsMap = (Map<String, Object>) request.get("options");
-
-            CompareOptions options = new CompareOptions();
-            if (optionsMap != null) {
-                options.setIgnoreHeaderFooter(Boolean.TRUE.equals(optionsMap.get("ignoreHeaderFooter")));
-                options.setHeaderHeightPercent(((Number) optionsMap.getOrDefault("headerHeightPercent", 12.0)).doubleValue());
-                options.setFooterHeightPercent(((Number) optionsMap.getOrDefault("footerHeightPercent", 12.0)).doubleValue());
-                options.setIgnoreCase(Boolean.TRUE.equals(optionsMap.get("ignoreCase")));
-                options.setIgnoredSymbols((String) optionsMap.getOrDefault("ignoredSymbols", "_＿"));
-                options.setIgnoreSpaces(Boolean.TRUE.equals(optionsMap.get("ignoreSpaces")));
-                options.setIgnoreSeals(Boolean.TRUE.equals(optionsMap.get("ignoreSeals")));
-                options.setRemoveWatermark(Boolean.TRUE.equals(optionsMap.get("removeWatermark")));
-                options.setWatermarkRemovalStrength((String) optionsMap.getOrDefault("watermarkRemovalStrength", "smart"));
-                options.setOcrServiceType((String) optionsMap.getOrDefault("ocrServiceType", "dotsocr"));
-            }
-
-            if (taskId == null || taskId.trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error("taskId不能为空"));
-            }
-
-            String debugTaskId = compareService.debugCompareWithTaskId(taskId, options);
-
-            Map<String, String> data = new HashMap<>();
-            data.put("taskId", debugTaskId);
-
-            return ResponseEntity.ok(Result.success("调试比对任务提交成功", data));
-
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("调试比对失败: " + e.getMessage()));
-        }
-    }
-
-    /**
      * 获取Canvas版本的比对结果（包含图片信息和原始坐标）
      */
     @GetMapping("/canvas-result/{taskId}")
@@ -400,7 +364,7 @@ public class GPUCompareController {
      * 获取文档图片信息
      */
     @GetMapping("/images/{taskId}/{mode}")
-    public ResponseEntity<Result<CompareService.DocumentImageInfo>> getDocumentImages(
+    public ResponseEntity<Result<CompareImageService.DocumentImageInfo>> getDocumentImages(
             @PathVariable String taskId, 
             @PathVariable String mode) {
         try {
@@ -419,7 +383,7 @@ public class GPUCompareController {
                 return ResponseEntity.badRequest().body(Result.error("mode参数必须是old或new"));
             }
 
-            CompareService.DocumentImageInfo imageInfo = compareService.getDocumentImageInfo(taskId, mode);
+            CompareImageService.DocumentImageInfo imageInfo = imageService.getDocumentImageInfo(taskId, mode);
             return ResponseEntity.ok(Result.success("获取文档图片信息成功", imageInfo));
 
         } catch (Exception e) {

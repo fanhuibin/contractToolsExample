@@ -37,6 +37,9 @@ public class ContractInfoExtractController {
     @Autowired
     private ObjectMapper objectMapper;
     
+    @org.springframework.beans.factory.annotation.Value("${file.upload.root-path:./uploads}")
+    private String uploadRootPath;
+    
     /**
      * 上传文件并提取信息
      */
@@ -342,10 +345,14 @@ public class ContractInfoExtractController {
         log.debug("访问任务文件: {} - {}", taskId, fileName);
         
         try {
-            // 构建文件路径
-            File taskDir = new File("uploads/extract-tasks/" + taskId);
-            File imagesDir = new File(taskDir, "images");
+            // 构建文件路径（使用配置的上传路径）
+            // MinerU 生成的图片在 images/extract 目录下
+            File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
+            File imagesDir = new File(new File(taskDir, "images"), "extract");
             File requestedFile = new File(imagesDir, fileName);
+            
+            log.debug("查找图片文件: taskDir={}, imagesDir={}, file={}", 
+                taskDir.getAbsolutePath(), imagesDir.getAbsolutePath(), requestedFile.getAbsolutePath());
             
             // 安全检查：确保文件在允许的目录内
             if (!requestedFile.getCanonicalPath().startsWith(imagesDir.getCanonicalPath())) {
@@ -394,7 +401,7 @@ public class ContractInfoExtractController {
     @GetMapping("/charboxes/{taskId}")
     public Result<Object> getTaskCharBoxes(@PathVariable String taskId) {
         try {
-            File taskDir = new File("uploads/extract-tasks/" + taskId);
+            File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             File charBoxFile = new File(taskDir, "char_boxes.json");
             
             if (!charBoxFile.exists()) {
@@ -421,7 +428,7 @@ public class ContractInfoExtractController {
     @GetMapping("/bbox-mappings/{taskId}")
     public Result<Object> getTaskBboxMappings(@PathVariable String taskId) {
         try {
-            File taskDir = new File("uploads/extract-tasks/" + taskId);
+            File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             File bboxMappingFile = new File(taskDir, "bbox_mappings.json");
             
             if (!bboxMappingFile.exists()) {

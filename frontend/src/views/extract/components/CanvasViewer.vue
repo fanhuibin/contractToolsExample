@@ -516,20 +516,23 @@ const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
       .map(b => `${b.page}-${b.bbox.join('-')}`)
   )
   
-  // 遍历所有提取内容，根据是否高亮绘制不同样式
-  props.extractions.forEach((extraction) => {
-    if (extraction.charInterval) {
-      const bboxes = findBboxesForCharInterval(extraction.charInterval)
-      bboxes.forEach(bboxInfo => {
-        if (bboxInfo.page === page.index + 1) {
-          // 检查当前bbox是否在高亮列表中
-          const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
-          const isHighlighted = highlightedSet.has(bboxKey)
-          
-          // 根据状态绘制一次（避免重复绘制）
-          drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
-        }
-      })
+  // 直接遍历bboxMappings，每个mapping的bboxes数组已经是合并好的
+  props.bboxMappings.forEach((mapping) => {
+    // 检查这个mapping是否在当前页面
+    if (mapping.pages && mapping.pages.includes(page.index + 1)) {
+      // 遍历该mapping的所有bbox（已经合并过，不是字符级的）
+      if (mapping.bboxes && Array.isArray(mapping.bboxes)) {
+        mapping.bboxes.forEach((bboxInfo: any) => {
+          // 只绘制当前页面的bbox
+          if (bboxInfo.page === page.index + 1) {
+            const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
+            const isHighlighted = highlightedSet.has(bboxKey)
+            
+            // 直接绘制，每个bbox只绘制一次
+            drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
+          }
+        })
+      }
     }
   })
 }
@@ -579,34 +582,6 @@ const drawExtractionBbox = (ctx: CanvasRenderingContext2D, bboxInfo: any, page: 
     ctx.fillRect(x, y, width, height)
   }
 }
-
-// 根据字符区间查找对应的bbox
-const findBboxesForCharInterval = (charInterval: any) => {
-  const bboxes: any[] = []
-  
-  if (!props.charBoxes.length) {
-    return bboxes
-  }
-  
-  const startPos = charInterval.startPos || charInterval.start || 0
-  const endPos = charInterval.endPos || charInterval.end || 0
-  
-  
-  for (let i = startPos; i < endPos && i < props.charBoxes.length; i++) {
-    const charBox = props.charBoxes[i]
-    if (charBox && charBox.bbox) {
-      bboxes.push({
-        page: charBox.page,
-        bbox: charBox.bbox,
-        char: charBox.ch
-      })
-    }
-  }
-  
-  
-  return bboxes
-}
-
 
 // Canvas交互事件
 const onCanvasClick = (event: MouseEvent, pageIndex: number) => {
@@ -677,9 +652,10 @@ const retryLoad = () => {
 const navigateToExtraction = (extraction: any) => {
   if (!extraction.charInterval) return
   
-  const bboxes = findBboxesForCharInterval(extraction.charInterval)
-  if (bboxes.length > 0) {
-    const firstBbox = bboxes[0]
+  // 从bboxMappings中查找对应的mapping
+  const mapping = findMappingForExtraction(extraction)
+  if (mapping && mapping.bboxes && mapping.bboxes.length > 0) {
+    const firstBbox = mapping.bboxes[0]
     if (firstBbox.page) {
       currentPage.value = firstBbox.page
       scrollToPage(firstBbox.page)
@@ -698,13 +674,33 @@ const highlightExtractionBboxes = (extractions: any[]) => {
   // 添加新的高亮
   extractions.forEach(extraction => {
     if (extraction.charInterval) {
-      const bboxes = findBboxesForCharInterval(extraction.charInterval)
-      highlightedBboxes.value.push(...bboxes)
+      // 从bboxMappings中查找对应的mapping
+      const mapping = findMappingForExtraction(extraction)
+      if (mapping && mapping.bboxes) {
+        highlightedBboxes.value.push(...mapping.bboxes)
+      }
     }
   })
   
   // 重新绘制
   renderVisiblePages()
+}
+
+// 根据extraction查找对应的bboxMapping
+const findMappingForExtraction = (extraction: any) => {
+  if (!extraction.charInterval) return null
+  
+  const interval = extraction.charInterval
+  const start = interval.startPos || interval.start || 0
+  const end = interval.endPos || interval.end || 0
+  
+  // 在bboxMappings中查找匹配的mapping
+  return props.bboxMappings.find(mapping => {
+    if (!mapping.interval) return false
+    const mappingStart = mapping.interval.startPos || mapping.interval.start || 0
+    const mappingEnd = mapping.interval.endPos || mapping.interval.end || 0
+    return mappingStart === start && mappingEnd === end
+  })
 }
 
 // 暴露方法给父组件

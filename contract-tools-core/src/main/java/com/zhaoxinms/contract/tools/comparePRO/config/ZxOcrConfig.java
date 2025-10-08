@@ -80,69 +80,14 @@ public class ZxOcrConfig {
     private float jpegQuality = 0.85f;
 
     /**
-     * 最小像素总数（小于则按比例放大，0 表示不启用）
-     */
-    private long minPixels = 3136;
-
-    /**
-     * 最大像素总数（大于则按比例缩小，建议 11289600）
-     */
-    private long maxPixels = 11289600;
-
-    /**
      * 是否保存OCR识别图片（默认关闭）
      */
     private boolean saveOcrImages = false;
 
     /**
-     * 幻觉校验配置
-     */
-    private HallucinationValidation hallucinationValidation = new HallucinationValidation();
-
-    /**
      * MinerU OCR配置
      */
     private MinerUConfig mineru = new MinerUConfig();
-
-    /**
-     * 幻觉校验配置内部类
-     */
-    public static class HallucinationValidation {
-        /**
-         * 是否启用幻觉校验功能
-         */
-        private boolean enabled = true;
-
-        /**
-         * 页数阈值倍数
-         * 当符合条件的差异块数量超过 总页数*此倍数 时，跳过RapidOCR校验
-         */
-        private int pageThresholdMultiplier = 3;
-
-        public boolean isEnabled() {
-            return enabled;
-        }
-
-        public void setEnabled(boolean enabled) {
-            this.enabled = enabled;
-        }
-
-        public int getPageThresholdMultiplier() {
-            return pageThresholdMultiplier;
-        }
-
-        public void setPageThresholdMultiplier(int pageThresholdMultiplier) {
-            this.pageThresholdMultiplier = pageThresholdMultiplier;
-        }
-
-        @Override
-        public String toString() {
-            return "HallucinationValidation{" +
-                    "enabled=" + enabled +
-                    ", pageThresholdMultiplier=" + pageThresholdMultiplier +
-                    '}';
-        }
-    }
 
     public String getDefaultOcrService() {
         return defaultOcrService;
@@ -224,36 +169,12 @@ public class ZxOcrConfig {
         this.jpegQuality = jpegQuality;
     }
 
-    public long getMinPixels() {
-        return minPixels;
-    }
-
-    public void setMinPixels(long minPixels) {
-        this.minPixels = minPixels;
-    }
-
-    public long getMaxPixels() {
-        return maxPixels;
-    }
-
-    public void setMaxPixels(long maxPixels) {
-        this.maxPixels = maxPixels;
-    }
-
     public boolean isSaveOcrImages() {
         return saveOcrImages;
     }
 
     public void setSaveOcrImages(boolean saveOcrImages) {
         this.saveOcrImages = saveOcrImages;
-    }
-
-    public HallucinationValidation getHallucinationValidation() {
-        return hallucinationValidation;
-    }
-
-    public void setHallucinationValidation(HallucinationValidation hallucinationValidation) {
-        this.hallucinationValidation = hallucinationValidation;
     }
 
     public MinerUConfig getMineru() {

@@ -154,21 +154,6 @@ public class TextExtractionUtil {
 
         List<PageLayout> processedLayouts = prepareLayouts(ordered, strategy);
 
-        // 输出页眉页脚配置信息
-//        System.out.println("=== 页眉页脚检测配置 ===");
-//        System.out.println("页眉高度占比: " + headerHeightPercent + "%");
-//        System.out.println("页脚高度占比: " + footerHeightPercent + "%");
-//        System.out.println("页眉区域: 0% - " + headerHeightPercent + "%");
-//        System.out.println("页脚区域: " + (100 - footerHeightPercent) + "% - 100%");
-//        System.out.println("忽略页眉页脚: " + (ignoreHeaderFooter ? "是" : "否"));
-//        System.out.println("========================");
-
-        // 统计变量
-        int totalItems = 0;
-        int headerItems = 0;
-        int footerItems = 0;
-        int ignoredItems = 0;
-
         for (PageLayout pl : processedLayouts) {
             if (pl == null) continue;
 
@@ -200,7 +185,6 @@ public class TextExtractionUtil {
             for (LayoutItem it : pl.items) {
                 if (it.text == null || it.text.isEmpty()) continue;
                 
-                totalItems++; // 统计总项目数
 
                 // 如果启用忽略页眉页脚功能，进行检测
                 if (ignoreHeaderFooter) {
@@ -223,26 +207,15 @@ public class TextExtractionUtil {
                         if ("Page-header".equals(it.category) && 
                             topPercent >= 0 && bottomPercent <= headerHeightPercent) {
                             isHeaderOrFooter = true;
-                            headerItems++; // 统计页眉项目数
-                            System.out.println("检测到页眉内容 - 页面" + pl.page + 
-                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
-                                ", bbox范围: " + String.format("%.2f", topPercent) + "%-" + String.format("%.2f", bottomPercent) + "%" +
-                                ", 页眉阈值: 0%-" + headerHeightPercent + "%");
                         }
                         // 页脚检测：bbox完全包含在页脚区域内（顶部和底部都在页脚区域）
                         else if ("Page-footer".equals(it.category) && 
                                  topPercent >= (100 - footerHeightPercent) && bottomPercent <= 100) {
                             isHeaderOrFooter = true;
-                            footerItems++; // 统计页脚项目数
-                            System.out.println("检测到页脚内容 - 页面" + pl.page + 
-                                ", 文本: '" + it.text.substring(0, Math.min(20, it.text.length())) + "'" +
-                                ", bbox范围: " + String.format("%.2f", topPercent) + "%-" + String.format("%.2f", bottomPercent) + "%" +
-                                ", 页脚阈值: " + (100 - footerHeightPercent) + "%-100%");
                         }
                     }
                     
                     if (isHeaderOrFooter) {
-                        ignoredItems++; // 统计被忽略的项目数
                         continue; // 跳过页眉页脚内容
                     }
                 }

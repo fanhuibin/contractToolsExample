@@ -285,81 +285,6 @@ public class MinerUOCRService {
     }
     
     /**
-     * 解析MinerU结果并转换为标准格式
-     */
-    private Map<String, Object> parseMinerUResult(
-            String apiResult, 
-            List<Map<String, Object>> pageImages, 
-            File pdfFile,
-            CompareOptions options) throws Exception {
-        
-        JsonNode root = objectMapper.readTree(apiResult);
-        
-        // 提取content_list
-        JsonNode contentListNode = extractContentList(root);
-        if (contentListNode == null || !contentListNode.isArray()) {
-            throw new Exception("未找到有效的content_list数据");
-        }
-        
-        // 获取每页的PDF尺寸（用于坐标转换）
-        Map<Integer, double[]> pdfPageSizes = new HashMap<>();
-        for (Map<String, Object> pageImage : pageImages) {
-            int pageIdx = (Integer) pageImage.get("pageIndex");
-            double[] pdfSize = MinerUCoordinateConverter.getPdfPageSize(pdfFile, pageIdx);
-            pdfPageSizes.put(pageIdx, pdfSize);
-            pageImage.put("pdfWidth", pdfSize[0]);
-            pageImage.put("pdfHeight", pdfSize[1]);
-        }
-        
-        // 按页面组织数据
-        Map<Integer, List<Map<String, Object>>> pageData = new HashMap<>();
-        
-        for (JsonNode item : contentListNode) {
-            int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
-            
-            // 过滤页眉页脚（根据CompareOptions的设置）
-            if (options.isIgnoreHeaderFooter()) {
-                boolean isFiltered = isHeaderFooterOrPageNumber(item);
-                
-                if (isFiltered) {
-                    String itemType = item.has("type") ? item.get("type").asText() : "unknown";
-                    String itemText = "";
-                    if (item.has("text")) {
-                        itemText = item.get("text").asText();
-                        if (itemText.length() > 30) itemText = itemText.substring(0, 30) + "...";
-                    } else if (item.has("list_items")) {
-                        itemText = "[LIST with " + item.get("list_items").size() + " items]";
-                    }
-                    
-                    log.info("🚫 过滤 MinerU 识别的页眉页脚 - 第{}页, 类型:{}, 内容:{}", pageIdx + 1, itemType, itemText);
-                    continue;
-                }
-            }
-            
-            // 转换坐标
-            Map<String, Object> charBoxData = convertMinerUToCharBox(
-                item, 
-                pageImages.get(pageIdx),
-                pdfPageSizes.get(pageIdx)
-            );
-            
-            if (!pageData.containsKey(pageIdx)) {
-                pageData.put(pageIdx, new ArrayList<>());
-            }
-            pageData.get(pageIdx).add(charBoxData);
-        }
-        
-        // 构建最终结果
-        Map<String, Object> result = new HashMap<>();
-        result.put("fileName", pdfFile.getName());
-        result.put("totalPages", pageImages.size());
-        result.put("pageData", pageData);
-        result.put("pageImages", pageImages);
-        
-        return result;
-    }
-    
-    /**
      * 提取content_list字段
      */
     private JsonNode extractContentList(JsonNode root) throws Exception {
@@ -958,93 +883,6 @@ public class MinerUOCRService {
     }
     
     /**
-     * 转换MinerU坐标系到图片坐标系
-     */
-    private Map<String, Object> convertMinerUToCharBox(
-            JsonNode item, 
-            Map<String, Object> pageImage,
-            double[] pdfPageSize) {
-        
-        Map<String, Object> charBox = new HashMap<>();
-        
-        int imageWidth = (Integer) pageImage.get("imageWidth");
-        int imageHeight = (Integer) pageImage.get("imageHeight");
-        double pdfWidth = pdfPageSize[0];
-        double pdfHeight = pdfPageSize[1];
-        
-        // 提取bbox
-        if (item.has("bbox")) {
-            JsonNode bboxNode = item.get("bbox");
-            if (bboxNode.isArray() && bboxNode.size() >= 4) {
-                double[] mineruBbox = new double[4];
-                mineruBbox[0] = bboxNode.get(0).asDouble();
-                mineruBbox[1] = bboxNode.get(1).asDouble();
-                mineruBbox[2] = bboxNode.get(2).asDouble();
-                mineruBbox[3] = bboxNode.get(3).asDouble();
-                
-                // MinerU 使用 1000x1000 归一化坐标，不应该和 PDF 尺寸比较
-                // 只检查是否在 0-1000 范围内
-                final double MINERU_MAX = 1000.0;
-                if (mineruBbox[2] > MINERU_MAX || mineruBbox[3] > MINERU_MAX) {
-                    log.warn("⚠️  MinerU 坐标异常（超出1000）: [{}, {}, {}, {}]", 
-                        mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
-                    
-                    // 修正到 0-1000 范围
-                    mineruBbox[0] = Math.max(0, Math.min(mineruBbox[0], MINERU_MAX));
-                    mineruBbox[1] = Math.max(0, Math.min(mineruBbox[1], MINERU_MAX));
-                    mineruBbox[2] = Math.max(mineruBbox[0], Math.min(mineruBbox[2], MINERU_MAX));
-                    mineruBbox[3] = Math.max(mineruBbox[1], Math.min(mineruBbox[3], MINERU_MAX));
-                    
-                    log.warn("   修正后: [{}, {}, {}, {}]", 
-                        mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
-                }
-                
-                // 使用坐标转换工具进行转换
-                int[] imageBbox = MinerUCoordinateConverter.convertToImageCoordinates(
-                    mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
-                
-                // 再次验证并修正坐标（防止浮点数舍入误差）
-                if (!MinerUCoordinateConverter.isValidBbox(imageBbox, imageWidth, imageHeight)) {
-                    log.debug("转换后坐标微调: {} -> ", imageBbox);
-                    imageBbox = MinerUCoordinateConverter.clampBbox(imageBbox, imageWidth, imageHeight);
-                    log.debug("{}", imageBbox);
-                }
-                
-                charBox.put("bbox", imageBbox);
-            }
-        }
-        
-        // 提取文本
-        if (item.has("text")) {
-            charBox.put("text", item.get("text").asText());
-        }
-        
-        // 提取类型
-        if (item.has("type")) {
-            charBox.put("type", item.get("type").asText());
-        }
-        
-        // 提取text_level
-        if (item.has("text_level")) {
-            charBox.put("textLevel", item.get("text_level").asInt());
-        }
-        
-        // 提取list_items（如果是列表类型）
-        if (item.has("list_items")) {
-            JsonNode listItemsNode = item.get("list_items");
-            List<String> listItems = new ArrayList<>();
-            if (listItemsNode.isArray()) {
-                for (JsonNode listItem : listItemsNode) {
-                    listItems.add(listItem.asText());
-                }
-            }
-            charBox.put("listItems", listItems);
-        }
-        
-        return charBox;
-    }
-    
-    /**
      * 保存MinerU原始响应JSON
      */
     private void saveRawResponse(String apiResult, File outputDir, String taskId, String docMode) {
@@ -1199,45 +1037,6 @@ public class MinerUOCRService {
     }
     
     /**
-     * 保存处理后的结果JSON
-     * 
-     * @param result 处理后的结果数据
-     * @param outputDir 输出目录
-     * @param taskId 任务ID
-     * @param docMode 文档模式（old/new）
-     * @param suffix 文件名后缀（如 "filtered" 或 "unfiltered"）
-     */
-    private void saveProcessedResult(Map<String, Object> result, File outputDir, String taskId, String docMode, String suffix) {
-        try {
-            // 创建ocr目录
-            File ocrDir = new File(outputDir, "ocr");
-            if (!ocrDir.exists()) {
-                ocrDir.mkdirs();
-            }
-            
-            // 保存处理后的结果
-            String fileName = String.format("mineru_processed_%s_%s.json", docMode, suffix);
-            File processedFile = new File(ocrDir, fileName);
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(processedFile, result);
-            
-            int totalBlocks = 0;
-            @SuppressWarnings("unchecked")
-            Map<Integer, List<Map<String, Object>>> pageData = 
-                (Map<Integer, List<Map<String, Object>>>) result.get("pageData");
-            if (pageData != null) {
-                for (List<Map<String, Object>> blocks : pageData.values()) {
-                    totalBlocks += blocks.size();
-                }
-            }
-            
-            log.info("保存MinerU处理后结果 ({}): {}, 共{}个内容块", 
-                suffix, processedFile.getAbsolutePath(), totalBlocks);
-        } catch (Exception e) {
-            log.warn("保存MinerU处理后结果失败 ({}): {}", suffix, e.getMessage());
-        }
-    }
-    
-    /**
      * 将 LaTeX/Markdown 格式转换为人类可读的纯文本
      * 参考 dots.ocr 的公式处理方式
      * 
@@ -1380,7 +1179,9 @@ public class MinerUOCRService {
         
         // 3. 处理比较符号
         result = result.replaceAll("\\\\leq\\b", "≤");
+        result = result.replaceAll("\\\\leqslant\\b", "≤");  // \leqslant 也是小于等于
         result = result.replaceAll("\\\\geq\\b", "≥");
+        result = result.replaceAll("\\\\geqslant\\b", "≥");  // \geqslant 也是大于等于
         result = result.replaceAll("\\\\neq\\b", "≠");
         result = result.replaceAll("\\\\approx\\b", "≈");
         result = result.replaceAll("\\\\equiv\\b", "≡");

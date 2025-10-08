@@ -100,7 +100,7 @@ zxcm:
     # ZXOCR配置（原GPU OCR）
     zxocr:
       # 默认OCR工具选择（全局配置，优先级高于前端传递）
-      # 可选值: mineru, dotsocr, thirdparty
+      # 可选值: mineru
       default-ocr-service: mineru
       
       # OCR服务配置
@@ -131,34 +131,6 @@ zxcm:
       # 0.90: 高质量，文件稍大
       # 0.75: 更小的文件
       jpeg-quality: 0.85
-      
-      min-pixels: 3136
-      max-pixels: 11289600
-      
-      # 并发处理配置
-      parallel-threads: 30  # 默认并发线程数，可根据服务器性能调整
-      
-      # GPU OCR线程池配置
-      thread-pool:
-        # 核心线程数（始终保持活跃的线程数）
-        core-pool-size: 2
-        # 最大线程数（线程池允许的最大线程数）
-        max-pool-size: 30
-        # 任务队列容量（等待队列中最多能容纳的任务数）
-        queue-capacity: 500
-        # 线程空闲时间（秒）- 非核心线程的最大空闲时间
-        keep-alive-time: 60
-        # 线程名称前缀
-        thread-name-prefix: "GPU-OCR-Worker-"
-        # 是否允许核心线程超时
-        allow-core-thread-timeout: false
-        
-      # 任务处理配置
-      task:
-        # 队列繁忙阈值（当队列使用率超过此值时认为繁忙）
-        busy-threshold: 0.8
-        # 任务超时时间（分钟）
-        timeout-minutes: 30
         
       # 监控配置
       monitoring:
@@ -166,11 +138,6 @@ zxcm:
         enable-detailed-logging: true
         # 统计信息输出间隔（秒）
         stats-interval-seconds: 300
-      
-      # 幻觉校验配置
-      hallucination-validation:
-        enabled: true  # 是否启用RapidOCR幻觉校验
-        page-threshold-multiplier: 3  # 页数阈值倍数，符合条件的块数超过 总页数*此倍数 时跳过校验
       
       # 调试配置
       debug-file-path: "./uploads/debug"
@@ -205,17 +172,6 @@ zxcm:
         # 性能调整系数
         ocr-buffer-factor: 1.1           # OCR步骤缓冲系数（降低缓冲，更贴近实际）
         regression-fallback: true        # 是否启用线性回归作为备选
-
-    # RapidOCR配置
-    rapidocr:
-      enabled: false  # 禁用RapidOCR
-      base-url: http://192.168.0.100:9005
-      timeout: PT2M  # 2分钟超时
-      verbose-logging: false
-      max-concurrency: 10
-      default-use-detection: true
-      default-use-classification: true
-      default-use-recognition: true
       
     # MinerU OCR配置
     mineru:
