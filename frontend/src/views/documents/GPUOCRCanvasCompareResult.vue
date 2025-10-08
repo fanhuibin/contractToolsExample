@@ -32,19 +32,15 @@
           <span class="page-tip">（连续滚动模式）</span>
         </div>
         
-        <!-- 图片缩放控制 -->
-        <div class="zoom-controls">
-          <el-button size="small" :disabled="zoomScale <= 0.5" @click="zoomOut" title="缩小">
-            <el-icon><ZoomOut /></el-icon>
-          </el-button>
-          <span class="zoom-indicator">{{ Math.round(zoomScale * 100) }}%</span>
-          <el-button size="small" :disabled="zoomScale >= 2.0" @click="zoomIn" title="放大">
-            <el-icon><ZoomIn /></el-icon>
-          </el-button>
-          <el-button size="small" @click="resetZoom" title="重置缩放">
-            <el-icon><FullScreen /></el-icon>
-          </el-button>
-        </div>
+        <el-button 
+          size="small" 
+          type="info"
+          plain
+          @click="toggleDiffList"
+        >
+          <el-icon><View /></el-icon>
+          {{ showDiffList ? '隐藏结果' : '显示结果' }}
+        </el-button>
         
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
@@ -169,7 +165,7 @@
       </div>
 
       <!-- 右侧差异列表 - 参考样式重构 -->
-      <div class="diff-list-container" :style="{ width: diffListWidth + 'px' }">
+      <div v-show="showDiffList" class="diff-list-container" :style="{ width: diffListWidth + 'px' }">
         <!-- 拖拽手柄 -->
         <div class="diff-list-drag-box" @mousedown="handleDragStart">
           <svg width="32" height="86" viewBox="0 0 32 86" fill="none">
@@ -348,7 +344,7 @@
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked, ZoomIn, ZoomOut, FullScreen } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, debugGPUCompareLegacy, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
 
@@ -493,8 +489,8 @@ const oldFileName = ref('')
 const newFileName = ref('')
 const displayFileNames = computed(() => oldFileName.value && newFileName.value)
 
-// 缩放控制
-const zoomScale = ref(1.0) // 默认100%缩放
+// 差异列表显示控制
+const showDiffList = ref(true) // 默认显示差异列表
 
 // 拖拽调整宽度相关状态
 const isDragging = ref(false)
@@ -738,7 +734,7 @@ const renderAllPages = async () => {
   
   // 应用缩放比例到容器宽度
   const baseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
-  const containerWidth = baseWidth * zoomScale.value
+  const containerWidth = baseWidth * 1.0
   const oldLayout = calculatePageLayout(oldImageInfo.value, containerWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, containerWidth)
   
@@ -874,8 +870,8 @@ const updateVisibleCanvasesOnScroll = async () => {
   // 应用缩放比例
   const oldBaseWidth = getCanvasWidth(oldCanvasWrapper.value || null)
   const newBaseWidth = getCanvasWidth(newCanvasWrapper.value || null)
-  const oldWidth = oldBaseWidth * zoomScale.value
-  const newWidth = newBaseWidth * zoomScale.value
+  const oldWidth = oldBaseWidth * 1.0
+  const newWidth = newBaseWidth * 1.0
   const oldLayout = calculatePageLayout(oldImageInfo.value, oldWidth)
   const newLayout = calculatePageLayout(newImageInfo.value, newWidth)
 
@@ -891,7 +887,7 @@ const jumpToPage = (pageNum: number) => {
   
   // 使用记录的Canvas宽度，确保与渲染时一致（已包含缩放）
   const canvasWidth = actualCanvasWidth.value.old
-  const actualWidth = canvasWidth || (getCanvasWidth(oldCanvasWrapper.value) * zoomScale.value)
+  const actualWidth = canvasWidth || (getCanvasWidth(oldCanvasWrapper.value) * 1.0)
   
   // 计算目标页面的位置（使用实际Canvas宽度）
   let targetY = 0
@@ -1007,7 +1003,7 @@ const getCurrentVisiblePage = () => {
   
   const scrollTop = oldCanvasWrapper.value.scrollTop
   const baseWidth = getCanvasWidth(oldCanvasWrapper.value)
-  const containerWidth = baseWidth * zoomScale.value
+  const containerWidth = baseWidth * 1.0
   const layout = calculatePageLayout(oldImageInfo.value, containerWidth)
   
   // 根据滚动位置确定当前页面
@@ -1229,7 +1225,7 @@ const alignCanvasViewerContinuousLocal = (side: 'old' | 'new', pos: any) => {
   try {
     // 使用预计算的布局，确保与渲染一致（应用缩放）
     const baseWidth = getCanvasWidth(wrapper)
-    const containerWidth = baseWidth * zoomScale.value
+    const containerWidth = baseWidth * 1.0
     const layout = calculatePageLayout(imageInfo, containerWidth)
     
     const pageIndex = pos.page - 1 // 转换为0-based索引
@@ -1550,30 +1546,20 @@ const getTabBarPosition = () => {
   return 0
 }
 
-// 缩放控制方法
-const zoomIn = () => {
-  if (zoomScale.value >= 2.0) return
-  zoomScale.value = Math.min(2.0, zoomScale.value + 0.1)
-  applyZoom()
-}
-
-const zoomOut = () => {
-  if (zoomScale.value <= 0.5) return
-  zoomScale.value = Math.max(0.5, zoomScale.value - 0.1)
-  applyZoom()
-}
-
-const resetZoom = () => {
-  zoomScale.value = 1.0
-  applyZoom()
-}
-
-// 应用缩放到Canvas
-const applyZoom = async () => {
-  // 重新渲染所有页面以应用新的缩放比例
+// 切换差异列表显示/隐藏
+const toggleDiffList = async () => {
+  showDiffList.value = !showDiffList.value
+  
+  // 等待DOM更新完成（容器宽度已变化）
   await nextTick()
-  if (oldImageInfo.value && newImageInfo.value) {
-    renderAllPages()
+  
+  // 完整重新渲染：图片、差异框、图标、连接线
+  await renderAllPages()
+  
+  // 额外确保中间区域正确渲染
+  await nextTick()
+  if (middleCanvasInteraction) {
+    middleCanvasInteraction.render()
   }
 }
 
@@ -2055,25 +2041,6 @@ onUnmounted(() => {
   font-size: 10px;
   color: #909399;
   margin-left: 4px;
-}
-
-/* 缩放控制样式 */
-.zoom-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 8px;
-  padding: 4px 8px;
-  background: #f5f7fa;
-  border-radius: 4px;
-}
-
-.zoom-indicator {
-  font-size: 12px;
-  color: #606266;
-  min-width: 40px;
-  text-align: center;
-  font-weight: 500;
 }
 
 .filter-group :deep(.el-radio-button__inner) { 
