@@ -2499,11 +2499,12 @@ body.dragging * {
 
 .diff-item-content .meta {
   color: var(--zx-text-secondary);
-  font-size: var(--zx-font-xs);
-  margin-top: var(--zx-spacing-xs);
-  display: flex;
+  font-size: 11px;
+  margin-top: 4px;
+  display: inline-flex;
   align-items: center;
-  gap: var(--zx-spacing-sm);
+  gap: 4px;
+  margin-right: 8px;
 }
 
 /* 按钮样式 */
@@ -2522,21 +2523,28 @@ body.dragging * {
 }
 
 .diff-item-actions {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: flex-start;
-  margin-top: var(--zx-spacing-sm);
-  padding-top: var(--zx-spacing-sm);
-  border-top: 1px solid var(--zx-border-extra-light);
+  margin-top: 4px;
+  padding-top: 0;
+  border-top: none;
 }
 
 .remark-btn {
-  padding: var(--zx-spacing-xs) var(--zx-spacing-sm) !important;
-  font-size: var(--zx-font-xs) !important;
+  padding: 2px 6px !important;
+  font-size: 11px !important;
   color: var(--zx-primary) !important;
   flex-shrink: 0;
   border-radius: var(--zx-radius-base) !important;
   transition: all var(--zx-transition-base) var(--zx-ease-in-out);
+  height: auto !important;
+  min-height: auto !important;
+}
+
+.remark-btn .el-icon {
+  font-size: 12px !important;
+  margin-right: 2px;
 }
 
 .remark-btn:hover {
@@ -2651,11 +2659,12 @@ body.dragging * {
 
 .result-item .meta { 
   color: var(--zx-text-secondary); 
-  font-size: var(--zx-font-xs); 
-  margin-top: var(--zx-spacing-xs); 
-  display: flex; 
+  font-size: 11px; 
+  margin-top: 4px; 
+  display: inline-flex; 
   align-items: center; 
-  gap: var(--zx-spacing-sm); 
+  gap: 4px; 
+  margin-right: 8px;
 }
 
 /* ==================== 空状态样式 ==================== */

@@ -180,7 +180,7 @@
     <el-dialog v-model="debugDialogVisible" title="GPU OCR比对调试模式" width="500px">
       <el-form label-width="120px" class="mt20">
         <el-form-item label="任务ID">
-          <el-input v-model="debugForm.taskId" placeholder="输入已完成的GPU OCR任务ID"></el-input>
+          <el-input v-model="debugForm.taskId" placeholder="输入已完成的任务ID"></el-input>
         </el-form-item>
         <el-alert
           title="说明：调试模式将使用已有任务的结果，重新应用比对参数进行分析。请确保输入的TaskId对应的任务已经完成。"
@@ -242,7 +242,7 @@
         </el-form-item>
         <el-form-item label="去除水印">
           <el-switch v-model="settings.removeWatermark" />
-          <div class="setting-hint">自动去除图片中的水印，提高OCR识别准确度</div>
+          <div class="setting-hint">自动去除图片中的水印，提高文字识别准确度</div>
         </el-form-item>
         <el-form-item v-if="settings.removeWatermark" label="去水印强度">
           <el-select v-model="settings.watermarkRemovalStrength" style="width: 100%">
@@ -269,7 +269,7 @@
           </div>
         </el-form-item>
         <el-alert
-          title="说明：这些设置影响GPU OCR识别结果的比对过滤，页眉页脚设置影响OCR识别区域。GPU加速提供更快的处理速度和更高的准确率。"
+          title="说明：这些设置影响文字识别结果的比对过滤，页眉页脚设置影响OCR识别区域。加速提供更快的处理速度和更高的准确率。"
           type="info"
           show-icon
           :closable="false"

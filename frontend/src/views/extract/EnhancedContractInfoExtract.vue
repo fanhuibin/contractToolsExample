@@ -1,6 +1,6 @@
 <template>
   <div class="enhanced-extract-container">
-    <el-card :shadow="never">
+    <el-card shadow="never">
       <template #header>
         <div class="card-title">
           <el-button 
@@ -14,6 +14,7 @@
           智能合同信息提取 - 增强版
         </div>
       </template>
+      
       <!-- 文件上传区域 -->
       <div class="upload-section" v-if="!taskId">
         <el-upload
@@ -450,20 +451,25 @@ onUnmounted(() => {
   display: flex;
   gap: 16px;
   margin-top: 16px;
-  height: 70vh; /* 设置固定高度，避免被挤压 */
+  height: 70vh;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
 }
 
 .left-panel {
-  flex: 2; /* 左侧占更大比例 */
-  min-width: 0; /* 防止flex收缩问题 */
-  height: 100%; /* 确保高度继承 */
+  flex: 2;
+  min-width: 0;
+  height: 100%;
 }
 
 .right-panel {
-  flex: 1; /* 右侧占较小比例 */
-  min-width: 300px; /* 设置最小宽度，防止被挤压 */
-  max-width: 500px; /* 设置最大宽度 */
-  height: 100%; /* 确保高度继承 */
+  flex: 1;
+  min-width: 350px;
+  max-width: 500px;
+  height: 100%;
 }
 
 .canvas-card,
@@ -473,30 +479,36 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
-.canvas-card :deep(.ant-card-body) {
+.canvas-card :deep(.el-card__body) {
   flex: 1;
   overflow: hidden;
+  padding: 0 !important;
+  display: flex;
+  flex-direction: column;
 }
 
-.results-card :deep(.ant-card-body) {
+.results-card :deep(.el-card__body) {
   flex: 1;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .canvas-container {
+  flex: 1;
   width: 100%;
-  height: 100%;
+  overflow: hidden;
   display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  flex-direction: column;
 }
 
 .text-container {
   width: 100%;
   height: 100%;
+  overflow: auto;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 14px;
   line-height: 1.6;
+  padding: 12px;
 }
 
 .stats-section {
@@ -508,10 +520,5 @@ onUnmounted(() => {
 
 .error-section {
   margin-top: 16px;
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
 }
 </style>
