@@ -24,7 +24,6 @@
             accept=".pdf,.doc,.docx,.docm,.xls,.xlsx,.xlsm,.xlsb,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             @change="onFileChange('old', $event)"
           />
-          <div v-if="oldFileName" class="file-info">{{ oldFileName }}</div>
         </el-form-item>
 
         <el-form-item label="新文件">
@@ -34,7 +33,6 @@
             accept=".pdf,.doc,.docx,.docm,.xls,.xlsx,.xlsm,.xlsb,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             @change="onFileChange('new', $event)"
           />
-          <div v-if="newFileName" class="file-info">{{ newFileName }}</div>
         </el-form-item>
 
 
@@ -49,7 +47,7 @@
 
         <el-button type="info" @click="settingsOpen = true" icon="Setting">比对设置</el-button>
 
-        <el-button type="warning" @click="debugDialogVisible = true">调试模式</el-button>
+        <!-- <el-button type="warning" @click="debugDialogVisible = true">调试模式</el-button> -->
       </el-form>
 
       <el-alert
@@ -177,7 +175,7 @@
     </el-card>
 
     <!-- 调试对话框 -->
-    <el-dialog v-model="debugDialogVisible" title="GPU OCR比对调试模式" width="500px">
+    <!-- <el-dialog v-model="debugDialogVisible" title="GPU OCR比对调试模式" width="500px">
       <el-form label-width="120px" class="mt20">
         <el-form-item label="任务ID">
           <el-input v-model="debugForm.taskId" placeholder="输入已完成的任务ID"></el-input>
@@ -198,37 +196,28 @@
           </el-button>
         </span>
       </template>
-    </el-dialog>
+    </el-dialog> -->
 
     <!-- 比对设置抽屉 -->
-    <el-drawer v-model="settingsOpen" title="GPU OCR比对设置" size="400px">
+    <el-drawer v-model="settingsOpen" title="比对设置" size="400px">
       <el-form label-width="140px">
         <el-form-item label="忽略页眉页脚">
           <el-switch v-model="settings.ignoreHeaderFooter" />
+          <div class="setting-hint">忽略文档顶部和底部各12%的区域（默认页眉页脚位置）</div>
         </el-form-item>
-        <el-form-item label="页眉高度(%)">
-          <el-input-number 
-            v-model="settings.headerHeightPercent" 
-            :min="0" 
-            :max="50" 
-            :precision="1"
-            :step="0.5"
-            placeholder="页面顶部百分比"
-          />
-          <div class="setting-hint">文档顶部多少百分比的区域视为页眉</div>
+
+        <!-- 页眉页脚高度设置已隐藏，固定使用默认值12% -->
+        <!-- <el-form-item v-if="settings.ignoreHeaderFooter" label="页眉高度(%)">
+          <el-input-number v-model="settings.headerHeightPercent" :min="0" :max="50" :step="0.5" />
+          <div class="setting-hint">文档顶部多少百分比的区域视为页眉，默认12%</div>
         </el-form-item>
-        <el-form-item label="页脚高度(%)">
-          <el-input-number 
-            v-model="settings.footerHeightPercent" 
-            :min="0" 
-            :max="50" 
-            :precision="1"
-            :step="0.5"
-            placeholder="页面底部百分比"
-          />
-          <div class="setting-hint">文档底部多少百分比的区域视为页脚</div>
-        </el-form-item>
-        <el-form-item label="忽略大小写">
+        <el-form-item v-if="settings.ignoreHeaderFooter" label="页脚高度(%)">
+          <el-input-number v-model="settings.footerHeightPercent" :min="0" :max="50" :step="0.5" />
+          <div class="setting-hint">文档底部多少百分比的区域视为页脚，默认12%</div>
+        </el-form-item> -->
+
+        <!-- 以下选项暂未实现，待后端开发完成后恢复 -->
+        <!-- <el-form-item label="忽略大小写">
           <el-switch v-model="settings.ignoreCase" />
         </el-form-item>
         <el-form-item label="忽略符号集">
@@ -239,12 +228,14 @@
         </el-form-item>
         <el-form-item label="忽略印章">
           <el-switch v-model="settings.ignoreSeals" />
-        </el-form-item>
+        </el-form-item> -->
+
         <el-form-item label="去除水印">
           <el-switch v-model="settings.removeWatermark" />
-          <div class="setting-hint">自动去除图片中的水印，提高文字识别准确度</div>
+          <div class="setting-hint">自动去除图片中的水印，提高文字识别准确度（使用默认强度）</div>
         </el-form-item>
-        <el-form-item v-if="settings.removeWatermark" label="去水印强度">
+        <!-- 去水印强度选择已隐藏，默认使用 default 强度 -->
+        <!-- <el-form-item v-if="settings.removeWatermark" label="去水印强度">
           <el-select v-model="settings.watermarkRemovalStrength" style="width: 100%">
             <el-option
               v-for="option in watermarkStrengthOptions"
@@ -267,9 +258,10 @@
             <strong>扩展强度</strong>：适合半透明水印<br>
             <strong>宽松强度</strong>：可能误删文字，慎用
           </div>
-        </el-form-item>
+        </el-form-item> -->
+        
         <el-alert
-          title="说明：这些设置影响文字识别结果的比对过滤，页眉页脚设置影响OCR识别区域。加速提供更快的处理速度和更高的准确率。"
+          title="说明：页眉页脚设置影响识别区域；去除水印会增加处理时间（约每页1-2秒），但可提升识别准确率。"
           type="info"
           show-icon
           :closable="false"
@@ -404,7 +396,7 @@ const settings = reactive({
   ignoreSpaces: false,
   ignoreSeals: true,
   removeWatermark: false,
-  watermarkRemovalStrength: 'smart' as 'default' | 'extended' | 'loose' | 'smart'
+  watermarkRemovalStrength: 'default' as 'default' | 'extended' | 'loose' | 'smart' // 默认使用 default 模式
 })
 
 // 生命周期

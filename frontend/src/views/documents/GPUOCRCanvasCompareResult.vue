@@ -280,10 +280,10 @@
                       {{ isExpanded(indexInAll(i)) ? '收起' : '展开' }}
                     </span>
                   </div>
-                  <div class="meta">
-                    第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
-                  </div>
-                  <div class="diff-item-actions">
+                  <div class="meta-actions-row">
+                    <span class="meta">
+                      第 {{ r.operation === 'DELETE' ? (r.pageA || r.page) : (r.pageB || r.page) }} 页
+                    </span>
                     <el-button 
                       size="small" 
                       type="text" 
@@ -2050,7 +2050,7 @@ onUnmounted(() => {
   width: 100% !important;
   height: 100% !important;
   pointer-events: none !important;
-  z-index: var(--zx-z-top) !important;
+  z-index: 100 !important; /* 降低 z-index，避免覆盖对话框（dialog 默认 z-index > 2000） */
   overflow: visible !important;
 }
 
@@ -2497,14 +2497,21 @@ body.dragging * {
   color: var(--zx-primary-light-2);
 }
 
+/* 页码和操作按钮同行容器 */
+.meta-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .diff-item-content .meta {
   color: var(--zx-text-secondary);
   font-size: 11px;
-  margin-top: 4px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-right: 8px;
+  margin: 0;
 }
 
 /* 按钮样式 */
@@ -2522,14 +2529,7 @@ body.dragging * {
   background-color: var(--zx-danger-lighter) !important;
 }
 
-.diff-item-actions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-top: 4px;
-  padding-top: 0;
-  border-top: none;
-}
+/* diff-item-actions 已废弃，使用 meta-actions-row 替代 */
 
 .remark-btn {
   padding: 2px 6px !important;
