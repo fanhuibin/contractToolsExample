@@ -157,6 +157,19 @@ public class CompareResultExportService {
                 logger.info("  ✓ 添加HTML文件到ZIP (大小: {} KB)", 
                     finalHtml.getBytes(StandardCharsets.UTF_8).length / 1024);
                 
+                // 添加JSON文件到ZIP
+                zos.putNextEntry(new java.util.zip.ZipEntry("data/current/compare-result.json"));
+                zos.write(compareResultJson.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+                logger.info("  ✓ 添加比对结果JSON到ZIP (大小: {} KB)", 
+                    compareResultJson.getBytes(StandardCharsets.UTF_8).length / 1024);
+                
+                zos.putNextEntry(new java.util.zip.ZipEntry("data/current/task-status.json"));
+                zos.write(taskStatusJson.getBytes(StandardCharsets.UTF_8));
+                zos.closeEntry();
+                logger.info("  ✓ 添加任务状态JSON到ZIP (大小: {} KB)", 
+                    taskStatusJson.getBytes(StandardCharsets.UTF_8).length / 1024);
+                
                 // 添加图片文件到ZIP
                 int zipImages = addTempImagesToZip(zos, tempDir);
                 logger.info("  ✓ 添加图片文件到ZIP (数量: {})", zipImages);
@@ -473,7 +486,7 @@ public class CompareResultExportService {
             
             // 基本任务信息
             taskStatus.put("taskId", result.getTaskId());
-            taskStatus.put("status", "completed");
+            taskStatus.put("status", "COMPLETED");  // 必须大写，与前端期望的状态值一致
             taskStatus.put("oldFileName", result.getOldFileName());
             taskStatus.put("newFileName", result.getNewFileName());
             taskStatus.put("totalDiffCount", result.getTotalDiffCount());

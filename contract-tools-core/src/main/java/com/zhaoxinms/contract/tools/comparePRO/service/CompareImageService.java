@@ -220,7 +220,7 @@ public class CompareImageService {
                     
                     Map<String, Object> pageInfo = new HashMap<>();
                     pageInfo.put("pageNumber", pageNumber);
-                    pageInfo.put("imageUrl", "./images/" + mode + "/" + fileName);
+                    pageInfo.put("imageUrl", "./data/current/images/" + mode + "/" + fileName);
                     pageInfo.put("width", width);
                     pageInfo.put("height", height);
                     
