@@ -44,6 +44,7 @@ import com.zhaoxinms.contract.tools.comparePRO.util.DiffProcessingUtil;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.comparePRO.util.WatermarkRemover;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import com.zhaoxinms.contract.tools.watermark.OpenCVWatermarkUtil; // 直接调用OpenCV去水印
 
 /**
  * GPU OCR比对服务 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -87,6 +88,9 @@ public class CompareService {
 
     @Autowired
     private WatermarkRemover watermarkRemover;
+
+    // PDFWatermarkRemovalService 已废弃，现在直接在 recognizePdfWithMinerU 中实现水印去除
+    // 新流程：拆分图片（一次）→ 去水印 → 合成PDF → MinerU复用图片
 
     private final ConcurrentHashMap<String, CompareTask> tasks = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CompareResult> results = new ConcurrentHashMap<>();
@@ -723,6 +727,9 @@ public class CompareService {
             
             progressManager.completeStep(TaskStep.INIT);
 
+            // 注意：水印去除逻辑已整合到 recognizePdfWithMinerU() 方法中
+            // 新流程：拆分图片 → 去水印 → 合成PDF → MinerU复用图片（一次拆分）
+
             // 步骤2: OCR识别原文档
             progressManager.startStep(TaskStep.OCR_FIRST_DOC);
             
@@ -741,7 +748,7 @@ public class CompareService {
                 progressManager.logStepDetail("📄 文档页数: 原文档{}页, 新文档{}页, 设置总页数为{}页", oldPages, newPages, totalPages);
             }
             
-            // 注意：图片保存和去水印已集成到OCR识别流程中
+            // 注意：图片保存已集成到OCR识别流程中
             
 			RecognitionResult resultA;
 			    // 使用MinerU OCR
@@ -1686,6 +1693,27 @@ public class CompareService {
 	/**
 	 * 使用MinerU OCR识别PDF文档
 	 * 
+	 * 【中间结果保存】
+	 * MinerU 识别过程会自动保存以下中间结果，方便调试和分析：
+	 * 
+	 * 1. MinerU 中间结果目录：{taskDir}/mineru_intermediate/{docMode}/
+	 *    - 01_mineru_raw_response.json    : MinerU API 原始响应（完整 JSON）
+	 *    - 02_content_list.json           : 格式化的 content_list（MinerU 原始结构）
+	 *    - 03_content_list_readable.json  : 易读格式的 content_list（中文字段名）
+	 *    - 04_content_list_stats.txt      : 统计信息（类型分布、页面分布）
+	 * 
+	 * 2. 页面图片：{taskDir}/images/{docMode}/
+	 *    - page-1.png, page-2.png, ...    : PDF 渲染的高清图片（300 DPI）
+	 * 
+	 * 3. OCR 页面结果：{taskDir}/ocr_pages/
+	 *    - {docMode}_page_001.json        : 每页的 OCR 识别结果（dots.ocr 格式）
+	 * 
+	 * 4. 提取的全文：{taskDir}/
+	 *    - old_xxx.pdf.extracted.txt              : 带页面标记的全文
+	 *    - old_xxx.pdf.extracted.compare.txt      : 无页面标记的全文（用于比对）
+	 * 
+	 * 详细说明请参阅：contract-tools-core/MINERU_INTERMEDIATE_RESULTS_README.md
+	 * 
 	 * @param pdfPath PDF文件路径
 	 * @param options 比对选项
 	 * @param progressManager 进度管理器
@@ -1718,9 +1746,183 @@ public class CompareService {
 				outputDir.mkdirs();
 			}
 			
+			// ==================== 优化后的水印去除逻辑 ====================
+			// 策略：先拆分图片（一次），对图片去水印，合成新PDF，MinerU复用图片
+			java.io.File pdfFileToProcess = pdfPath.toFile();
+			
+			if (options.isRemoveWatermark()) {
+				progressManager.logStepDetail("检测到去除水印选项，开始图片预处理...");
+				logger.info("📝 开始去除PDF水印: {}, 模式: {}", pdfPath.getFileName(), docMode);
+				
+				try {
+					// 1. 先拆分PDF为图片（复用MinerU的图片，避免重复拆分）
+					logger.info("步骤1：拆分PDF为图片（DPI=300）");
+					progressManager.logStepDetail("拆分PDF为图片...");
+					
+					java.io.File imagesDir = new java.io.File(outputDir, "images/" + docMode);
+					if (!imagesDir.exists()) {
+						imagesDir.mkdirs();
+					}
+					
+					List<java.io.File> imageFiles = new ArrayList<>();
+					try (org.apache.pdfbox.pdmodel.PDDocument document = 
+						org.apache.pdfbox.pdmodel.PDDocument.load(pdfPath.toFile())) {
+						
+						org.apache.pdfbox.rendering.PDFRenderer renderer = 
+							new org.apache.pdfbox.rendering.PDFRenderer(document);
+						int pageCount = document.getNumberOfPages();
+						
+						logger.info("开始拆分PDF，共 {} 页", pageCount);
+						
+						for (int i = 0; i < pageCount; i++) {
+							java.awt.image.BufferedImage image = null;
+							try {
+								// 渲染为高清图片（DPI=300）
+								image = renderer.renderImageWithDPI(i, 300, 
+									org.apache.pdfbox.rendering.ImageType.RGB);
+								
+								// 保存为PNG
+								java.io.File imageFile = new java.io.File(imagesDir, 
+									"page-" + (i + 1) + ".png");
+								javax.imageio.ImageIO.write(image, "PNG", imageFile);
+								imageFiles.add(imageFile);
+								
+								logger.debug("页面 {} 拆分完成: {}x{}", 
+									i + 1, image.getWidth(), image.getHeight());
+								
+							} finally {
+								if (image != null) {
+									image.flush();
+									image = null;
+								}
+								// 每3页GC
+								if ((i + 1) % 3 == 0) {
+									System.gc();
+								}
+							}
+						}
+					}
+					
+					logger.info("✅ PDF拆分完成，共 {} 页", imageFiles.size());
+					progressManager.logStepDetail("PDF拆分完成，共{}页", imageFiles.size());
+					
+				// 2. 对图片进行水印去除
+				logger.info("步骤2：对图片进行水印去除");
+				progressManager.logStepDetail("正在去除图片水印...");
+				
+				// 获取水印强度（直接使用字符串，不再依赖PDFWatermarkRemovalService）
+				String strengthStr = options.getWatermarkRemovalStrength();
+				if (strengthStr == null || strengthStr.trim().isEmpty()) {
+					strengthStr = "default"; // 默认值
+				}
+				strengthStr = strengthStr.toLowerCase(); // 统一转为小写
+				
+				logger.info("水印去除强度: {}", strengthStr);
+				
+				// 直接对已拆分的图片去水印（使用OpenCVWatermarkUtil）
+				int successCount = 0;
+				OpenCVWatermarkUtil opencvUtil = new OpenCVWatermarkUtil();
+				
+				for (java.io.File imageFile : imageFiles) {
+					try {
+						boolean success = false;
+						String imagePath = imageFile.getAbsolutePath();
+						
+						// 根据强度字符串调用对应的OpenCV方法
+						switch (strengthStr) {
+							case "default":
+								success = opencvUtil.removeWatermark(imagePath);
+								break;
+							case "extended":
+								success = opencvUtil.removeWatermarkExtended(imagePath);
+								break;
+							case "loose":
+								success = opencvUtil.removeWatermarkLoose(imagePath);
+								break;
+							case "smart":
+								success = opencvUtil.removeWatermarkSmart(imagePath);
+								break;
+							default:
+								logger.warn("未知的水印强度: {}, 使用default模式", strengthStr);
+								success = opencvUtil.removeWatermark(imagePath);
+						}
+						
+						if (success) {
+							successCount++;
+						}
+					} catch (Exception e) {
+						logger.warn("图片去水印失败: {}, 原因: {}", 
+							imageFile.getName(), e.getMessage());
+					}
+				}
+					
+					logger.info("✅ 图片去水印完成，成功处理 {}/{} 张", successCount, imageFiles.size());
+					progressManager.logStepDetail("图片去水印完成，成功{}/{}张", successCount, imageFiles.size());
+					
+					// 3. 将去水印后的图片合成为新PDF
+					logger.info("步骤3：合成去水印后的PDF");
+					progressManager.logStepDetail("合成去水印PDF...");
+					
+					String watermarkFreeFileName = pdfPath.getFileName().toString()
+						.replace(".pdf", "_nowatermark.pdf");
+					java.io.File watermarkFreePdf = new java.io.File(outputDir, watermarkFreeFileName);
+					
+					try (org.apache.pdfbox.pdmodel.PDDocument newDoc = 
+						new org.apache.pdfbox.pdmodel.PDDocument()) {
+						
+						for (java.io.File imageFile : imageFiles) {
+							java.awt.image.BufferedImage image = javax.imageio.ImageIO.read(imageFile);
+							if (image == null) {
+								logger.warn("无法读取图片: {}", imageFile.getName());
+								continue;
+							}
+							
+							float width = image.getWidth();
+							float height = image.getHeight();
+							org.apache.pdfbox.pdmodel.PDPage page = 
+								new org.apache.pdfbox.pdmodel.PDPage(
+									new org.apache.pdfbox.pdmodel.common.PDRectangle(width, height));
+							newDoc.addPage(page);
+							
+							org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject pdImage = 
+								org.apache.pdfbox.pdmodel.graphics.image.LosslessFactory
+									.createFromImage(newDoc, image);
+							
+							try (org.apache.pdfbox.pdmodel.PDPageContentStream contentStream = 
+								new org.apache.pdfbox.pdmodel.PDPageContentStream(newDoc, page)) {
+								contentStream.drawImage(pdImage, 0, 0, width, height);
+							}
+						}
+						
+						newDoc.save(watermarkFreePdf);
+					}
+					
+					logger.info("✅ PDF合成成功: {}", watermarkFreePdf.getName());
+					progressManager.logStepDetail("PDF合成成功，使用去水印PDF进行识别");
+					
+					// 4. 使用去水印后的PDF（图片已保存，MinerU会复用）
+					pdfFileToProcess = watermarkFreePdf;
+					
+				} catch (OutOfMemoryError oom) {
+					logger.error("❌ 内存不足无法去除水印，使用原始PDF继续: {}", oom.getMessage());
+					progressManager.logStepDetail("内存不足，跳过水印去除，使用原始PDF");
+					System.gc();
+					try {
+						Thread.sleep(100);
+					} catch (InterruptedException ie) {
+						Thread.currentThread().interrupt();
+					}
+				} catch (Exception e) {
+					logger.error("❌ 水印去除过程出错: {}, 使用原始PDF继续", e.getMessage(), e);
+					progressManager.logStepDetail("水印去除出错: {}, 使用原始PDF", e.getMessage());
+				}
+			}
+			// ==================== 水印去除逻辑结束 ====================
+			
 			// 调用MinerU识别，返回dots.ocr兼容的PageLayout格式
+			// 注意：这里使用 pdfFileToProcess（可能是去水印后的PDF）
 			TextExtractionUtil.PageLayout[] layouts = mineruOcrService.recognizePdf(
-				pdfPath.toFile(),
+				pdfFileToProcess,
 				taskId,
 				outputDir,
 				docMode,

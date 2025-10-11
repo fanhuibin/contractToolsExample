@@ -779,9 +779,10 @@ onMounted(() => {
 .canvas-scroll-container {
   flex: 1;
   position: relative;
-  overflow-y: auto;
-  overflow-x: auto;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
   background: #f5f5f5;
+  min-height: 0; /* 确保flex子元素可以滚动 */
 }
 
 .virtual-content {

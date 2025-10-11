@@ -55,23 +55,11 @@
           <!-- Upload and Result View -->
           <div v-else>
           <!-- Upload Area -->
-          <el-upload
-            class="upload-area"
-            drag
-            action="#"
-            :auto-upload="false"
-            :show-file-list="false"
-            :on-change="handleFileChange"
+          <FileUploadZone
             accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-          >
-            <div class="upload-content">
-              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-              <div class="el-upload__text">
-                拖拽文件到此处，或 <em>点击上传</em>
-              </div>
-              <div class="upload-formats">支持格式: PDF, Word, Excel, 图片</div>
-            </div>
-          </el-upload>
+            tip="支持格式: PDF, Word, Excel, 图片"
+            @change="handleFileChange"
+          />
 
           <div v-if="selectedFile" class="file-info-actions">
             <div class="file-info">
@@ -268,7 +256,7 @@ import riskApi from '@/api/ai/risk'
 import { useRouter } from 'vue-router'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import RiskCardPanel from '@/components/ai/RiskCardPanel.vue' // 引入新组件
-import { PageHeader } from '@/components/common'
+import { PageHeader, FileUploadZone } from '@/components/common'
 
 // 轻量内嵌的条款库选择器（最小实现：只提供选择和预览功能）
 const RiskLibraryEmbed = defineAsyncComponent(() => import('./RiskLibraryEmbed.vue'))
@@ -337,17 +325,16 @@ onMounted(async () => {
   }
 })
 
-function handleFileChange(file: any) {
+function handleFileChange(file: File) {
   console.log('[review] handleFileChange', { name: file?.name, size: file?.size })
   const isLt100M = file.size / 1024 / 1024 < 100
-  if (!isLt100M) { ElMessage.error('文件大小不能超过100MB'); return false }
-  selectedFile.value = file.raw
+  if (!isLt100M) { ElMessage.error('文件大小不能超过100MB'); return }
+  selectedFile.value = file
   error.value = ''
   traceId.value = ''
   results.value = []
   hasAudited.value = false
   console.log('[review] file selected, reset states')
-  return false
 }
 
 function formatFileSize(size: number) {

@@ -21,10 +21,11 @@
             </div>
           </template>
 
-          <el-upload class="upload-area" drag action="#" :auto-upload="false" :show-file-list="false" :on-change="onFileChange" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
-            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-            <div class="el-upload__text">拖拽文件到此处，或 <em>点击上传</em></div>
-          </el-upload>
+          <FileUploadZone
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+            tip="支持格式: PDF, Word, Excel, 图片"
+            @change="onFileChange"
+          />
 
           <div v-if="selectedFile" class="file-info-actions">
             <div class="file-info">
@@ -184,6 +185,7 @@
 import { ref, computed, onMounted, getCurrentInstance, watch } from 'vue'
 import { UploadFilled, Document, CaretRight, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { FileUploadZone } from '@/components/common'
 import api from '@/api/ai'
 import { PageHeader } from '@/components/common'
 
@@ -378,8 +380,8 @@ async function loadInit() {
 
 function templatesByType(type: string) { return templates.value.filter((t: any) => (t.categoryCode || t.contractType) === type) }
 
-function onFileChange(file: any) {
-  selectedFile.value = file.raw
+function onFileChange(file: File) {
+  selectedFile.value = file
   error.value = ''
   result.value = ''
   // 同步一次字段，避免切换模板后未展示

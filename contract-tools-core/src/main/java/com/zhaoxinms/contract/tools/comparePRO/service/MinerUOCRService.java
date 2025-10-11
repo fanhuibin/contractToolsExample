@@ -153,9 +153,14 @@ public class MinerUOCRService {
                 writer.append(mineruConfig.getVllmServerUrl()).append("\r\n");
             }
             
-            // 返回content_list
+            // 返回content_list（最终的结构化列表）
             writer.append("--").append(boundary).append("\r\n");
             writer.append("Content-Disposition: form-data; name=\"return_content_list\"\r\n\r\n");
+            writer.append("true\r\n");
+            
+            // 返回middle_json（MinerU 原始中间 JSON，包含布局分析等原始数据）
+            writer.append("--").append(boundary).append("\r\n");
+            writer.append("Content-Disposition: form-data; name=\"return_middle_json\"\r\n\r\n");
             writer.append("true\r\n");
             
             writer.append("--").append(boundary).append("--\r\n");
@@ -223,57 +228,89 @@ public class MinerUOCRService {
             log.info("图片格式: {}, JPEG质量: {}", imageFormat, jpegQuality);
             
             // PDFRenderer 不是线程安全的，必须串行处理
+            // 【内存优化】逐页处理并立即释放内存
             for (int i = 0; i < pageCount; i++) {
                 File imageFile = new File(imagesDir, "page-" + (i + 1) + imageExt);
-                BufferedImage image;
+                BufferedImage image = null;
+                int imageWidth = 0;
+                int imageHeight = 0;
                 
-                // 缓存检查：如果图片已存在且可读取，直接复用
-                if (imageFile.exists()) {
-                    try {
-                        image = ImageIO.read(imageFile);
-                        if (image != null) {
-                            log.debug("复用已有图片: {}, 尺寸: {}x{}, 大小: {}KB", 
-                                imageFile.getName(), image.getWidth(), image.getHeight(),
-                                imageFile.length() / 1024);
-                            cachedCount++;
-                        } else {
-                            // 文件损坏，重新生成
-                            log.warn("图片文件损坏，重新生成: {}", imageFile.getName());
+                try {
+                    // 缓存检查：如果图片已存在且可读取，直接复用
+                    if (imageFile.exists()) {
+                        try {
+                            image = ImageIO.read(imageFile);
+                            if (image != null) {
+                                imageWidth = image.getWidth();
+                                imageHeight = image.getHeight();
+                                log.debug("复用已有图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                                    imageFile.getName(), imageWidth, imageHeight,
+                                    imageFile.length() / 1024);
+                                cachedCount++;
+                            } else {
+                                // 文件损坏，重新生成
+                                log.warn("图片文件损坏，重新生成: {}", imageFile.getName());
+                                image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                                imageWidth = image.getWidth();
+                                imageHeight = image.getHeight();
+                                saveImage(image, imageFile, imageFormat, jpegQuality);
+                                log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                                    imageFile.getName(), imageWidth, imageHeight,
+                                    imageFile.length() / 1024);
+                                renderedCount++;
+                            }
+                        } catch (IOException e) {
+                            // 读取失败，重新生成
+                            log.warn("读取已有图片失败，重新生成: {}, 原因: {}", 
+                                imageFile.getName(), e.getMessage());
                             image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                            imageWidth = image.getWidth();
+                            imageHeight = image.getHeight();
                             saveImage(image, imageFile, imageFormat, jpegQuality);
                             log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
-                                imageFile.getName(), image.getWidth(), image.getHeight(),
+                                imageFile.getName(), imageWidth, imageHeight,
                                 imageFile.length() / 1024);
                             renderedCount++;
                         }
-                    } catch (IOException e) {
-                        // 读取失败，重新生成
-                        log.warn("读取已有图片失败，重新生成: {}, 原因: {}", 
-                            imageFile.getName(), e.getMessage());
+                    } else {
+                        // 生成新图片
                         image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                        imageWidth = image.getWidth();
+                        imageHeight = image.getHeight();
                         saveImage(image, imageFile, imageFormat, jpegQuality);
-                        log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
-                            imageFile.getName(), image.getWidth(), image.getHeight(),
+                        log.debug("生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                            imageFile.getName(), imageWidth, imageHeight,
                             imageFile.length() / 1024);
                         renderedCount++;
                     }
-                } else {
-                    // 生成新图片
-                    image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
-                    saveImage(image, imageFile, imageFormat, jpegQuality);
-                    log.debug("生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
-                        imageFile.getName(), image.getWidth(), image.getHeight(),
-                        imageFile.length() / 1024);
-                    renderedCount++;
+                    
+                    // 构建页面信息（只保存元数据，不保存图片对象）
+                    Map<String, Object> pageInfo = new HashMap<>();
+                    pageInfo.put("pageIndex", i);
+                    pageInfo.put("imagePath", imageFile.getAbsolutePath());
+                    pageInfo.put("imageWidth", imageWidth);
+                    pageInfo.put("imageHeight", imageHeight);
+                    pageImages.add(pageInfo);
+                    
+                } finally {
+                    // 【关键】立即释放BufferedImage内存
+                    if (image != null) {
+                        image.flush();
+                        image = null;
+                    }
+                    
+                    // 【关键】每处理3页建议进行一次垃圾回收
+                    // 这样可以及时释放内存，避免峰值过高
+                    if ((i + 1) % 3 == 0) {
+                        System.gc();
+                        // 给GC一点时间
+                        try {
+                            Thread.sleep(10);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
                 }
-                
-                // 构建页面信息
-                Map<String, Object> pageInfo = new HashMap<>();
-                pageInfo.put("pageIndex", i);
-                pageInfo.put("imagePath", imageFile.getAbsolutePath());
-                pageInfo.put("imageWidth", image.getWidth());
-                pageInfo.put("imageHeight", image.getHeight());
-                pageImages.add(pageInfo);
             }
             
             long endTime = System.currentTimeMillis();
@@ -887,20 +924,20 @@ public class MinerUOCRService {
      */
     private void saveRawResponse(String apiResult, File outputDir, String taskId, String docMode) {
         try {
-            // 创建ocr目录
-            File ocrDir = new File(outputDir, "ocr");
-            if (!ocrDir.exists()) {
-                ocrDir.mkdirs();
+            // 创建统一的中间结果目录：mineru_intermediate
+            File intermediateDir = new File(outputDir, "mineru_intermediate/" + docMode);
+            if (!intermediateDir.exists()) {
+                intermediateDir.mkdirs();
             }
             
-            // 保存原始响应
-            File rawFile = new File(ocrDir, String.format("mineru_raw_%s.json", docMode));
+            // 保存原始响应（完整的 MinerU API 响应）
+            File rawFile = new File(intermediateDir, "01_mineru_raw_response.json");
             JsonNode jsonNode = objectMapper.readTree(apiResult);
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(rawFile, jsonNode);
             
-            log.info("保存MinerU原始响应: {}", rawFile.getAbsolutePath());
+            log.info("✅ 保存 MinerU 原始响应: {}", rawFile.getAbsolutePath());
         } catch (Exception e) {
-            log.warn("保存MinerU原始响应失败: {}", e.getMessage());
+            log.warn("保存 MinerU 原始响应失败: {}", e.getMessage());
         }
     }
     
@@ -909,25 +946,35 @@ public class MinerUOCRService {
      */
     private void saveFormattedContentList(String apiResult, File outputDir, String taskId, String docMode) {
         try {
-            // 创建ocr目录
-            File ocrDir = new File(outputDir, "ocr");
-            if (!ocrDir.exists()) {
-                ocrDir.mkdirs();
+            // 创建统一的中间结果目录：mineru_intermediate
+            File intermediateDir = new File(outputDir, "mineru_intermediate/" + docMode);
+            if (!intermediateDir.exists()) {
+                intermediateDir.mkdirs();
             }
             
             JsonNode root = objectMapper.readTree(apiResult);
+            
+            // 【关键】同时保存两个独立的文件，不要覆盖
+            
+            // 1. 保存 middle_json（MinerU 原始中间 JSON）
+            saveMiddleJson(root, intermediateDir, docMode);
+            
+            // 2. 保存 content_list（最终的结构化列表）
             JsonNode contentListNode = extractContentList(root);
             
             if (contentListNode != null && contentListNode.isArray()) {
-                // 保存格式化的 content_list
-                File contentListFile = new File(ocrDir, String.format("mineru_content_list_%s.json", docMode));
+                // 2.1 保存格式化的 content_list（MinerU 原始结构）
+                File contentListFile = new File(intermediateDir, "02_content_list.json");
                 objectMapper.writerWithDefaultPrettyPrinter().writeValue(contentListFile, contentListNode);
                 
-                log.info("保存格式化的 content_list: {}, 共{}个内容项", 
+                log.info("✅ 保存格式化的 content_list: {}, 共{}个内容项", 
                     contentListFile.getAbsolutePath(), contentListNode.size());
                 
-                // 额外保存一个带统计信息的版本
-                saveContentListWithStats(contentListNode, ocrDir, docMode);
+                // 2.2 保存易读格式的 content_list（包含完整文本和坐标信息）
+                saveReadableContentList(contentListNode, intermediateDir, docMode);
+                
+                // 2.3 额外保存一个带统计信息的版本
+                saveContentListWithStats(contentListNode, intermediateDir, docMode);
             }
         } catch (Exception e) {
             log.warn("保存格式化 content_list 失败: {}", e.getMessage());
@@ -935,11 +982,156 @@ public class MinerUOCRService {
     }
     
     /**
+     * 保存 middle_json（MinerU 原始中间 JSON）
+     * 
+     * 【重要】这个文件和 content_list 是独立的：
+     * - middle_json: MinerU 的原始布局分析数据（layout detection, OCR results 等）
+     * - content_list: 经过后处理的结构化内容列表
+     * 
+     * 两者都保存，互不覆盖
+     */
+    private void saveMiddleJson(JsonNode root, File intermediateDir, String docMode) {
+        try {
+            // 从 results 中提取 middle_json
+            JsonNode resultsNode = root.get("results");
+            if (resultsNode != null && resultsNode.isObject()) {
+                JsonNode firstResult = resultsNode.elements().next();
+                if (firstResult != null) {
+                    JsonNode middleJsonNode = firstResult.get("middle_json");
+                    if (middleJsonNode != null) {
+                        // 如果 middle_json 是字符串，解析为 JSON
+                        if (middleJsonNode.isTextual()) {
+                            JsonNode parsedMiddleJson = objectMapper.readTree(middleJsonNode.asText());
+                            File middleJsonFile = new File(intermediateDir, "05_middle_json.json");
+                            objectMapper.writerWithDefaultPrettyPrinter().writeValue(middleJsonFile, parsedMiddleJson);
+                            log.info("✅ 保存 MinerU middle_json（原始布局分析数据）: {}", middleJsonFile.getAbsolutePath());
+                        } else {
+                            // 如果已经是 JSON 对象，直接保存
+                            File middleJsonFile = new File(intermediateDir, "05_middle_json.json");
+                            objectMapper.writerWithDefaultPrettyPrinter().writeValue(middleJsonFile, middleJsonNode);
+                            log.info("✅ 保存 MinerU middle_json（原始布局分析数据）: {}", middleJsonFile.getAbsolutePath());
+                        }
+                        return;
+                    }
+                }
+            }
+            
+            log.debug("未找到 middle_json 数据（MinerU API 可能未返回此字段）");
+            
+        } catch (Exception e) {
+            log.warn("保存 middle_json 失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * 保存易读格式的 content_list
+     * 展开所有字段，方便查看和调试
+     */
+    private void saveReadableContentList(JsonNode contentListNode, File intermediateDir, String docMode) {
+        try {
+            List<Map<String, Object>> readableList = new ArrayList<>();
+            
+            int index = 0;
+            for (JsonNode item : contentListNode) {
+                Map<String, Object> readableItem = new LinkedHashMap<>();
+                
+                // 基本信息
+                readableItem.put("序号", ++index);
+                readableItem.put("页码", item.has("page_idx") ? item.get("page_idx").asInt() + 1 : "未知");
+                readableItem.put("类型", item.has("type") ? item.get("type").asText() : "unknown");
+                
+                if (item.has("sub_type")) {
+                    readableItem.put("子类型", item.get("sub_type").asText());
+                }
+                
+                // 坐标信息（MinerU 使用 1000x1000 归一化坐标）
+                if (item.has("bbox") && item.get("bbox").isArray() && item.get("bbox").size() >= 4) {
+                    JsonNode bbox = item.get("bbox");
+                    Map<String, Object> bboxInfo = new LinkedHashMap<>();
+                    bboxInfo.put("x0", bbox.get(0).asDouble());
+                    bboxInfo.put("y0", bbox.get(1).asDouble());
+                    bboxInfo.put("x1", bbox.get(2).asDouble());
+                    bboxInfo.put("y1", bbox.get(3).asDouble());
+                    bboxInfo.put("宽度", bbox.get(2).asDouble() - bbox.get(0).asDouble());
+                    bboxInfo.put("高度", bbox.get(3).asDouble() - bbox.get(1).asDouble());
+                    bboxInfo.put("说明", "MinerU归一化坐标系（0-1000）");
+                    readableItem.put("坐标", bboxInfo);
+                }
+                
+                // 文本内容（根据类型提取）
+                String contentType = item.has("type") ? item.get("type").asText() : "";
+                Map<String, Object> contentInfo = new LinkedHashMap<>();
+                
+                if ("text".equals(contentType) || "title".equals(contentType)) {
+                    if (item.has("text")) {
+                        contentInfo.put("文本", item.get("text").asText());
+                    }
+                } else if ("table".equals(contentType)) {
+                    if (item.has("table_caption")) {
+                        contentInfo.put("表格标题", item.get("table_caption"));
+                    }
+                    if (item.has("table_body")) {
+                        String tableBody = item.get("table_body").asText();
+                        contentInfo.put("表格内容_长度", tableBody.length());
+                        contentInfo.put("表格内容_预览", tableBody.length() > 200 ? 
+                            tableBody.substring(0, 200) + "..." : tableBody);
+                    }
+                    if (item.has("table_footnote")) {
+                        contentInfo.put("表格注释", item.get("table_footnote"));
+                    }
+                } else if ("list".equals(contentType)) {
+                    if (item.has("list_items")) {
+                        contentInfo.put("列表项", item.get("list_items"));
+                    }
+                } else if ("image".equals(contentType)) {
+                    if (item.has("figure_caption")) {
+                        contentInfo.put("图片标题", item.get("figure_caption"));
+                    }
+                } else if ("code".equals(contentType)) {
+                    if (item.has("code_caption")) {
+                        contentInfo.put("代码标题", item.get("code_caption"));
+                    }
+                    if (item.has("code_body")) {
+                        String codeBody = item.get("code_body").asText();
+                        contentInfo.put("代码内容_长度", codeBody.length());
+                        contentInfo.put("代码内容_预览", codeBody.length() > 200 ? 
+                            codeBody.substring(0, 200) + "..." : codeBody);
+                    }
+                } else if ("isolate_formula".equals(contentType) || "isolated".equals(contentType)) {
+                    if (item.has("latex_text")) {
+                        contentInfo.put("公式LaTeX", item.get("latex_text").asText());
+                    }
+                    if (item.has("formula_caption")) {
+                        contentInfo.put("公式标号", item.get("formula_caption"));
+                    }
+                } else if (item.has("text")) {
+                    contentInfo.put("文本", item.get("text").asText());
+                }
+                
+                if (!contentInfo.isEmpty()) {
+                    readableItem.put("内容", contentInfo);
+                }
+                
+                readableList.add(readableItem);
+            }
+            
+            // 保存易读格式的 JSON
+            File readableFile = new File(intermediateDir, "03_content_list_readable.json");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(readableFile, readableList);
+            
+            log.info("✅ 保存易读格式的 content_list: {}", readableFile.getAbsolutePath());
+            
+        } catch (Exception e) {
+            log.warn("保存易读格式 content_list 失败: {}", e.getMessage());
+        }
+    }
+    
+    /**
      * 保存带统计信息的 content_list
      */
-    private void saveContentListWithStats(JsonNode contentListNode, File ocrDir, String docMode) {
+    private void saveContentListWithStats(JsonNode contentListNode, File intermediateDir, String docMode) {
         try {
-            File statsFile = new File(ocrDir, String.format("mineru_content_list_%s_stats.txt", docMode));
+            File statsFile = new File(intermediateDir, "04_content_list_stats.txt");
             
             StringBuilder stats = new StringBuilder();
             stats.append("=".repeat(80)).append("\n");
@@ -1028,7 +1220,7 @@ public class MinerUOCRService {
                 stats.append("\n");
             }
             
-            java.nio.file.Files.write(statsFile.toPath(), stats.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            Files.write(statsFile.toPath(), stats.toString().getBytes(StandardCharsets.UTF_8));
             
             log.info("保存 content_list 统计信息: {}", statsFile.getAbsolutePath());
         } catch (Exception e) {

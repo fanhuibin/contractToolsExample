@@ -41,13 +41,13 @@
           <el-icon><Monitor /></el-icon>
           <span>OnlyOffice预览</span>
         </el-menu-item>
-        <el-menu-item index="/compare">
+        <!-- <el-menu-item index="/compare">
           <el-icon><Files /></el-icon>
           <span>PDF合同比对</span>
-        </el-menu-item>
+        </el-menu-item> -->
         <el-menu-item index="/gpu-ocr-compare">
           <el-icon><DataAnalysis /></el-icon>
-          <span>GPU合同比对</span>
+          <span>合同比对</span>
         </el-menu-item>
         <el-menu-item index="/compose/start">
           <el-icon><Edit /></el-icon>

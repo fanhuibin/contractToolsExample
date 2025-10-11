@@ -1,250 +1,349 @@
 <template>
   <div class="contract-info-extract">
-    <!-- 头部区域 -->
-    <div class="header-section">
-      <h1 class="page-title">
-        <el-icon><Search /></el-icon>
-        智能信息提取
-      </h1>
-      <p class="page-description">
-        基于OCR方案的精准合同信息提取功能，从PDF文档中智能提取关键信息，支持字符级精确定位和可视化分析
-      </p>
-    </div>
+    <PageHeader 
+      title="智能信息提取" 
+      description="基于OCR方案的精准合同信息提取功能，从PDF文档中智能提取关键信息，支持字符级精确定位和可视化分析"
+      :icon="Search"
+    />
 
-    <!-- 主要内容区域 -->
-    <div class="main-content">
-      <!-- 左侧：上传和配置区域 -->
-      <div class="left-panel">
+    <!-- 三列式主操作区 -->
+    <el-row :gutter="16" class="main-operation-area mb16">
+      <!-- 左列：文件上传 -->
+      <el-col :span="8">
         <el-card class="upload-card">
-          <template #header>文档上传</template>
-          <el-upload
-            drag
-            v-model:file-list="fileList"
-            :multiple="false"
-            :before-upload="beforeUpload"
-            :show-file-list="false"
-            accept=".pdf"
-            :on-change="handleFileChange"
-            :auto-upload="false"
-          >
-            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-            <div class="el-upload__text">点击或拖拽文件到此区域上传</div>
-            <div class="el-upload__tip">仅支持PDF格式，文件大小不超过100MB</div>
-          </el-upload>
+          <template #header>
+            <div class="card-header">
+              <el-icon><Upload /></el-icon>
+              <span>文档上传</span>
+            </div>
+          </template>
           
-          <!-- 已选择的文件 -->
-          <div v-if="selectedFile" class="selected-file">
-            <el-alert
-              :title="`已选择文件: ${selectedFile?.name}`"
-              :description="`大小: ${formatFileSize(selectedFile?.size || 0)}`"
-              type="info"
-              show-icon
-              closable
-              @close="clearFile"
-            />
+          <FileUploadZone
+            accept=".pdf"
+            tip="支持PDF，最大100MB"
+            :max-size="100"
+            @change="handleFileChange"
+          />
+          
+          <div v-if="selectedFile" class="file-info-compact">
+            <div class="file-name">
+              <el-icon><Document /></el-icon>
+              <span class="text-ellipsis">{{ selectedFile.name }}</span>
+            </div>
+            <div class="file-meta">
+              <span class="file-size">{{ formatFileSize(selectedFile.size) }}</span>
+              <el-button 
+                link 
+                type="danger" 
+                size="small"
+                @click="clearFile"
+              >
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
           </div>
         </el-card>
+      </el-col>
 
-
-        <!-- 提取配置 -->
+      <!-- 中列：配置参数 -->
+      <el-col :span="8">
         <el-card class="config-card">
-          <template #header>提取配置</template>
-          <el-form :model="extractConfig" label-position="top">
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item label="文档类型">
-                  <el-select v-model="extractConfig.schemaType" style="width: 100%">
-                    <el-option value="contract" label="合同文档" />
-                    <el-option value="invoice" label="发票" />
-                    <el-option value="resume" label="简历" />
-                    <el-option value="news" label="新闻" />
-                    <el-option value="general" label="通用" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="提取轮数">
-                  <el-select v-model="extractConfig.extractionPasses" style="width: 100%">
-                    <el-option :value="1" label="1轮（快速）" />
-                    <el-option :value="3" label="3轮（推荐）" />
-                    <el-option :value="5" label="5轮（精确）" />
-                  </el-select>
-                </el-form-item>
-              </el-col>
-            </el-row>
-            
-            <el-row :gutter="16">
-              <el-col :span="12">
-                <el-form-item>
-                  <el-checkbox v-model="extractConfig.enableChunking">
-                    启用分块处理
-                  </el-checkbox>
-                  <el-tooltip content="将大文档分割成小块处理，可以解决大模型上下文不足问题，但是会导致处理时间增加和Token消耗大幅增加，一般不建议使用">
-                    <el-icon style="margin-left: 4px; color: #999;"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <!-- 可视化报告选项已移除，现在由前端负责渲染 -->
-              </el-col>
-            </el-row>
-
-            <el-form-item>
-              <el-button 
-                type="primary" 
-                size="large" 
-                style="width: 100%"
-                :loading="isExtracting"
-                :disabled="!canStartExtraction"
-                @click="startExtraction"
-              >
-                <el-icon><VideoPlay /></el-icon>
-                开始提取信息
-              </el-button>
+          <template #header>
+            <div class="card-header">
+              <el-icon><Setting /></el-icon>
+              <span>提取配置</span>
+            </div>
+          </template>
+          
+          <el-form :model="extractConfig" label-width="90px" class="compact-form">
+            <el-form-item label="文档类型">
+              <el-select v-model="extractConfig.schemaType" size="default">
+                <el-option value="contract" label="合同文档">
+                  <span>📄 合同文档</span>
+                </el-option>
+                <el-option value="invoice" label="发票">
+                  <span>🧾 发票</span>
+                </el-option>
+                <el-option value="resume" label="简历">
+                  <span>👤 简历</span>
+                </el-option>
+                <el-option value="news" label="新闻">
+                  <span>📰 新闻</span>
+                </el-option>
+                <el-option value="general" label="通用">
+                  <span>📋 通用</span>
+                </el-option>
+              </el-select>
             </el-form-item>
+
+            <el-form-item label="提取轮数">
+              <el-select v-model="extractConfig.extractionPasses" size="default">
+                <el-option :value="1">
+                  <span>⚡ 1轮（快速）</span>
+                </el-option>
+                <el-option :value="3">
+                  <span>⭐ 3轮（推荐）</span>
+                </el-option>
+                <el-option :value="5">
+                  <span>🎯 5轮（精确）</span>
+                </el-option>
+              </el-select>
+            </el-form-item>
+            
+            <el-form-item label="分块处理">
+              <div class="checkbox-with-tip">
+                <el-checkbox v-model="extractConfig.enableChunking">
+                  启用
+                </el-checkbox>
+                <el-tooltip 
+                  content="大文档分块处理，提高兼容性但增加耗时和成本"
+                  placement="top"
+                >
+                  <el-icon class="tip-icon"><QuestionFilled /></el-icon>
+                </el-tooltip>
+              </div>
+            </el-form-item>
+
+            <el-button 
+              type="primary"
+              size="large"
+              :loading="isExtracting"
+              :disabled="!canStartExtraction"
+              @click="startExtraction"
+              class="extract-btn"
+            >
+              <el-icon><VideoPlay /></el-icon>
+              <span>{{ isExtracting ? '提取中...' : '开始提取' }}</span>
+            </el-button>
           </el-form>
         </el-card>
-      </div>
+      </el-col>
 
-      <!-- 右侧：结果展示区域 -->
-      <div class="right-panel">
-        <!-- 任务状态 -->
-        <el-card v-if="currentTask" class="status-card">
-          <template #header>提取进度</template>
-          <div class="task-status">
-            <el-progress 
-              :percentage="currentTask.progress" 
-              :status="getProgressStatus(currentTask.status)"
-              :color="getProgressColor(currentTask.status)"
-            />
-            <div class="status-info">
-              <p class="status-message">{{ currentTask.message }}</p>
-              <p class="task-info">
-                任务ID: {{ currentTask.taskId }} | 
-                创建时间: {{ formatTime(currentTask.createdAt) }}
-              </p>
+      <!-- 右列：快速统计 -->
+      <el-col :span="8">
+        <el-card class="stats-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><DataAnalysis /></el-icon>
+              <span>快速统计</span>
             </div>
-          </div>
-        </el-card>
-
-        <!-- 提取结果 -->
-        <el-card v-if="extractResult" class="result-card">
-          <template #header>提取结果</template>
-          <!-- 统计信息 -->
-          <div class="statistics">
-            <el-row :gutter="16">
-              <el-col :span="6">
-                <el-statistic 
-                  title="提取字段" 
-                  :value="extractResult.statistics.totalFields" 
-                  suffix="个"
-                />
-              </el-col>
-              <el-col :span="6">
-                <el-statistic 
-                  title="成功定位" 
-                  :value="Math.round(extractResult.statistics.positionAccuracy * 100)" 
-                  suffix="%"
-                />
-              </el-col>
-              <el-col :span="6">
-                <el-statistic 
-                  title="平均置信度" 
-                  :value="Math.round(extractResult.statistics.averageConfidence * 100)" 
-                  suffix="%"
-                />
-              </el-col>
-              <el-col :span="6">
-                <el-statistic 
-                  title="OCR提供者" 
-                  :value="extractResult.document.ocrProvider"
-                />
-              </el-col>
-            </el-row>
-          </div>
-
-          <!-- 提取的字段 -->
-          <el-divider />
-          <div class="extracted-fields">
-            <h3>提取的信息字段</h3>
-            <el-table 
-              :data="extractResult.extractions.items" 
-              size="small"
-              row-key="field"
-            >
-              <el-table-column prop="field" label="字段名" />
-              <el-table-column prop="value" label="提取值" :show-overflow-tooltip="true">
-                <template #default="{ row }">
-                  <el-tooltip :content="row.value">
-                    <span class="value-text">{{ row.value }}</span>
-                  </el-tooltip>
-                </template>
-              </el-table-column>
-              <el-table-column prop="confidence" label="置信度" width="150">
-                <template #default="{ row }">
-                  <el-progress 
-                    :percentage="Math.round((row.confidence || 0) * 100)"
-                    :stroke-width="16"
-                    :color="getConfidenceColor(row.confidence)"
-                  />
-                </template>
-              </el-table-column>
-              <el-table-column prop="position" label="字符位置" width="120">
-                <template #default="{ row }">
-                  <el-tag v-if="row.charInterval" type="primary">
-                    {{ row.charInterval.startPos }}-{{ row.charInterval.endPos }}
-                  </el-tag>
-                  <el-tag v-else type="info">未定位</el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
-          </div>
-
-          <!-- 操作按钮 -->
-          <el-divider />
-          <div class="result-actions" style="display: flex; gap: 12px;">
-            <el-button type="primary" @click="openVisualization">
-              <el-icon><View /></el-icon>
-              查看可视化报告
-            </el-button>
-            <el-button @click="downloadResults">
-              <el-icon><Download /></el-icon>
-              下载结果
-            </el-button>
-            <el-button @click="copyResults">
-              <el-icon><CopyDocument /></el-icon>
-              复制结果
-            </el-button>
-          </div>
-        </el-card>
-
-        <!-- 历史记录 -->
-        <el-card class="history-card">
-          <template #header>最近提取</template>
-          <div v-for="item in recentTasks" :key="item.taskId" class="history-item">
-            <div class="history-item-content">
-              <el-avatar :style="getStatusColor(item.status)">
-                {{ getStatusIcon(item.status) }}
-              </el-avatar>
-              <div class="history-item-info">
-                <div class="history-item-title">{{ item.fileName || '文本输入' }}</div>
-                <div class="history-item-desc">{{ getSchemaTypeLabel(item.schemaType) }} | {{ formatTime(item.createdAt) }}</div>
+          </template>
+          
+          <div class="compact-stats">
+            <div class="stat-item">
+              <div class="stat-icon primary">
+                <el-icon><Document /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">提取字段</div>
+                <div class="stat-value">
+                  {{ extractResult?.statistics?.totalFields || 0 }}
+                  <span class="stat-unit">个</span>
+                </div>
               </div>
             </div>
-            <el-button size="small" text type="primary" @click="loadTask(item.taskId)">
-              查看
-            </el-button>
+
+            <div class="stat-item">
+              <div class="stat-icon success">
+                <el-icon><Location /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">定位准确率</div>
+                <div class="stat-value">
+                  {{ extractResult ? Math.round(extractResult.statistics.positionAccuracy * 100) : 0 }}
+                  <span class="stat-unit">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-icon warning">
+                <el-icon><TrendCharts /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">平均置信度</div>
+                <div class="stat-value">
+                  {{ extractResult ? Math.round(extractResult.statistics.averageConfidence * 100) : 0 }}
+                  <span class="stat-unit">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stat-item">
+              <div class="stat-icon info">
+                <el-icon><Cpu /></el-icon>
+              </div>
+              <div class="stat-content">
+                <div class="stat-label">OCR引擎</div>
+                <div class="stat-value small">
+                  {{ extractResult?.document?.ocrProvider || '-' }}
+                </div>
+              </div>
+            </div>
           </div>
         </el-card>
-      </div>
-    </div>
+      </el-col>
+    </el-row>
 
-    <!-- 可视化功能已移至独立页面 -->
+    <!-- 任务进度（增强版带步骤指示器） -->
+    <el-card v-if="currentTask" class="progress-card mb16">
+      <template #header>
+        <div class="card-header">
+          <div class="header-left">
+            <el-icon><Loading /></el-icon>
+            <span>提取进度</span>
+          </div>
+          <el-tag :type="getProgressStatus(currentTask.status) === 'success' ? 'success' : 'info'">
+            {{ currentTask.message }}
+          </el-tag>
+        </div>
+      </template>
+
+      <!-- 步骤指示器 -->
+      <div class="steps-indicator mb16">
+        <el-steps :active="getStepActive(currentTask.status)" align-center>
+          <el-step title="文件上传" icon="Upload" />
+          <el-step title="OCR识别" icon="Document" />
+          <el-step title="信息提取" icon="MagicStick" />
+          <el-step title="结果生成" icon="CircleCheck" />
+        </el-steps>
+      </div>
+
+      <!-- 进度条 -->
+      <el-progress 
+        :percentage="currentTask.progress || 0" 
+        :status="getProgressStatus(currentTask.status)"
+        :stroke-width="24"
+      >
+        <span class="progress-text">{{ currentTask.progress || 0 }}%</span>
+      </el-progress>
+      
+      <div class="progress-meta">
+        <span class="task-id">
+          <el-icon><Document /></el-icon>
+          任务ID: {{ currentTask.taskId }}
+        </span>
+        <span class="create-time">
+          <el-icon><Clock /></el-icon>
+          {{ formatTime(currentTask.createdAt) }}
+        </span>
+      </div>
+    </el-card>
+
+    <!-- 提取结果（Tabs方式展示） -->
+    <el-card v-if="extractResult" class="result-card">
+      <template #header>
+        <div class="card-header">
+          <div class="header-left">
+            <el-icon><Checked /></el-icon>
+            <span>提取结果</span>
+            <el-tag type="success" size="small">
+              {{ extractResult.extractions.items.length }} 个字段
+            </el-tag>
+          </div>
+          <div class="header-actions">
+            <el-button type="primary" size="small" @click="openVisualization">
+              <el-icon><View /></el-icon>
+              可视化
+            </el-button>
+            <el-button size="small" @click="downloadResults">
+              <el-icon><Download /></el-icon>
+              下载
+            </el-button>
+            <el-button size="small" @click="copyResults">
+              <el-icon><CopyDocument /></el-icon>
+              复制
+            </el-button>
+          </div>
+        </div>
+      </template>
+
+      <!-- Tabs 展示 -->
+      <el-tabs v-model="activeTab" class="result-tabs">
+        <!-- Tab 1: 表格视图 -->
+        <el-tab-pane label="表格视图" name="table">
+          <template #label>
+            <span class="tab-label">
+              <el-icon><Grid /></el-icon>
+              表格视图
+            </span>
+          </template>
+          
+          <el-table 
+            :data="extractResult.extractions.items" 
+            stripe
+            max-height="500"
+            :header-cell-style="{ background: '#f5f7fa' }"
+          >
+            <el-table-column prop="field" label="字段名" width="200" fixed>
+              <template #default="{ row }">
+                <div class="field-name">
+                  <el-icon color="#409EFF"><Key /></el-icon>
+                  <span>{{ row.field }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="value" label="提取值" min-width="300" show-overflow-tooltip>
+              <template #default="{ row }">
+                <span class="extract-value">{{ row.value }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="置信度" width="180">
+              <template #default="{ row }">
+                <el-progress 
+                  :percentage="Math.round((row.confidence || 0) * 100)"
+                  :stroke-width="18"
+                  :color="getConfidenceColor(row.confidence)"
+                >
+                  <span class="progress-label">{{ Math.round((row.confidence || 0) * 100) }}%</span>
+                </el-progress>
+              </template>
+            </el-table-column>
+            <el-table-column label="字符位置" width="160" align="center">
+              <template #default="{ row }">
+                <el-tag v-if="row.charInterval" type="primary" effect="light">
+                  {{ row.charInterval.startPos }}-{{ row.charInterval.endPos }}
+                </el-tag>
+                <el-tag v-else type="info" effect="plain">未定位</el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-tab-pane>
+
+        <!-- Tab 2: JSON 视图 -->
+        <el-tab-pane label="JSON视图" name="json">
+          <template #label>
+            <span class="tab-label">
+              <el-icon><Document /></el-icon>
+              JSON视图
+            </span>
+          </template>
+          
+          <div class="json-viewer">
+            <pre>{{ JSON.stringify(extractResult, null, 2) }}</pre>
+          </div>
+        </el-tab-pane>
+
+        <!-- Tab 3: 统计图表 -->
+        <el-tab-pane label="统计图表" name="chart">
+          <template #label>
+            <span class="tab-label">
+              <el-icon><PieChart /></el-icon>
+              统计图表
+            </span>
+          </template>
+          
+          <div class="chart-view">
+            <el-empty description="统计图表功能开发中" />
+          </div>
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Search,
@@ -254,17 +353,32 @@ import {
   QuestionFilled,
   View,
   Download,
-  CopyDocument
+  CopyDocument,
+  Document,
+  Setting,
+  DataAnalysis,
+  Location,
+  TrendCharts,
+  Cpu,
+  Close,
+  Loading,
+  Clock,
+  Checked,
+  Grid,
+  PieChart,
+  Key,
+  MagicStick,
+  CircleCheck
 } from '@element-plus/icons-vue'
+import { PageHeader, FileUploadZone } from '@/components/common'
 import { extractFromFile, getTaskStatus, getExtractResult } from '@/api/extract'
 
 // 数据定义
-const fileList = ref<any[]>([])
 const selectedFile = ref<File | null>(null)
 const isExtracting = ref(false)
 const currentTask = ref<any>(null)
 const extractResult = ref<any>(null)
-const recentTasks = ref<any[]>([])
+const activeTab = ref('table') // Tab 切换
 
 // 提取配置
 const extractConfig = reactive({
@@ -274,62 +388,43 @@ const extractConfig = reactive({
   llmProvider: 'auto'
 })
 
-// 表格列定义
-const extractionColumns = [
-  {
-    title: '字段名',
-    dataIndex: 'field',
-    key: 'field',
-    width: 150
-  },
-  {
-    title: '提取值',
-    dataIndex: 'value',
-    key: 'value'
-  },
-  {
-    title: '置信度',
-    key: 'confidence',
-    width: 120
-  },
-  {
-    title: '位置',
-    key: 'position',
-    width: 100
-  }
-]
-
 // 计算属性
 const canStartExtraction = computed(() => {
   return selectedFile.value && !isExtracting.value
 })
 
-// 方法
-const beforeUpload = (file: File) => {
-  const isValidType = file.type === 'application/pdf'
-  if (!isValidType) {
-    ElMessage.error('仅支持PDF文件')
-    return false
+// 获取步骤激活状态
+const getStepActive = (status: string) => {
+  const statusMap: Record<string, number> = {
+    'uploading': 0,
+    'uploaded': 1,
+    'ocr_processing': 2,
+    'extracting': 3,
+    'completed': 4,
+    'failed': 4
   }
-  
-  const isValidSize = file.size / 1024 / 1024 < 100
-  if (!isValidSize) {
-    ElMessage.error('文件大小不能超过100MB')
-    return false
-  }
-  
-  return false // 阻止自动上传
+  return statusMap[status] || 0
 }
 
-const handleFileChange = (info: any) => {
-  if (info.fileList.length > 0) {
-    selectedFile.value = info.fileList[0].originFileObj
+// 方法
+const handleFileChange = (file: File) => {
+  // 验证文件类型
+  if (file.type !== 'application/pdf') {
+    ElMessage.error('仅支持PDF文件')
+    return
   }
+  
+  // 验证文件大小
+  if (file.size / 1024 / 1024 > 100) {
+    ElMessage.error('文件大小不能超过100MB')
+    return
+  }
+  
+  selectedFile.value = file
 }
 
 const clearFile = () => {
   selectedFile.value = null
-  fileList.value = []
 }
 
 const startExtraction = async () => {
@@ -377,9 +472,6 @@ const pollTaskStatus = async (taskId: string) => {
         await loadExtractResult(taskId)
         isExtracting.value = false
         ElMessage.success('信息提取完成')
-        
-        // 添加到历史记录
-        addToHistory(response.data)
       } else if (response.data?.status === 'failed') {
         // 任务失败
         isExtracting.value = false
@@ -492,215 +584,330 @@ const getStatusIcon = (status: string) => {
   return icons[status as keyof typeof icons] || '●'
 }
 
-const getSchemaTypeLabel = (schemaType: string): string => {
-  const labelMap: Record<string, string> = {
-    'contract': '合同文档',
-    'invoice': '发票',
-    'resume': '简历',
-    'news': '新闻',
-    'general': '通用',
-    'unknown': '未知类型'
-  }
-  return labelMap[schemaType] || schemaType || '未知类型'
-}
-
-const addToHistory = (task: any) => {
-  const existingIndex = recentTasks.value.findIndex((t: any) => t.taskId === task.taskId)
-  if (existingIndex >= 0) {
-    recentTasks.value[existingIndex] = task
-  } else {
-    recentTasks.value.unshift(task)
-    if (recentTasks.value.length > 10) {
-      recentTasks.value = recentTasks.value.slice(0, 10)
-    }
-  }
-  // 保存到localStorage
-  localStorage.setItem('extract_history', JSON.stringify(recentTasks.value))
-}
-
-const loadTask = async (taskId: string) => {
-  try {
-    const statusResponse = await getTaskStatus(taskId)
-    if (statusResponse && statusResponse.data) {
-      currentTask.value = statusResponse.data
-      
-      if (statusResponse.data?.status === 'completed') {
-        await loadExtractResult(taskId)
-      }
-    }
-  } catch (error) {
-    ElMessage.error('加载任务失败')
-  }
-}
-
-// 生命周期
-onMounted(() => {
-  // 加载历史记录
-  const history = localStorage.getItem('extract_history')
-  if (history) {
-    try {
-      recentTasks.value = JSON.parse(history)
-    } catch (error) {
-      console.error('解析历史记录失败:', error)
-    }
-  }
-})
 </script>
 
 <style scoped>
 .contract-info-extract {
-  padding: 24px;
-  background: #f0f2f5;
-  min-height: 100vh;
+  padding: 0;
 }
 
-.header-section {
-  text-align: center;
-  margin-bottom: 32px;
-  padding: 24px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+.mb12 {
+  margin-bottom: 12px;
 }
 
-.page-title {
-  font-size: 32px;
-  font-weight: 600;
-  color: #1890ff;
+.mb16 {
   margin-bottom: 16px;
 }
 
-.page-description {
-  font-size: 16px;
-  color: #666;
-  max-width: 800px;
-  margin: 0 auto;
-  line-height: 1.6;
+/* ========== 主操作区域 ========== */
+.main-operation-area {
+  margin-bottom: 16px;
 }
 
-.main-content {
-  display: grid;
-  grid-template-columns: 400px 1fr;
-  gap: 24px;
-  align-items: start;
+.main-operation-area .el-card {
+  height: 100%;
+  min-height: 380px;
 }
 
-.left-panel {
+.card-header {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.upload-card,
-.text-input-card,
-.config-card,
-.status-card,
-.result-card,
-.history-card {
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-.selected-file {
-  margin-top: 16px;
-}
-
-.task-status {
-  padding: 16px 0;
-}
-
-.status-info {
-  margin-top: 16px;
-}
-
-.status-message {
-  font-size: 16px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
   font-weight: 500;
+}
+
+.card-header .el-icon {
+  font-size: 18px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ========== 文件上传卡片 ========== */
+.file-info-compact {
+  margin-top: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+}
+
+.file-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 8px;
-}
-
-.task-info {
-  font-size: 12px;
-  color: #666;
-  margin: 0;
-}
-
-.statistics {
-  padding: 16px 0;
-}
-
-.extracted-fields h3 {
-  margin-bottom: 16px;
-  font-size: 16px;
   font-weight: 500;
+  color: #303133;
 }
 
-.value-text {
-  max-width: 300px;
+.text-ellipsis {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  display: inline-block;
+  flex: 1;
 }
 
-.result-actions {
-  text-align: center;
-}
-
-/* 历史记录样式 */
-.history-item {
+.file-meta {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
-  border-bottom: 1px solid #f0f0f0;
-}
-
-.history-item:last-child {
-  border-bottom: none;
-}
-
-.history-item-content {
-  display: flex;
   align-items: center;
-  gap: 12px;
-  flex: 1;
-}
-
-.history-item-info {
-  flex: 1;
-}
-
-.history-item-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: #303133;
-  margin-bottom: 4px;
-}
-
-.history-item-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: #909399;
 }
 
-/* 响应式设计 */
+.file-size {
+  flex: 1;
+}
+
+/* ========== 配置表单 ========== */
+.compact-form {
+  padding-top: 8px;
+}
+
+.compact-form .el-form-item {
+  margin-bottom: 18px;
+}
+
+.compact-form .el-select {
+  width: 100%;
+}
+
+.checkbox-with-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tip-icon {
+  color: #909399;
+  cursor: help;
+  font-size: 16px;
+}
+
+.extract-btn {
+  width: 100%;
+  margin-top: 12px;
+  font-size: 15px;
+  height: 44px;
+  font-weight: 500;
+}
+
+/* ========== 紧凑型统计卡片 ========== */
+.compact-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 6px;
+  transition: all 0.3s;
+}
+
+.stat-item:hover {
+  background: #ebeef5;
+  transform: translateX(4px);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.stat-icon.primary {
+  background: #ecf5ff;
+  color: #409eff;
+}
+
+.stat-icon.success {
+  background: #f0f9ff;
+  color: #67c23a;
+}
+
+.stat-icon.warning {
+  background: #fef6ec;
+  color: #e6a23c;
+}
+
+.stat-icon.info {
+  background: #f4f4f5;
+  color: #909399;
+}
+
+.stat-content {
+  flex: 1;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1;
+}
+
+.stat-value.small {
+  font-size: 18px;
+}
+
+.stat-unit {
+  font-size: 14px;
+  font-weight: 400;
+  color: #909399;
+  margin-left: 2px;
+}
+
+/* ========== 进度卡片 ========== */
+.progress-card {
+  animation: fadeIn 0.3s;
+}
+
+.steps-indicator {
+  margin-bottom: 24px;
+}
+
+.progress-text {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #ebeef5;
+  font-size: 13px;
+  color: #606266;
+}
+
+.progress-meta span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progress-meta .el-icon {
+  font-size: 14px;
+  color: #909399;
+}
+
+/* ========== 结果卡片 ========== */
+.result-card {
+  animation: fadeIn 0.3s;
+}
+
+.result-tabs {
+  margin-top: -8px;
+}
+
+.tab-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.extract-value {
+  color: #303133;
+}
+
+.progress-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* JSON 视图 */
+.json-viewer {
+  background: #f5f7fa;
+  border-radius: 6px;
+  padding: 16px;
+  max-height: 500px;
+  overflow: auto;
+}
+
+.json-viewer pre {
+  margin: 0;
+  font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #303133;
+}
+
+/* 图表视图 */
+.chart-view {
+  min-height: 300px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ========== 动画 ========== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ========== 响应式设计 ========== */
 @media (max-width: 1200px) {
-  .main-content {
-    grid-template-columns: 1fr;
+  .main-operation-area .el-col {
+    margin-bottom: 16px;
   }
   
-  .left-panel {
-    order: 1;
+  .main-operation-area .el-card {
+    min-height: auto;
   }
-  
-  .right-panel {
-    order: 2;
-  }
+}
+
+/* ========== 滚动条美化 ========== */
+.json-viewer::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.json-viewer::-webkit-scrollbar-thumb {
+  background: #dcdfe6;
+  border-radius: 4px;
+}
+
+.json-viewer::-webkit-scrollbar-thumb:hover {
+  background: #c0c4cc;
 }
 </style>
