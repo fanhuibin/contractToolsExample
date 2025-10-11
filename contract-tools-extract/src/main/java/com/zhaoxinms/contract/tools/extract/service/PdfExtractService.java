@@ -1,5 +1,13 @@
 package com.zhaoxinms.contract.tools.extract.service;
 
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.extract.config.ExtractProperties;
@@ -8,14 +16,8 @@ import com.zhaoxinms.contract.tools.extract.core.data.Document;
 import com.zhaoxinms.contract.tools.extract.core.data.Extraction;
 import com.zhaoxinms.contract.tools.extract.core.data.ExtractionSchema;
 import com.zhaoxinms.contract.tools.extract.core.exceptions.ExtractException;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * PDF 文档智能提取服务

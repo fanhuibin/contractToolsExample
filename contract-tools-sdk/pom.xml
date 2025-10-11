@@ -40,6 +40,12 @@
             <groupId>com.zhaoxinms</groupId>
             <artifactId>contract-tools-extract</artifactId>
         </dependency>
+        
+        <!-- 依赖规则抽取模块 -->
+        <dependency>
+            <groupId>com.zhaoxinms</groupId>
+            <artifactId>contract-tools-rule-extract</artifactId>
+        </dependency>
 
         <!-- Spring Boot Starter Web -->
         <dependency>

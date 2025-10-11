@@ -139,3 +139,8 @@ node_modules/
 .env
 .env.local
 .env.*.local
+/contract-tools-sdk/rule-extract-data/ocr-output
+/contract-tools-sdk/rule-extract-data/ocr-texts
+/contract-tools-sdk/rule-extract-data/tasks
+/contract-tools-sdk/rule-extract-data/uploads
+ACCEPTANCE_CHECKLIST.md

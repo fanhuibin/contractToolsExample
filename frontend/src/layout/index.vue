@@ -29,6 +29,10 @@
           <el-icon><Search /></el-icon>
           <span>智能信息提取</span>
         </el-menu-item>
+        <el-menu-item index="/rule-extract">
+          <el-icon><Grid /></el-icon>
+          <span>规则抽取</span>
+        </el-menu-item>
         <el-menu-item index="/contract-review">
           <el-icon><DocumentChecked /></el-icon>
           <span>合同智能审核</span>
@@ -110,7 +114,8 @@ import {
   Search,
   DocumentChecked,
   DataAnalysis,
-  Edit
+  Edit,
+  Grid
 } from '@element-plus/icons-vue'
 import AiChat from '@/components/ai/AiChat.vue'
 

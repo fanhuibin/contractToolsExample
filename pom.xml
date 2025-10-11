@@ -33,6 +33,7 @@
         <druid.version>1.2.8</druid.version>
         <mysql.version>8.0.33</mysql.version>
         <dynamic-datasource.version>3.5.0</dynamic-datasource.version>
+        <fastjson2.version>2.0.43</fastjson2.version>
     </properties>
 
     <!-- 子模块 -->
@@ -42,6 +43,7 @@
         <module>contract-tools-backend</module>
         <module>contract-tools-sdk</module>
         <module>contract-tools-extract</module>
+        <module>contract-tools-rule-extract</module>
     </modules>
 
     <!-- 依赖管理 -->
@@ -70,6 +72,11 @@
             <dependency>
                 <groupId>com.zhaoxinms</groupId>
                 <artifactId>contract-tools-extract</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.zhaoxinms</groupId>
+                <artifactId>contract-tools-rule-extract</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -109,6 +116,11 @@
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
                 <version>${hutool.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba.fastjson2</groupId>
+                <artifactId>fastjson2</artifactId>
+                <version>${fastjson2.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.apache.poi</groupId>

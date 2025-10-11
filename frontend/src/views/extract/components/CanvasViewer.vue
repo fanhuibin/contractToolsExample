@@ -121,18 +121,21 @@ interface Props {
   charBoxes: any[]
   extractions: any[]
   bboxMappings: any[]
+  apiPrefix?: string  // 可选的API前缀，用于不同的后端路径
 }
 
 const props = withDefaults(defineProps<Props>(), {
   totalPages: 0,
   charBoxes: () => [],
   extractions: () => [],
-  bboxMappings: () => []
+  bboxMappings: () => [],
+  apiPrefix: '/api/extract/files/tasks'  // 默认使用智能提取的路径
 })
 
 // Emits
 const emit = defineEmits<{
   bboxClick: [bboxInfo: any]
+  pageChange: [page: number]
 }>()
 
 // 响应式数据
@@ -269,7 +272,12 @@ const fitToWidth = () => {
 
 // 初始化页面布局
 const initializePages = async () => {
-  if (!props.taskId || props.totalPages === 0) return
+  if (!props.taskId || props.totalPages === 0) {
+    console.warn('CanvasViewer: 无法初始化页面', { taskId: props.taskId, totalPages: props.totalPages })
+    return
+  }
+  
+  console.log('CanvasViewer: 开始初始化页面', { totalPages: props.totalPages, taskId: props.taskId })
   
   try {
     loading.value = true
@@ -283,11 +291,14 @@ const initializePages = async () => {
     
     // 页面数少时，一次性加载所有图片
     if (props.totalPages <= MAX_VIRTUAL_PAGES) {
+      console.log('CanvasViewer: 一次性加载所有页面')
       
       for (let i = 0; i < props.totalPages; i++) {
+        console.log(`CanvasViewer: 加载第 ${i + 1} 页`)
         const img = await loadPageImage(i + 1)
         if (img) {
           pageImages.value.set(i, img)
+          console.log(`CanvasViewer: 第 ${i + 1} 页加载成功`, { width: img.naturalWidth, height: img.naturalHeight })
           
           // 计算缩放后的尺寸
           const aspectRatio = img.naturalHeight / img.naturalWidth
@@ -349,6 +360,12 @@ const initializePages = async () => {
       }
     }
     
+    console.log('CanvasViewer: 页面布局初始化完成', { 
+      totalPages: props.totalPages, 
+      loadedPages: pageImages.value.size,
+      pageLayoutLength: pageLayout.value.length
+    })
+    
     loading.value = false
     
     // 立即触发首次渲染
@@ -357,7 +374,7 @@ const initializePages = async () => {
     })
     
   } catch (err: any) {
-    console.error('初始化页面失败:', err)
+    console.error('CanvasViewer: 初始化页面失败:', err)
     error.value = err.message || '初始化失败'
     loading.value = false
   }
@@ -366,14 +383,30 @@ const initializePages = async () => {
 // 加载单页图像
 const loadPageImage = async (pageNum: number): Promise<HTMLImageElement | null> => {
   try {
-    const imageUrl = `/api/extract/files/tasks/${props.taskId}/images/page-${pageNum}.png`
+    // 根据apiPrefix生成图片URL
+    let imageUrl: string
+    if (props.apiPrefix === '/api/rule-extract/extract/page-image') {
+      // 规则抽取API格式
+      imageUrl = `${props.apiPrefix}/${props.taskId}/${pageNum}`
+    } else {
+      // 智能提取API格式（默认）
+      imageUrl = `${props.apiPrefix}/${props.taskId}/images/page-${pageNum}.png`
+    }
+    
+    console.log(`CanvasViewer: 开始加载图片`, { pageNum, imageUrl })
     
     const img = new Image()
     img.crossOrigin = 'anonymous'
     
     await new Promise((resolve, reject) => {
-      img.onload = resolve
-      img.onerror = () => reject(new Error(`页面${pageNum}图像加载失败`))
+      img.onload = () => {
+        console.log(`CanvasViewer: 图片加载成功`, { pageNum, url: imageUrl })
+        resolve(null)
+      }
+      img.onerror = () => {
+        console.error(`CanvasViewer: 图片加载失败`, { pageNum, url: imageUrl })
+        reject(new Error(`页面${pageNum}图像加载失败`))
+      }
       img.src = imageUrl
     })
     
@@ -484,15 +517,72 @@ const scrollToPage = (pageNum: number) => {
   }
 }
 
+// 滚动到指定的bbox位置
+const scrollToBbox = (bboxInfo: any) => {
+  if (!canvasContainer.value || !bboxInfo || !bboxInfo.bbox || !bboxInfo.page) {
+    return
+  }
+  
+  const pageIndex = bboxInfo.page - 1
+  const page = pageLayout.value[pageIndex]
+  
+  if (!page) return
+  
+  const [x1, y1, x2, y2] = bboxInfo.bbox
+  const scale = page.width / page.actualWidth
+  
+  // 计算bbox在canvas上的y坐标和高度
+  const bboxY = Math.round(y1 * scale)
+  const bboxHeight = Math.round((y2 - y1) * scale)
+  
+  // 计算bbox在整个滚动容器中的绝对位置
+  const absoluteY = page.y + bboxY
+  const absoluteBottom = absoluteY + bboxHeight
+  
+  // 获取当前滚动位置和容器高度
+  const currentScrollTop = canvasContainer.value.scrollTop
+  const containerHeight = canvasContainer.value.clientHeight
+  const visibleTop = currentScrollTop
+  const visibleBottom = currentScrollTop + containerHeight
+  
+  // 检查bbox是否已经在可视区域内
+  const isVisible = absoluteY >= visibleTop && absoluteBottom <= visibleBottom
+  
+  if (isVisible) {
+    return
+  }
+  
+  // 计算滚动位置，让bbox显示在容器中间（留出一些边距）
+  const margin = 50 // 顶部留出50px边距
+  let targetScrollTop = absoluteY - margin
+  
+  // 如果bbox比容器还高，就滚动到bbox顶部
+  if (bboxHeight > containerHeight - margin * 2) {
+    targetScrollTop = absoluteY - margin
+  } else {
+    // 否则居中显示
+    targetScrollTop = absoluteY - (containerHeight - bboxHeight) / 2
+  }
+  
+  // 确保不会滚动到负值
+  targetScrollTop = Math.max(0, targetScrollTop)
+  
+  canvasContainer.value.scrollTo({
+    top: targetScrollTop,
+    behavior: 'smooth'
+  })
+}
+
 // 滚动事件处理
 const onScroll = () => {
-  // 更新当前页面
   updateCurrentPage()
 }
 
 // 更新当前页面
 const updateCurrentPage = () => {
-  if (!canvasContainer.value || pageLayout.value.length === 0) return
+  if (!canvasContainer.value || pageLayout.value.length === 0) {
+    return
+  }
   
   const scrollTop = canvasContainer.value.scrollTop
   const containerHeight = canvasContainer.value.clientHeight
@@ -502,7 +592,13 @@ const updateCurrentPage = () => {
   for (let i = 0; i < pageLayout.value.length; i++) {
     const page = pageLayout.value[i]
     if (centerY >= page.y && centerY <= page.y + page.height) {
-      currentPage.value = i + 1
+      const newPage = i + 1
+      
+      if (currentPage.value !== newPage) {
+        currentPage.value = newPage
+        // 通知父组件页码变化
+        emit('pageChange', newPage)
+      }
       break
     }
   }
@@ -516,6 +612,8 @@ const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
       .filter(b => b.page === page.index + 1)
       .map(b => `${b.page}-${b.bbox.join('-')}`)
   )
+  
+  let drawnCount = 0
   
   // 直接遍历bboxMappings，每个mapping的bboxes数组已经是合并好的
   props.bboxMappings.forEach((mapping) => {
@@ -531,11 +629,16 @@ const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
             
             // 直接绘制，每个bbox只绘制一次
             drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
+            drawnCount++
           }
         })
       }
     }
   })
+  
+  if (drawnCount > 0) {
+    console.log(`第${page.index + 1}页绘制了 ${drawnCount} 个bbox`)
+  }
 }
 
 // 绘制提取内容的bbox（参考合同比对实现）
@@ -651,15 +754,21 @@ const retryLoad = () => {
 
 // 导航到提取内容
 const navigateToExtraction = (extraction: any) => {
-  if (!extraction.charInterval) return
+  if (!extraction.charInterval) {
+    return
+  }
   
   // 从bboxMappings中查找对应的mapping
   const mapping = findMappingForExtraction(extraction)
+  
   if (mapping && mapping.bboxes && mapping.bboxes.length > 0) {
     const firstBbox = mapping.bboxes[0]
+    
     if (firstBbox.page) {
       currentPage.value = firstBbox.page
-      scrollToPage(firstBbox.page)
+      
+      // 滚动到bbox的具体位置（而不是页面顶部）
+      scrollToBbox(firstBbox)
       
       // 高亮选中的提取内容
       highlightExtractionBboxes([extraction])
@@ -697,9 +806,19 @@ const findMappingForExtraction = (extraction: any) => {
   
   // 在bboxMappings中查找匹配的mapping
   return props.bboxMappings.find(mapping => {
-    if (!mapping.interval) return false
-    const mappingStart = mapping.interval.startPos || mapping.interval.start || 0
-    const mappingEnd = mapping.interval.endPos || mapping.interval.end || 0
+    // 支持两种数据格式
+    let mappingStart, mappingEnd
+    
+    if (mapping.interval) {
+      // 格式1: { interval: { startPos, endPos }, bboxes: [...] }
+      mappingStart = mapping.interval.startPos || mapping.interval.start || 0
+      mappingEnd = mapping.interval.endPos || mapping.interval.end || 0
+    } else {
+      // 格式2: { startPos, endPos, bboxes: [...] }（规则抽取使用的格式）
+      mappingStart = mapping.startPos || 0
+      mappingEnd = mapping.endPos || 0
+    }
+    
     return mappingStart === start && mappingEnd === end
   })
 }
@@ -773,6 +892,7 @@ onMounted(() => {
   overflow-x: auto !important;
   background: #f5f5f5;
   min-height: 0; /* 确保flex子元素可以滚动 */
+  height: 100%; /* 确保容器有高度 */
 }
 
 .virtual-content {
