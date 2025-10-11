@@ -984,8 +984,17 @@ public class CompareService {
 		// 4. 处理规则：空格 + 标点符号 场景替换为等长空格串，保持字符位移一致
 		// 示例：" ;"、" 。"、" \t, "、" . ." → 用相同长度的空格替换
 		// 说明：用正则逐段匹配并按匹配长度替换，避免位移差异
+		// 
+		// 【重要修正】保护金额中的小数点和千分位逗号，避免误删除
+		// 策略：改进正则表达式，排除"数字.数字"和"数字,数字"模式
 		{
-			Pattern wsPunct = Pattern.compile("[\\s\\p{Punct}，。；：、！？…·•]+");
+			// 方案：使用负向零宽断言（negative lookbehind/lookahead）排除金额相关的点和逗号
+			// 正则说明：
+			// - (?<!\\d) : 前面不是数字
+			// - [\\s\\p{Punct}，。；：、！？…·•]+ : 空格或标点符号（一个或多个）
+			// - (?!\\d) : 后面不是数字
+			// 这样可以避免匹配"103400.00"中的点，同时匹配" . "这样的孤立标点
+			Pattern wsPunct = Pattern.compile("(?<!\\d)[\\s\\p{Punct}，。；：、！？…·•]+(?!\\d)");
 			Matcher m = wsPunct.matcher(normalized);
 			StringBuffer sb = new StringBuffer();
 			while (m.find()) {
