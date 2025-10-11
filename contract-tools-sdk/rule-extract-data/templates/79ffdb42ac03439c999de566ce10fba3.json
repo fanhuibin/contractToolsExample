@@ -1,0 +1,46 @@
+{
+	"createdAt":"2025-10-09 14:30:53.512967800",
+	"description":"阿萨德发生的发",
+	"fields":[
+		{
+			"fieldCode":"field_1",
+			"fieldName":"甲方",
+			"fieldType":"string",
+			"id":"field_1760153932411_0.1087922493751492",
+			"isRequired":false,
+			"rules":[
+				{
+					"id":"rule_1760153932411_0.5378279518743074",
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchor\":\"甲方（需方）：\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5]+\",\"extractMethod\":\"line\"}",
+					"ruleName":"甲方的提取规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			]
+		},
+		{
+			"fieldCode":"field_2",
+			"fieldName":"合同金额",
+			"fieldType":"string",
+			"id":"field_1760153932411_0.5721215009691583",
+			"isRequired":false,
+			"rules":[
+				{
+					"id":"rule_1760153932411_0.20560302561342902",
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{}",
+					"ruleName":"合同金额的提取规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			]
+		}
+	],
+	"id":"79ffdb42ac03439c999de566ce10fba3",
+	"status":"active",
+	"templateCode":"12",
+	"templateName":"模板1",
+	"updatedAt":"2025-10-11 11:38:52.447151400",
+	"version":10
+}

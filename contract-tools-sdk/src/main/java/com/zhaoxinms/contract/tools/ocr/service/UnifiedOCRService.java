@@ -53,9 +53,15 @@ public class UnifiedOCRService implements OCRService {
         }
         
         try {
-            // 创建临时输出目录
+            // 创建持久化输出目录（保存在 rule-extract-data 下）
             String taskId = UUID.randomUUID().toString();
-            File tempOutputDir = Files.createTempDirectory("mineru-ocr-" + taskId).toFile();
+            String dataRoot = System.getProperty("user.dir") + File.separator + "rule-extract-data";
+            File ocrOutputDir = new File(dataRoot, "ocr-output");
+            if (!ocrOutputDir.exists()) {
+                ocrOutputDir.mkdirs();
+            }
+            File taskOutputDir = new File(ocrOutputDir, taskId);
+            taskOutputDir.mkdirs();
             
             // 创建默认选项
             CompareOptions options = new CompareOptions();
@@ -64,7 +70,7 @@ public class UnifiedOCRService implements OCRService {
             TextExtractionUtil.PageLayout[] pageLayouts = mineruOcrService.recognizePdf(
                 pdfFile, 
                 taskId, 
-                tempOutputDir,
+                taskOutputDir,
                 "extract", // 文档模式：extract 表示用于智能提取
                 options
             );
@@ -102,10 +108,33 @@ public class UnifiedOCRService implements OCRService {
             OCRResult result = new OCRResult(allText.toString(), 0.95, "mineru");
             result.setBlocks(allBlocks);
             
-            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}", pageLayouts.length, allText.length());
+            // 构建图片路径信息（保存到metadata）
+            File imagesDir = new File(taskOutputDir, "images/extract");
+            List<String> pageImagePaths = new ArrayList<>();
+            if (imagesDir.exists()) {
+                for (int i = 1; i <= pageLayouts.length; i++) {
+                    // 尝试多种可能的图片扩展名
+                    File pngFile = new File(imagesDir, "page-" + i + ".png");
+                    File jpgFile = new File(imagesDir, "page-" + i + ".jpg");
+                    
+                    if (pngFile.exists()) {
+                        pageImagePaths.add(pngFile.getAbsolutePath());
+                    } else if (jpgFile.exists()) {
+                        pageImagePaths.add(jpgFile.getAbsolutePath());
+                    }
+                }
+            }
             
-            // 清理临时目录（可选）
-            // 如果需要保留图片供后续使用，则不删除
+            // 将图片路径信息保存到metadata（作为JSONObject）
+            com.alibaba.fastjson2.JSONObject metadata = new com.alibaba.fastjson2.JSONObject();
+            metadata.put("totalPages", pageLayouts.length);
+            metadata.put("pageImagePaths", pageImagePaths);
+            metadata.put("imagesDir", imagesDir.getAbsolutePath());
+            metadata.put("taskId", taskId);
+            result.setMetadata((Object) metadata);
+            
+            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}", 
+                pageLayouts.length, allText.length(), pageImagePaths.size());
             
             return result;
             

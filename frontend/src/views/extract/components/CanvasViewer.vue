@@ -121,13 +121,15 @@ interface Props {
   charBoxes: any[]
   extractions: any[]
   bboxMappings: any[]
+  apiPrefix?: string  // 可选的API前缀，用于不同的后端路径
 }
 
 const props = withDefaults(defineProps<Props>(), {
   totalPages: 0,
   charBoxes: () => [],
   extractions: () => [],
-  bboxMappings: () => []
+  bboxMappings: () => [],
+  apiPrefix: '/api/extract/files/tasks'  // 默认使用智能提取的路径
 })
 
 // Emits
@@ -366,7 +368,15 @@ const initializePages = async () => {
 // 加载单页图像
 const loadPageImage = async (pageNum: number): Promise<HTMLImageElement | null> => {
   try {
-    const imageUrl = `/api/extract/files/tasks/${props.taskId}/images/page-${pageNum}.png`
+    // 根据apiPrefix生成图片URL
+    let imageUrl: string
+    if (props.apiPrefix === '/api/rule-extract/extract/page-image') {
+      // 规则抽取API格式
+      imageUrl = `${props.apiPrefix}/${props.taskId}/${pageNum}`
+    } else {
+      // 智能提取API格式（默认）
+      imageUrl = `${props.apiPrefix}/${props.taskId}/images/page-${pageNum}.png`
+    }
     
     const img = new Image()
     img.crossOrigin = 'anonymous'

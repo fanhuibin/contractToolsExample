@@ -163,6 +163,31 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/extract/EnhancedContractInfoExtract.vue'),
         meta: { title: '智能信息提取 - 增强版' }
       },
+      // 规则抽取模块（重构版本）
+      {
+        path: '/rule-extract',
+        name: 'RuleExtract',
+        component: () => import('@/views/rule-extract/ExtractMain.vue'),
+        meta: { title: '规则抽取' }
+      },
+      {
+        path: '/rule-extract/templates',
+        name: 'RuleExtractTemplates',
+        component: () => import('@/views/rule-extract/TemplateList.vue'),
+        meta: { title: '规则模板管理', keepAlive: true }
+      },
+      {
+        path: '/rule-extract/template/:id',
+        name: 'RuleExtractTemplateDesign',
+        component: () => import('@/views/rule-extract/TemplateDesigner.vue'),
+        meta: { title: '模板设计' }
+      },
+      {
+        path: '/rule-extract/result/:taskId',
+        name: 'RuleExtractResult',
+        component: () => import('@/views/rule-extract/RuleExtractResult.vue'),
+        meta: { title: '抽取结果' }
+      },
       
     ]
   }

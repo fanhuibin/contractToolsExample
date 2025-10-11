@@ -17,6 +17,7 @@ public interface OCRService {
         private double confidence;
         private List<OCRBlock> blocks;
         private String provider;
+        private Object metadata;
         
         public OCRResult(String content, double confidence, String provider) {
             this.content = content;
@@ -33,6 +34,8 @@ public interface OCRService {
         public void setBlocks(List<OCRBlock> blocks) { this.blocks = blocks; }
         public String getProvider() { return provider; }
         public void setProvider(String provider) { this.provider = provider; }
+        public Object getMetadata() { return metadata; }
+        public void setMetadata(Object metadata) { this.metadata = metadata; }
     }
     
     /**

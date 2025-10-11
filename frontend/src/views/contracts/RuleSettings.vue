@@ -50,7 +50,7 @@
                 <div class="kv-line">
                   <span>pattern</span>
                   <el-input v-model="row.rule.pattern" size="small" class="pattern-input" placeholder="正则表达式" />
-                </div>
+                </div> 
                 <div class="kv-line" v-if="row.rule.type==='date'">
                   <span>format</span>
                   <el-input v-model="row.rule.outputFormat" size="small" class="short-input" placeholder="yyyy-MM-dd" />
