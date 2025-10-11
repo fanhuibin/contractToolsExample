@@ -369,6 +369,11 @@ public class MinerUOCRService {
             throw new Exception("未找到有效的content_list数据");
         }
         
+        // 解析 middle_json 以获取表格的精确 bbox
+        JsonNode middleJsonNode = extractMiddleJson(root);
+        log.info("📊 [convertToPageLayouts] extractMiddleJson 返回: {}", 
+            middleJsonNode != null ? (middleJsonNode.isArray() ? "数组[" + middleJsonNode.size() + "页]" : "非数组对象") : "null");
+        
         // 获取PDF尺寸信息
         int totalPages = pageImages.size();
         Map<Integer, double[]> pdfPageSizes = new HashMap<>();
@@ -398,7 +403,9 @@ public class MinerUOCRService {
             List<TextExtractionUtil.LayoutItem> items = convertToLayoutItems(
                 item,
                 pageImageMap.get(pageIdx),
-                pdfPageSizes.get(pageIdx)
+                pdfPageSizes.get(pageIdx),
+                middleJsonNode,
+                pageIdx
             );
             
             if (!pageLayoutItems.containsKey(pageIdx)) {
@@ -429,7 +436,9 @@ public class MinerUOCRService {
     private List<TextExtractionUtil.LayoutItem> convertToLayoutItems(
             JsonNode item,
             Map<String, Object> pageImage,
-            double[] pdfPageSize) {
+            double[] pdfPageSize,
+            JsonNode middleJsonNode,
+            int pageIdx) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         
@@ -444,8 +453,9 @@ public class MinerUOCRService {
         
         // 处理表格类型
         if ("table".equals(itemType)) {
-            log.info("🔍 检测到表格类型");
-            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+            log.info("📊 [表格检测] 页{} 检测到表格，将从 middle_json 获取精确 bbox", pageIdx + 1);
+            log.debug("📊 [表格检测] content_list 表格数据: {}", item.toString());
+            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx));
         }
         // 处理图片类型
         else if ("image".equals(itemType)) {
@@ -478,89 +488,195 @@ public class MinerUOCRService {
     /**
      * 处理表格类型的内容
      * 包括 table_caption, table_body, table_footnote
+     * 从 middle_json 中获取各部分的精确 bbox
      */
     private List<TextExtractionUtil.LayoutItem> handleTableItem(
             JsonNode item,
             int imageWidth, int imageHeight,
-            double pdfWidth, double pdfHeight) {
+            double pdfWidth, double pdfHeight,
+            JsonNode middleJsonNode,
+            int pageIdx) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
-        JsonNode bboxNode = item.get("bbox");
         
-        if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
-            log.warn("⚠️  表格缺少 bbox 信息");
-            return items;
-        }
+        log.info("📊 [表格处理] ========== 开始处理表格，页{} ==========", pageIdx + 1);
+        log.info("📊 [表格处理] 图片尺寸: {}x{}, PDF尺寸: {}x{}", imageWidth, imageHeight, pdfWidth, pdfHeight);
         
-        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
-        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        // 从 middle_json 中查找对应页面的表格块
+        TableBlockInfo tableBlockInfo = findTableBlocksInMiddleJson(middleJsonNode, pageIdx, item);
         
-        log.info("📊 处理表格项，bbox: [{}, {}, {}, {}]", imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3]);
-        
-        // 1. 处理 table_caption（如果有）
-        if (item.has("table_caption")) {
-            JsonNode captionNode = item.get("table_caption");
-            if (captionNode.isArray() && captionNode.size() > 0) {
-                for (JsonNode caption : captionNode) {
-                    String captionText = caption.asText().trim();
-                    if (!captionText.isEmpty()) {
-                        // 表格标题放在表格上方
-                        double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.1; // 估计标题高度
-                        double[] captionBbox = new double[]{
-                            imageBbox[0],
-                            imageBbox[1],
-                            imageBbox[2],
-                            imageBbox[1] + captionHeight
-                        };
-                        // 转换 LaTeX 格式为可读文本
-                        String readableCaptionText = convertLatexToReadableText(captionText);
-                        items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", readableCaptionText + "\n"));
-                    }
+        if (tableBlockInfo != null && tableBlockInfo.blocks != null && 
+            tableBlockInfo.blocks.isArray() && tableBlockInfo.blocks.size() > 0) {
+            // 使用 middle_json 中的精确 bbox 处理 table_caption 和 table_footnote
+            log.info("📊 [表格处理] ✅ 从 middle_json 中找到表格精确 bbox，页{}, 子块数量: {}, middle_json页面尺寸: {}x{}", 
+                pageIdx + 1, tableBlockInfo.blocks.size(), tableBlockInfo.pageWidth, tableBlockInfo.pageHeight);
+            
+            // 只处理 table_caption 和 table_footnote，table_body 使用 content_list 的逻辑
+            for (int i = 0; i < tableBlockInfo.blocks.size(); i++) {
+                JsonNode block = tableBlockInfo.blocks.get(i);
+                String blockType = block.has("type") ? block.get("type").asText() : "";
+                
+                // 跳过 table_body，它将在后面用 content_list 逻辑处理
+                if ("table_body".equals(blockType)) {
+                    log.info("📊 [表格处理] 跳过 table_body（将使用 content_list 逻辑处理）");
+                    continue;
+                }
+                
+                JsonNode bboxNode = block.get("bbox");
+                
+                log.info("📊 [表格处理] 处理子块 {}/{}: type={}", i + 1, tableBlockInfo.blocks.size(), blockType);
+                
+                if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+                    log.warn("📊 [表格处理] ⚠️  子块 {} 缺少有效 bbox，跳过", blockType);
+                    continue;
+                }
+                
+                // middle_json 的 bbox 是基于页面实际尺寸的，需要先归一化到 1000x1000
+                double[] rawBbox = new double[]{
+                    bboxNode.get(0).asDouble(),
+                    bboxNode.get(1).asDouble(),
+                    bboxNode.get(2).asDouble(),
+                    bboxNode.get(3).asDouble()
+                };
+                log.info("📊 [表格处理] middle_json 原始 bbox (页面坐标): [{}, {}, {}, {}]", 
+                    rawBbox[0], rawBbox[1], rawBbox[2], rawBbox[3]);
+                
+                // 归一化到 1000x1000（与 content_list 保持一致）
+                double[] mineruBbox = new double[]{
+                    rawBbox[0] * 1000.0 / tableBlockInfo.pageWidth,
+                    rawBbox[1] * 1000.0 / tableBlockInfo.pageHeight,
+                    rawBbox[2] * 1000.0 / tableBlockInfo.pageWidth,
+                    rawBbox[3] * 1000.0 / tableBlockInfo.pageHeight
+                };
+                log.info("📊 [表格处理] 归一化后 bbox (MinerU归一化): [{}, {}, {}, {}]", 
+                    mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
+                
+                // 转换到图片坐标系（使用与 content_list 相同的转换逻辑）
+                double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+                log.info("📊 [表格处理] 转换后 bbox (图片坐标): [{}, {}, {}, {}]", 
+                    imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3]);
+                
+                // 提取文本内容
+                String text = extractTextFromMiddleJsonBlock(block);
+                
+                if (text != null && !text.trim().isEmpty()) {
+                    // table_caption 和 table_footnote 都设置为 Text 类型
+                    items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", text));
+                    log.info("📊 [表格处理] ✅ 添加表格子块: type={}, category=Text, bbox=[{}, {}, {}, {}], 文本长度={}, 文本预览: {}", 
+                        blockType, imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], text.length(),
+                        text.length() > 50 ? text.substring(0, 50) + "..." : text);
+                } else {
+                    log.warn("📊 [表格处理] ⚠️  子块 {} 文本为空，跳过", blockType);
                 }
             }
-        }
-        
-        // 2. 处理 table_body (HTML格式需要去除标签)
-        if (item.has("table_body")) {
-            String tableBody = item.get("table_body").asText();
-            log.debug("表格原始HTML长度: {}", tableBody.length());
-            // 去除HTML标签，转换为纯文本
-            String cleanText = removeHtmlTags(tableBody);
-            // 转换 LaTeX 格式为可读文本
-            cleanText = convertLatexToReadableText(cleanText);
-            log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
-                cleanText.length(), 
-                cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
-            if (!cleanText.trim().isEmpty()) {
-                items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", cleanText));
+            log.info("📊 [表格处理] 从 middle_json 共添加 {} 个子块（caption/footnote）", items.size());
+            
+            // 现在处理 table_body（使用 content_list 的逻辑）
+            log.info("📊 [表格处理] 开始处理 table_body（使用 content_list）");
+            JsonNode bboxNode = item.get("bbox");
+            
+            if (bboxNode != null && bboxNode.isArray() && bboxNode.size() >= 4) {
+                double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+                double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+                
+                // 处理 table_body（HTML 表格）
+                if (item.has("table_body")) {
+                    String tableBodyHtml = item.get("table_body").asText();
+                    if (tableBodyHtml != null && !tableBodyHtml.trim().isEmpty()) {
+                        String readableTableBody = convertLatexToReadableText(tableBodyHtml);
+                        items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n"));
+                        log.info("📊 [表格处理] ✅ 添加 table_body: bbox=[{}, {}, {}, {}], HTML长度={}", 
+                            imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                    }
+                }
+            } else {
+                log.warn("📊 [表格处理] ⚠️  content_list 中缺少 bbox 信息，无法处理 table_body");
             }
         } else {
-            log.warn("⚠️  表格缺少 table_body 字段");
-        }
-        
-        // 3. 处理 table_footnote（如果有）
-        if (item.has("table_footnote")) {
-            JsonNode footnoteNode = item.get("table_footnote");
-            if (footnoteNode.isArray() && footnoteNode.size() > 0) {
-                for (JsonNode footnote : footnoteNode) {
-                    String footnoteText = footnote.asText().trim();
-                    if (!footnoteText.isEmpty()) {
-                        // 表格注释放在表格下方
-                        double footnoteHeight = (imageBbox[3] - imageBbox[1]) * 0.1;
-                        double[] footnoteBbox = new double[]{
-                            imageBbox[0],
-                            imageBbox[3] - footnoteHeight,
-                            imageBbox[2],
-                            imageBbox[3]
-                        };
-                        // 转换 LaTeX 格式为可读文本
-                        String readableFootnoteText = convertLatexToReadableText(footnoteText);
-                        items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", readableFootnoteText + "\n"));
+            // 如果未找到 middle_json 数据，使用 content_list 中的合并 bbox（降级处理）
+            log.warn("📊 [表格处理] ⚠️  未从 middle_json 中找到表格精确 bbox，使用 content_list 的合并 bbox（降级模式）");
+            JsonNode bboxNode = item.get("bbox");
+            
+            if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
+                log.warn("📊 [表格处理] ⚠️  表格缺少 bbox 信息");
+                return items;
+            }
+            
+            double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+            log.info("📊 [表格处理] content_list bbox (PDF坐标): [{}, {}, {}, {}]", 
+                mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
+            
+            double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+            log.info("📊 [表格处理] 转换后 bbox (图片坐标): [{}, {}, {}, {}]", 
+                imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3]);
+            
+            // 1. 处理 table_caption（如果有）
+            if (item.has("table_caption")) {
+                JsonNode captionNode = item.get("table_caption");
+                if (captionNode.isArray() && captionNode.size() > 0) {
+                    for (JsonNode caption : captionNode) {
+                        String captionText = caption.asText().trim();
+                        if (!captionText.isEmpty()) {
+                            // 表格标题放在表格上方
+                            double captionHeight = (imageBbox[3] - imageBbox[1]) * 0.1; // 估计标题高度
+                            double[] captionBbox = new double[]{
+                                imageBbox[0],
+                                imageBbox[1],
+                                imageBbox[2],
+                                imageBbox[1] + captionHeight
+                            };
+                            // 转换 LaTeX 格式为可读文本
+                            String readableCaptionText = convertLatexToReadableText(captionText);
+                            items.add(new TextExtractionUtil.LayoutItem(captionBbox, "Text", readableCaptionText + "\n"));
+                        }
                     }
                 }
             }
+            
+            // 2. 处理 table_body (HTML格式需要去除标签)
+            if (item.has("table_body")) {
+                String tableBody = item.get("table_body").asText();
+                log.debug("表格原始HTML长度: {}", tableBody.length());
+                // 去除HTML标签，转换为纯文本
+                String cleanText = removeHtmlTags(tableBody);
+                // 转换 LaTeX 格式为可读文本
+                cleanText = convertLatexToReadableText(cleanText);
+                log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
+                    cleanText.length(), 
+                    cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
+                if (!cleanText.trim().isEmpty()) {
+                    items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", cleanText));
+                }
+            } else {
+                log.warn("⚠️  表格缺少 table_body 字段");
+            }
+            
+            // 3. 处理 table_footnote（如果有）
+            if (item.has("table_footnote")) {
+                JsonNode footnoteNode = item.get("table_footnote");
+                if (footnoteNode.isArray() && footnoteNode.size() > 0) {
+                    for (JsonNode footnote : footnoteNode) {
+                        String footnoteText = footnote.asText().trim();
+                        if (!footnoteText.isEmpty()) {
+                            // 表格注释放在表格下方
+                            double footnoteHeight = (imageBbox[3] - imageBbox[1]) * 0.1;
+                            double[] footnoteBbox = new double[]{
+                                imageBbox[0],
+                                imageBbox[3] - footnoteHeight,
+                                imageBbox[2],
+                                imageBbox[3]
+                            };
+                            // 转换 LaTeX 格式为可读文本
+                            String readableFootnoteText = convertLatexToReadableText(footnoteText);
+                            items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", readableFootnoteText + "\n"));
+                        }
+                    }
+                }
+            }
+            log.info("📊 [表格处理] 从 content_list（降级模式）共添加 {} 个子块", items.size());
         }
         
+        log.info("📊 [表格处理] ========== 表格处理完成，页{}，共 {} 个 LayoutItem ==========", pageIdx + 1, items.size());
         return items;
     }
     
@@ -999,14 +1115,26 @@ public class MinerUOCRService {
                 if (firstResult != null) {
                     JsonNode middleJsonNode = firstResult.get("middle_json");
                     if (middleJsonNode != null) {
+                        log.info("📊 [saveMiddleJson] middle_json 类型: {}", 
+                            middleJsonNode.isTextual() ? "字符串" : (middleJsonNode.isArray() ? "数组" : "对象"));
+                        
                         // 如果 middle_json 是字符串，解析为 JSON
                         if (middleJsonNode.isTextual()) {
                             JsonNode parsedMiddleJson = objectMapper.readTree(middleJsonNode.asText());
+                            log.info("📊 [saveMiddleJson] 解析后类型: {}, 是否为数组: {}, 大小: {}", 
+                                parsedMiddleJson.getNodeType(), 
+                                parsedMiddleJson.isArray(),
+                                parsedMiddleJson.isArray() ? parsedMiddleJson.size() : "N/A");
+                            
                             File middleJsonFile = new File(intermediateDir, "05_middle_json.json");
                             objectMapper.writerWithDefaultPrettyPrinter().writeValue(middleJsonFile, parsedMiddleJson);
                             log.info("✅ 保存 MinerU middle_json（原始布局分析数据）: {}", middleJsonFile.getAbsolutePath());
                         } else {
                             // 如果已经是 JSON 对象，直接保存
+                            log.info("📊 [saveMiddleJson] 直接保存，是否为数组: {}, 大小: {}", 
+                                middleJsonNode.isArray(),
+                                middleJsonNode.isArray() ? middleJsonNode.size() : "N/A");
+                            
                             File middleJsonFile = new File(intermediateDir, "05_middle_json.json");
                             objectMapper.writerWithDefaultPrettyPrinter().writeValue(middleJsonFile, middleJsonNode);
                             log.info("✅ 保存 MinerU middle_json（原始布局分析数据）: {}", middleJsonFile.getAbsolutePath());
@@ -1464,6 +1592,230 @@ public class MinerUOCRService {
         result = result.trim();
         
         return result;
+    }
+    
+    /**
+     * 从 API 结果中提取 middle_json
+     */
+    private JsonNode extractMiddleJson(JsonNode root) {
+        log.info("📊 [middle_json] 开始提取 middle_json");
+        log.debug("📊 [middle_json] root 字段列表: {}", root.fieldNames());
+        try {
+            JsonNode resultsNode = root.get("results");
+            log.info("📊 [middle_json] resultsNode 是否为 null: {}", resultsNode == null);
+            if (resultsNode != null) {
+                log.info("📊 [middle_json] resultsNode 类型: {}", resultsNode.getNodeType());
+                log.info("📊 [middle_json] resultsNode 是否为对象: {}", resultsNode.isObject());
+                log.debug("📊 [middle_json] resultsNode 字段: {}", resultsNode.fieldNames());
+            }
+            if (resultsNode != null && resultsNode.isObject()) {
+                log.info("📊 [middle_json] 找到 results 节点");
+                JsonNode firstResult = resultsNode.elements().next();
+                if (firstResult != null) {
+                    log.info("📊 [middle_json] 找到第一个 result");
+                    log.debug("📊 [middle_json] firstResult 字段: {}", firstResult.fieldNames());
+                    JsonNode middleJsonNode = firstResult.get("middle_json");
+                    if (middleJsonNode != null) {
+                        log.info("📊 [middle_json] 找到 middle_json 节点，类型: {}", 
+                            middleJsonNode.isTextual() ? "字符串" : "对象");
+                        // 如果 middle_json 是字符串，解析为 JSON
+                        if (middleJsonNode.isTextual()) {
+                            JsonNode parsed = objectMapper.readTree(middleJsonNode.asText());
+                            log.info("📊 [middle_json] 解析后类型: {}, 是否为数组: {}", 
+                                parsed.getNodeType(), parsed.isArray());
+                            if (parsed.isArray()) {
+                                log.info("📊 [middle_json] ✅ 成功解析 middle_json（数组），页数: {}", parsed.size());
+                                return parsed;
+                            } else if (parsed.isObject()) {
+                                log.info("📊 [middle_json] 解析出的是对象，检查是否包含 pdf_info 字段");
+                                // MinerU 的 middle_json 格式: { "pdf_info": [...] }
+                                if (parsed.has("pdf_info")) {
+                                    JsonNode pdfInfo = parsed.get("pdf_info");
+                                    if (pdfInfo != null && pdfInfo.isArray()) {
+                                        log.info("📊 [middle_json] ✅ 成功提取 pdf_info 数组，页数: {}", pdfInfo.size());
+                                        return pdfInfo;
+                                    } else {
+                                        log.warn("📊 [middle_json] ⚠️  pdf_info 不是数组");
+                                    }
+                                } else {
+                                    log.warn("📊 [middle_json] ⚠️  对象中没有 pdf_info 字段");
+                                }
+                                return null;
+                            } else {
+                                log.warn("📊 [middle_json] ⚠️  未知类型: {}", parsed.getNodeType());
+                                return null;
+                            }
+                        }
+                        log.info("📊 [middle_json] ✅ 成功获取 middle_json，是否为数组: {}, 页数: {}", 
+                            middleJsonNode.isArray(),
+                            middleJsonNode.isArray() ? middleJsonNode.size() : "N/A");
+                        return middleJsonNode;
+                    } else {
+                        log.warn("📊 [middle_json] ⚠️  result 中没有 middle_json 字段");
+                    }
+                } else {
+                    log.warn("📊 [middle_json] ⚠️  results 节点为空");
+                }
+            } else {
+                log.warn("📊 [middle_json] ⚠️  root 中没有 results 节点或不是对象");
+            }
+        } catch (Exception e) {
+            log.error("📊 [middle_json] ❌ 提取失败: {}", e.getMessage(), e);
+        }
+        log.warn("📊 [middle_json] ❌ 未能提取 middle_json，将使用降级模式");
+        return null;
+    }
+    
+    /**
+     * 从 middle_json 中查找对应页面的表格块
+     * @param middleJsonNode middle_json 数据
+     * @param pageIdx 页索引（0-based）
+     * @param contentItem content_list 中的表格项（用于匹配）
+     * @return 表格块信息（包含子块数组和页面尺寸）
+     */
+    private TableBlockInfo findTableBlocksInMiddleJson(JsonNode middleJsonNode, int pageIdx, JsonNode contentItem) {
+        log.info("📊 [表格匹配] 开始在 middle_json 中查找表格，页{}", pageIdx + 1);
+        
+        if (middleJsonNode == null || !middleJsonNode.isArray()) {
+            log.warn("📊 [表格匹配] ⚠️  middle_json 为空或不是数组");
+            return null;
+        }
+        
+        log.info("📊 [表格匹配] middle_json 总页数: {}", middleJsonNode.size());
+        
+        try {
+            // 提取 content_list 中表格的文本内容（用于匹配）
+            String tableBodyText = "";
+            if (contentItem.has("table_body")) {
+                tableBodyText = contentItem.get("table_body").asText();
+                // 去除HTML标签
+                tableBodyText = removeHtmlTags(tableBodyText).trim();
+                log.info("📊 [表格匹配] content_list 表格文本长度: {}, 预览: {}", 
+                    tableBodyText.length(), 
+                    tableBodyText.length() > 100 ? tableBodyText.substring(0, 100) + "..." : tableBodyText);
+            } else {
+                log.warn("📊 [表格匹配] ⚠️  content_list 中没有 table_body 字段");
+            }
+            
+            // 遍历 middle_json 中的页面（pdf_info 数组）
+            if (pageIdx < middleJsonNode.size()) {
+                JsonNode pageNode = middleJsonNode.get(pageIdx);
+                
+                // 提取页面尺寸信息（用于坐标转换）
+                JsonNode pageSizeNode = pageNode.get("page_size");
+                double middleJsonPageWidth = 0;
+                double middleJsonPageHeight = 0;
+                if (pageSizeNode != null && pageSizeNode.isArray() && pageSizeNode.size() >= 2) {
+                    middleJsonPageWidth = pageSizeNode.get(0).asDouble();
+                    middleJsonPageHeight = pageSizeNode.get(1).asDouble();
+                    log.info("📊 [表格匹配] middle_json 页面尺寸: {}x{}", middleJsonPageWidth, middleJsonPageHeight);
+                }
+                
+                // MinerU middle_json 字段名是 para_blocks（不是 preproc_blocks）
+                JsonNode paraBlocks = pageNode.get("para_blocks");
+                
+                log.info("📊 [表格匹配] 页{} para_blocks 块数量: {}", 
+                    pageIdx + 1, 
+                    paraBlocks != null ? paraBlocks.size() : 0);
+                
+                if (paraBlocks != null && paraBlocks.isArray()) {
+                    int tableCount = 0;
+                    // 遍历页面中的所有块
+                    for (int i = 0; i < paraBlocks.size(); i++) {
+                        JsonNode block = paraBlocks.get(i);
+                        String blockType = block.has("type") ? block.get("type").asText() : "";
+                        
+                        if ("table".equals(blockType)) {
+                            tableCount++;
+                            log.info("📊 [表格匹配] 找到第 {} 个表格块（块索引 {}）", tableCount, i);
+                            
+                            JsonNode subBlocks = block.get("blocks");
+                            if (subBlocks != null && subBlocks.isArray()) {
+                                log.info("📊 [表格匹配] 表格有 {} 个子块", subBlocks.size());
+                                
+                                // 检查这个表格是否匹配（通过对比 table_body 的文本）
+                                for (JsonNode subBlock : subBlocks) {
+                                    String subType = subBlock.has("type") ? subBlock.get("type").asText() : "";
+                                    if ("table_body".equals(subType)) {
+                                        String middleBodyText = extractTextFromMiddleJsonBlock(subBlock);
+                                        log.info("📊 [表格匹配] table_body 文本长度: {}, 预览: {}", 
+                                            middleBodyText != null ? middleBodyText.length() : 0,
+                                            middleBodyText != null && middleBodyText.length() > 100 ? 
+                                                middleBodyText.substring(0, 100) + "..." : middleBodyText);
+                                        
+                                        // 简单匹配：如果文本内容相似，认为是同一个表格
+                                        if (middleBodyText != null && middleBodyText.length() >= 50 && 
+                                            tableBodyText.contains(middleBodyText.substring(0, Math.min(50, middleBodyText.length())))) {
+                                            log.info("📊 [表格匹配] ✅ 匹配成功！返回表格子块");
+                                            return new TableBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                                        } else if (middleBodyText != null && middleBodyText.length() < 50 && 
+                                                   tableBodyText.contains(middleBodyText)) {
+                                            log.info("📊 [表格匹配] ✅ 匹配成功（短文本）！返回表格子块");
+                                            return new TableBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                                        } else {
+                                            log.warn("📊 [表格匹配] ❌ 文本不匹配，继续查找");
+                                        }
+                                    }
+                                }
+                            } else {
+                                log.warn("📊 [表格匹配] ⚠️  表格块没有子块");
+                            }
+                        }
+                    }
+                    log.warn("📊 [表格匹配] 页{} 共找到 {} 个表格块，但都不匹配", pageIdx + 1, tableCount);
+                } else {
+                    log.warn("📊 [表格匹配] ⚠️  页{} 没有 para_blocks", pageIdx + 1);
+                }
+            } else {
+                log.warn("📊 [表格匹配] ⚠️  页索引 {} 超出范围（总页数: {}）", pageIdx, middleJsonNode.size());
+            }
+        } catch (Exception e) {
+            log.error("📊 [表格匹配] ❌ 查找失败: {}", e.getMessage(), e);
+        }
+        
+        log.warn("📊 [表格匹配] ❌ 未找到匹配的表格");
+        return null;
+    }
+    
+    /**
+     * 表格块信息包装类（包含块数据和页面尺寸）
+     */
+    private static class TableBlockInfo {
+        JsonNode blocks;
+        double pageWidth;
+        double pageHeight;
+        
+        public TableBlockInfo(JsonNode blocks, double pageWidth, double pageHeight) {
+            this.blocks = blocks;
+            this.pageWidth = pageWidth;
+            this.pageHeight = pageHeight;
+        }
+    }
+    
+    /**
+     * 从 middle_json 的块中提取文本内容
+     */
+    private String extractTextFromMiddleJsonBlock(JsonNode block) {
+        StringBuilder text = new StringBuilder();
+        
+        try {
+            JsonNode lines = block.get("lines");
+            if (lines != null && lines.isArray()) {
+                for (JsonNode line : lines) {
+                    JsonNode spans = line.get("spans");
+                    if (spans != null && spans.isArray()) {
+                        for (JsonNode span : spans) {
+                            String content = span.has("content") ? span.get("content").asText() : "";
+                            text.append(content);
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.debug("提取块文本失败: {}", e.getMessage());
+        }
+        
+        return text.toString().trim();
     }
 }
 
