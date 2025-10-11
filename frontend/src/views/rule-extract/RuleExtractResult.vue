@@ -54,7 +54,13 @@
           <div class="left-panel">
             <el-card 
               class="content-card"
-              :body-style="{ padding: '12px', height: 'calc(100vh - 280px)', overflow: 'auto' }"
+              :body-style="{ 
+                padding: '12px', 
+                height: 'calc(100vh - 280px)', 
+                overflow: displayMode === 'canvas' ? 'hidden' : 'auto',
+                display: displayMode === 'canvas' ? 'flex' : 'block',
+                flexDirection: displayMode === 'canvas' ? 'column' : 'column'
+              }"
             >
               <template #header>
                 <div class="panel-header">
@@ -66,7 +72,7 @@
               </template>
               
               <!-- 图片模式 -->
-              <div v-if="displayMode === 'canvas'" class="canvas-container">
+              <div v-if="displayMode === 'canvas'" class="canvas-container" style="flex: 1; min-height: 0; overflow: hidden;">
                 <canvas-viewer 
                   v-if="totalPages > 0"
                   ref="canvasViewer"
@@ -77,6 +83,8 @@
                   :total-pages="totalPages"
                   :api-prefix="'/api/rule-extract/extract/page-image'"
                   @bbox-click="onBboxClick"
+                  @page-change="currentPage = $event"
+                  style="height: 100%; display: flex; flex-direction: column;"
                 />
                 <div v-else class="image-fallback">
                   <div class="page-controls" style="margin-bottom: 12px;">
@@ -197,16 +205,6 @@
                         </template>
                       </div>
                     </div>
-                    
-                    <div class="field-confidence" v-if="item.confidence">
-                      <span class="label">置信度：</span>
-                      <el-progress 
-                        :percentage="item.confidence" 
-                        :color="getConfidenceColor(item.confidence)"
-                        :stroke-width="6"
-                        style="width: 120px;"
-                      />
-                    </div>
                   </div>
                 </div>
               </div>
@@ -321,7 +319,6 @@ const loadResult = async () => {
             fieldName: value.fieldName || key,
             fieldCode: value.fieldCode || key,
             value: value.value,
-            confidence: value.confidence || 1.0,
             success: value.success !== false,
             charInterval: value.charInterval || null
           }))
@@ -358,11 +355,6 @@ const loadResult = async () => {
           console.warn('解析charBoxes失败:', e)
         }
       }
-      
-      console.log('Task Info:', taskInfo.value)
-      console.log('Result Data:', resultData.value)
-      console.log('BBox Mappings:', bboxMappings.value.length)
-      console.log('Char Boxes:', charBoxes.value.length)
     } else {
       ElMessage.error(res.message || '获取任务结果失败')
     }
@@ -379,12 +371,6 @@ const onImageError = () => {
   ElMessage.warning('图片加载失败')
 }
 
-const getConfidenceColor = (confidence: number) => {
-  if (confidence >= 90) return '#67c23a'
-  if (confidence >= 70) return '#e6a23c'
-  return '#f56c6c'
-}
-
 const handleBack = () => {
   router.push('/rule-extract')
 }
@@ -396,12 +382,11 @@ const exportResult = () => {
   }
 
   // 转换为CSV格式
-  const headers = ['字段名称', '字段编码', '抽取值', '置信度', '状态']
+  const headers = ['字段名称', '字段编码', '抽取值', '状态']
   const rows = resultData.value.map(item => [
     item.fieldName,
     item.fieldCode,
     Array.isArray(item.value) ? item.value.join('; ') : (item.value || ''),
-    (item.confidence || 0) + '%',
     item.success ? '成功' : '失败'
   ])
 
@@ -423,24 +408,25 @@ const exportResult = () => {
 
 // 交互事件处理
 const onBboxClick = (bboxInfo: any) => {
-  console.log('Bbox clicked:', bboxInfo)
   // 可以在这里添加高亮对应字段的逻辑
 }
 
 const onTextClick = (textInfo: any) => {
-  console.log('Text clicked:', textInfo)
   // 可以在这里添加高亮对应字段的逻辑
 }
 
 const onExtractionClick = (extraction: any) => {
-  console.log('Extraction clicked:', extraction)
-  
-  // 在Canvas或文本视图中高亮对应区域
+  // 在Canvas或文本视图中导航并高亮对应区域
   if (extraction.charInterval) {
     if (displayMode.value === 'canvas' && canvasViewer.value) {
-      canvasViewer.value.highlightExtraction(extraction)
+      // 导航到提取内容的位置（包含滚动和高亮）
+      canvasViewer.value.navigateToExtraction(extraction)
     } else if (displayMode.value === 'text' && textViewer.value) {
-      textViewer.value.highlightExtraction(extraction)
+      // TextViewer使用highlightText方法，传入charIntervals数组
+      textViewer.value.highlightText([{
+        start: extraction.charInterval.startPos,
+        end: extraction.charInterval.endPos
+      }])
     }
   }
 }
@@ -622,8 +608,7 @@ onMounted(() => {
           gap: 8px;
           
           .field-code,
-          .field-value,
-          .field-confidence {
+          .field-value {
             display: flex;
             align-items: flex-start;
             font-size: 13px;

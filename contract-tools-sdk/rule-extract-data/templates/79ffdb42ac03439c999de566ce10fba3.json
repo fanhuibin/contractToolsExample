@@ -6,14 +6,14 @@
 			"fieldCode":"field_1",
 			"fieldName":"甲方",
 			"fieldType":"string",
-			"id":"field_1760153932411_0.1087922493751492",
+			"id":"field_1760171470822_0.4301014006852747",
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760153932411_0.5378279518743074",
+					"id":"rule_1760174202531_0.3671191401268248",
 					"isEnabled":true,
 					"priority":1,
-					"ruleContent":"{\"anchor\":\"甲方（需方）：\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5]+\",\"extractMethod\":\"line\"}",
+					"ruleContent":"{\"anchor\":\"甲方（需方）：|买方\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5]+\",\"extractMethod\":\"line\"}",
 					"ruleName":"甲方的提取规则",
 					"ruleType":"KEYWORD_ANCHOR"
 				}
@@ -23,15 +23,32 @@
 			"fieldCode":"field_2",
 			"fieldName":"合同金额",
 			"fieldType":"string",
-			"id":"field_1760153932411_0.5721215009691583",
+			"id":"field_1760171286480_0.011104845685360853",
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760153932411_0.20560302561342902",
+					"id":"rule_1760174202531_0.7136677841180022",
 					"isEnabled":true,
 					"priority":1,
-					"ruleContent":"{}",
+					"ruleContent":"{\"anchor\":\"总计：\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[¥$￥]?\\\\s*([\\\\d,]+(\\\\.\\\\d{1,2})?)\\\\s*[千万亿]?\\\\s*元?\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
 					"ruleName":"合同金额的提取规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			]
+		},
+		{
+			"fieldCode":"field_3",
+			"fieldName":"银行账号",
+			"fieldType":"string",
+			"id":"field_1760174202531_0.1492039922070888",
+			"isRequired":false,
+			"rules":[
+				{
+					"id":"rule_1760174202531_0.20516772755446788",
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchor\":\"账号\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"\\\\d+\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
+					"ruleName":"银行账号的提取规则",
 					"ruleType":"KEYWORD_ANCHOR"
 				}
 			]
@@ -41,6 +58,6 @@
 	"status":"active",
 	"templateCode":"12",
 	"templateName":"模板1",
-	"updatedAt":"2025-10-11 11:38:52.447151400",
-	"version":10
+	"updatedAt":"2025-10-11 17:16:42.575204800",
+	"version":14
 }

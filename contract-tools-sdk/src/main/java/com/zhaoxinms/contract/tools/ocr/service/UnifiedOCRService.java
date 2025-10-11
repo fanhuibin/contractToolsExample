@@ -1,8 +1,6 @@
 package com.zhaoxinms.contract.tools.ocr.service;
 
 import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -12,6 +10,7 @@ import javax.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
@@ -28,7 +27,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Service
-public class UnifiedOCRService implements OCRService {
+public class UnifiedOCRService implements OCRProvider {
     
     @Autowired(required = false)
     private MinerUOCRService mineruOcrService;
@@ -45,7 +44,7 @@ public class UnifiedOCRService implements OCRService {
     }
     
     @Override
-    public OCRResult recognizePdf(File pdfFile) {
+    public OCRProvider.OCRResult recognizePdf(File pdfFile) {
         log.info("使用 MinerU OCR 识别PDF: {}", pdfFile.getName());
         
         if (mineruOcrService == null) {
@@ -75,38 +74,61 @@ public class UnifiedOCRService implements OCRService {
                 options
             );
             
-            // 提取文本
+            // 提取文本和CharBox数据
             StringBuilder allText = new StringBuilder();
-            List<OCRBlock> allBlocks = new ArrayList<>();
+            List<CharBox> charBoxes = new ArrayList<>();
             
             for (int i = 0; i < pageLayouts.length; i++) {
                 TextExtractionUtil.PageLayout layout = pageLayouts[i];
                 
-                    if (allText.length() > 0) {
-                    allText.append("\n\n--- 第").append(layout.page).append("页 ---\n");
+                // 添加页面分隔符
+                if (allText.length() > 0) {
+                    String separator = "\n\n--- 第" + layout.page + "页 ---\n";
+                    allText.append(separator);
+                    
+                    // 为分隔符的每个字符创建CharBox（保持索引对齐）
+                    // 使用前一页或当前页的页码，bbox设为空（不会显示）
+                    for (int j = 0; j < separator.length(); j++) {
+                        CharBox separatorCharBox = new CharBox(
+                            layout.page,  // 使用当前页
+                            separator.charAt(j),
+                            new double[]{0, 0, 0, 0},  // 空bbox，不会显示
+                            "Separator"
+                        );
+                        charBoxes.add(separatorCharBox);
+                    }
                 }
                 
                 // 提取页面文本
                 for (TextExtractionUtil.LayoutItem item : layout.items) {
                     if (item.text != null && !item.text.trim().isEmpty()) {
-                        allText.append(item.text).append("\n");
+                        String text = item.text.trim();
+                        allText.append(text).append("\n");
                         
-                        // 创建文本块
-                        OCRBlock block = new OCRBlock(
-                            item.text, 
-                            0.95, // MinerU 质量很高
-                            (int)item.bbox[0], 
-                            (int)item.bbox[1], 
-                            (int)item.bbox[2], 
-                            (int)item.bbox[3]
+                        // 创建字符级CharBox数据（用于精确位置标注）
+                        for (int j = 0; j < text.length(); j++) {
+                            CharBox charBox = new CharBox(
+                                layout.page,
+                                text.charAt(j),
+                                item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
+                                item.category != null ? item.category : "Text"
+                            );
+                            charBoxes.add(charBox);
+                        }
+                        
+                        // 添加换行符
+                        CharBox newlineCharBox = new CharBox(
+                            layout.page,
+                            '\n',
+                            item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
+                            item.category != null ? item.category : "Text"
                         );
-                        allBlocks.add(block);
+                        charBoxes.add(newlineCharBox);
                     }
                 }
             }
             
-            OCRResult result = new OCRResult(allText.toString(), 0.95, "mineru");
-            result.setBlocks(allBlocks);
+            OCRProvider.OCRResult result = new OCRProvider.OCRResult(allText.toString());
             
             // 构建图片路径信息（保存到metadata）
             File imagesDir = new File(taskOutputDir, "images/extract");
@@ -125,16 +147,20 @@ public class UnifiedOCRService implements OCRService {
                 }
             }
             
-            // 将图片路径信息保存到metadata（作为JSONObject）
+            // 将图片路径和CharBox信息保存到metadata（作为JSONObject）
             com.alibaba.fastjson2.JSONObject metadata = new com.alibaba.fastjson2.JSONObject();
             metadata.put("totalPages", pageLayouts.length);
             metadata.put("pageImagePaths", pageImagePaths);
             metadata.put("imagesDir", imagesDir.getAbsolutePath());
             metadata.put("taskId", taskId);
+            
+            // 序列化CharBox数据
+            metadata.put("charBoxes", com.alibaba.fastjson2.JSON.toJSONString(charBoxes));
+            
             result.setMetadata((Object) metadata);
             
-            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}", 
-                pageLayouts.length, allText.length(), pageImagePaths.size());
+            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}, CharBox数: {}", 
+                pageLayouts.length, allText.length(), pageImagePaths.size(), charBoxes.size());
             
             return result;
             
@@ -144,18 +170,10 @@ public class UnifiedOCRService implements OCRService {
         }
     }
     
-    @Override
-    public OCRResult recognizeImage(File imageFile) {
-        log.info("MinerU OCR 暂不支持单独图片识别，建议将图片转为 PDF: {}", imageFile.getName());
-        throw new UnsupportedOperationException("MinerU OCR 暂不支持单独图片识别，请将图片转换为 PDF 后再识别");
-    }
-    
-    @Override
     public String getProviderName() {
         return "mineru";
     }
     
-    @Override
     public boolean isAvailable() {
         return mineruOcrService != null;
     }

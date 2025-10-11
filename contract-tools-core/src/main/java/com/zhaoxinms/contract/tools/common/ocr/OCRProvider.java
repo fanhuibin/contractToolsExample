@@ -1,4 +1,4 @@
-package com.zhaoxinms.contract.tools.ruleextract.ocr;
+package com.zhaoxinms.contract.tools.common.ocr;
 
 import java.io.File;
 

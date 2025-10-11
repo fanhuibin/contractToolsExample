@@ -2,7 +2,9 @@ package com.zhaoxinms.contract.tools.ruleextract.service;
 
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.EnhancedRuleEngine;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.ExtractionResult;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.ExtractionRule;
@@ -11,7 +13,6 @@ import com.zhaoxinms.contract.tools.ruleextract.model.ExtractionRuleModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.FieldDefinitionModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleExtractTaskModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleTemplateModel;
-import com.zhaoxinms.contract.tools.ruleextract.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.ruleextract.storage.JsonFileStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -259,11 +260,6 @@ public class RuleExtractService {
                                 result.put("charInterval", charInterval);
                             }
                             
-                            // 保存置信度
-                            if (extractionResult.getConfidence() != null) {
-                                result.put("confidence", extractionResult.getConfidence() / 100.0); // 转换为0-1范围
-                            }
-                            
                             matched = true;
                             log.info("字段提取成功: field={}, value={}, startPos={}, endPos={}, rule={}", 
                                 field.getFieldName(), extractionResult.getValue(), 
@@ -362,36 +358,219 @@ public class RuleExtractService {
         resultJson.put("totalFields", results.size());
         resultJson.put("extractResults", results);  // 改为 extractResults
         
+        // 保存OCR文本到resultJson
+        if (ocrResult != null && ocrResult.getContent() != null) {
+            resultJson.put("ocrText", ocrResult.getContent());
+        }
+        
         // 保存OCR元数据（从metadata中提取）
+        JSONObject metaJson = null;
+        String charBoxesJson = null;
+        
         if (ocrResult != null && ocrResult.getMetadata() != null) {
             try {
                 Object metadata = ocrResult.getMetadata();
+                log.info("OCR metadata 类型: {}", metadata.getClass().getName());
+                
                 // 尝试将metadata作为JSONObject处理
                 if (metadata instanceof JSONObject) {
-                    JSONObject metaJson = (JSONObject) metadata;
-                    if (metaJson.containsKey("totalPages")) {
-                        resultJson.put("totalPages", metaJson.getInteger("totalPages"));
-                    }
-                    if (metaJson.containsKey("pageImagePaths")) {
-                        resultJson.put("pageImagePaths", metaJson.get("pageImagePaths"));
-                    }
+                    metaJson = (JSONObject) metadata;
                 } else if (metadata instanceof String) {
                     // 如果是JSON字符串，尝试解析
-                    JSONObject metaJson = JSON.parseObject((String) metadata);
+                    metaJson = JSON.parseObject((String) metadata);
+                }
+                
+                if (metaJson != null) {
+                    log.info("Metadata keys: {}", metaJson.keySet());
+                    
                     if (metaJson.containsKey("totalPages")) {
                         resultJson.put("totalPages", metaJson.getInteger("totalPages"));
+                        log.info("保存totalPages: {}", metaJson.getInteger("totalPages"));
                     }
                     if (metaJson.containsKey("pageImagePaths")) {
                         resultJson.put("pageImagePaths", metaJson.get("pageImagePaths"));
                     }
+                    if (metaJson.containsKey("charBoxes")) {
+                        // 保存CharBox数据到task
+                        charBoxesJson = metaJson.getString("charBoxes");
+                        task.setCharBoxes(charBoxesJson);
+                        log.info("保存CharBox数据，长度: {}", charBoxesJson.length());
+                    } else {
+                        log.warn("Metadata中没有charBoxes字段");
+                    }
+                } else {
+                    log.warn("无法解析metadata为JSONObject");
                 }
             } catch (Exception e) {
-                log.warn("提取OCR元数据失败: {}", e.getMessage());
+                log.error("提取OCR元数据失败: {}", e.getMessage(), e);
             }
+        } else {
+            log.warn("OCR结果或metadata为空");
+        }
+        
+        // 生成BboxMappings（从提取结果和CharBox数据中）
+        try {
+            List<JSONObject> bboxMappings = generateBboxMappings(results, ocrResult, charBoxesJson);
+            if (!bboxMappings.isEmpty()) {
+                task.setBboxMappings(JSON.toJSONString(bboxMappings));
+                log.info("成功生成 {} 个BboxMapping", bboxMappings.size());
+            }
+        } catch (Exception e) {
+            log.warn("生成BboxMappings失败: {}", e.getMessage(), e);
         }
 
         task.setResultJson(resultJson.toJSONString());
         storage.save("task", taskId, task);
+    }
+    
+    /**
+     * 从提取结果生成BboxMappings（使用CharBox数据）
+     */
+    private List<JSONObject> generateBboxMappings(List<JSONObject> results, OCRProvider.OCRResult ocrResult, String charBoxesJson) {
+        List<JSONObject> bboxMappings = new ArrayList<>();
+        
+        if (ocrResult == null || ocrResult.getContent() == null) {
+            return bboxMappings;
+        }
+        
+        String fullText = ocrResult.getContent();
+        
+        // 解析CharBox数据
+        List<CharBoxData> charBoxes = null;
+        if (charBoxesJson != null && !charBoxesJson.isEmpty()) {
+            try {
+                log.info("开始解析CharBox数据，字符串长度: {}", charBoxesJson.length());
+                com.alibaba.fastjson2.JSONArray charBoxArray = JSON.parseArray(charBoxesJson);
+                charBoxes = new ArrayList<>();
+                for (int i = 0; i < charBoxArray.size(); i++) {
+                    com.alibaba.fastjson2.JSONObject charBoxObj = charBoxArray.getJSONObject(i);
+                    CharBoxData charBox = new CharBoxData();
+                    charBox.page = charBoxObj.getInteger("page");
+                    charBox.ch = charBoxObj.getString("ch");
+                    com.alibaba.fastjson2.JSONArray bboxArray = charBoxObj.getJSONArray("bbox");
+                    if (bboxArray != null && bboxArray.size() == 4) {
+                        charBox.bbox = new double[]{
+                            bboxArray.getDoubleValue(0),
+                            bboxArray.getDoubleValue(1),
+                            bboxArray.getDoubleValue(2),
+                            bboxArray.getDoubleValue(3)
+                        };
+                    }
+                    charBoxes.add(charBox);
+                }
+                log.info("成功解析 {} 个CharBox数据", charBoxes.size());
+            } catch (Exception e) {
+                log.error("解析CharBox数据失败: {}", e.getMessage(), e);
+            }
+        } else {
+            log.warn("CharBox数据为空，无法生成bbox坐标");
+        }
+        
+        // 为每个提取结果生成bbox映射
+        for (JSONObject result : results) {
+            if (result.containsKey("charInterval") && result.getJSONObject("charInterval") != null) {
+                JSONObject charInterval = result.getJSONObject("charInterval");
+                Integer startPos = charInterval.getInteger("startPos");
+                Integer endPos = charInterval.getInteger("endPos");
+                String value = result.getString("value");
+                
+                if (startPos != null && endPos != null && startPos >= 0 && endPos <= fullText.length() && value != null) {
+                    JSONObject mapping = new JSONObject();
+                    mapping.put("startPos", startPos);
+                    mapping.put("endPos", endPos);
+                    mapping.put("value", value);
+                    mapping.put("fieldName", result.getString("fieldName"));
+                    mapping.put("fieldCode", result.getString("fieldCode"));
+                    
+                    // 从CharBox数据中提取bbox坐标
+                    if (charBoxes != null && !charBoxes.isEmpty()) {
+                        List<JSONObject> bboxes = extractBboxesFromCharBoxes(charBoxes, startPos, endPos);
+                        mapping.put("bboxes", bboxes);
+                        
+                        // 提取页面列表
+                        java.util.Set<Integer> pageSet = new java.util.HashSet<>();
+                        for (JSONObject bbox : bboxes) {
+                            if (bbox.containsKey("page")) {
+                                pageSet.add(bbox.getInteger("page"));
+                            }
+                        }
+                        mapping.put("pages", new ArrayList<>(pageSet));
+                    } else {
+                        mapping.put("bboxes", new JSONArray());
+                        mapping.put("pages", new JSONArray());
+                    }
+                    
+                    bboxMappings.add(mapping);
+                }
+            }
+        }
+        
+        return bboxMappings;
+    }
+    
+    /**
+     * 从CharBox数据中提取指定范围的bbox坐标
+     */
+    private List<JSONObject> extractBboxesFromCharBoxes(List<CharBoxData> charBoxes, int startPos, int endPos) {
+        List<JSONObject> bboxes = new ArrayList<>();
+        
+        if (startPos >= charBoxes.size() || endPos > charBoxes.size() || startPos >= endPos) {
+            return bboxes;
+        }
+        
+        // 合并相邻字符的bbox（按页面分组）
+        java.util.Map<Integer, List<double[]>> pageBoxes = new java.util.LinkedHashMap<>();
+        
+        for (int i = startPos; i < endPos && i < charBoxes.size(); i++) {
+            CharBoxData charBox = charBoxes.get(i);
+            if (charBox.bbox == null || charBox.page == null) continue;
+            
+            // 跳过换行符
+            if ("\n".equals(charBox.ch)) continue;
+            
+            // 跳过空bbox（分隔符等）
+            if (charBox.bbox[0] == 0 && charBox.bbox[1] == 0 && 
+                charBox.bbox[2] == 0 && charBox.bbox[3] == 0) continue;
+            
+            pageBoxes.computeIfAbsent(charBox.page, k -> new ArrayList<>()).add(charBox.bbox);
+        }
+        
+        // 为每个页面合并bbox
+        for (java.util.Map.Entry<Integer, List<double[]>> entry : pageBoxes.entrySet()) {
+            Integer page = entry.getKey();
+            List<double[]> boxes = entry.getValue();
+            
+            if (boxes.isEmpty()) continue;
+            
+            // 计算合并后的bbox
+            double minX = Double.MAX_VALUE;
+            double minY = Double.MAX_VALUE;
+            double maxX = Double.MIN_VALUE;
+            double maxY = Double.MIN_VALUE;
+            
+            for (double[] box : boxes) {
+                minX = Math.min(minX, box[0]);
+                minY = Math.min(minY, box[1]);
+                maxX = Math.max(maxX, box[2]);
+                maxY = Math.max(maxY, box[3]);
+            }
+            
+            JSONObject bboxInfo = new JSONObject();
+            bboxInfo.put("page", page);
+            bboxInfo.put("bbox", new double[]{minX, minY, maxX, maxY});
+            bboxes.add(bboxInfo);
+        }
+        
+        return bboxes;
+    }
+    
+    /**
+     * CharBox数据辅助类
+     */
+    private static class CharBoxData {
+        Integer page;
+        String ch;
+        double[] bbox;
     }
 
     /**
@@ -495,10 +674,16 @@ public class RuleExtractService {
             if (extractResultJson.containsKey("totalPages")) {
                 result.put("totalPages", extractResultJson.getInteger("totalPages"));
             }
+            if (extractResultJson.containsKey("ocrText")) {
+                result.put("ocrText", extractResultJson.getString("ocrText"));
+            }
             if (extractResultJson.containsKey("pageImagePaths")) {
                 result.put("pageImagePaths", extractResultJson.get("pageImagePaths"));
             }
         }
+        
+        log.info("返回任务结果: taskId={}, totalPages={}, extractResults={}", 
+            taskId, result.get("totalPages"), result.containsKey("extractResults"));
 
         return result;
     }

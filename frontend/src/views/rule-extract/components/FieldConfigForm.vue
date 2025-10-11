@@ -474,12 +474,16 @@ onMounted(() => {
 const PATTERNS: Record<string, string> = {
   integer: '-?\\d+',
   number: '-?\\d+(\\.\\d+)?',
+  // 金额相关正则（推荐）
+  amountUniversal: '[¥$￥]?\\s*([\\d,]+(\\.\\d{1,2})?)\\s*[千万亿]?\\s*元?',
   amountSimple: '\\d+(\\.\\d{1,2})?',
   amountWithUnit: '\\d+(\\.\\d+)?[千万亿]',
   amountWithYuan: '\\d+(\\.\\d{1,2})?元',
   amountWithComma: '\\d{1,3}(,\\d{3})*(\\.\\d{1,2})?',
+  // 日期相关
   dateYMD: '\\d{4}-\\d{1,2}-\\d{1,2}',
   dateChinese: '\\d{4}年\\d{1,2}月\\d{1,2}日',
+  // 其他常用
   chinese: '[\\u4e00-\\u9fa5]+',
   email: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}',
   phone: '1[3-9]\\d{9}'

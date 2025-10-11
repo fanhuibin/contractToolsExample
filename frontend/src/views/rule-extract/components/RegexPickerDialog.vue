@@ -223,7 +223,15 @@ const regexPatterns: RegexPattern[] = [
     examples: ['123', '456.78', '-90.12']
   },
 
-  // 金额匹配（8种）
+  // 金额匹配（9种）
+  {
+    key: 'amountUniversal',
+    name: '通用金额（推荐）⭐',
+    category: '金额匹配',
+    pattern: '[¥$￥]?\\s*([\\d,]+(\\.\\d{1,2})?)\\s*[千万亿]?\\s*元?',
+    description: '通用金额正则，支持：纯数字、千分位、货币符号、中文单位、元字等多种格式，可匹配任意长度的数字',
+    examples: ['123', '31321132', '1,234.56', '¥1,234.00', '100万', '12.5万元', '$1234', '1,234,567.89元', '￥31321132']
+  },
   {
     key: 'amountSimple',
     name: '纯数字金额',
@@ -260,9 +268,9 @@ const regexPatterns: RegexPattern[] = [
     key: 'amountWithComma',
     name: '带千分位的金额',
     category: '金额匹配',
-    pattern: '\\d{1,3}(,\\d{3})*(\\.\\d{1,2})?',
-    description: '匹配带千分位分隔符的金额',
-    examples: ['1,234.56', '1,234,567.89', '123.45']
+    pattern: '[\\d,]+(\\.\\d{1,2})?',
+    description: '匹配带千分位分隔符的金额（也可以无千分位）',
+    examples: ['1,234.56', '1,234,567.89', '123.45', '1234567.89']
   },
   {
     key: 'amountWithSymbol',
@@ -368,9 +376,9 @@ const regexPatterns: RegexPattern[] = [
     key: 'noPunctuation',
     name: '非标点符号',
     category: '文本匹配',
-    pattern: '[^\\p{P}\\s]+',
-    description: '匹配非标点符号和空格的内容',
-    examples: ['合同内容', 'ContractName', '甲方名称']
+    pattern: '[\\u4e00-\\u9fa5a-zA-Z0-9]+',
+    description: '匹配中文、字母和数字（排除标点和空格）',
+    examples: ['合同内容', 'ContractName', '甲方名称123']
   },
 
   // 特殊格式（5种）

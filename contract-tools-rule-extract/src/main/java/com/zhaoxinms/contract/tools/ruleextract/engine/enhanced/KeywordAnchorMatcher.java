@@ -150,7 +150,6 @@ public class KeywordAnchorMatcher {
             if (returnAll && !allMatches.isEmpty()) {
                 result.setAllMatches(allMatches);
             }
-            result.setConfidence(95);
             
             // 在搜索范围内查找提取内容的位置，然后加上搜索范围的起始位置得到绝对位置
             int relativePos = searchText.indexOf(extracted);
