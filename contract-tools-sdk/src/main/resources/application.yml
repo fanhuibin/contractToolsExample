@@ -13,6 +13,7 @@ spring:
     import:
       - classpath:application-ai.yml
       - classpath:application-extract.yml
+      - classpath:application-compare-progress.yml
   servlet:
     multipart:
       max-file-size: 100MB
@@ -141,37 +142,6 @@ zxcm:
       
       # 调试配置
       debug-file-path: "./uploads/debug"
-      
-      # OCR性能参数配置（毫秒）
-      performance:
-        # 基础性能参数
-        base-overhead: 500               # 基础开销时间（初始化等）
-        page-setup-time: 50              # 每页设置时间
-        
-        # OCR识别性能参数（每页时间）- 基于实测数据：3页OCR第一文档8910ms，第二文档7423ms
-        ocr-first-doc-per-page: 2500     # OCR第一个文档每页时间（毫秒）实测2970ms/页，预留缓冲
-        ocr-second-doc-per-page: 2500    # OCR第二个文档每页时间（毫秒）实测2474ms/页，预留缓冲
-        ocr-first-doc-min-time: 2500     # OCR第一个文档最小时间
-        ocr-second-doc-min-time: 2500    # OCR第二个文档最小时间
-        
-        # 其他步骤性能参数（基于实测数据大幅优化）
-        init-time: 10                    # 初始化时间（实测4ms）
-        ocr-complete-time: 10            # OCR完成时间（实测0ms）
-        text-compare-per-page: 5         # 文本比对每页时间（实测14ms/3页）
-        text-compare-min-time: 15        # 文本比对最小时间
-        diff-analysis-per-page: 6        # 差异分析每页时间（实测18ms/3页）
-        diff-analysis-min-time: 20       # 差异分析最小时间
-        block-merge-per-page: 1          # 块合并每页时间（实测1ms/3页）
-        block-merge-min-time: 5          # 块合并最小时间
-        ocr-validation-per-page: 6       # OCR验证每页时间（实测17ms/3页）
-        ocr-validation-min-time: 20      # OCR验证最小时间
-        result-generation-per-page: 1    # 结果生成每页时间（实测2ms/3页）
-        result-generation-min-time: 10   # 结果生成最小时间
-        task-complete-time: 10           # 任务完成时间（实测0ms）
-        
-        # 性能调整系数
-        ocr-buffer-factor: 1.1           # OCR步骤缓冲系数（降低缓冲，更贴近实际）
-        regression-fallback: true        # 是否启用线性回归作为备选
       
     # MinerU OCR配置
     mineru:

@@ -28,6 +28,12 @@ public class CompareResult {
     private String summary;
     private long processingTimeMs;
     
+    // 时间统计信息
+    private Long estimatedOcrTimeOld;  // 原文档OCR预估时间（毫秒）
+    private Long estimatedOcrTimeNew;  // 新文档OCR预估时间（毫秒）
+    private Long actualOcrTimeOld;     // 原文档OCR实际用时（毫秒）
+    private Long actualOcrTimeNew;     // 新文档OCR实际用时（毫秒）
+    
     // 错误页面记录
     private List<String> failedPages; // 失败的页面信息，格式："文档A-第3页: 超时错误"
 
@@ -162,6 +168,38 @@ public class CompareResult {
         this.processingTimeMs = processingTimeMs;
     }
     
+    public Long getEstimatedOcrTimeOld() {
+        return estimatedOcrTimeOld;
+    }
+    
+    public void setEstimatedOcrTimeOld(Long estimatedOcrTimeOld) {
+        this.estimatedOcrTimeOld = estimatedOcrTimeOld;
+    }
+    
+    public Long getEstimatedOcrTimeNew() {
+        return estimatedOcrTimeNew;
+    }
+    
+    public void setEstimatedOcrTimeNew(Long estimatedOcrTimeNew) {
+        this.estimatedOcrTimeNew = estimatedOcrTimeNew;
+    }
+    
+    public Long getActualOcrTimeOld() {
+        return actualOcrTimeOld;
+    }
+    
+    public void setActualOcrTimeOld(Long actualOcrTimeOld) {
+        this.actualOcrTimeOld = actualOcrTimeOld;
+    }
+    
+    public Long getActualOcrTimeNew() {
+        return actualOcrTimeNew;
+    }
+    
+    public void setActualOcrTimeNew(Long actualOcrTimeNew) {
+        this.actualOcrTimeNew = actualOcrTimeNew;
+    }
+    
     public List<String> getFailedPages() {
         return failedPages;
     }
@@ -221,7 +259,39 @@ public class CompareResult {
         }
         
         sb.append("处理耗时 ").append(processingTimeMs).append(" 毫秒。");
+        
+        // 添加OCR时间统计
+        if (estimatedOcrTimeOld != null && estimatedOcrTimeNew != null) {
+            long totalEstimated = estimatedOcrTimeOld + estimatedOcrTimeNew;
+            sb.append(" OCR预估时间：").append(formatTime(totalEstimated));
+        }
+        
+        if (actualOcrTimeOld != null && actualOcrTimeNew != null) {
+            long totalActual = actualOcrTimeOld + actualOcrTimeNew;
+            sb.append(" OCR实际用时：").append(formatTime(totalActual));
+            
+            // 计算准确率
+            if (estimatedOcrTimeOld != null && estimatedOcrTimeNew != null) {
+                long totalEstimated = estimatedOcrTimeOld + estimatedOcrTimeNew;
+                if (totalEstimated > 0) {
+                    double accuracy = (double) totalActual / totalEstimated * 100;
+                    sb.append(String.format(" (预估准确率: %.1f%%)", accuracy));
+                }
+            }
+        }
 
         this.summary = sb.toString();
+    }
+    
+    private String formatTime(long milliseconds) {
+        if (milliseconds < 1000) {
+            return milliseconds + "毫秒";
+        } else if (milliseconds < 60000) {
+            return String.format("%.1f秒", milliseconds / 1000.0);
+        } else {
+            long minutes = milliseconds / 60000;
+            long seconds = (milliseconds % 60000) / 1000;
+            return minutes + "分" + seconds + "秒";
+        }
     }
 }

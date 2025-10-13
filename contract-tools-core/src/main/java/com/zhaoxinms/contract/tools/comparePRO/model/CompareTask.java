@@ -65,6 +65,10 @@ public class CompareTask {
     private int currentPageNew; // 当前处理的新文档页面
     private int completedPagesOld; // 已完成的原文档页面数
     private int completedPagesNew; // 已完成的新文档页面数
+    
+    // OCR预估时间信息（毫秒）
+    private Long estimatedOcrTimeOld; // 原文档OCR预估时间
+    private Long estimatedOcrTimeNew; // 新文档OCR预估时间
 
     public CompareTask() {
         this.createdTime = LocalDateTime.now();
@@ -307,4 +311,10 @@ public class CompareTask {
     
     public int getCompletedPagesNew() { return completedPagesNew; }
     public void setCompletedPagesNew(int completedPagesNew) { this.completedPagesNew = completedPagesNew; }
+    
+    public Long getEstimatedOcrTimeOld() { return estimatedOcrTimeOld; }
+    public void setEstimatedOcrTimeOld(Long estimatedOcrTimeOld) { this.estimatedOcrTimeOld = estimatedOcrTimeOld; }
+    
+    public Long getEstimatedOcrTimeNew() { return estimatedOcrTimeNew; }
+    public void setEstimatedOcrTimeNew(Long estimatedOcrTimeNew) { this.estimatedOcrTimeNew = estimatedOcrTimeNew; }
 }

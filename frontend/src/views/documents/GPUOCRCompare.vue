@@ -306,6 +306,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, EditPen, Download, Delete } from '@element-plus/icons-vue'
 import { PageHeader } from '@/components/common'
+import { SimpleProgressCalculator } from '@/utils/simpleProgressCalculator'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -334,19 +335,10 @@ const currentTask = ref<GPUOCRCompareTaskStatus | null>(null)
 const taskHistory = ref<GPUOCRCompareTaskStatus[]>([])
 const progressTimer = ref<number | null>(null)
 
-// 平滑进度相关
-const displayProgress = ref(0) // 用于显示的平滑进度
-const targetProgress = ref(0)  // 目标进度
+// 简化的进度计算
+const displayProgress = ref(0) // 用于显示的进度
 const smoothTimer = ref<number | null>(null)
-
-// 阶段信息（用于基于时间的平滑增长）
-const currentStageInfo = ref({
-  minProgress: 0,
-  maxProgress: 100,
-  estimatedTime: 0,
-  elapsedTime: 0,
-  startTime: Date.now()
-})
+const progressCalculator = new SimpleProgressCalculator()
 
 // 调试相关
 const debugDialogVisible = ref(false)
@@ -451,9 +443,9 @@ const doUploadGPUOCRCompare = async () => {
 
   uploading.value = true
   
-  // 初始化平滑进度
+  // 初始化进度和计算器
   displayProgress.value = 0
-  targetProgress.value = 0
+  progressCalculator.reset()
 
   try {
     // 直接跳转到Canvas版本结果页面
@@ -505,119 +497,41 @@ const goToResult = (taskId: string) => {
   }).catch(() => {})
 }
 
-// 判断当前是否是OCR步骤
-const isOCRStep = () => {
-  const stepDesc = currentTask.value?.currentStepDesc || ''
-  return stepDesc.includes('OCR识别原文档') || stepDesc.includes('OCR识别新文档')
-}
-
-// 基于页面进度计算OCR步骤的进度
-const calculateOCRPageProgress = () => {
-  const stageInfo = currentStageInfo.value
-  const task = currentTask.value
-  
-  if (!task) return stageInfo.minProgress
-  
-  let currentDocPages = 0
-  let completedPages = 0
-  
-  // 判断当前处理的是哪个文档
-  if (task.currentStepDesc?.includes('原文档')) {
-    currentDocPages = task.oldDocPages || 0
-    completedPages = task.completedPagesOld || 0
-  } else if (task.currentStepDesc?.includes('新文档')) {
-    currentDocPages = task.newDocPages || 0
-    completedPages = task.completedPagesNew || 0
-  }
-  
-  if (currentDocPages <= 0) {
-    // 如果没有页面信息，回退到时间基础计算
-    let stageProgressRatio = Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime)
-    const stageRange = stageInfo.maxProgress - stageInfo.minProgress
-    return stageInfo.minProgress + (stageRange * stageProgressRatio)
-  }
-  
-  // 计算页面进度比例
-  let pageProgressRatio = completedPages / currentDocPages
-  
-  // 限制在0-1范围内
-  pageProgressRatio = Math.min(1.0, Math.max(0.0, pageProgressRatio))
-  
-  // 在阶段范围内插值
-  const stageRange = stageInfo.maxProgress - stageInfo.minProgress
-  return stageInfo.minProgress + (stageRange * pageProgressRatio)
-}
-
-// 基于后端预估时间和页面进度的精确进度计算
+// 简化的平滑进度更新
 const updateSmoothProgress = () => {
-  const stageInfo = currentStageInfo.value
-  
-  // 如果没有有效的阶段信息，使用缓慢增长保持进度条活跃
-  if (stageInfo.estimatedTime <= 0 || stageInfo.elapsedTime < 0) {
-    // 缓慢增长，每次增长0.01%，但不超过5%
+  if (!currentTask.value) {
+    // 缓慢增长保持进度条活跃
     if (displayProgress.value < 5.0) {
       displayProgress.value = Math.min(displayProgress.value + 0.01, 5.0)
     }
     return
   }
   
-  let calculatedProgress = 0
+  // 使用简化的进度计算器
+  const newProgress = progressCalculator.calculateProgress(
+    {
+      oldDocPages: currentTask.value.oldDocPages || 0,
+      newDocPages: currentTask.value.newDocPages || 0,
+      completedPagesOld: currentTask.value.completedPagesOld || 0,
+      completedPagesNew: currentTask.value.completedPagesNew || 0,
+      estimatedOcrTimeOld: currentTask.value.estimatedOcrTimeOld || 0,
+      estimatedOcrTimeNew: currentTask.value.estimatedOcrTimeNew || 0,
+      currentStepDesc: currentTask.value.currentStepDesc || '',
+      status: currentTask.value.status || '',
+      startTime: currentTask.value.startTime
+    },
+    displayProgress.value
+  )
   
-  // 检查是否是OCR步骤，如果是，优先使用页面进度
-  if (isOCRStep()) {
-    calculatedProgress = calculateOCRPageProgress()
-  } else {
-    // 非OCR步骤使用时间基础的进度计算
-    let stageProgressRatio = Math.min(1.0, stageInfo.elapsedTime / stageInfo.estimatedTime)
-    const stageRange = stageInfo.maxProgress - stageInfo.minProgress
-    calculatedProgress = stageInfo.minProgress + (stageRange * stageProgressRatio)
-  }
-  
-  // 平滑过渡到计算出的进度
-  const diff = calculatedProgress - displayProgress.value
+  // 平滑过渡
+  const diff = newProgress - displayProgress.value
   
   if (Math.abs(diff) < 0.1) {
-    displayProgress.value = calculatedProgress
+    displayProgress.value = newProgress
   } else {
-    // 每次更新移动差值的15%，稍快一些但仍然平滑
-    const step = diff * 0.15
-    displayProgress.value += step
+    // 平滑移动
+    displayProgress.value += diff * 0.15
   }
-  
-  // 确保进度在阶段范围内，并且不超过基于时间计算的进度
-  displayProgress.value = Math.max(stageInfo.minProgress, 
-    Math.min(displayProgress.value, calculatedProgress, stageInfo.maxProgress - 0.5))
-  
-}
-
-
-// 更新阶段信息并启动平滑进度
-const updateStageInfoAndStartProgress = (taskData: any) => {
-  // 启动平滑进度定时器（如果还没启动）
-  if (!smoothTimer.value) {
-    smoothTimer.value = setInterval(updateSmoothProgress, 300) // 每300ms更新一次，稍慢一些更平滑
-  }
-  
-  // 检查是否有完整的阶段信息
-  if (taskData.stageMinProgress === undefined || taskData.stageMaxProgress === undefined || 
-      taskData.stageEstimatedTime === undefined || taskData.stageElapsedTime === undefined) {
-    return
-  }
-  
-  const newStageInfo = {
-    minProgress: taskData.stageMinProgress,
-    maxProgress: taskData.stageMaxProgress,
-    estimatedTime: taskData.stageEstimatedTime,
-    elapsedTime: taskData.stageElapsedTime,
-    startTime: Date.now() // 这个字段在新逻辑中不再使用，但保留兼容性
-  }
-  
-  // 检查是否进入了新阶段
-  const isNewStage = newStageInfo.minProgress !== currentStageInfo.value.minProgress || 
-                     newStageInfo.maxProgress !== currentStageInfo.value.maxProgress
-  
-  
-  currentStageInfo.value = newStageInfo
 }
 
 // 更新任务状态
@@ -632,8 +546,10 @@ const updateTaskStatus = async (taskId: string) => {
     const res = await getGPUOCRCompareTaskStatus(taskId)
     currentTask.value = res.data
 
-    // 更新阶段信息和平滑进度
-    updateStageInfoAndStartProgress(res.data)
+    // 启动平滑进度定时器（如果还没启动）
+    if (!smoothTimer.value) {
+      smoothTimer.value = setInterval(updateSmoothProgress, 300) // 每300ms更新一次
+    }
 
     // 如果任务完成，停止监控
     if (res.data.status === 'COMPLETED' || res.data.status === 'FAILED' || res.data.status === 'TIMEOUT') {
@@ -652,9 +568,7 @@ const updateTaskStatus = async (taskId: string) => {
       refreshTasks()
 
       if (res.data.status === 'COMPLETED') {
-        // 设置进度为100%
-        displayProgress.value = 100
-        targetProgress.value = 100
+        // 进度会通过 progressCalculator 自动冲刺到 100%
         ElMessage.success('GPU OCR比对完成！')
       } else if (res.data.status === 'FAILED') {
         ElMessage.error('GPU OCR比对失败: ' + res.data.errorMessage)
@@ -706,10 +620,20 @@ const startNewTask = () => {
   if (oldInput.value) oldInput.value.value = ''
   if (newInput.value) newInput.value.value = ''
 
+  // 清理定时器
   if (progressTimer.value) {
     clearInterval(progressTimer.value)
     progressTimer.value = null
   }
+  
+  if (smoothTimer.value) {
+    clearInterval(smoothTimer.value)
+    smoothTimer.value = null
+  }
+  
+  // 重置进度
+  displayProgress.value = 0
+  progressCalculator.reset()
 }
 
 // 删除任务
