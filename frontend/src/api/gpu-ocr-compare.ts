@@ -10,20 +10,7 @@ export interface GPUOCRCompareTaskStatus {
   currentStep: number
   currentStepDesc: string
   
-  // 智能进度信息
-  progressPercentage: number
-  progressDescription: string
-  currentStepDescription: string
-  remainingTime: string
-  estimatedTotalTime: string
-  
-  // 阶段进度范围信息（新增）
-  stageMinProgress?: number     // 当前阶段最小进度
-  stageMaxProgress?: number     // 当前阶段最大进度
-  stageEstimatedTime?: number   // 当前阶段预估总时间（毫秒）
-  stageElapsedTime?: number     // 当前阶段已过时间（毫秒）
-  
-  // 页面级别进度信息（新增）
+  // 页面级别进度信息
   totalPages?: number           // 总页数（最大值）
   oldDocPages?: number          // 原文档页数
   newDocPages?: number          // 新文档页数
@@ -31,6 +18,10 @@ export interface GPUOCRCompareTaskStatus {
   currentPageNew?: number       // 当前处理的新文档页面
   completedPagesOld?: number    // 已完成的原文档页面数
   completedPagesNew?: number    // 已完成的新文档页面数
+  
+  // OCR预估时间信息
+  estimatedOcrTimeOld?: number  // 原文档OCR预估时间（毫秒）
+  estimatedOcrTimeNew?: number  // 新文档OCR预估时间（毫秒）
   
   // 时间统计
   startTime?: string

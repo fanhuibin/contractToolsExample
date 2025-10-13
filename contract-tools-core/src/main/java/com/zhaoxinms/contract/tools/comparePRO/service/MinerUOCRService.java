@@ -21,6 +21,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.comparePRO.config.ZxOcrConfig;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
+import com.zhaoxinms.contract.tools.comparePRO.model.CrossPageTableManager;
+import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.util.MinerUCoordinateConverter;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 
@@ -45,16 +47,16 @@ public class MinerUOCRService {
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     /**
-     * 识别PDF并返回dots.ocr兼容的格式
+     * 识别PDF并返回dots.ocr兼容的格式（包含跨页表格管理器）
      * 
      * @param pdfFile PDF文件
      * @param taskId 任务ID
      * @param outputDir 输出目录
      * @param docMode 文档模式（old/new）
      * @param options 比对选项（包含页眉页脚设置）
-     * @return PageLayout数组（与dots.ocr格式完全一致）
+     * @return MinerU识别结果（包含PageLayout数组和跨页表格管理器）
      */
-    public TextExtractionUtil.PageLayout[] recognizePdf(
+    public MinerURecognitionResult recognizePdf(
             File pdfFile, 
             String taskId, 
             File outputDir,
@@ -95,13 +97,21 @@ public class MinerUOCRService {
         // 保存格式化的 content_list（方便调试 bbox）
         saveFormattedContentList(apiResult, outputDir, taskId, docMode);
         
-        // 转换为dots.ocr兼容的PageLayout格式
-        TextExtractionUtil.PageLayout[] layouts = convertToPageLayouts(apiResult, pageImages, pdfFile, options);
+        // 创建跨页表格管理器
+        CrossPageTableManager tableManager = new CrossPageTableManager();
+        
+        // 转换为dots.ocr兼容的PageLayout格式（同时识别跨页表格）
+        TextExtractionUtil.PageLayout[] layouts = convertToPageLayouts(apiResult, pageImages, pdfFile, options, tableManager);
         
         long endTime = System.currentTimeMillis();
         log.info("MinerU OCR识别完成，共{}页，耗时{}ms", layouts.length, endTime - startTime);
         
-        return layouts;
+        // 输出跨页表格统计信息
+        if (tableManager.getTableGroupCount() > 0) {
+            log.info("📊 跨页表格识别统计: {}", tableManager.getStatistics());
+        }
+        
+        return new MinerURecognitionResult(layouts, tableManager);
     }
     
     /**
@@ -356,12 +366,20 @@ public class MinerUOCRService {
      * 转换MinerU结果为dots.ocr兼容的PageLayout格式
      * 
      * 【重要】返回的格式与dots.ocr完全一致，可以复用所有后续处理逻辑
+     * 
+     * @param apiResult MinerU API 返回结果
+     * @param pageImages 页面图片信息
+     * @param pdfFile PDF 文件
+     * @param options 比对选项
+     * @param tableManager 跨页表格管理器（用于识别和管理跨页表格）
+     * @return PageLayout 数组
      */
     private TextExtractionUtil.PageLayout[] convertToPageLayouts(
             String apiResult,
             List<Map<String, Object>> pageImages,
             File pdfFile,
-            CompareOptions options) throws Exception {
+            CompareOptions options,
+            CrossPageTableManager tableManager) throws Exception {
         
         JsonNode root = objectMapper.readTree(apiResult);
         JsonNode contentListNode = extractContentList(root);
@@ -389,6 +407,7 @@ public class MinerUOCRService {
         // 按页面组织LayoutItem
         Map<Integer, List<TextExtractionUtil.LayoutItem>> pageLayoutItems = new HashMap<>();
         
+        int contentListIndex = 0;
         for (JsonNode item : contentListNode) {
             int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
             
@@ -396,7 +415,14 @@ public class MinerUOCRService {
             if (options.isIgnoreHeaderFooter() && isHeaderFooterOrPageNumber(item)) {
                 String itemType = item.has("type") ? item.get("type").asText() : "unknown";
                 log.debug("🚫 过滤 MinerU 识别的页眉页脚 - 第{}页, 类型:{}", pageIdx + 1, itemType);
+                contentListIndex++;
                 continue;
+            }
+            
+            // 识别跨页表格并建立关联
+            if (tableManager != null && "table".equals(item.has("type") ? item.get("type").asText() : "")) {
+                identifyCrossPageTable(item, contentListIndex, pageIdx, 
+                    pageImageMap.get(pageIdx), pdfPageSizes.get(pageIdx), tableManager);
             }
             
             // 转换为LayoutItem
@@ -412,6 +438,8 @@ public class MinerUOCRService {
                 pageLayoutItems.put(pageIdx, new ArrayList<>());
             }
             pageLayoutItems.get(pageIdx).addAll(items);
+            
+            contentListIndex++;
         }
         
         // 构建PageLayout数组
@@ -427,6 +455,83 @@ public class MinerUOCRService {
         }
         
         return layouts;
+    }
+    
+    /**
+     * 识别跨页表格并建立关联
+     * 
+     * 识别规则：
+     * - 如果 table_caption 为空或不存在
+     * - 且 table_footnote 为空或不存在
+     * - 且 table_body 为空或不存在
+     * - 则认为是上一个表格的跨页延续部分
+     * 
+     * @param item content_list 中的表格项
+     * @param contentListIndex 在 content_list 中的索引
+     * @param pageIdx 页码（0-based）
+     * @param pageImage 页面图片信息
+     * @param pdfPageSize PDF 页面尺寸
+     * @param tableManager 跨页表格管理器
+     */
+    private void identifyCrossPageTable(JsonNode item, int contentListIndex, int pageIdx,
+                                        Map<String, Object> pageImage, double[] pdfPageSize,
+                                        CrossPageTableManager tableManager) {
+        if (item == null || tableManager == null) {
+            return;
+        }
+        
+        // 检查是否有 table_caption
+        boolean hasCaption = false;
+        if (item.has("table_caption")) {
+            JsonNode captionNode = item.get("table_caption");
+            hasCaption = captionNode != null && captionNode.isArray() && captionNode.size() > 0 
+                && captionNode.get(0) != null && !captionNode.get(0).asText().trim().isEmpty();
+        }
+        
+        // 检查是否有 table_footnote
+        boolean hasFootnote = false;
+        if (item.has("table_footnote")) {
+            JsonNode footnoteNode = item.get("table_footnote");
+            hasFootnote = footnoteNode != null && footnoteNode.isArray() && footnoteNode.size() > 0
+                && footnoteNode.get(0) != null && !footnoteNode.get(0).asText().trim().isEmpty();
+        }
+        
+        // 检查是否有 table_body
+        boolean hasBody = false;
+        if (item.has("table_body")) {
+            String tableBody = item.get("table_body").asText();
+            hasBody = tableBody != null && !tableBody.trim().isEmpty();
+        }
+        
+        // 获取 bbox（转换为图片坐标系）
+        double[] bbox = null;
+        if (item.has("bbox") && item.get("bbox").isArray() && item.get("bbox").size() >= 4) {
+            JsonNode bboxNode = item.get("bbox");
+            int imageWidth = pageImage != null ? (Integer) pageImage.get("imageWidth") : 0;
+            int imageHeight = pageImage != null ? (Integer) pageImage.get("imageHeight") : 0;
+            double pdfWidth = pdfPageSize != null ? pdfPageSize[0] : 0;
+            double pdfHeight = pdfPageSize != null ? pdfPageSize[1] : 0;
+            
+            double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
+            bbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        }
+        
+        // 提取文本内容
+        String text = "";
+        if (hasBody && item.has("table_body")) {
+            text = item.get("table_body").asText();
+        }
+        
+        // 添加到跨页表格管理器
+        String groupId = tableManager.addTableItem(contentListIndex, pageIdx, bbox, 
+            hasCaption, hasFootnote, hasBody, text);
+        
+        // 记录日志
+        if (!hasCaption && !hasFootnote && !hasBody) {
+            log.info("📋 识别到跨页表格延续部分: 第{}页, 组ID: {}", pageIdx + 1, groupId);
+        } else {
+            log.debug("📋 识别到主表格: 第{}页, 组ID: {}", pageIdx + 1, groupId);
+        }
     }
     
     /**

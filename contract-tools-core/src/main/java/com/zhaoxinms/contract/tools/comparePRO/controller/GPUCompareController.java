@@ -29,7 +29,6 @@ import com.zhaoxinms.contract.tools.comparePRO.service.CompareImageService;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
-import com.zhaoxinms.contract.tools.comparePRO.util.ProgressCalculator;
 import com.zhaoxinms.contract.tools.comparePRO.util.FileDownloadUtil;
 
 /**
@@ -47,8 +46,6 @@ public class GPUCompareController {
     @Autowired
     private CompareImageService imageService;
     
-    @Autowired
-    private ProgressCalculator progressCalculator;
 
     /**
      * 提交GPU OCR比对任务（使用文件上传）
@@ -185,9 +182,6 @@ public class GPUCompareController {
                 return ResponseEntity.ok(Result.error(404, "任务不存在"));
             }
             
-            // 计算进度信息
-            ProgressCalculator.ProgressInfo progressInfo = progressCalculator.calculateProgress(task);
-            
             // 构建返回数据
             Map<String, Object> responseData = new HashMap<>();
             
@@ -200,18 +194,8 @@ public class GPUCompareController {
             responseData.put("currentStep", task.getCurrentStep());
             responseData.put("currentStepDesc", task.getCurrentStepDesc());
             
-            // 进度信息
-            responseData.put("progressPercentage", progressInfo.getProgressPercentage());
-            responseData.put("progressDescription", progressInfo.getProgressDescription());
-            responseData.put("currentStepDescription", progressInfo.getCurrentStepDescription());
-            responseData.put("remainingTime", progressInfo.getRemainingTimeFormatted());
-            responseData.put("estimatedTotalTime", progressInfo.getEstimatedTotalTime());
-            
-            // 新增阶段信息，用于前端平滑进度
-            responseData.put("stageMinProgress", progressInfo.getStageMinProgress());
-            responseData.put("stageMaxProgress", progressInfo.getStageMaxProgress());
-            responseData.put("stageEstimatedTime", progressInfo.getStageEstimatedTime());
-            responseData.put("stageElapsedTime", progressInfo.getStageElapsedTime());
+            // 简化的进度信息（仅基于步骤）
+            responseData.put("progress", task.getProgress());
             
             // 页面级别进度信息
             responseData.put("totalPages", task.getTotalPages());
@@ -221,6 +205,14 @@ public class GPUCompareController {
             responseData.put("currentPageNew", task.getCurrentPageNew());
             responseData.put("completedPagesOld", task.getCompletedPagesOld());
             responseData.put("completedPagesNew", task.getCompletedPagesNew());
+            
+            // OCR预估时间信息
+            if (task.getEstimatedOcrTimeOld() != null) {
+                responseData.put("estimatedOcrTimeOld", task.getEstimatedOcrTimeOld());
+            }
+            if (task.getEstimatedOcrTimeNew() != null) {
+                responseData.put("estimatedOcrTimeNew", task.getEstimatedOcrTimeNew());
+            }
             
             // 时间统计（如果任务已完成或进行中）
             if (task.getStartTime() != null) {

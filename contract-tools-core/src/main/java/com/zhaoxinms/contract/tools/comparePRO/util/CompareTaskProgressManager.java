@@ -38,9 +38,8 @@ public class CompareTaskProgressManager {
         TEXT_COMPARE("文本比对", 5),
         DIFF_ANALYSIS("差异分析", 6),
         BLOCK_MERGE("差异块合并", 7),
-        OCR_VALIDATION("OCR验证", 8),
-        RESULT_GENERATION("结果生成", 9),
-        TASK_COMPLETE("任务完成", 10);
+        RESULT_GENERATION("结果生成", 8),
+        TASK_COMPLETE("任务完成", 9);
         
         private final String description;
         private final int stepNumber;

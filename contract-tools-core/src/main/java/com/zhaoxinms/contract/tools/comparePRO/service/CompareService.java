@@ -30,13 +30,16 @@ import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.compare.DiffUtil;
 import com.zhaoxinms.contract.tools.compare.util.TextNormalizer;
+import com.zhaoxinms.contract.tools.comparePRO.config.SimpleProgressConfig;
 import com.zhaoxinms.contract.tools.comparePRO.config.ZxOcrConfig;
 import com.zhaoxinms.contract.tools.comparePRO.model.CharBox;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareResult;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
+import com.zhaoxinms.contract.tools.comparePRO.model.CrossPageTableManager;
 import com.zhaoxinms.contract.tools.comparePRO.model.DiffBlock;
 import com.zhaoxinms.contract.tools.comparePRO.model.ExportRequest;
+import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskProgressManager;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskProgressManager.TaskStep;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
@@ -59,11 +62,20 @@ public class CompareService {
 		public final List<CharBox> charBoxes;
 		public final List<String> failedPages;
 		public final int totalPages;
+		public final CrossPageTableManager tableManager; // 跨页表格管理器
 
 		public RecognitionResult(List<CharBox> charBoxes, List<String> failedPages, int totalPages) {
 			this.charBoxes = charBoxes;
 			this.failedPages = failedPages;
 			this.totalPages = totalPages;
+			this.tableManager = null; // 默认为空
+		}
+		
+		public RecognitionResult(List<CharBox> charBoxes, List<String> failedPages, int totalPages, CrossPageTableManager tableManager) {
+			this.charBoxes = charBoxes;
+			this.failedPages = failedPages;
+			this.totalPages = totalPages;
+			this.tableManager = tableManager;
 		}
 		
 	}
@@ -73,6 +85,9 @@ public class CompareService {
     
     @Autowired
     private ZxcmConfig zxcmConfig;
+    
+    @Autowired
+    private SimpleProgressConfig progressConfig;
 
     @Autowired
     private CompareTaskQueue taskQueue;
@@ -745,7 +760,19 @@ public class CompareService {
                 task.setNewDocPages(newPages);
                 task.setTotalPages(totalPages);
                 
-                progressManager.logStepDetail("📄 文档页数: 原文档{}页, 新文档{}页, 设置总页数为{}页", oldPages, newPages, totalPages);
+                // 初始化页面进度
+                task.setCompletedPagesOld(0);
+                task.setCompletedPagesNew(0);
+                
+                // 计算并设置OCR预估时间
+                long estimatedOcrTimeOld = progressConfig.calculateFirstDocOcrTime(oldPages);
+                long estimatedOcrTimeNew = progressConfig.calculateSecondDocOcrTime(newPages);
+                task.setEstimatedOcrTimeOld(estimatedOcrTimeOld);
+                task.setEstimatedOcrTimeNew(estimatedOcrTimeNew);
+                
+                progressManager.logStepDetail("📄 文档页数: 原文档{}页(预估{}秒), 新文档{}页(预估{}秒)", 
+                    oldPages, estimatedOcrTimeOld / 1000, 
+                    newPages, estimatedOcrTimeNew / 1000);
             }
             
             // 注意：图片保存已集成到OCR识别流程中
@@ -753,8 +780,20 @@ public class CompareService {
 			RecognitionResult resultA;
 			    // 使用MinerU OCR
 			    progressManager.logStepDetail("使用MinerU OCR识别原文档");
+			    long ocrStartOld = System.currentTimeMillis();
 			    resultA = recognizePdfWithMinerU(oldPath, options, progressManager, task.getTaskId(), "old", task);
+			    long ocrTimeOld = System.currentTimeMillis() - ocrStartOld;
 			List<CharBox> seqA = resultA.charBoxes;
+			
+			// 标记第一个文档完成
+			task.setCompletedPagesOld(task.getOldDocPages());
+			
+			// 输出跨页表格统计信息
+			if (resultA.tableManager != null && resultA.tableManager.getTableGroupCount() > 0) {
+			    progressManager.logStepDetail("原文档跨页表格统计: {}", resultA.tableManager.getStatistics());
+			}
+			progressManager.logStepDetail("原文档OCR实际用时: {}ms (预估: {}ms)", 
+			    ocrTimeOld, task.getEstimatedOcrTimeOld());
 			progressManager.completeStep(TaskStep.OCR_FIRST_DOC);
 
             // 步骤3: OCR识别新文档
@@ -765,8 +804,21 @@ public class CompareService {
 			RecognitionResult resultB;
 			    // 使用MinerU OCR
 			    progressManager.logStepDetail("使用MinerU OCR识别新文档");
+			    long ocrStartNew = System.currentTimeMillis();
 			    resultB = recognizePdfWithMinerU(newPath, options, progressManager, task.getTaskId(), "new", task);
+			    long ocrTimeNew = System.currentTimeMillis() - ocrStartNew;
 			List<CharBox> seqB = resultB.charBoxes;
+			
+			// 标记第二个文档完成
+			task.setCompletedPagesNew(task.getNewDocPages());
+			
+			progressManager.logStepDetail("新文档OCR实际用时: {}ms (预估: {}ms)", 
+			    ocrTimeNew, task.getEstimatedOcrTimeNew());
+			
+			// 输出跨页表格统计信息
+			if (resultB.tableManager != null && resultB.tableManager.getTableGroupCount() > 0) {
+			    progressManager.logStepDetail("新文档跨页表格统计: {}", resultB.tableManager.getStatistics());
+			}
 			progressManager.completeStep(TaskStep.OCR_SECOND_DOC);
 
             // 步骤4: OCR完成
@@ -797,22 +849,18 @@ public class CompareService {
             progressManager.logStepDetail("开始合并差异块，filteredBlocks大小: {}", filteredBlocks.size());
             List<DiffBlock> merged = mergeBlocksByBbox(filteredBlocks);
             progressManager.logStepDetail("合并完成，merged大小: {}", merged.size());
+            
+            // 补充跨页表格关联的 bbox
+            if (resultA.tableManager != null || resultB.tableManager != null) {
+                progressManager.logStepDetail("检测到跨页表格，开始补充关联 bbox...");
+                int beforeCount = merged.size();
+                supplementCrossPageTableBboxes(merged, resultA.tableManager, resultB.tableManager);
+                progressManager.logStepDetail("跨页表格 bbox 补充完成，处理前: {} 个差异块", beforeCount);
+            }
+            
             progressManager.completeStep(TaskStep.BLOCK_MERGE);
 
-            // 步骤8: OCR验证
-            progressManager.startStep(TaskStep.OCR_VALIDATION);
-                // 计算实际页数（取两个文档的最大页数）
-                int actualTotalPages = Math.max(resultA.totalPages, resultB.totalPages);
-                progressManager.logStepDetail("文档页数信息: 原文档{}页, 新文档{}页, 使用最大值{}页", 
-                    resultA.totalPages, resultB.totalPages, actualTotalPages);
-                
-                // 设置任务的总页数
-                task.setTotalPages(actualTotalPages);
-                
-                progressManager.logStepDetail("🚀 开始OCR验证（已优化并行处理）: {}个差异块", merged.size());
-            progressManager.completeStep(TaskStep.OCR_VALIDATION);
-
-            // 步骤9: 结果生成
+            // 步骤8: 结果生成
             progressManager.startStep(TaskStep.RESULT_GENERATION);
             
             // 记录最终差异统计
@@ -824,6 +872,12 @@ public class CompareService {
                 CompareResult result = new CompareResult(task.getTaskId());
                 result.setOldFileName(task.getOldFileName());
                 result.setNewFileName(task.getNewFileName());
+                
+                // 设置OCR时间统计
+                result.setEstimatedOcrTimeOld(task.getEstimatedOcrTimeOld());
+                result.setEstimatedOcrTimeNew(task.getEstimatedOcrTimeNew());
+                result.setActualOcrTimeOld(ocrTimeOld);
+                result.setActualOcrTimeNew(ocrTimeNew);
                 
                 // 不再需要设置PDF URL，全部使用画布显示
 
@@ -984,8 +1038,17 @@ public class CompareService {
 		// 4. 处理规则：空格 + 标点符号 场景替换为等长空格串，保持字符位移一致
 		// 示例：" ;"、" 。"、" \t, "、" . ." → 用相同长度的空格替换
 		// 说明：用正则逐段匹配并按匹配长度替换，避免位移差异
+		// 
+		// 【重要修正】保护金额中的小数点和千分位逗号，避免误删除
+		// 策略：改进正则表达式，排除"数字.数字"和"数字,数字"模式
 		{
-			Pattern wsPunct = Pattern.compile("[\\s\\p{Punct}，。；：、！？…·•]+");
+			// 方案：使用负向零宽断言（negative lookbehind/lookahead）排除金额相关的点和逗号
+			// 正则说明：
+			// - (?<!\\d) : 前面不是数字
+			// - [\\s\\p{Punct}，。；：、！？…·•]+ : 空格或标点符号（一个或多个）
+			// - (?!\\d) : 后面不是数字
+			// 这样可以避免匹配"103400.00"中的点，同时匹配" . "这样的孤立标点
+			Pattern wsPunct = Pattern.compile("(?<!\\d)[\\s\\p{Punct}，。；：、！？…·•]+(?!\\d)");
 			Matcher m = wsPunct.matcher(normalized);
 			StringBuffer sb = new StringBuffer();
 			while (m.find()) {
@@ -1733,6 +1796,7 @@ public class CompareService {
 		List<CharBox> charBoxes = new ArrayList<>();
 		List<String> failedPages = new ArrayList<>();
 		int totalPages = 0;
+		CrossPageTableManager tableManager = null;
 		
 		try {
 			if (mineruOcrService == null) {
@@ -1919,9 +1983,9 @@ public class CompareService {
 			}
 			// ==================== 水印去除逻辑结束 ====================
 			
-			// 调用MinerU识别，返回dots.ocr兼容的PageLayout格式
+			// 调用MinerU识别，返回dots.ocr兼容的PageLayout格式（包含跨页表格管理器）
 			// 注意：这里使用 pdfFileToProcess（可能是去水印后的PDF）
-			TextExtractionUtil.PageLayout[] layouts = mineruOcrService.recognizePdf(
+			MinerURecognitionResult mineruResult = mineruOcrService.recognizePdf(
 				pdfFileToProcess,
 				taskId,
 				outputDir,
@@ -1929,6 +1993,8 @@ public class CompareService {
 				options
 			);
 			
+			TextExtractionUtil.PageLayout[] layouts = mineruResult.layouts;
+			tableManager = mineruResult.tableManager;
 			totalPages = layouts.length;
 			
 			// 使用与dots.ocr完全相同的处理逻辑
@@ -1951,7 +2017,7 @@ public class CompareService {
 			}
 		}
 		
-		return new RecognitionResult(charBoxes, failedPages, totalPages);
+		return new RecognitionResult(charBoxes, failedPages, totalPages, tableManager);
 	}
 	
 	/**
@@ -2095,6 +2161,174 @@ public class CompareService {
 		return result;
 	}
 	
+	/**
+	 * 补充跨页表格关联的 bbox
+	 * 
+	 * 如果一个 DiffBlock 包含跨页表格中的任意一个 bbox，
+	 * 则将该表格组的所有其他 bbox 也添加到该 DiffBlock 中。
+	 * 
+	 * @param diffBlocks 差异块列表
+	 * @param tableManagerA 原文档的跨页表格管理器
+	 * @param tableManagerB 新文档的跨页表格管理器
+	 */
+	private void supplementCrossPageTableBboxes(List<DiffBlock> diffBlocks, 
+	                                             CrossPageTableManager tableManagerA, 
+	                                             CrossPageTableManager tableManagerB) {
+		if (diffBlocks == null || diffBlocks.isEmpty()) {
+			return;
+		}
+		
+		int supplementedCount = 0;
+		
+		for (DiffBlock block : diffBlocks) {
+			boolean supplemented = false;
+			
+			// 检查原文档（A）的 bbox
+			if (tableManagerA != null && block.oldBboxes != null && block.pageA != null) {
+				for (int i = 0; i < block.oldBboxes.size() && i < block.pageA.size(); i++) {
+					double[] bbox = block.oldBboxes.get(i);
+					int page = block.pageA.get(i);
+					
+					// 查找该 bbox 所属的表格组
+					CrossPageTableManager.TableGroup group = tableManagerA.findTableGroupByBbox(page, bbox);
+					if (group != null && group.getAllParts().size() > 1) {
+						// 找到跨页表格组，补充其他 bbox
+						supplementCrossPageTableBboxesToBlock(block, group, true);
+						supplemented = true;
+						break; // 找到一个就够了
+					}
+				}
+			}
+			
+			// 检查新文档（B）的 bbox
+			if (tableManagerB != null && block.newBboxes != null && block.pageB != null) {
+				for (int i = 0; i < block.newBboxes.size() && i < block.pageB.size(); i++) {
+					double[] bbox = block.newBboxes.get(i);
+					int page = block.pageB.get(i);
+					
+					// 查找该 bbox 所属的表格组
+					CrossPageTableManager.TableGroup group = tableManagerB.findTableGroupByBbox(page, bbox);
+					if (group != null && group.getAllParts().size() > 1) {
+						// 找到跨页表格组，补充其他 bbox
+						supplementCrossPageTableBboxesToBlock(block, group, false);
+						supplemented = true;
+						break; // 找到一个就够了
+					}
+				}
+			}
+			
+			if (supplemented) {
+				supplementedCount++;
+			}
+		}
+		
+		if (supplementedCount > 0) {
+			logger.info("✅ 跨页表格 bbox 补充完成，共处理 {} 个差异块", supplementedCount);
+		}
+	}
+	
+	/**
+	 * 将跨页表格组的所有 bbox 补充到差异块中
+	 * 
+	 * @param block 差异块
+	 * @param group 跨页表格组
+	 * @param isOldDoc 是否为原文档（true=原文档A，false=新文档B）
+	 */
+	private void supplementCrossPageTableBboxesToBlock(DiffBlock block, 
+	                                                    CrossPageTableManager.TableGroup group, 
+	                                                    boolean isOldDoc) {
+		// 获取所有表格部分的 bbox（按页码组织）
+		Map<Integer, List<double[]>> bboxesByPage = group.getAllBboxesByPage();
+		
+		if (isOldDoc) {
+			// 补充原文档（A）的 bbox
+			if (block.oldBboxes == null) {
+				block.oldBboxes = new ArrayList<>();
+			}
+			if (block.pageA == null) {
+				block.pageA = new ArrayList<>();
+			}
+			if (block.allTextA == null) {
+				block.allTextA = new ArrayList<>();
+			}
+			
+			// 记录已有的 bbox（避免重复）
+			Set<String> existingBboxes = new HashSet<>();
+			for (int i = 0; i < block.oldBboxes.size() && i < block.pageA.size(); i++) {
+				existingBboxes.add(createBboxKey(block.pageA.get(i), block.oldBboxes.get(i)));
+			}
+			
+			// 添加表格组中的所有 bbox
+			for (Map.Entry<Integer, List<double[]>> entry : bboxesByPage.entrySet()) {
+				int pageIdx = entry.getKey();
+				int page1Based = pageIdx + 1; // 转换为 1-based
+				
+				for (double[] bbox : entry.getValue()) {
+					String bboxKey = createBboxKey(page1Based, bbox);
+					if (!existingBboxes.contains(bboxKey)) {
+						block.oldBboxes.add(bbox);
+						block.pageA.add(page1Based);
+						// 文本可以用空字符串或者简单的占位符
+						block.allTextA.add(""); // 用户建议可以尝试空字符串
+						existingBboxes.add(bboxKey);
+					}
+				}
+			}
+			
+			logger.debug("补充原文档跨页表格 bbox: 表格组 {}, 新增 {} 个 bbox", 
+			    group.groupId, block.oldBboxes.size() - existingBboxes.size());
+			
+		} else {
+			// 补充新文档（B）的 bbox
+			if (block.newBboxes == null) {
+				block.newBboxes = new ArrayList<>();
+			}
+			if (block.pageB == null) {
+				block.pageB = new ArrayList<>();
+			}
+			if (block.allTextB == null) {
+				block.allTextB = new ArrayList<>();
+			}
+			
+			// 记录已有的 bbox（避免重复）
+			Set<String> existingBboxes = new HashSet<>();
+			for (int i = 0; i < block.newBboxes.size() && i < block.pageB.size(); i++) {
+				existingBboxes.add(createBboxKey(block.pageB.get(i), block.newBboxes.get(i)));
+			}
+			
+			// 添加表格组中的所有 bbox
+			for (Map.Entry<Integer, List<double[]>> entry : bboxesByPage.entrySet()) {
+				int pageIdx = entry.getKey();
+				int page1Based = pageIdx + 1; // 转换为 1-based
+				
+				for (double[] bbox : entry.getValue()) {
+					String bboxKey = createBboxKey(page1Based, bbox);
+					if (!existingBboxes.contains(bboxKey)) {
+						block.newBboxes.add(bbox);
+						block.pageB.add(page1Based);
+						// 文本可以用空字符串或者简单的占位符
+						block.allTextB.add(""); // 用户建议可以尝试空字符串
+						existingBboxes.add(bboxKey);
+					}
+				}
+			}
+			
+			logger.debug("补充新文档跨页表格 bbox: 表格组 {}, 新增 {} 个 bbox", 
+			    group.groupId, block.newBboxes.size() - existingBboxes.size());
+		}
+	}
+	
+	/**
+	 * 创建 bbox 的唯一键（用于去重）
+	 */
+	private String createBboxKey(int page, double[] bbox) {
+		if (bbox == null || bbox.length < 4) {
+			return "";
+		}
+		return String.format("%d_%.2f_%.2f_%.2f_%.2f", 
+		    page, bbox[0], bbox[1], bbox[2], bbox[3]);
+	}
+
 	/**
 	 * 将原始差异数据转换为DiffBlock对象列表
 	 */
