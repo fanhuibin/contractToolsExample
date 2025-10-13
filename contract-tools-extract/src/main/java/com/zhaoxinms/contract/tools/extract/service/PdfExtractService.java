@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.extract.config.ExtractProperties;
@@ -15,7 +16,7 @@ import com.zhaoxinms.contract.tools.extract.core.ExtractEngine;
 import com.zhaoxinms.contract.tools.extract.core.data.Document;
 import com.zhaoxinms.contract.tools.extract.core.data.Extraction;
 import com.zhaoxinms.contract.tools.extract.core.data.ExtractionSchema;
-import com.zhaoxinms.contract.tools.extract.core.exceptions.ExtractException;
+import com.zhaoxinms.contract.tools.extract.core.exceptions.ExtractException;  
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -167,14 +168,17 @@ public class PdfExtractService {
         try {
             // 调用 MinerU OCR 服务
             String taskId = "extract-" + UUID.randomUUID().toString();
-            
-            TextExtractionUtil.PageLayout[] pageLayouts = minerUOCRService.recognizePdf(
+              
+            MinerURecognitionResult result = minerUOCRService.recognizePdf(
                 pdfFile,
                 taskId,
                 tempDir,
                 "extract",  // 文档模式
                 null        // 使用默认选项（不需要页眉页脚过滤）
             );
+            
+            // 从结果中提取 PageLayout 数组
+            TextExtractionUtil.PageLayout[] pageLayouts = result.layouts;
             
             // 提取所有页面的文本并合并
             StringBuilder fullText = new StringBuilder();

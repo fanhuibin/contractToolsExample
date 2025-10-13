@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
+import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.extract.model.CharBox;
@@ -66,13 +67,16 @@ public class UnifiedOCRService implements OCRProvider {
             CompareOptions options = new CompareOptions();
             
             // 调用 MinerU 进行 PDF 识别
-            TextExtractionUtil.PageLayout[] pageLayouts = mineruOcrService.recognizePdf(
+            MinerURecognitionResult mineruResult = mineruOcrService.recognizePdf(
                 pdfFile, 
                 taskId, 
                 taskOutputDir,
                 "extract", // 文档模式：extract 表示用于智能提取
                 options
             );
+            
+            // 从结果中提取 PageLayout 数组
+            TextExtractionUtil.PageLayout[] pageLayouts = mineruResult.layouts;
             
             // 提取文本和CharBox数据
             StringBuilder allText = new StringBuilder();
@@ -200,13 +204,16 @@ public class UnifiedOCRService implements OCRProvider {
             CompareOptions options = new CompareOptions();
             
             // 调用 MinerU 进行 PDF 识别
-            TextExtractionUtil.PageLayout[] pageLayouts = mineruOcrService.recognizePdf(
+            MinerURecognitionResult mineruResult = mineruOcrService.recognizePdf(
                 pdfFile, 
                 taskId, 
                 outputDir,
                 "extract", // 文档模式：extract 表示用于智能提取
                 options
             );
+            
+            // 从结果中提取 PageLayout 数组
+            TextExtractionUtil.PageLayout[] pageLayouts = mineruResult.layouts;
             
             // 提取文本和 CharBox 数据
             StringBuilder allText = new StringBuilder();
@@ -240,7 +247,7 @@ public class UnifiedOCRService implements OCRProvider {
                                 charBoxes.add(newlineCharBox);
                     }
                 }
-            }
+            }  
             
             // 获取图片路径（MinerU 会在 outputDir 中生成页面图片）
             File imagesDir = new File(outputDir, "images");
