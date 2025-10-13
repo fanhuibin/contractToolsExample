@@ -1,17 +1,14 @@
 <template>
   <div class="extract-main-page">
-    <!-- 头部 -->
-    <div class="header-section">
-      <div class="header-left">
-        <h1 class="page-title">
-          <el-icon><Document /></el-icon>
-          规则抽取
-        </h1>
-        <p class="page-description">
-          基于预定义规则和模板的合同信息提取功能，无需AI，快速准确
-        </p>
-      </div>
-      <div class="header-right">
+    <!-- 使用 PageHeader 组件 -->
+    <PageHeader 
+      title="规则抽取" 
+      description="基于预定义规则和模板的合同信息提取功能，无需AI，快速准确"
+      :icon="Document"
+      tag="规则引擎"
+      tag-type="success"
+    >
+      <template #actions>
         <el-button 
           type="primary" 
           size="large"
@@ -20,24 +17,18 @@
           <el-icon><Setting /></el-icon>
           模板管理
         </el-button>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <!-- 主内容 -->
-    <div class="main-content">
-      <!-- 左侧面板 -->
-      <div class="left-panel">
+    <!-- 主内容 - 三列式布局 -->
+    <el-row :gutter="16" class="main-operation-area mb16">
+      <!-- 左列：文档上传 -->
+      <el-col :span="8">
         <el-card class="upload-card">
           <template #header>
             <div class="card-header">
+              <el-icon><UploadFilled /></el-icon>
               <span>文档上传</span>
-              <el-button 
-                type="text" 
-                size="small" 
-                @click="$router.push('/rule-extract/templates')"
-              >
-                管理模板
-              </el-button>
             </div>
           </template>
           
@@ -52,24 +43,33 @@
             :auto-upload="false"
           >
             <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">点击或拖拽PDF文件到此区域</div>
-            <div class="el-upload__tip">仅支持PDF格式，文件大小不超过100MB</div>
+            <div class="el-upload__text">拖拽或点击上传PDF</div>
+            <div class="el-upload__tip">仅支持PDF格式，最大100MB</div>
           </el-upload>
           
           <div v-if="selectedFile" class="selected-file">
             <el-alert
-              :title="`已选择: ${selectedFile?.name}`"
+              :title="selectedFile?.name"
               :description="`大小: ${formatFileSize(selectedFile?.size || 0)}`"
-              type="info"
+              type="success"
               show-icon
               closable
               @close="clearFile"
             />
           </div>
         </el-card>
+      </el-col>
 
+      <!-- 中列：提取配置 -->
+      <el-col :span="8">
         <el-card class="config-card">
-          <template #header>提取配置</template>
+          <template #header>
+            <div class="card-header">
+              <el-icon><Setting /></el-icon>
+              <span>提取配置</span>
+            </div>
+          </template>
+          
           <el-form label-position="top">
             <el-form-item label="选择模板" required>
               <el-select 
@@ -99,6 +99,21 @@
               </div>
             </el-form-item>
 
+            <el-form-item v-if="selectedTemplateInfo">
+              <div class="template-preview">
+                <div class="template-info">
+                  <div class="info-item">
+                    <span class="label">模板名称：</span>
+                    <span class="value">{{ selectedTemplateInfo.templateName }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">字段数量：</span>
+                    <span class="value">{{ selectedTemplateInfo.fields?.length || 0 }} 个</span>
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+
             <el-form-item>
               <el-button 
                 type="primary" 
@@ -112,30 +127,21 @@
                 {{ isExtracting ? '抽取中...' : '开始抽取' }}
               </el-button>
             </el-form-item>
-
-            <div v-if="selectedTemplateInfo" class="template-preview">
-              <el-divider>模板信息</el-divider>
-              <div class="template-info">
-                <div class="info-item">
-                  <span class="label">模板名称：</span>
-                  <span class="value">{{ selectedTemplateInfo.templateName }}</span>
-                </div>
-                <div class="info-item">
-                  <span class="label">字段数量：</span>
-                  <span class="value">{{ selectedTemplateInfo.fields?.length || 0 }} 个</span>
-                </div>
-                <div class="info-item">
-                  <span class="label">描述：</span>
-                  <span class="value">{{ selectedTemplateInfo.description || '无' }}</span>
-                </div>
-              </div>
-            </div>
           </el-form>
         </el-card>
+      </el-col>
 
-        <el-card class="history-card" v-if="recentTasks.length > 0">
-          <template #header>最近任务</template>
-          <div class="task-list">
+      <!-- 右列：最近任务 -->
+      <el-col :span="8">
+        <el-card class="history-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><Document /></el-icon>
+              <span>最近任务</span>
+            </div>
+          </template>
+          
+          <div v-if="recentTasks.length > 0" class="task-list">
             <div 
               v-for="task in recentTasks.slice(0, 5)" 
               :key="task.taskId"
@@ -153,23 +159,21 @@
               </div>
             </div>
           </div>
+          
+          <el-empty v-else description="暂无历史任务" :image-size="80" />
         </el-card>
-      </div>
+      </el-col>
+    </el-row>
 
-      <!-- 右侧面板 -->
-      <div class="right-panel">
-        <div v-if="!currentTask" class="empty-state">
-          <el-empty 
-            description="上传文件并选择模板开始抽取"
-            :image-size="200"
-          >
-            <template #image>
-              <el-icon :size="100" color="#909399">
-                <Document />
-              </el-icon>
-            </template>
-          </el-empty>
-        </div>
+    <!-- 结果展示区 -->
+    <div class="result-area">
+      <!-- 使用 EmptyState 组件 -->
+      <EmptyState 
+        v-if="!currentTask"
+        title="准备就绪"
+        description="上传文件并选择模板，开始信息抽取"
+        :icon="Document"
+      />
 
         <el-card v-if="currentTask && currentTask.status !== 'completed'" class="progress-card">
           <template #header>
@@ -276,7 +280,6 @@
             </template>
           </el-result>
         </el-card>
-      </div>
     </div>
   </div>
 </template>
@@ -286,6 +289,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Document, UploadFilled, Refresh, Setting, InfoFilled } from '@element-plus/icons-vue'
+import PageHeader from '@/components/common/PageHeader.vue'
+import EmptyState from '@/components/common/EmptyState.vue'
 import { 
   listTemplates, 
   uploadAndExtract, 
@@ -563,62 +568,69 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .extract-main-page {
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
+  padding: 0;
 
-  .header-section {
-    margin-bottom: 30px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+  /* 三列式主操作区 */
+  .main-operation-area {
+    /* 统一卡片样式 */
+    .el-card {
+      min-height: 420px;
+      border-radius: var(--zx-radius-md);
+      transition: box-shadow var(--zx-transition-base);
 
-    .header-left {
-      .page-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        font-size: 28px;
-        font-weight: 600;
-        color: #303133;
-        margin: 0 0 12px 0;
-      }
-
-      .page-description {
-        color: #606266;
-        font-size: 14px;
-        margin: 0;
+      &:hover {
+        box-shadow: var(--zx-shadow-md);
       }
     }
 
-    .header-right {
-      .el-button {
-        padding: 12px 24px;
-        font-size: 15px;
-      }
-    }
-  }
-
-  .main-content {
-    display: grid;
-    grid-template-columns: 400px 1fr;
-    gap: 20px;
-
-    .left-panel {
+    .card-header {
       display: flex;
-      flex-direction: column;
-      gap: 20px;
+      align-items: center;
+      gap: var(--zx-spacing-sm);
+      font-weight: var(--zx-font-semibold);
+      font-size: var(--zx-font-base);
 
-      .card-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+      .el-icon {
+        font-size: 18px;
+      }
+    }
+
+    /* 上传卡片 */
+    .upload-card {
+      :deep(.el-upload-dragger) {
+        padding: var(--zx-spacing-2xl);
+        border-radius: var(--zx-radius-md);
+        transition: all var(--zx-transition-base);
+
+        &:hover {
+          border-color: var(--zx-primary);
+          background-color: var(--zx-primary-light-9);
+        }
+
+        .el-icon--upload {
+          font-size: 48px;
+          color: var(--zx-text-placeholder);
+          margin-bottom: var(--zx-spacing-md);
+        }
+
+        .el-upload__text {
+          font-size: var(--zx-font-base);
+          color: var(--zx-text-regular);
+        }
+
+        .el-upload__tip {
+          font-size: var(--zx-font-sm);
+          color: var(--zx-text-secondary);
+          margin-top: var(--zx-spacing-sm);
+        }
       }
 
       .selected-file {
-        margin-top: 16px;
+        margin-top: var(--zx-spacing-lg);
+      }
       }
 
+    /* 配置卡片 */
       .config-card {
         .template-option {
           display: flex;
@@ -627,63 +639,96 @@ onUnmounted(() => {
         }
 
         .form-tip {
-          margin-top: 8px;
-          font-size: 13px;
-          color: #909399;
+        margin-top: var(--zx-spacing-sm);
+        font-size: var(--zx-font-sm);
+        color: var(--zx-text-secondary);
           display: flex;
           align-items: center;
-          gap: 4px;
+        gap: var(--zx-spacing-xs);
 
           .el-link {
-            margin-left: 4px;
-            font-size: 13px;
-          }
+          margin-left: var(--zx-spacing-xs);
+        }
         }
 
         .template-preview {
-          margin-top: 20px;
+        padding: var(--zx-spacing-md);
+        background: var(--zx-bg-light);
+        border-radius: var(--zx-radius-sm);
+        border-left: 3px solid var(--zx-success);
 
           .template-info {
             .info-item {
-              margin-bottom: 12px;
-              font-size: 14px;
+            display: flex;
+            margin-bottom: var(--zx-spacing-xs);
+            font-size: var(--zx-font-sm);
+
+            &:last-child {
+              margin-bottom: 0;
+            }
 
               .label {
-                color: #909399;
-                margin-right: 8px;
+              color: var(--zx-text-secondary);
+              min-width: 80px;
               }
 
               .value {
-                color: #303133;
-                font-weight: 500;
-              }
+              color: var(--zx-text-primary);
+              font-weight: var(--zx-font-medium);
+              flex: 1;
             }
           }
         }
       }
+    }
 
+    /* 历史任务卡片 */
       .history-card {
         .task-list {
+        max-height: 330px;
+        overflow-y: auto;
+
+        /* 美化滚动条 */
+        &::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+          background: var(--zx-border-light);
+          border-radius: 3px;
+
+          &:hover {
+            background: var(--zx-border-base);
+          }
+        }
+
           .task-item {
-            padding: 12px;
-            border-radius: 4px;
-            margin-bottom: 8px;
+          padding: var(--zx-spacing-md);
+          border-radius: var(--zx-radius-sm);
+          margin-bottom: var(--zx-spacing-sm);
             cursor: pointer;
-            transition: all 0.3s;
-            border: 1px solid #ebeef5;
+          transition: all var(--zx-transition-fast);
+          border: 1px solid var(--zx-border-lighter);
+          background: var(--zx-bg-white);
+
+          &:last-child {
+            margin-bottom: 0;
+          }
 
             &:hover {
-              background-color: #f5f7fa;
-              border-color: #409eff;
+            background-color: var(--zx-primary-light-9);
+            border-color: var(--zx-primary);
+            transform: translateX(2px);
             }
 
             .task-name {
-              font-size: 14px;
-              color: #303133;
-              margin-bottom: 8px;
+            font-size: var(--zx-font-sm);
+            color: var(--zx-text-primary);
+            margin-bottom: var(--zx-spacing-sm);
               overflow: hidden;
               text-overflow: ellipsis;
               white-space: nowrap;
+            font-weight: var(--zx-font-medium);
             }
 
             .task-status {
@@ -695,69 +740,135 @@ onUnmounted(() => {
       }
     }
 
-    .right-panel {
-      .empty-state {
-        height: 600px;
+  /* 结果展示区 */
+  .result-area {
+    .progress-card, .result-card {
+      animation: fadeIn 0.3s ease-out;
+      border-radius: var(--zx-radius-md);
+      
+      .progress-header, .result-header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
-        background: #f5f7fa;
-        border-radius: 4px;
+        font-weight: var(--zx-font-semibold);
       }
 
-      .progress-card, .result-card {
-        .progress-header, .result-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
+      .progress-content {
+        .task-info {
+          background: var(--zx-primary-light-9);
+          padding: var(--zx-spacing-lg);
+          border-radius: var(--zx-radius-md);
+          margin-bottom: var(--zx-spacing-xl);
+          border-left: 4px solid var(--zx-primary);
 
-        .progress-content {
-          .task-info {
-            background: #f5f7fa;
-            padding: 16px;
-            border-radius: 4px;
-            margin-bottom: 24px;
+          .info-row {
+            display: flex;
+            margin-bottom: var(--zx-spacing-sm);
+            font-size: var(--zx-font-sm);
 
-            .info-row {
-              display: flex;
-              margin-bottom: 8px;
-              font-size: 14px;
+            &:last-child {
+              margin-bottom: 0;
+            }
 
-              &:last-child {
-                margin-bottom: 0;
-              }
+            .label {
+              color: var(--zx-text-secondary);
+              min-width: 90px;
+              font-weight: var(--zx-font-medium);
+            }
 
-              .label {
-                color: #909399;
-                min-width: 80px;
-              }
-
-              .value {
-                color: #303133;
-                font-weight: 500;
-              }
+            .value {
+              color: var(--zx-text-primary);
+              font-weight: var(--zx-font-medium);
+              flex: 1;
+              word-break: break-all;
             }
           }
+        }
 
-          .progress-bar {
-            margin-bottom: 30px;
+        .progress-bar {
+          margin-bottom: var(--zx-spacing-xl);
 
-            .progress-message {
-              text-align: center;
-              margin-top: 12px;
-              color: #606266;
-              font-size: 14px;
-            }
-          }
-
-          .status-timeline {
-            padding-left: 20px;
+          .progress-message {
+            text-align: center;
+            margin-top: var(--zx-spacing-md);
+            color: var(--zx-text-regular);
+            font-size: var(--zx-font-sm);
+            font-weight: var(--zx-font-medium);
           }
         }
+
+        .status-timeline {
+          padding: var(--zx-spacing-lg);
+          background: var(--zx-bg-light);
+          border-radius: var(--zx-radius-md);
+
+          :deep(.el-timeline-item__node) {
+            transition: all var(--zx-transition-base);
+          }
+
+          :deep(.el-timeline-item__content) {
+            color: var(--zx-text-regular);
+            font-size: var(--zx-font-sm);
+          }
+        }
+      }
+    }
+
+    .result-card {
+      :deep(.el-result) {
+        padding: var(--zx-spacing-2xl);
+      }
+    }
+  }
+}
+
+/* 动画 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 通用样式类 */
+.mb12 {
+  margin-bottom: 12px;
+}
+
+.mb16 {
+  margin-bottom: 16px;
+}
+
+/* 响应式设计 */
+@media (max-width: 992px) {
+  .extract-main-page {
+    .main-operation-area {
+      .el-card {
+        min-height: auto;
+      }
+      
+      :deep(.el-col) {
+        width: 100% !important;
+        margin-bottom: var(--zx-spacing-lg);
       }
     }
   }
 }
 </style>
+
 

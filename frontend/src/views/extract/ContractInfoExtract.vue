@@ -323,20 +323,6 @@
             <pre>{{ JSON.stringify(extractResult, null, 2) }}</pre>
           </div>
         </el-tab-pane>
-
-        <!-- Tab 3: 统计图表 -->
-        <el-tab-pane label="统计图表" name="chart">
-          <template #label>
-            <span class="tab-label">
-              <el-icon><PieChart /></el-icon>
-              统计图表
-            </span>
-          </template>
-          
-          <div class="chart-view">
-            <el-empty description="统计图表功能开发中" />
-          </div>
-        </el-tab-pane>
       </el-tabs>
     </el-card>
   </div>
@@ -365,7 +351,6 @@ import {
   Clock,
   Checked,
   Grid,
-  PieChart,
   Key,
   MagicStick,
   CircleCheck
@@ -863,14 +848,6 @@ const getStatusIcon = (status: string) => {
   font-size: 13px;
   line-height: 1.6;
   color: #303133;
-}
-
-/* 图表视图 */
-.chart-view {
-  min-height: 300px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 /* ========== 动画 ========== */
