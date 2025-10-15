@@ -13,7 +13,7 @@
 #### 2. 页面（3个）
 - ✅ `TemplateList.vue` (365行) - 模板列表页
 - ✅ `TemplateDesigner.vue` (628行) - 模板设计页
-- ✅ `ExtractMain.vue` (800+行) - 规则抽取主页
+- ✅ `ExtractMain.vue` (800+行) - 规则提取主页
 
 ### 📚 文档（4个）
 - ✅ `README.md` - 详细使用说明和技术文档
@@ -143,7 +143,7 @@ emit('update:modelValue', { ...props.modelValue, field: newValue })
 **使用场景**: 直接用正则匹配
 **示例**: 提取所有日期格式的内容
 
-### 4. 表格抽取 (TABLE_CELL)
+### 4. 表格提取 (TABLE_CELL)
 **使用场景**: 从HTML表格提取数据
 **示例**: 提取商品清单表格
 
@@ -154,7 +154,7 @@ emit('update:modelValue', { ...props.modelValue, field: newValue })
 ### 快速流程（3步）
 1. **创建模板** → 访问模板管理，点击新建
 2. **配置字段** → 点击设计，添加字段和规则
-3. **执行抽取** → 上传文件，选择模板，开始抽取
+3. **执行提取** → 上传文件，选择模板，开始提取
 
 ### 详细流程（7步）
 1. 访问 `/rule-extract/templates`
@@ -163,7 +163,7 @@ emit('update:modelValue', { ...props.modelValue, field: newValue })
 4. 添加字段（配置字段信息和规则）
 5. 测试规则（单字段测试/批量测试）
 6. 保存模板（点击顶部保存按钮）
-7. 执行抽取（上传PDF，选择模板，开始抽取）
+7. 执行提取（上传PDF，选择模板，开始提取）
 
 ---
 
@@ -208,7 +208,7 @@ emit('update:modelValue', { ...props.modelValue, field: newValue })
 ✓ 复制模板
 ✓ 删除模板
 ✓ 文件上传
-✓ 开始抽取
+✓ 开始提取
 ✓ 监控进度
 ✓ 取消任务
 ✓ 查看结果
@@ -300,7 +300,7 @@ npm run dev
 ## 🎉 结论
 
 ### 交付成果
-一个**完全重写**的规则抽取模块，具有：
+一个**完全重写**的规则提取模块，具有：
 - ✅ 完整的功能
 - ✅ 零循环更新错误
 - ✅ 清晰的代码结构

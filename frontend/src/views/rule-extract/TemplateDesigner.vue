@@ -479,7 +479,7 @@ const handleTest = async (testText: string) => {
       text: testText,
       ruleType: fieldData.ruleType,
       config: fieldData.ruleConfig,
-      debug: false
+      debug: true
     })
 
     if (res.code === 200) {

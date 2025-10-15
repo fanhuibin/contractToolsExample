@@ -163,12 +163,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/extract/EnhancedContractInfoExtract.vue'),
         meta: { title: '智能信息提取 - 增强版' }
       },
-      // 规则抽取模块（重构版本）
+      // 规则提取模块（重构版本）
       {
         path: '/rule-extract',
         name: 'RuleExtract',
         component: () => import('@/views/rule-extract/ExtractMain.vue'),
-        meta: { title: '规则抽取' }
+        meta: { title: '规则提取' }
       },
       {
         path: '/rule-extract/templates',
@@ -186,7 +186,7 @@ const routes: RouteRecordRaw[] = [
         path: '/rule-extract/result/:taskId',
         name: 'RuleExtractResult',
         component: () => import('@/views/rule-extract/RuleExtractResult.vue'),
-        meta: { title: '抽取结果' }
+        meta: { title: '提取结果' }
       },
       
     ]

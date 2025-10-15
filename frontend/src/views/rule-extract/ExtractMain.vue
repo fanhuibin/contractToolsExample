@@ -2,7 +2,7 @@
   <div class="extract-main-page">
     <!-- 使用 PageHeader 组件 -->
     <PageHeader 
-      title="规则抽取" 
+      title="规则提取" 
       description="基于预定义规则和模板的合同信息提取功能，无需AI，快速准确"
       :icon="Document"
       tag="规则引擎"
@@ -114,6 +114,22 @@
               </div>
             </el-form-item>
 
+            <el-form-item label="文本提取设置">
+              <div class="extract-settings">
+                <div class="setting-item">
+                  <el-checkbox v-model="extractSettings.ignoreHeaderFooter">
+                    忽略页眉页脚
+                  </el-checkbox>
+                  <el-tooltip 
+                    content="忽略页眉页脚位置，避免页眉页脚干扰跨页提取" 
+                    placement="top"
+                  >
+                    <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
+                  </el-tooltip>
+                </div>
+              </div>
+            </el-form-item>
+
             <el-form-item>
               <el-button 
                 type="primary" 
@@ -124,7 +140,7 @@
                 @click="startExtraction"
               >
                 <el-icon v-if="!isExtracting"><Refresh /></el-icon>
-                {{ isExtracting ? '抽取中...' : '开始抽取' }}
+                {{ isExtracting ? '提取中...' : '开始提取' }}
               </el-button>
             </el-form-item>
           </el-form>
@@ -171,7 +187,7 @@
       <EmptyState 
         v-if="!currentTask"
         title="准备就绪"
-        description="上传文件并选择模板，开始信息抽取"
+        description="上传文件并选择模板，开始信息提取"
         :icon="Document"
       />
 
@@ -254,7 +270,7 @@
         <el-card v-if="currentTask && currentTask.status === 'completed'" class="result-card">
           <template #header>
             <div class="result-header">
-              <span>抽取完成</span>
+              <span>提取完成</span>
               <el-button 
                 type="primary" 
                 size="small"
@@ -267,7 +283,7 @@
 
           <el-result
             icon="success"
-            title="信息抽取完成"
+            title="信息提取完成"
             :sub-title="`耗时 ${currentTask.durationSeconds || 0} 秒`"
           >
             <template #extra>
@@ -275,7 +291,7 @@
                 查看详细结果
               </el-button>
               <el-button @click="startNewTask">
-                继续抽取
+                继续提取
               </el-button>
             </template>
           </el-result>
@@ -288,7 +304,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, UploadFilled, Refresh, Setting, InfoFilled } from '@element-plus/icons-vue'
+import { Document, UploadFilled, Refresh, Setting, InfoFilled, QuestionFilled } from '@element-plus/icons-vue'
 import PageHeader from '@/components/common/PageHeader.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { 
@@ -309,6 +325,11 @@ const selectedFile = ref<File | null>(null)
 const loadingTemplates = ref(false)
 const templates = ref<any[]>([])
 const selectedTemplateId = ref('')
+
+// 提取设置
+const extractSettings = ref({
+  ignoreHeaderFooter: true  // 默认开启忽略页眉页脚
+})
 
 // 任务相关
 const isExtracting = ref(false)
@@ -398,6 +419,7 @@ const startExtraction = async () => {
     formData.append('file', selectedFile.value)
     formData.append('templateId', selectedTemplateId.value)
     formData.append('ocrProvider', 'mineru')
+    formData.append('ignoreHeaderFooter', String(extractSettings.value.ignoreHeaderFooter))
 
     const res: any = await uploadAndExtract(formData)
     
@@ -419,7 +441,7 @@ const startExtraction = async () => {
       throw new Error(res.message || '创建任务失败')
     }
   } catch (error: any) {
-    ElMessage.error('开始抽取失败：' + (error.message || '未知错误'))
+    ElMessage.error('开始提取失败：' + (error.message || '未知错误'))
     isExtracting.value = false
   }
 }
@@ -440,10 +462,10 @@ const startStatusPolling = (taskId: string) => {
           isExtracting.value = false
           
           if (currentTask.value.status === 'completed') {
-            ElMessage.success('抽取完成！')
+            ElMessage.success('提取完成！')
             loadRecentTasks()
           } else if (currentTask.value.status === 'failed') {
-            ElMessage.error('抽取失败：' + (currentTask.value.errorMessage || '未知错误'))
+            ElMessage.error('提取失败：' + (currentTask.value.errorMessage || '未知错误'))
           }
         }
       }
@@ -678,6 +700,40 @@ onUnmounted(() => {
               flex: 1;
             }
           }
+        }
+      }
+
+      .extract-settings {
+        padding: var(--zx-spacing-md);
+        background: var(--zx-bg-light);
+        border-radius: var(--zx-radius-sm);
+        border-left: 3px solid var(--zx-primary);
+        margin-bottom: var(--zx-spacing-sm);
+
+        .setting-item {
+          display: flex;
+          align-items: center;
+          font-size: var(--zx-font-sm);
+
+          .el-checkbox {
+            font-size: var(--zx-font-sm);
+          }
+        }
+      }
+
+      .setting-hint {
+        display: flex;
+        align-items: center;
+        gap: var(--zx-spacing-xs);
+        font-size: var(--zx-font-xs);
+        color: var(--zx-text-secondary);
+        padding: var(--zx-spacing-sm);
+        background: var(--zx-info-light-9);
+        border-radius: var(--zx-radius-sm);
+        border-left: 3px solid var(--zx-info);
+
+        .el-icon {
+          color: var(--zx-info);
         }
       }
     }

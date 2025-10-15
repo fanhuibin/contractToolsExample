@@ -23,7 +23,8 @@ public class FormatConverter {
      * 字段类型枚举
      */
     public enum FieldType {
-        TEXT,           // 文本
+        STRING,         // 字符串（对应前端string）
+        TEXT,           // 文本（兼容旧版本）
         DATE,           // 日期
         TIME,           // 时间
         DATETIME,       // 日期时间
@@ -32,6 +33,7 @@ public class FormatConverter {
         EMAIL,          // 邮箱
         ID_CARD,        // 身份证
         NUMBER,         // 数字
+        BOOLEAN,        // 布尔值
         URL             // 网址
     }
 
@@ -69,6 +71,9 @@ public class FormatConverter {
                     return convertEmail(value, formatConfig);
                 case ID_CARD:
                     return convertIdCard(value, formatConfig);
+                case BOOLEAN:
+                    return convertBoolean(value, formatConfig);
+                case STRING:
                 case TEXT:
                 default:
                     return value;
@@ -309,6 +314,32 @@ public class FormatConverter {
     }
 
     /**
+     * 转换布尔值
+     */
+    private static Object convertBoolean(String value, JSONObject formatConfig) {
+        String cleanValue = value.trim().toLowerCase();
+        
+        // 定义真值和假值的匹配规则
+        boolean booleanValue;
+        if (cleanValue.matches("^(true|是|对|正确|有|1|yes|y|✓|√)$")) {
+            booleanValue = true;
+        } else if (cleanValue.matches("^(false|否|错|错误|无|0|no|n|✗|×)$")) {
+            booleanValue = false;
+        } else {
+            // 无法识别的值，返回原始字符串
+            return value;
+        }
+
+        JSONObject result = new JSONObject();
+        result.put("raw", value);
+        result.put("value", booleanValue);
+        result.put("display", booleanValue ? "是" : "否");
+        result.put("english", booleanValue ? "true" : "false");
+
+        return result;
+    }
+
+    /**
      * 验证字段值
      */
     public static boolean validate(String value, FieldType fieldType) {
@@ -334,6 +365,10 @@ public class FormatConverter {
                 } catch (Exception e) {
                     return false;
                 }
+            case BOOLEAN:
+                String cleanValue = value.trim().toLowerCase();
+                return cleanValue.matches("^(true|false|是|否|对|错|正确|错误|有|无|1|0|yes|no|y|n|✓|√|✗|×)$");
+            case STRING:
             case TEXT:
             default:
                 return true;

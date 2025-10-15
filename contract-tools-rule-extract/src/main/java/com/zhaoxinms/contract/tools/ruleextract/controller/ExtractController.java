@@ -41,9 +41,15 @@ public class ExtractController {
     public Map<String, Object> uploadAndExtract(
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId,
-            @RequestParam(value = "ocrProvider", required = false) String ocrProvider) {
+            @RequestParam(value = "ocrProvider", required = false) String ocrProvider,
+            @RequestParam(value = "ignoreHeaderFooter", required = false, defaultValue = "true") boolean ignoreHeaderFooter,
+            @RequestParam(value = "headerHeightPercent", required = false, defaultValue = "12.0") double headerHeightPercent,
+            @RequestParam(value = "footerHeightPercent", required = false, defaultValue = "12.0") double footerHeightPercent) {
         try {
-            String taskId = extractService.createTask(file, templateId, ocrProvider);
+            log.info("收到规则提取请求: file={}, templateId={}, ignoreHeaderFooter={}", 
+                file.getOriginalFilename(), templateId, ignoreHeaderFooter);
+            String taskId = extractService.createTask(file, templateId, ocrProvider, 
+                ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
             
             Map<String, Object> result = new HashMap<>();
             result.put("code", 200);

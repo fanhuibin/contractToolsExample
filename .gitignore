@@ -144,3 +144,7 @@ node_modules/
 /contract-tools-sdk/rule-extract-data/tasks
 /contract-tools-sdk/rule-extract-data/uploads
 ACCEPTANCE_CHECKLIST.md
+/contract-tools-sdk/uploads/rule-extract-data/ocr-output
+/contract-tools-sdk/uploads/rule-extract-data/ocr-texts
+/contract-tools-sdk/uploads/rule-extract-data/tasks
+/contract-tools-sdk/uploads/rule-extract-data/uploads

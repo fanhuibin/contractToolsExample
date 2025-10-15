@@ -1,8 +1,8 @@
-# Extract Rule - 规则抽取模块（重构版本）
+# Extract Rule - 规则提取模块（重构版本）
 
 ## 🎯 概述
 
-这是完全重新实现的规则抽取功能，不参考任何旧代码。使用正确的Vue 3模式避免循环更新问题。
+这是完全重新实现的规则提取功能，不参考任何旧代码。使用正确的Vue 3模式避免循环更新问题。
 
 ## 📁 文件结构
 
@@ -149,7 +149,7 @@ interface FieldData {
 1. KEYWORD_ANCHOR - 关键词锚点
 2. CONTEXT_BOUNDARY - 上下文边界
 3. REGEX_PATTERN - 正则表达式
-4. TABLE_CELL - 表格抽取
+4. TABLE_CELL - 表格提取
 
 **特点**：
 - 所有输入使用 `:model-value` + `@input/change`
@@ -228,12 +228,12 @@ interface Props {
 
 ### ExtractMain.vue
 
-**功能**：文件上传和抽取任务管理
+**功能**：文件上传和提取任务管理
 
 **功能点**：
 - PDF文件上传
 - 模板选择
-- 开始抽取
+- 开始提取
 - 任务进度监控
 - 任务历史
 - 取消任务
@@ -267,11 +267,11 @@ interface Props {
    - 测试规则
    - 保存模板
 
-3. **执行抽取**
+3. **执行提取**
    - 访问 `/rule-extract`
    - 上传PDF文件
    - 选择模板
-   - 点击"开始抽取"
+   - 点击"开始提取"
    - 等待完成
    - 查看结果
 
@@ -316,7 +316,7 @@ interface Field {
 ## 📝 API 依赖
 
 使用以下API：
-- `@/api/rule-extract.ts` - 模板和抽取相关API
+- `@/api/rule-extract.ts` - 模板和提取相关API
 - `@/api/rule-test.ts` - 规则测试API
 
 ## ✨ 特性

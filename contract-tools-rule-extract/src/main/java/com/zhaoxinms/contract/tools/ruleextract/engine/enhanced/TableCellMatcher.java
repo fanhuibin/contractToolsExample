@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.zhaoxinms.contract.tools.comparePRO.util.HtmlTableParser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +25,12 @@ import java.util.regex.Pattern;
  *   "targetColumn": "商品名称",           // 目标列名
  *   "rowMarker": "合计",                  // 行标识（可选）
  *   "columnIndex": 2,                     // 或直接指定列索引（从1开始）
- *   "rowIndex": 3,                        // 或直接指定行索引（从1开始）
- *   "occurrence": 1,                      // 提取第几个匹配项
- *   "returnAll": false                    // 是否返回所有匹配项
+ *   "rowIndex": 3,                        // 或直接指定数据行索引（从1开始，不包含表头）
+ *   "occurrence": 1                       // 提取第几个匹配项
  * }
+ * 
+ * 注意：rowIndex 是数据行索引，不包含表头行
+ * 例如：rowIndex=1 表示第1行数据（表格的第2行，因为第1行是表头）
  * 
  * 模式2 - 抽取整个表格：
  * {
@@ -50,6 +53,8 @@ public class TableCellMatcher {
         List<String> headers = new ArrayList<>();
         List<List<String>> rows = new ArrayList<>();
         String rawHtml;
+        int startPosition = -1;  // 表格在原文中的起始位置
+        int endPosition = -1;    // 表格在原文中的结束位置
         
         /**
          * 转换为 JSON 格式
@@ -166,9 +171,27 @@ public class TableCellMatcher {
         
         while (tableMatcher.find()) {
             String tableHtml = tableMatcher.group(0);
-            TableData tableData = parseTable(tableHtml);
+            int startPos = tableMatcher.start();
+            int endPos = tableMatcher.end();
+            
+            if (debug) {
+                result.addDebugInfo("找到表格HTML: " + tableHtml.substring(0, Math.min(100, tableHtml.length())) + "...");
+                result.addDebugInfo("表格位置: " + startPos + " - " + endPos);
+            }
+            
+            // 使用修复后的 HtmlTableParser 解析表格
+            TableData tableData = parseTableWithHtmlParser(tableHtml, debug, result);
             if (tableData != null && !tableData.headers.isEmpty()) {
+                // 设置表格位置信息
+                tableData.startPosition = startPos;
+                tableData.endPosition = endPos;
+                
                 tables.add(tableData);
+                
+                if (debug) {
+                    result.addDebugInfo("解析表格成功，表头: " + String.join(", ", tableData.headers));
+                    result.addDebugInfo("数据行数: " + tableData.rows.size());
+                }
             }
         }
         
@@ -176,7 +199,50 @@ public class TableCellMatcher {
     }
     
     /**
-     * 解析单个 HTML 表格
+     * 使用修复后的 HtmlTableParser 解析表格
+     */
+    private TableData parseTableWithHtmlParser(String tableHtml, boolean debug, ExtractionResult result) {
+        try {
+            // 使用修复后的 HtmlTableParser 解析
+            List<List<String>> tableArray = HtmlTableParser.parseTableToArray(tableHtml);
+            
+            if (tableArray.isEmpty()) {
+                if (debug) {
+                    result.addDebugInfo("表格解析结果为空");
+                }
+                return null;
+            }
+            
+            TableData tableData = new TableData();
+            tableData.rawHtml = tableHtml;
+            
+            // 第一行作为表头
+            tableData.headers = new ArrayList<>(tableArray.get(0));
+            
+            // 其余行作为数据
+            for (int i = 1; i < tableArray.size(); i++) {
+                tableData.rows.add(tableArray.get(i));
+            }
+            
+            if (debug) {
+                result.addDebugInfo("使用HtmlTableParser解析成功，表头: " + String.join(", ", tableData.headers));
+                result.addDebugInfo("数据行数: " + tableData.rows.size());
+            }
+            
+            return tableData;
+            
+        } catch (Exception e) {
+            if (debug) {
+                result.addDebugInfo("HtmlTableParser解析失败: " + e.getMessage());
+            }
+            log.warn("HtmlTableParser解析表格失败，回退到原始解析方法", e);
+            // 回退到原始解析方法
+            return parseTable(tableHtml);
+        }
+    }
+    
+    /**
+     * 解析单个 HTML 表格（原始方法，作为备用）
      */
     private TableData parseTable(String tableHtml) {
         TableData table = new TableData();
@@ -266,27 +332,29 @@ public class TableCellMatcher {
      * 根据表头特征查找表格
      */
     private TableData findTableByHeader(List<TableData> tables, String headerPattern, boolean debug, ExtractionResult result) {
-        String[] keywords = headerPattern.split("\\|");
-        
         for (TableData table : tables) {
-            String headerText = String.join(" ", table.headers);
-            
-            // 检查是否包含所有关键词
-            boolean allMatch = true;
-            for (String keyword : keywords) {
-                keyword = keyword.trim();
-                if (!keyword.isEmpty() && !headerText.contains(keyword)) {
-                    allMatch = false;
-                    break;
-                }
+            if (debug) {
+                result.addDebugInfo("检查表格，表头: " + String.join(", ", table.headers));
             }
             
-            if (allMatch) {
+            // 使用修复后的 HtmlTableParser 进行精确匹配
+            boolean matched = HtmlTableParser.matchTableHeaderFeature(table.rawHtml, headerPattern, false);
+            
+            if (matched) {
                 if (debug) {
-                    result.addDebugInfo("匹配到表格，表头: " + headerText);
+                    result.addDebugInfo("✅ 表头特征匹配成功: " + headerPattern);
+                    result.addDebugInfo("匹配的表格表头: " + String.join(", ", table.headers));
                 }
                 return table;
+            } else {
+                if (debug) {
+                    result.addDebugInfo("❌ 表头特征不匹配: " + headerPattern);
+                }
             }
+        }
+        
+        if (debug) {
+            result.addDebugInfo("未找到匹配表头特征的表格: " + headerPattern);
         }
         
         return null;
@@ -327,9 +395,18 @@ public class TableCellMatcher {
         result.setValue(value);
         result.setConfidence(95);
         
+        // 设置表格的位置信息
+        if (table.startPosition != -1 && table.endPosition != -1) {
+            result.setStartPosition(table.startPosition);
+            result.setEndPosition(table.endPosition);
+        }
+        
         if (debug) {
             result.addDebugInfo("提取整表成功，格式: " + format);
             result.addDebugInfo("行数: " + table.rows.size() + ", 列数: " + table.headers.size());
+            if (table.startPosition != -1) {
+                result.addDebugInfo("表格位置: " + table.startPosition + " - " + table.endPosition);
+            }
             // 添加表格预览到调试信息
             result.addDebugInfo("表格预览:\n" + table.toMarkdown());
         }
@@ -346,7 +423,6 @@ public class TableCellMatcher {
         Integer columnIndex = config.getInteger("columnIndex");
         Integer rowIndex = config.getInteger("rowIndex");
         Integer occurrence = getOrDefault(config, "occurrence", 1);
-        Boolean returnAll = getOrDefault(config, "returnAll", false);
         
         // 确定列索引
         int colIndex = -1;
@@ -404,11 +480,7 @@ public class TableCellMatcher {
                 }
             }
             
-            if (returnAll) {
-                if (!allMatches.isEmpty()) {
-                    extracted = allMatches.get(0);
-                }
-            } else if (occurrence > 0 && occurrence <= allMatches.size()) {
+            if (occurrence > 0 && occurrence <= allMatches.size()) {
                 extracted = allMatches.get(occurrence - 1);
             }
         }
@@ -419,15 +491,18 @@ public class TableCellMatcher {
         
         result.setSuccess(true);
         result.setValue(extracted.trim());
-        if (returnAll && !allMatches.isEmpty()) {
-            result.setAllMatches(allMatches);
-        }
         result.setConfidence(90);
+        
+        // 设置表格的位置信息（单元格抽取使用整个表格的位置）
+        if (table.startPosition != -1 && table.endPosition != -1) {
+            result.setStartPosition(table.startPosition);
+            result.setEndPosition(table.endPosition);
+        }
         
         if (debug) {
             result.addDebugInfo("提取单元格成功: " + extracted.trim());
-            if (returnAll) {
-                result.addDebugInfo("所有匹配项数量: " + allMatches.size());
+            if (table.startPosition != -1) {
+                result.addDebugInfo("表格位置: " + table.startPosition + " - " + table.endPosition);
             }
             // 添加表格预览
             result.addDebugInfo("表格预览:\n" + table.toMarkdown());

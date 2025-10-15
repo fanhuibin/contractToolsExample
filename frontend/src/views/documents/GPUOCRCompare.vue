@@ -203,7 +203,7 @@
       <el-form label-width="140px">
         <el-form-item label="忽略页眉页脚">
           <el-switch v-model="settings.ignoreHeaderFooter" />
-          <div class="setting-hint">忽略文档顶部和底部各12%的区域（默认页眉页脚位置）</div>
+          <div class="setting-hint">忽略页眉页脚位置</div>
         </el-form-item>
 
         <!-- 页眉页脚高度设置已隐藏，固定使用默认值12% -->

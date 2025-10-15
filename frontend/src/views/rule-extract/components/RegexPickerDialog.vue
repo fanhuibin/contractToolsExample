@@ -179,7 +179,7 @@ const dialogVisible = computed({
 const searchKeyword = ref('')
 const activeTab = ref('all')
 
-// 完整的正则表达式库（34种）
+// 完整的正则表达式库（35种）
 const regexPatterns: RegexPattern[] = [
   // 数字匹配（5种）
   {
@@ -381,7 +381,7 @@ const regexPatterns: RegexPattern[] = [
     examples: ['合同内容', 'ContractName', '甲方名称123']
   },
 
-  // 特殊格式（5种）
+  // 特殊格式（6种）
   {
     key: 'email',
     name: '电子邮箱',
@@ -405,6 +405,14 @@ const regexPatterns: RegexPattern[] = [
     pattern: '[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]',
     description: '匹配18位身份证号码',
     examples: ['110101199001011234', '44030119900101001X']
+  },
+  {
+    key: 'taxId',
+    name: '纳税人识别号（通用）',
+    category: '特殊格式',
+    pattern: '[0-9A-Z]{15,20}',
+    description: '匹配各种格式的纳税人识别号（统一社会信用代码、旧版税号等），支持15-20位数字和字母组合',
+    examples: ['91510100MA61WHB260', '91140105MAOLLW8Q1D', '123456789012345', '12345678901234567A']
   },
   {
     key: 'url',

@@ -1,7 +1,7 @@
 import request from '@/utils/request'
 
 /**
- * 基于规则的合同信息抽取 API
+ * 基于规则的合同信息提取 API
  */
 
 // ==================== 模板管理 ====================
@@ -294,10 +294,10 @@ export function batchCreateRules(data: any[]) {
   })
 }
 
-// ==================== 规则抽取 ====================
+// ==================== 规则提取 ====================
 
 /**
- * 上传文件并开始抽取
+ * 上传文件并开始提取
  */
 export function uploadAndExtract(formData: FormData) {
   return request({

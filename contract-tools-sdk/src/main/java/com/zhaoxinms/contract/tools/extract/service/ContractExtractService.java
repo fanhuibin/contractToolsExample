@@ -61,6 +61,9 @@ public interface ContractExtractService {
         private int maxCharBuffer = 2000;
         private boolean enableVisualization = true;
         private String llmProvider = "auto"; // auto, aliyun, ollama
+        private boolean ignoreHeaderFooter = true; // 是否忽略页眉页脚
+        private double headerHeightPercent = 12.0; // 页眉高度百分比
+        private double footerHeightPercent = 12.0; // 页脚高度百分比
         
         // Getters and setters
         public String getSchemaType() { return schemaType; }
@@ -75,6 +78,12 @@ public interface ContractExtractService {
         public void setEnableVisualization(boolean enableVisualization) { this.enableVisualization = enableVisualization; }
         public String getLlmProvider() { return llmProvider; }
         public void setLlmProvider(String llmProvider) { this.llmProvider = llmProvider; }
+        public boolean isIgnoreHeaderFooter() { return ignoreHeaderFooter; }
+        public void setIgnoreHeaderFooter(boolean ignoreHeaderFooter) { this.ignoreHeaderFooter = ignoreHeaderFooter; }
+        public double getHeaderHeightPercent() { return headerHeightPercent; }
+        public void setHeaderHeightPercent(double headerHeightPercent) { this.headerHeightPercent = headerHeightPercent; }
+        public double getFooterHeightPercent() { return footerHeightPercent; }
+        public void setFooterHeightPercent(double footerHeightPercent) { this.footerHeightPercent = footerHeightPercent; }
     }
     
     /**

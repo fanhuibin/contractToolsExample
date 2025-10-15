@@ -23,7 +23,7 @@
         </el-menu-item>
         <el-menu-item index="/contract-extract">
           <el-icon><Document /></el-icon>
-          <span>合同抽取</span>
+          <span>合同提取</span>
         </el-menu-item>
         <el-menu-item index="/info-extract">
           <el-icon><Search /></el-icon>
@@ -31,7 +31,7 @@
         </el-menu-item>
         <el-menu-item index="/rule-extract">
           <el-icon><Grid /></el-icon>
-          <span>规则抽取</span>
+          <span>规则提取</span>
         </el-menu-item>
         <el-menu-item index="/contract-review">
           <el-icon><DocumentChecked /></el-icon>

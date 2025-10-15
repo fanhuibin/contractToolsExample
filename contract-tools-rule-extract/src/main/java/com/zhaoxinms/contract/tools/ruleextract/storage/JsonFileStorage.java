@@ -5,6 +5,7 @@ import cn.hutool.core.util.IdUtil;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONWriter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 
 /**
  * JSON文件存储服务
- * 在项目根目录下创建 rule-extract-data 目录存储数据
+ * 使用配置的上传路径存储数据
  * 
  * @author zhaoxin
  * @since 2024-10-09
@@ -28,20 +29,20 @@ import java.util.stream.Collectors;
 @Component
 public class JsonFileStorage {
 
-    // 项目根目录
-    private final String projectRoot = System.getProperty("user.dir");
+    @Value("${file.upload.root-path:./uploads}")
+    private String uploadRootPath;
     
-    // 数据存储根目录
-    private final String dataRoot = projectRoot + File.separator + "rule-extract-data";
+    // 数据存储根目录（延迟初始化）
+    private String dataRoot;
     
     // 模板目录
-    private final String templatesDir = dataRoot + File.separator + "templates";
+    private String templatesDir;
     
     // 任务目录
-    private final String tasksDir = dataRoot + File.separator + "tasks";
+    private String tasksDir;
     
     // 上传文件目录
-    private final String uploadsDir = dataRoot + File.separator + "uploads";
+    private String uploadsDir;
 
     /**
      * 初始化目录结构
@@ -49,6 +50,21 @@ public class JsonFileStorage {
     @PostConstruct
     public void init() {
         try {
+            // 使用配置的上传路径作为基础目录
+            // 移除尾部的分隔符（如果存在）
+            String rootPath = uploadRootPath.endsWith(File.separator) 
+                ? uploadRootPath.substring(0, uploadRootPath.length() - 1) 
+                : uploadRootPath;
+            
+            // 转换为绝对路径
+            File rootFile = new File(rootPath);
+            String absoluteRootPath = rootFile.getAbsolutePath();
+            
+            dataRoot = absoluteRootPath + File.separator + "rule-extract-data";
+            templatesDir = dataRoot + File.separator + "templates";
+            tasksDir = dataRoot + File.separator + "tasks";
+            uploadsDir = dataRoot + File.separator + "uploads";
+            
             // 创建目录
             FileUtil.mkdir(dataRoot);
             FileUtil.mkdir(templatesDir);
@@ -56,6 +72,8 @@ public class JsonFileStorage {
             FileUtil.mkdir(uploadsDir);
             
             log.info("JSON文件存储服务初始化成功");
+            log.info("配置的上传根路径: {}", uploadRootPath);
+            log.info("绝对路径: {}", absoluteRootPath);
             log.info("数据存储目录: {}", dataRoot);
             log.info("模板目录: {}", templatesDir);
             log.info("任务目录: {}", tasksDir);
@@ -72,15 +90,31 @@ public class JsonFileStorage {
     public <T> void save(String category, String id, T data) {
         try {
             String dir = getCategoryDir(category);
+            
+            // 确保目录存在
+            File dirFile = new File(dir);
+            if (!dirFile.exists()) {
+                dirFile.mkdirs();
+                log.info("创建目录: {}", dir);
+            }
+            
             String filePath = dir + File.separator + id + ".json";
+            File file = new File(filePath);
             
             // 序列化为JSON（格式化输出）
             String json = JSON.toJSONString(data, JSONWriter.Feature.PrettyFormat);
             
             // 写入文件
-            FileUtil.writeString(json, filePath, StandardCharsets.UTF_8);
+            FileUtil.writeString(json, file, StandardCharsets.UTF_8);
             
-            log.debug("保存数据: category={}, id={}, path={}", category, id, filePath);
+            // 验证文件是否真的被创建
+            if (file.exists()) {
+                log.info("保存数据成功: category={}, id={}, path={}, size={} bytes", 
+                    category, id, filePath, file.length());
+            } else {
+                log.error("文件保存失败，文件不存在: {}", filePath);
+                throw new RuntimeException("文件保存失败");
+            }
         } catch (Exception e) {
             log.error("保存数据失败: category={}, id={}", category, id, e);
             throw new RuntimeException("保存数据失败", e);
@@ -96,11 +130,26 @@ public class JsonFileStorage {
             String filePath = dir + File.separator + id + ".json";
             
             File file = new File(filePath);
+            
+            // 详细的调试信息
+            log.debug("尝试读取文件: category={}, id={}, path={}", category, id, filePath);
+            log.debug("文件绝对路径: {}", file.getAbsolutePath());
+            log.debug("文件是否存在: {}", file.exists());
+            log.debug("父目录是否存在: {}", file.getParentFile().exists());
+            
             if (!file.exists()) {
+                // 列出目录中的所有文件
+                File parentDir = file.getParentFile();
+                if (parentDir.exists()) {
+                    String[] files = parentDir.list();
+                    log.debug("目录中的文件: {}", files != null ? String.join(", ", files) : "空");
+                }
+                log.debug("文件不存在: category={}, id={}, path={}", category, id, filePath);
                 return null;
             }
             
             String json = FileUtil.readString(file, StandardCharsets.UTF_8);
+            log.debug("成功读取文件: category={}, id={}, size={} bytes", category, id, file.length());
             return JSON.parseObject(json, clazz);
         } catch (Exception e) {
             log.error("读取数据失败: category={}, id={}", category, id, e);
@@ -182,6 +231,11 @@ public class JsonFileStorage {
      * 获取分类目录
      */
     private String getCategoryDir(String category) {
+        // 确保目录已初始化
+        if (dataRoot == null) {
+            throw new IllegalStateException("存储服务未初始化，请检查配置");
+        }
+        
         switch (category) {
             case "template":
                 return templatesDir;
@@ -201,9 +255,11 @@ public class JsonFileStorage {
             FileUtil.mkdir(taskUploadDir);
             
             String filePath = taskUploadDir + File.separator + fileName;
+            File file = new File(filePath);
             FileUtil.writeBytes(fileData, filePath);
             
-            log.info("保存上传文件: taskId={}, fileName={}", taskId, fileName);
+            log.info("保存上传文件: taskId={}, fileName={}, 相对路径={}, 绝对路径={}, 文件大小={} bytes", 
+                taskId, fileName, filePath, file.getAbsolutePath(), file.length());
             return filePath;
         } catch (Exception e) {
             log.error("保存上传文件失败", e);

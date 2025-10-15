@@ -170,12 +170,17 @@ public class ContractExtractServiceImpl implements ContractExtractService {
      * 执行文件提取（包含OCR步骤）
      */
     private void executeExtraction(String taskId, File file, ExtractOptions options) throws Exception {
-        // 1. 增强OCR识别（包含位置信息）
+        // 1. 增强OCR识别（包含位置信息，支持页眉页脚过滤）
         updateTaskStatus(taskId, "ocr_processing", "正在进行OCR识别...", 30);
-        EnhancedOCRResult enhancedOcrResult = unifiedOCRService.recognizePdfWithPositions(file, taskId);
-        log.info("统一OCR增强识别完成，任务: {}, 提供者: {}, 文本长度: {}, CharBox数量: {}", 
+        EnhancedOCRResult enhancedOcrResult = unifiedOCRService.recognizePdfWithPositions(
+            file, taskId, 
+            options.isIgnoreHeaderFooter(),
+            options.getHeaderHeightPercent(),
+            options.getFooterHeightPercent()
+        );
+        log.info("统一OCR增强识别完成，任务: {}, 提供者: {}, 文本长度: {}, CharBox数量: {}, 忽略页眉页脚: {}", 
             taskId, enhancedOcrResult.getProvider(), enhancedOcrResult.getContent().length(), 
-            enhancedOcrResult.getCharBoxes().size());
+            enhancedOcrResult.getCharBoxes().size(), options.isIgnoreHeaderFooter());
         
         // 2. 创建文档对象
         updateTaskStatus(taskId, "creating_document", "创建文档对象...", 40);

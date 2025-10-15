@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,8 +21,7 @@ import java.util.regex.Pattern;
  *   "extractPattern": ".*?",       // 提取范围内匹配的pattern
  *   "multiline": true,             // 是否多行
  *   "greedy": false,               // 是否贪婪匹配
- *   "occurrence": 1,               // 提取第几个匹配项
- *   "returnAll": false             // 是否返回所有匹配项
+ *   "occurrence": 1                // 提取第几个匹配项
  * }
  *
  * @author zhaoxin
@@ -53,7 +51,6 @@ public class ContextBoundaryMatcher {
             Boolean multiline = getOrDefault(config, "multiline", false);
             Boolean greedy = getOrDefault(config, "greedy", false);
             Integer occurrence = getOrDefault(config, "occurrence", 1);
-            Boolean returnAll = getOrDefault(config, "returnAll", false);
 
             if (debug) {
                 result.addDebugInfo("开始边界: " + startBoundary);
@@ -93,38 +90,22 @@ public class ContextBoundaryMatcher {
 
             // 如果有提取pattern，应用pattern
             String extracted = rangeText;
-            List<String> allMatches = new ArrayList<>();
             
             if (StrUtil.isNotBlank(extractPattern)) {
-                if (returnAll) {
-                    allMatches = extractAllByPattern(rangeText, extractPattern, multiline, greedy, debug, result);
-                    if (!allMatches.isEmpty()) {
-                        extracted = allMatches.get(0);
-                    } else {
-                        return ExtractionResult.failure("Pattern未匹配到内容");
-                    }
-                } else {
-                    extracted = extractByPattern(rangeText, extractPattern, multiline, greedy, occurrence, debug, result);
-                    if (extracted == null) {
-                        return ExtractionResult.failure("Pattern未匹配到内容");
-                    }
+                extracted = extractByPattern(rangeText, extractPattern, multiline, greedy, occurrence, debug, result);
+                if (extracted == null) {
+                    return ExtractionResult.failure("Pattern未匹配到内容");
                 }
             }
 
             result.setSuccess(true);
             result.setValue(extracted.trim());
-            if (returnAll && !allMatches.isEmpty()) {
-                result.setAllMatches(allMatches);
-            }
             result.setConfidence(90);
             result.setStartPosition(startPos);
             result.setEndPosition(endPos);
 
             if (debug) {
                 result.addDebugInfo("提取成功: " + extracted.trim());
-                if (returnAll) {
-                    result.addDebugInfo("所有匹配项数量: " + allMatches.size());
-                }
             }
 
             return result;
@@ -176,41 +157,6 @@ public class ContextBoundaryMatcher {
         return null;
     }
     
-    /**
-     * 按pattern提取所有匹配项
-     */
-    private List<String> extractAllByPattern(String text, String patternStr, boolean multiline, 
-                                            boolean greedy, boolean debug, ExtractionResult result) {
-        List<String> matches = new ArrayList<>();
-        try {
-            int flags = 0;
-            if (multiline) {
-                flags = Pattern.MULTILINE | Pattern.DOTALL;
-            }
-
-            if (!greedy && !patternStr.contains("?")) {
-                patternStr = patternStr.replace("*", "*?").replace("+", "+?");
-            }
-
-            Pattern pattern = Pattern.compile(patternStr, flags);
-            Matcher matcher = pattern.matcher(text);
-
-            while (matcher.find()) {
-                matches.add(matcher.group());
-            }
-
-            if (debug) {
-                result.addDebugInfo("找到 " + matches.size() + " 个匹配项");
-            }
-
-        } catch (Exception e) {
-            if (debug) {
-                result.addDebugInfo("Pattern匹配失败: " + e.getMessage());
-            }
-        }
-        return matches;
-    }
-
     /**
      * 获取配置值或默认值
      */

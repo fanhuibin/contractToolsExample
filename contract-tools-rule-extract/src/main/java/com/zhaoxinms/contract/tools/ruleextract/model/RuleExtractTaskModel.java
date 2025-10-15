@@ -51,6 +51,21 @@ public class RuleExtractTaskModel implements Serializable {
     private String ocrProvider;
 
     /**
+     * 是否忽略页眉页脚
+     */
+    private Boolean ignoreHeaderFooter = true;
+
+    /**
+     * 页眉高度百分比
+     */
+    private Double headerHeightPercent = 12.0;
+
+    /**
+     * 页脚高度百分比
+     */
+    private Double footerHeightPercent = 12.0;
+
+    /**
      * 任务状态
      */
     private String status;
@@ -84,6 +99,11 @@ public class RuleExtractTaskModel implements Serializable {
      * 字符框数据
      */
     private String charBoxes;
+
+    /**
+     * 页面尺寸信息（JSON字符串，包含每页的宽高）
+     */
+    private String pageDimensions;
 
     /**
      * 错误信息

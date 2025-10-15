@@ -8,6 +8,7 @@ import java.util.UUID;
 import javax.annotation.PostConstruct;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
@@ -33,6 +34,9 @@ public class UnifiedOCRService implements OCRProvider {
     @Autowired(required = false)
     private MinerUOCRService mineruOcrService;
     
+    @Value("${file.upload.root-path:./uploads}")
+    private String uploadRootPath;
+    
     @PostConstruct
     public void init() {
         log.info("初始化统一OCR服务 - 使用 MinerU OCR");
@@ -46,25 +50,35 @@ public class UnifiedOCRService implements OCRProvider {
     
     @Override
     public OCRProvider.OCRResult recognizePdf(File pdfFile) {
-        log.info("使用 MinerU OCR 识别PDF: {}", pdfFile.getName());
+        return recognizePdf(pdfFile, true, 12.0, 12.0);
+    }
+    
+    /**
+     * 识别PDF（支持页眉页脚设置）
+     */
+    public OCRProvider.OCRResult recognizePdf(File pdfFile, boolean ignoreHeaderFooter, 
+                                             double headerHeightPercent, double footerHeightPercent) {
+        log.info("使用 MinerU OCR 识别PDF: {}, 忽略页眉页脚: {}", pdfFile.getName(), ignoreHeaderFooter);
         
         if (mineruOcrService == null) {
             throw new RuntimeException("MinerU OCR 服务未启用，请检查配置");
         }
         
         try {
-            // 创建持久化输出目录（保存在 rule-extract-data 下）
+            // 创建持久化输出目录（使用配置的上传路径）
             String taskId = UUID.randomUUID().toString();
-            String dataRoot = System.getProperty("user.dir") + File.separator + "rule-extract-data";
-            File ocrOutputDir = new File(dataRoot, "ocr-output");
+            File ocrOutputDir = new File(uploadRootPath, "rule-extract-data/ocr-output");
             if (!ocrOutputDir.exists()) {
                 ocrOutputDir.mkdirs();
             }
             File taskOutputDir = new File(ocrOutputDir, taskId);
             taskOutputDir.mkdirs();
             
-            // 创建默认选项
+            // 创建选项并设置页眉页脚参数
             CompareOptions options = new CompareOptions();
+            options.setIgnoreHeaderFooter(ignoreHeaderFooter);
+            options.setHeaderHeightPercent(headerHeightPercent);
+            options.setFooterHeightPercent(footerHeightPercent);
             
             // 调用 MinerU 进行 PDF 识别
             MinerURecognitionResult mineruResult = mineruOcrService.recognizePdf(
@@ -85,21 +99,20 @@ public class UnifiedOCRService implements OCRProvider {
             for (int i = 0; i < pageLayouts.length; i++) {
                 TextExtractionUtil.PageLayout layout = pageLayouts[i];
                 
-                // 添加页面分隔符
-                if (allText.length() > 0) {
-                    String separator = "\n\n--- 第" + layout.page + "页 ---\n";
-                    allText.append(separator);
+                // 不添加页面分隔符标记（--- 第X页 ---），确保跨页文本连续
+                // 只在页面之间添加两个换行作为适当的空白分隔
+                if (allText.length() > 0 && i > 0) {
+                    allText.append("\n\n");
                     
-                    // 为分隔符的每个字符创建CharBox（保持索引对齐）
-                    // 使用前一页或当前页的页码，bbox设为空（不会显示）
-                    for (int j = 0; j < separator.length(); j++) {
-                        CharBox separatorCharBox = new CharBox(
-                            layout.page,  // 使用当前页
-                            separator.charAt(j),
-                            new double[]{0, 0, 0, 0},  // 空bbox，不会显示
-                            "Separator"
+                    // 为换行符创建CharBox（保持索引对齐）
+                    for (int j = 0; j < 2; j++) {
+                        CharBox newlineCharBox = new CharBox(
+                            layout.page,
+                            '\n',
+                            new double[]{0, 0, 0, 0},
+                            "PageBreak"
                         );
-                        charBoxes.add(separatorCharBox);
+                        charBoxes.add(newlineCharBox);
                     }
                 }
                 
@@ -158,13 +171,44 @@ public class UnifiedOCRService implements OCRProvider {
             metadata.put("imagesDir", imagesDir.getAbsolutePath());
             metadata.put("taskId", taskId);
             
-            // 序列化CharBox数据
-            metadata.put("charBoxes", com.alibaba.fastjson2.JSON.toJSONString(charBoxes));
+            // 序列化CharBox数据 - 转换为简单的JSON格式
+            com.alibaba.fastjson2.JSONArray charBoxesArray = new com.alibaba.fastjson2.JSONArray();
+            for (CharBox charBox : charBoxes) {
+                com.alibaba.fastjson2.JSONObject charBoxJson = new com.alibaba.fastjson2.JSONObject();
+                charBoxJson.put("page", charBox.page);
+                charBoxJson.put("ch", String.valueOf(charBox.ch));
+                charBoxJson.put("bbox", charBox.bbox);
+                charBoxJson.put("category", charBox.category);
+                charBoxesArray.add(charBoxJson);
+            }
+            metadata.put("charBoxes", charBoxesArray.toJSONString());
+            
+            // 保存页面尺寸信息
+            com.alibaba.fastjson2.JSONArray pageDimensions = new com.alibaba.fastjson2.JSONArray();
+            for (TextExtractionUtil.PageLayout layout : pageLayouts) {
+                com.alibaba.fastjson2.JSONObject pageInfo = new com.alibaba.fastjson2.JSONObject();
+                pageInfo.put("page", layout.page);
+                pageInfo.put("width", layout.imageWidth);
+                pageInfo.put("height", layout.imageHeight);
+                pageDimensions.add(pageInfo);
+            }
+            metadata.put("pageDimensions", pageDimensions);
             
             result.setMetadata((Object) metadata);
             
             log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}, CharBox数: {}", 
                 pageLayouts.length, allText.length(), pageImagePaths.size(), charBoxes.size());
+            log.info("CharBoxes序列化后长度: {}", charBoxesArray.toJSONString().length());
+            
+            // 输出前几个CharBox作为调试信息
+            if (!charBoxes.isEmpty()) {
+                log.info("前5个CharBox示例:");
+                for (int i = 0; i < Math.min(5, charBoxes.size()); i++) {
+                    CharBox cb = charBoxes.get(i);
+                    log.info("  CharBox[{}]: page={}, ch='{}', bbox=[{},{},{},{}], category={}", 
+                        i, cb.page, cb.ch, cb.bbox[0], cb.bbox[1], cb.bbox[2], cb.bbox[3], cb.category);
+                }
+            }
             
             return result;
             
@@ -187,7 +231,23 @@ public class UnifiedOCRService implements OCRProvider {
      * 支持智能信息提取的位置映射功能
      */
     public EnhancedOCRResult recognizePdfWithPositions(File pdfFile, String taskId) {
-        log.info("MinerU OCR 开始增强识别PDF文件: {}, 任务ID: {}", pdfFile.getAbsolutePath(), taskId);
+        return recognizePdfWithPositions(pdfFile, taskId, true, 12.0, 12.0);
+    }
+    
+    /**
+     * 增强OCR识别 - 返回详细位置信息（支持页眉页脚设置）
+     * 支持智能信息提取的位置映射功能
+     * 
+     * @param pdfFile PDF文件
+     * @param taskId 任务ID
+     * @param ignoreHeaderFooter 是否忽略页眉页脚
+     * @param headerHeightPercent 页眉高度百分比（默认12%）
+     * @param footerHeightPercent 页脚高度百分比（默认12%）
+     */
+    public EnhancedOCRResult recognizePdfWithPositions(File pdfFile, String taskId, 
+            boolean ignoreHeaderFooter, double headerHeightPercent, double footerHeightPercent) {
+        log.info("MinerU OCR 开始增强识别PDF文件: {}, 任务ID: {}, 忽略页眉页脚: {}", 
+            pdfFile.getAbsolutePath(), taskId, ignoreHeaderFooter);
         
         if (mineruOcrService == null) {
             throw new IllegalStateException("MinerU OCR 服务未启用，请检查配置");
@@ -200,8 +260,11 @@ public class UnifiedOCRService implements OCRProvider {
                 outputDir.mkdirs();
             }
             
-            // 创建默认选项
+            // 创建选项并设置页眉页脚参数
             CompareOptions options = new CompareOptions();
+            options.setIgnoreHeaderFooter(ignoreHeaderFooter);
+            options.setHeaderHeightPercent(headerHeightPercent);
+            options.setFooterHeightPercent(footerHeightPercent);
             
             // 调用 MinerU 进行 PDF 识别
             MinerURecognitionResult mineruResult = mineruOcrService.recognizePdf(

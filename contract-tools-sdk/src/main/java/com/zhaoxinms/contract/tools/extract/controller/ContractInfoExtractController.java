@@ -51,7 +51,10 @@ public class ContractInfoExtractController {
             @RequestParam(value = "enableChunking", defaultValue = "false") boolean enableChunking,
             @RequestParam(value = "maxCharBuffer", defaultValue = "2000") int maxCharBuffer,
             @RequestParam(value = "enableVisualization", defaultValue = "true") boolean enableVisualization,
-            @RequestParam(value = "llmProvider", defaultValue = "auto") String llmProvider) {
+            @RequestParam(value = "llmProvider", defaultValue = "auto") String llmProvider,
+            @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") boolean ignoreHeaderFooter,
+            @RequestParam(value = "headerHeightPercent", defaultValue = "12.0") double headerHeightPercent,
+            @RequestParam(value = "footerHeightPercent", defaultValue = "12.0") double footerHeightPercent) {
         
         try {
             // 验证文件
@@ -67,8 +70,8 @@ public class ContractInfoExtractController {
                 return Result.error("仅支持PDF、PNG、JPG、JPEG格式的文件");
             }
             
-            log.info("收到文件提取请求: 文件名={}, 大小={} bytes, 模式={}", 
-                originalFilename, file.getSize(), schemaType);
+            log.info("收到文件提取请求: 文件名={}, 大小={} bytes, 模式={}, 忽略页眉页脚={}", 
+                originalFilename, file.getSize(), schemaType, ignoreHeaderFooter);
             
             // 创建提取选项
             ContractExtractService.ExtractOptions options = new ContractExtractService.ExtractOptions();
@@ -78,6 +81,9 @@ public class ContractInfoExtractController {
             options.setMaxCharBuffer(maxCharBuffer);
             options.setEnableVisualization(enableVisualization);
             options.setLlmProvider(llmProvider);
+            options.setIgnoreHeaderFooter(ignoreHeaderFooter);
+            options.setHeaderHeightPercent(headerHeightPercent);
+            options.setFooterHeightPercent(footerHeightPercent);
             
             // 启动提取任务
             String taskId = extractService.extractFromFile(file, options);

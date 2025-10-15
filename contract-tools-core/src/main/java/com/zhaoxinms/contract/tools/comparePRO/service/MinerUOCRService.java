@@ -101,7 +101,7 @@ public class MinerUOCRService {
         CrossPageTableManager tableManager = new CrossPageTableManager();
         
         // 转换为dots.ocr兼容的PageLayout格式（同时识别跨页表格）
-        TextExtractionUtil.PageLayout[] layouts = convertToPageLayouts(apiResult, pageImages, pdfFile, options, tableManager);
+        TextExtractionUtil.PageLayout[] layouts = convertToPageLayouts(apiResult, pageImages, pdfFile, options, tableManager, docMode);
         
         long endTime = System.currentTimeMillis();
         log.info("MinerU OCR识别完成，共{}页，耗时{}ms", layouts.length, endTime - startTime);
@@ -372,6 +372,7 @@ public class MinerUOCRService {
      * @param pdfFile PDF 文件
      * @param options 比对选项
      * @param tableManager 跨页表格管理器（用于识别和管理跨页表格）
+     * @param docMode 文档模式（old/new/extract），用于决定是否保留表格HTML
      * @return PageLayout 数组
      */
     private TextExtractionUtil.PageLayout[] convertToPageLayouts(
@@ -379,7 +380,8 @@ public class MinerUOCRService {
             List<Map<String, Object>> pageImages,
             File pdfFile,
             CompareOptions options,
-            CrossPageTableManager tableManager) throws Exception {
+            CrossPageTableManager tableManager,
+            String docMode) throws Exception {
         
         JsonNode root = objectMapper.readTree(apiResult);
         JsonNode contentListNode = extractContentList(root);
@@ -431,7 +433,8 @@ public class MinerUOCRService {
                 pageImageMap.get(pageIdx),
                 pdfPageSizes.get(pageIdx),
                 middleJsonNode,
-                pageIdx
+                pageIdx,
+                docMode
             );
             
             if (!pageLayoutItems.containsKey(pageIdx)) {
@@ -543,7 +546,8 @@ public class MinerUOCRService {
             Map<String, Object> pageImage,
             double[] pdfPageSize,
             JsonNode middleJsonNode,
-            int pageIdx) {
+            int pageIdx,
+            String docMode) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         
@@ -560,7 +564,7 @@ public class MinerUOCRService {
         if ("table".equals(itemType)) {
             log.info("📊 [表格检测] 页{} 检测到表格，将从 middle_json 获取精确 bbox", pageIdx + 1);
             log.debug("📊 [表格检测] content_list 表格数据: {}", item.toString());
-            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx));
+            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx, docMode));
         }
         // 处理图片类型
         else if ("image".equals(itemType)) {
@@ -594,13 +598,16 @@ public class MinerUOCRService {
      * 处理表格类型的内容
      * 包括 table_caption, table_body, table_footnote
      * 从 middle_json 中获取各部分的精确 bbox
+     * 
+     * @param docMode 文档模式：extract表示规则抽取模式（保留HTML），old/new表示合同比对模式（去除HTML）
      */
     private List<TextExtractionUtil.LayoutItem> handleTableItem(
             JsonNode item,
             int imageWidth, int imageHeight,
             double pdfWidth, double pdfHeight,
             JsonNode middleJsonNode,
-            int pageIdx) {
+            int pageIdx,
+            String docMode) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         
@@ -688,10 +695,20 @@ public class MinerUOCRService {
                 if (item.has("table_body")) {
                     String tableBodyHtml = item.get("table_body").asText();
                     if (tableBodyHtml != null && !tableBodyHtml.trim().isEmpty()) {
-                        String readableTableBody = convertLatexToReadableText(tableBodyHtml);
-                        items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n"));
-                        log.info("📊 [表格处理] ✅ 添加 table_body: bbox=[{}, {}, {}, {}], HTML长度={}", 
-                            imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                        // 根据 docMode 决定是否保留HTML
+                        if ("extract".equals(docMode)) {
+                            // 规则抽取模式：保留原始HTML，同时提供可读文本
+                            String readableTableBody = convertLatexToReadableText(tableBodyHtml);
+                            items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n", tableBodyHtml));
+                            log.info("📊 [表格处理] ✅ 添加 table_body（保留HTML）: bbox=[{}, {}, {}, {}], HTML长度={}", 
+                                imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                        } else {
+                            // 合同比对模式：去除HTML，只保留文本
+                            String readableTableBody = convertLatexToReadableText(tableBodyHtml);
+                            items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n"));
+                            log.info("📊 [表格处理] ✅ 添加 table_body（去除HTML）: bbox=[{}, {}, {}, {}], HTML长度={}", 
+                                imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                        }
                     }
                 }
             } else {
@@ -738,19 +755,28 @@ public class MinerUOCRService {
                 }
             }
             
-            // 2. 处理 table_body (HTML格式需要去除标签)
+            // 2. 处理 table_body (HTML格式处理)
             if (item.has("table_body")) {
                 String tableBody = item.get("table_body").asText();
                 log.debug("表格原始HTML长度: {}", tableBody.length());
-                // 去除HTML标签，转换为纯文本
-                String cleanText = removeHtmlTags(tableBody);
-                // 转换 LaTeX 格式为可读文本
-                cleanText = convertLatexToReadableText(cleanText);
-                log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
-                    cleanText.length(), 
-                    cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
-                if (!cleanText.trim().isEmpty()) {
+                
+                // 根据 docMode 决定是否保留HTML
+                if ("extract".equals(docMode)) {
+                    // 规则抽取模式：保留原始HTML，同时提供可读文本
+                    String cleanText = removeHtmlTags(tableBody);
+                    cleanText = convertLatexToReadableText(cleanText);
+                    items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", cleanText, tableBody));
+                    log.info("📝 表格保留HTML，文本长度: {}, 预览: {}", 
+                        cleanText.length(), 
+                        cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
+                } else {
+                    // 合同比对模式：去除HTML标签，转换为纯文本
+                    String cleanText = removeHtmlTags(tableBody);
+                    cleanText = convertLatexToReadableText(cleanText);
                     items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", cleanText));
+                    log.info("📝 表格去除HTML后文本长度: {}, 预览: {}", 
+                        cleanText.length(), 
+                        cleanText.length() > 100 ? cleanText.substring(0, 100) + "..." : cleanText);
                 }
             } else {
                 log.warn("⚠️  表格缺少 table_body 字段");
@@ -934,9 +960,9 @@ public class MinerUOCRService {
         
         return items;
     }
-    
+     
     /**
-     * 处理普通文本类型的内容
+     * 处理普通文本类型的内容 
      */
     private List<TextExtractionUtil.LayoutItem> handleTextItem(
             JsonNode item,
