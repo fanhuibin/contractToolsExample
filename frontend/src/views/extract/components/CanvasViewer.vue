@@ -385,8 +385,9 @@ const loadPageImage = async (pageNum: number): Promise<HTMLImageElement | null> 
   try {
     // 根据apiPrefix生成图片URL
     let imageUrl: string
-    if (props.apiPrefix === '/api/rule-extract/extract/page-image') {
-      // 规则提取API格式
+    if (props.apiPrefix === '/api/rule-extract/extract/page-image' || 
+        props.apiPrefix === '/api/ocr/extract/page-image') {
+      // 规则提取和OCR提取API格式
       imageUrl = `${props.apiPrefix}/${props.taskId}/${pageNum}`
     } else {
       // 智能提取API格式（默认）
@@ -615,30 +616,107 @@ const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
   
   let drawnCount = 0
   
-  // 直接遍历bboxMappings，每个mapping的bboxes数组已经是合并好的
-  props.bboxMappings.forEach((mapping) => {
-    // 检查这个mapping是否在当前页面
-    if (mapping.pages && mapping.pages.includes(page.index + 1)) {
-      // 遍历该mapping的所有bbox（已经合并过，不是字符级的）
-      if (mapping.bboxes && Array.isArray(mapping.bboxes)) {
-        mapping.bboxes.forEach((bboxInfo: any) => {
-          // 只绘制当前页面的bbox
-          if (bboxInfo.page === page.index + 1) {
-            const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
-            const isHighlighted = highlightedSet.has(bboxKey)
-            
-            // 直接绘制，每个bbox只绘制一次
-            drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
-            drawnCount++
-          }
-        })
+  // 判断是否为OCR模式（有charBoxes但没有bboxMappings）
+  const isOcrMode = props.charBoxes.length > 0 && props.bboxMappings.length === 0
+  
+  if (isOcrMode) {
+    // OCR模式：绘制所有字符的bbox（合并连续字符为词组以提高性能）
+    const pageCharBoxes = props.charBoxes.filter((cb: any) => cb.page === page.index + 1)
+    const mergedBoxes = mergeCharBoxesToWords(pageCharBoxes)
+    
+    mergedBoxes.forEach((bboxInfo: any) => {
+      const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
+      const isHighlighted = highlightedSet.has(bboxKey)
+      drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
+      drawnCount++
+    })
+    
+    console.log(`OCR模式：第${page.index + 1}页合并绘制了 ${drawnCount} 个bbox（原始字符数：${pageCharBoxes.length}）`)
+  } else {
+    // 智能提取模式：直接遍历bboxMappings
+    props.bboxMappings.forEach((mapping) => {
+      // 检查这个mapping是否在当前页面
+      if (mapping.pages && mapping.pages.includes(page.index + 1)) {
+        // 遍历该mapping的所有bbox（已经合并过，不是字符级的）
+        if (mapping.bboxes && Array.isArray(mapping.bboxes)) {
+          mapping.bboxes.forEach((bboxInfo: any) => {
+            // 只绘制当前页面的bbox
+            if (bboxInfo.page === page.index + 1) {
+              const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
+              const isHighlighted = highlightedSet.has(bboxKey)
+              
+              // 直接绘制，每个bbox只绘制一次
+              drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
+              drawnCount++
+            }
+          })
+        }
+      }
+    })
+    
+    if (drawnCount > 0) {
+      console.log(`智能提取模式：第${page.index + 1}页绘制了 ${drawnCount} 个bbox`)
+    }
+  }
+}
+
+// 将字符级CharBox合并为词组bbox（优化性能和可读性）
+const mergeCharBoxesToWords = (charBoxes: any[]): any[] => {
+  if (!charBoxes || charBoxes.length === 0) return []
+  
+  const merged: any[] = []
+  let currentBox: any = null
+  
+  for (let i = 0; i < charBoxes.length; i++) {
+    const charBox = charBoxes[i]
+    
+    // 跳过换行符和空格
+    if (charBox.ch === '\n' || charBox.ch === ' ') {
+      if (currentBox) {
+        merged.push(currentBox)
+        currentBox = null
+      }
+      continue
+    }
+    
+    if (!currentBox) {
+      // 开始新的词组
+      currentBox = {
+        page: charBox.page,
+        bbox: [...charBox.bbox],
+        category: charBox.category,
+        text: charBox.ch
+      }
+    } else {
+      // 检查是否应该合并（在同一行且距离较近）
+      const distance = charBox.bbox[0] - currentBox.bbox[2] // 水平距离
+      const verticalDistance = Math.abs(charBox.bbox[1] - currentBox.bbox[1]) // 垂直距离
+      
+      if (distance < 20 && verticalDistance < 5) {
+        // 扩展当前bbox
+        currentBox.bbox[2] = charBox.bbox[2] // 更新右边界
+        currentBox.bbox[3] = Math.max(currentBox.bbox[3], charBox.bbox[3]) // 更新下边界
+        currentBox.bbox[1] = Math.min(currentBox.bbox[1], charBox.bbox[1]) // 更新上边界
+        currentBox.text += charBox.ch
+      } else {
+        // 开始新词组
+        merged.push(currentBox)
+        currentBox = {
+          page: charBox.page,
+          bbox: [...charBox.bbox],
+          category: charBox.category,
+          text: charBox.ch
+        }
       }
     }
-  })
-  
-  if (drawnCount > 0) {
-    console.log(`第${page.index + 1}页绘制了 ${drawnCount} 个bbox`)
   }
+  
+  // 添加最后一个词组
+  if (currentBox) {
+    merged.push(currentBox)
+  }
+  
+  return merged
 }
 
 // 绘制提取内容的bbox（参考合同比对实现）
@@ -708,35 +786,61 @@ const findBboxAtPosition = (x: number, y: number, pageIndex: number): any => {
   const page = pageLayout.value[pageIndex]
   if (!page) return null
   
-  // 使用统一的缩放比例（参考合同比对）
+  // 使用统一的缩放比例
   const scale = page.width / page.actualWidth
   
   // 转换为原始图像坐标
   const imageX = x / scale
   const imageY = y / scale
   
-  // 查找包含该点的bbox
   const pageNum = pageIndex + 1
-  const pageBboxes = props.bboxMappings.filter(mapping => 
-    mapping.pages && mapping.pages.includes(pageNum)
-  )
   
-  // 从后往前查找，优先选择上层的bbox
-  for (let i = pageBboxes.length - 1; i >= 0; i--) {
-    const mapping = pageBboxes[i]
-    if (mapping.bboxes) {
-      for (let j = mapping.bboxes.length - 1; j >= 0; j--) {
-        const bboxInfo = mapping.bboxes[j]
-        if (bboxInfo.page === pageNum && bboxInfo.bbox && bboxInfo.bbox.length >= 4) {
-          const [x1, y1, x2, y2] = bboxInfo.bbox
-          
-          // 精确的点击检测
-          if (imageX >= x1 && imageX <= x2 && imageY >= y1 && imageY <= y2) {
-            return {
-              ...bboxInfo,
-              mappingId: mapping.interval?.id,
-              text: mapping.text,
-              fieldName: mapping.fieldName || mapping.field || mapping.name
+  // 判断是否为OCR模式
+  const isOcrMode = props.charBoxes.length > 0 && props.bboxMappings.length === 0
+  
+  if (isOcrMode) {
+    // OCR模式：查找charBoxes（实际是textBoxes）
+    const pageTextBoxes = props.charBoxes.filter((tb: any) => tb.page === pageNum)
+    
+    // 从后往前查找，优先选择上层的bbox
+    for (let i = pageTextBoxes.length - 1; i >= 0; i--) {
+      const textBox = pageTextBoxes[i]
+      if (textBox.bbox && textBox.bbox.length >= 4) {
+        const [x1, y1, x2, y2] = textBox.bbox
+        
+        // 精确的点击检测
+        if (imageX >= x1 && imageX <= x2 && imageY >= y1 && imageY <= y2) {
+          return {
+            ...textBox,
+            text: textBox.text,
+            category: textBox.category
+          }
+        }
+      }
+    }
+  } else {
+    // 智能提取模式：查找bboxMappings
+    const pageBboxes = props.bboxMappings.filter(mapping => 
+      mapping.pages && mapping.pages.includes(pageNum)
+    )
+    
+    // 从后往前查找，优先选择上层的bbox
+    for (let i = pageBboxes.length - 1; i >= 0; i--) {
+      const mapping = pageBboxes[i]
+      if (mapping.bboxes) {
+        for (let j = mapping.bboxes.length - 1; j >= 0; j--) {
+          const bboxInfo = mapping.bboxes[j]
+          if (bboxInfo.page === pageNum && bboxInfo.bbox && bboxInfo.bbox.length >= 4) {
+            const [x1, y1, x2, y2] = bboxInfo.bbox
+            
+            // 精确的点击检测
+            if (imageX >= x1 && imageX <= x2 && imageY >= y1 && imageY <= y2) {
+              return {
+                ...bboxInfo,
+                mappingId: mapping.interval?.id,
+                text: mapping.text,
+                fieldName: mapping.fieldName || mapping.field || mapping.name
+              }
             }
           }
         }
@@ -823,10 +927,28 @@ const findMappingForExtraction = (extraction: any) => {
   })
 }
 
+// 高亮单个bbox（用于文本点击联动）
+const highlightBbox = (bboxInfo: any) => {
+  if (!bboxInfo || !bboxInfo.bbox) return
+  
+  // 清空之前的高亮
+  highlightedBboxes.value = []
+  
+  // 添加新的高亮
+  highlightedBboxes.value.push(bboxInfo)
+  
+  // 重新绘制所有可见页面
+  renderVisiblePages()
+  
+  // 滚动到bbox的精确位置（类似合同比对的差异跳转）
+  scrollToBbox(bboxInfo)
+}
+
 // 暴露方法给父组件
 defineExpose({
   navigateToExtraction,
   highlightExtractionBboxes,
+  highlightBbox,
   goToPage: (page: number) => {
     if (page >= 1 && page <= props.totalPages) {
       currentPage.value = page

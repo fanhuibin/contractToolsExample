@@ -73,11 +73,11 @@ const services = ref([
     link: '/contract-extract'
   },
   {
-    title: '自动履约任务',
-    description: '基于关键词与规则识别履约事项，分组管理与提醒。',
-    image: '/images/auto-fulfillment.webp',
+    title: 'OCR文本提取',
+    description: 'PDF文档OCR识别，支持页眉页脚过滤，图文对照显示。',
+    image: '/images/ocr-extract.webp',
     button_text: '进入功能',
-    link: '/auto-fulfillment'
+    link: '/ocr-extract'
   }
 ])
 

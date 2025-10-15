@@ -17,6 +17,7 @@ import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.extract.model.CharBox;
+import com.zhaoxinms.contract.tools.extract.model.TextBox;
 import com.zhaoxinms.contract.tools.extract.model.EnhancedOCRResult;
 
 import lombok.extern.slf4j.Slf4j;
@@ -89,58 +90,58 @@ public class UnifiedOCRService implements OCRProvider {
                 options
             );
             
-            // 从结果中提取 PageLayout 数组
+            // 从结果中提取 PageLayout 数组和跨页表格管理器
             TextExtractionUtil.PageLayout[] pageLayouts = mineruResult.layouts;
+            var tableManager = mineruResult.tableManager;
             
-            // 提取文本和CharBox数据
+            // 输出跨页表格统计
+            if (tableManager != null && tableManager.getTableGroupCount() > 0) {
+                log.info("📊 跨页表格识别统计: {}", tableManager.getStatistics());
+            }
+            
+            // 提取文本和TextBox数据
             StringBuilder allText = new StringBuilder();
-            List<CharBox> charBoxes = new ArrayList<>();
+            List<TextBox> textBoxes = new ArrayList<>();
+            int currentPos = 0; // 当前字符位置（用于计算字符索引）
             
             for (int i = 0; i < pageLayouts.length; i++) {
                 TextExtractionUtil.PageLayout layout = pageLayouts[i];
                 
-                // 不添加页面分隔符标记（--- 第X页 ---），确保跨页文本连续
-                // 只在页面之间添加两个换行作为适当的空白分隔
+                // 不添加页面分隔符标记，确保跨页文本连续
                 if (allText.length() > 0 && i > 0) {
                     allText.append("\n\n");
-                    
-                    // 为换行符创建CharBox（保持索引对齐）
-                    for (int j = 0; j < 2; j++) {
-                        CharBox newlineCharBox = new CharBox(
-                            layout.page,
-                            '\n',
-                            new double[]{0, 0, 0, 0},
-                            "PageBreak"
-                        );
-                        charBoxes.add(newlineCharBox);
-                    }
+                    currentPos += 2; // 两个换行符
                 }
                 
-                // 提取页面文本
+                // 提取页面文本和TextBox
                 for (TextExtractionUtil.LayoutItem item : layout.items) {
                     if (item.text != null && !item.text.trim().isEmpty()) {
                         String text = item.text.trim();
+                        
+                        // 记录当前文本块的起始位置
+                        int startPos = currentPos;
+                        
+                        // 添加文本到总文本中
                         allText.append(text).append("\n");
                         
-                        // 创建字符级CharBox数据（用于精确位置标注）
-                        for (int j = 0; j < text.length(); j++) {
-                            CharBox charBox = new CharBox(
-                                layout.page,
-                                text.charAt(j),
-                                item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
-                                item.category != null ? item.category : "Text"
-                            );
-                            charBoxes.add(charBox);
-                        }
+                        // 计算结束位置（不包括换行符）
+                        int endPos = startPos + text.length();
                         
-                        // 添加换行符
-                        CharBox newlineCharBox = new CharBox(
+                        // 更新当前位置（包括换行符）
+                        currentPos = endPos + 1; // +1 是换行符
+                        
+                        // 为每个LayoutItem创建一个TextBox，包含字符索引信息
+                        // 一个item代表一个文本块（可能是一行文字、一个表格单元格等）
+                        // 支持表格跨页：同一文本块可能有多个bbox
+                        TextBox textBox = new TextBox(
                             layout.page,
-                            '\n',
+                            text,
                             item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
-                            item.category != null ? item.category : "Text"
+                            item.category != null ? item.category : "Text",
+                            startPos,
+                            endPos
                         );
-                        charBoxes.add(newlineCharBox);
+                        textBoxes.add(textBox);
                     }
                 }
             }
@@ -164,24 +165,26 @@ public class UnifiedOCRService implements OCRProvider {
                 }
             }
             
-            // 将图片路径和CharBox信息保存到metadata（作为JSONObject）
+            // 将图片路径和TextBox信息保存到metadata（作为JSONObject）
             com.alibaba.fastjson2.JSONObject metadata = new com.alibaba.fastjson2.JSONObject();
             metadata.put("totalPages", pageLayouts.length);
             metadata.put("pageImagePaths", pageImagePaths);
             metadata.put("imagesDir", imagesDir.getAbsolutePath());
             metadata.put("taskId", taskId);
             
-            // 序列化CharBox数据 - 转换为简单的JSON格式
-            com.alibaba.fastjson2.JSONArray charBoxesArray = new com.alibaba.fastjson2.JSONArray();
-            for (CharBox charBox : charBoxes) {
-                com.alibaba.fastjson2.JSONObject charBoxJson = new com.alibaba.fastjson2.JSONObject();
-                charBoxJson.put("page", charBox.page);
-                charBoxJson.put("ch", String.valueOf(charBox.ch));
-                charBoxJson.put("bbox", charBox.bbox);
-                charBoxJson.put("category", charBox.category);
-                charBoxesArray.add(charBoxJson);
+            // 序列化TextBox数据 - 转换为简单的JSON格式
+            com.alibaba.fastjson2.JSONArray textBoxesArray = new com.alibaba.fastjson2.JSONArray();
+            for (TextBox textBox : textBoxes) {
+                com.alibaba.fastjson2.JSONObject textBoxJson = new com.alibaba.fastjson2.JSONObject();
+                textBoxJson.put("page", textBox.page);
+                textBoxJson.put("text", textBox.text);
+                textBoxJson.put("bbox", textBox.bbox);
+                textBoxJson.put("category", textBox.category);
+                textBoxJson.put("startPos", textBox.startPos);
+                textBoxJson.put("endPos", textBox.endPos);
+                textBoxesArray.add(textBoxJson);
             }
-            metadata.put("charBoxes", charBoxesArray.toJSONString());
+            metadata.put("textBoxes", textBoxesArray.toJSONString());
             
             // 保存页面尺寸信息
             com.alibaba.fastjson2.JSONArray pageDimensions = new com.alibaba.fastjson2.JSONArray();
@@ -194,19 +197,57 @@ public class UnifiedOCRService implements OCRProvider {
             }
             metadata.put("pageDimensions", pageDimensions);
             
+            // 序列化跨页表格信息（用于前端标记跨页bbox）
+            if (tableManager != null && tableManager.getTableGroupCount() > 0) {
+                com.alibaba.fastjson2.JSONArray crossPageTablesArray = new com.alibaba.fastjson2.JSONArray();
+                
+                for (var group : tableManager.getAllTableGroups()) {
+                    if (group.continuationParts.isEmpty()) {
+                        continue;  // 不是跨页表格，跳过
+                    }
+                    
+                    com.alibaba.fastjson2.JSONObject groupJson = new com.alibaba.fastjson2.JSONObject();
+                    groupJson.put("groupId", group.groupId);
+                    
+                    // 主表格信息
+                    if (group.mainTable != null) {
+                        com.alibaba.fastjson2.JSONObject mainTableJson = new com.alibaba.fastjson2.JSONObject();
+                        mainTableJson.put("page", group.mainTable.pageIdx + 1);  // 转为1-based
+                        mainTableJson.put("bbox", group.mainTable.bbox);
+                        groupJson.put("mainTable", mainTableJson);
+                    }
+                    
+                    // 跨页延续部分
+                    com.alibaba.fastjson2.JSONArray contPartsArray = new com.alibaba.fastjson2.JSONArray();
+                    for (var contPart : group.continuationParts) {
+                        com.alibaba.fastjson2.JSONObject contPartJson = new com.alibaba.fastjson2.JSONObject();
+                        contPartJson.put("page", contPart.pageIdx + 1);  // 转为1-based
+                        contPartJson.put("bbox", contPart.bbox);
+                        contPartsArray.add(contPartJson);
+                    }
+                    groupJson.put("continuationParts", contPartsArray);
+                    
+                    crossPageTablesArray.add(groupJson);
+                }
+                
+                metadata.put("crossPageTables", crossPageTablesArray);
+                log.info("序列化跨页表格信息，跨页表格数: {}", crossPageTablesArray.size());
+            }
+            
             result.setMetadata((Object) metadata);
             
-            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}, CharBox数: {}", 
-                pageLayouts.length, allText.length(), pageImagePaths.size(), charBoxes.size());
-            log.info("CharBoxes序列化后长度: {}", charBoxesArray.toJSONString().length());
+            log.info("MinerU PDF识别完成，页数: {}, 文本长度: {}, 图片数: {}, TextBox数: {}", 
+                pageLayouts.length, allText.length(), pageImagePaths.size(), textBoxes.size());
+            log.info("TextBoxes序列化后长度: {}", textBoxesArray.toJSONString().length());
             
-            // 输出前几个CharBox作为调试信息
-            if (!charBoxes.isEmpty()) {
-                log.info("前5个CharBox示例:");
-                for (int i = 0; i < Math.min(5, charBoxes.size()); i++) {
-                    CharBox cb = charBoxes.get(i);
-                    log.info("  CharBox[{}]: page={}, ch='{}', bbox=[{},{},{},{}], category={}", 
-                        i, cb.page, cb.ch, cb.bbox[0], cb.bbox[1], cb.bbox[2], cb.bbox[3], cb.category);
+            // 输出前几个TextBox作为调试信息
+            if (!textBoxes.isEmpty()) {
+                log.info("前5个TextBox示例:");
+                for (int i = 0; i < Math.min(5, textBoxes.size()); i++) {
+                    TextBox tb = textBoxes.get(i);
+                    log.info("  TextBox[{}]: page={}, text='{}', bbox=[{},{},{},{}], category={}", 
+                        i, tb.page, tb.text.length() > 20 ? tb.text.substring(0, 20) + "..." : tb.text,
+                        tb.bbox[0], tb.bbox[1], tb.bbox[2], tb.bbox[3], tb.category);
                 }
             }
             

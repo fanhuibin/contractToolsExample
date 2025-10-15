@@ -216,11 +216,8 @@ async function initByTemplateId() {
     const typeRes = await api.aiContract.getContractTypes()
     typeDict.value = typeRes.data || {}
   } catch {}
-  // 读取模板详情（auto 模式优先走 auto-fulfillment 模板详情）
-  const source = String(route.query.source || '')
-  const tplRes: any = source === 'auto'
-    ? await (await import('@/api/ai/auto-fulfillment')).getTemplateById(idNum)
-    : await api.aiContract.getTemplateById(idNum)
+  // 读取模板详情
+  const tplRes: any = await api.aiContract.getTemplateById(idNum)
   template.value = tplRes?.data
   // 读取模板规则
   const ruleRes: any = await readRuleByTemplateId(idNum)

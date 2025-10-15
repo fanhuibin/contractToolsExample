@@ -180,11 +180,7 @@ export const aiContract = {
   }
 };
 
-// 导出履约任务相关API
-// removed: aiFulfillment export
-
 export default {
   aiChat,
-  aiContract,
-  aiAutoFulfillment: (await import('./auto-fulfillment')).default
+  aiContract
 };

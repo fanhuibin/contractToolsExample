@@ -92,16 +92,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'OnlyOffice演示' }
       },
       {
-        path: '/auto-fulfillment',
-        name: 'AutoFulfillment',
-        component: () => import('@/views/contracts/AutoFulfillment.vue'),
-        meta: { title: '自动履约任务' }
-      },
-      {
         path: '/contract-extract',
         name: 'ContractExtract',
         component: () => import('@/views/contracts/ContractExtract.vue'),
         meta: { title: '合同信息提取' }
+      },
+      {
+        path: '/document-convert',
+        name: 'DocumentConvert',
+        component: () => import('@/views/documents/DocumentConvert.vue'),
+        meta: { title: '文档格式转换' }
       },
       {
         path: '/contract-review',
@@ -187,6 +187,13 @@ const routes: RouteRecordRaw[] = [
         name: 'RuleExtractResult',
         component: () => import('@/views/rule-extract/RuleExtractResult.vue'),
         meta: { title: '提取结果' }
+      },
+      // OCR文本提取
+      {
+        path: '/ocr-extract',
+        name: 'OcrExtract',
+        component: () => import('@/views/ocr/OcrExtract.vue'),
+        meta: { title: 'OCR文本提取' }
       },
       
     ]
