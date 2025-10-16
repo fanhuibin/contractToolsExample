@@ -12,6 +12,8 @@ import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageOutputStream;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
+import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -220,11 +222,16 @@ public class MinerUOCRService {
         int renderDpi = zxOcrConfig.getRenderDpi();
         long startTime = System.currentTimeMillis();
         
+        // 图片尺寸限制配置
+        final int MAX_IMAGE_WIDTH = 2000;   // 最大宽度2000像素
+        final int MAX_IMAGE_HEIGHT = 3000;  // 最大高度3000像素
+        
         try (PDDocument document = PDDocument.load(pdfFile)) {
             PDFRenderer renderer = new PDFRenderer(document);
             int pageCount = document.getNumberOfPages();
             
-            log.info("开始生成{}个页面图片，DPI: {}", pageCount, renderDpi);
+            log.info("开始生成{}个页面图片，DPI: {}, 最大尺寸限制: {}x{}", 
+                pageCount, renderDpi, MAX_IMAGE_WIDTH, MAX_IMAGE_HEIGHT);
             
             int cachedCount = 0;
             int renderedCount = 0;
@@ -245,6 +252,53 @@ public class MinerUOCRService {
                 int imageWidth = 0;
                 int imageHeight = 0;
                 
+                // 获取当前页面尺寸信息
+                PDPage page = document.getPage(i);
+                PDRectangle mediaBox = page.getMediaBox();
+                float pageWidthPt = mediaBox.getWidth();   // PDF点数单位
+                float pageHeightPt = mediaBox.getHeight(); // PDF点数单位
+                
+                // 转换为英寸和毫米
+                float pageWidthInch = pageWidthPt / 72f;
+                float pageHeightInch = pageHeightPt / 72f;
+                float pageWidthMm = pageWidthInch * 25.4f;
+                float pageHeightMm = pageHeightInch * 25.4f;
+                
+                // 计算使用默认DPI时的预期图片尺寸
+                int expectedWidth = (int)(pageWidthInch * renderDpi);
+                int expectedHeight = (int)(pageHeightInch * renderDpi);
+                
+                // 计算实际使用的DPI（考虑最大尺寸限制）
+                int actualDpi = renderDpi;
+                if (expectedWidth > MAX_IMAGE_WIDTH || expectedHeight > MAX_IMAGE_HEIGHT) {
+                    // 计算缩放比例（取宽度和高度缩放比例中的较小值，保持原始比例）
+                    float scaleWidth = (float) MAX_IMAGE_WIDTH / expectedWidth;
+                    float scaleHeight = (float) MAX_IMAGE_HEIGHT / expectedHeight;
+                    float scale = Math.min(scaleWidth, scaleHeight);
+                    
+                    // 调整DPI
+                    actualDpi = (int)(renderDpi * scale);
+                    
+                    // 重新计算调整后的图片尺寸
+                    expectedWidth = (int)(pageWidthInch * actualDpi);
+                    expectedHeight = (int)(pageHeightInch * actualDpi);
+                    
+                    log.warn("⚠️ 页面{} 尺寸过大，自动调整DPI以保持原始比例:", i + 1);
+                    log.warn("  - PDF页面尺寸: {:.1f} × {:.1f} 点 ({:.0f} × {:.0f} mm)", 
+                        pageWidthPt, pageHeightPt, pageWidthMm, pageHeightMm);
+                    log.warn("  - 原DPI {} 预期尺寸: {} × {} 像素 (超出限制)", 
+                        renderDpi, (int)(pageWidthInch * renderDpi), (int)(pageHeightInch * renderDpi));
+                    log.warn("  - 调整后DPI: {} → {}", renderDpi, actualDpi);
+                    log.warn("  - 实际生成尺寸: {} × {} 像素", expectedWidth, expectedHeight);
+                } else {
+                    // 尺寸正常，输出信息日志
+                    log.info("📄 页面{} 尺寸信息:", i + 1);
+                    log.info("  - PDF页面尺寸: {:.1f} × {:.1f} 点 ({:.0f} × {:.0f} mm)", 
+                        pageWidthPt, pageHeightPt, pageWidthMm, pageHeightMm);
+                    log.info("  - 使用DPI: {}", actualDpi);
+                    log.info("  - 预期生成尺寸: {} × {} 像素", expectedWidth, expectedHeight);
+                }
+                
                 try {
                     // 缓存检查：如果图片已存在且可读取，直接复用
                     if (imageFile.exists()) {
@@ -260,11 +314,11 @@ public class MinerUOCRService {
                             } else {
                                 // 文件损坏，重新生成
                                 log.warn("图片文件损坏，重新生成: {}", imageFile.getName());
-                                image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                                image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                                 imageWidth = image.getWidth();
                                 imageHeight = image.getHeight();
                                 saveImage(image, imageFile, imageFormat, jpegQuality);
-                                log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                                log.info("✅ 重新生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                                     imageFile.getName(), imageWidth, imageHeight,
                                     imageFile.length() / 1024);
                                 renderedCount++;
@@ -273,22 +327,22 @@ public class MinerUOCRService {
                             // 读取失败，重新生成
                             log.warn("读取已有图片失败，重新生成: {}, 原因: {}", 
                                 imageFile.getName(), e.getMessage());
-                            image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                            image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                             imageWidth = image.getWidth();
                             imageHeight = image.getHeight();
                             saveImage(image, imageFile, imageFormat, jpegQuality);
-                            log.debug("重新生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                            log.info("✅ 重新生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                                 imageFile.getName(), imageWidth, imageHeight,
                                 imageFile.length() / 1024);
                             renderedCount++;
                         }
                     } else {
                         // 生成新图片
-                        image = renderer.renderImageWithDPI(i, renderDpi, ImageType.RGB);
+                        image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                         imageWidth = image.getWidth();
                         imageHeight = image.getHeight();
                         saveImage(image, imageFile, imageFormat, jpegQuality);
-                        log.debug("生成页面图片: {}, 尺寸: {}x{}, 大小: {}KB", 
+                        log.info("✅ 生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                             imageFile.getName(), imageWidth, imageHeight,
                             imageFile.length() / 1024);
                         renderedCount++;

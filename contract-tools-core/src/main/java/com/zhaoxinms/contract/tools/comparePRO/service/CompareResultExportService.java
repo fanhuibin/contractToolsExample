@@ -913,11 +913,45 @@ public class CompareResultExportService {
         Object ranges = diff.get(rangeKey);
         
         if (ranges instanceof List) {
-            try {
-                return (List<Map<String, Object>>) ranges;
-            } catch (ClassCastException e) {
-                logger.warn("无法转换差异范围: {}", e.getMessage());
+            List<?> rangeList = (List<?>) ranges;
+            List<Map<String, Object>> result = new ArrayList<>();
+            
+            for (Object item : rangeList) {
+                Map<String, Object> rangeMap = new java.util.HashMap<>();
+                
+                if (item instanceof Map) {
+                    // 已经是Map，直接使用
+                    rangeMap.putAll((Map<String, Object>) item);
+                } else if (item instanceof DiffBlock.TextRange) {
+                    // 是TextRange对象，转换为Map
+                    DiffBlock.TextRange textRange = (DiffBlock.TextRange) item;
+                    rangeMap.put("start", textRange.start);
+                    rangeMap.put("end", textRange.end);
+                    rangeMap.put("type", textRange.type);
+                } else {
+                    // 尝试通过反射获取字段
+                    try {
+                        java.lang.reflect.Field startField = item.getClass().getField("start");
+                        java.lang.reflect.Field endField = item.getClass().getField("end");
+                        rangeMap.put("start", startField.get(item));
+                        rangeMap.put("end", endField.get(item));
+                        
+                        try {
+                            java.lang.reflect.Field typeField = item.getClass().getField("type");
+                            rangeMap.put("type", typeField.get(item));
+                        } catch (NoSuchFieldException ignored) {
+                            // type字段可选
+                        }
+                    } catch (Exception e) {
+                        logger.warn("无法转换差异范围对象: {}", e.getMessage());
+                        continue;
+                    }
+                }
+                
+                result.add(rangeMap);
             }
+            
+            return result;
         }
         
         return new ArrayList<>();
