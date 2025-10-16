@@ -93,7 +93,7 @@ public class ChangeFileToPDFService {
      */
     public String covertToPdf(FileInfo fileInfo) {
         // 构建文件下载URL，添加时间戳解决缓存问题
-        String fileUrl = zxcmConfig.getOnlyOffice().getCallback().getUrl() + "/download/" + fileInfo.getId() 
+        String fileUrl = zxcmConfig.getApplication().getBaseUrl() + "/download/" + fileInfo.getId() 
             + "?fileId=" + fileInfo.getId() 
             + "&t=" + System.currentTimeMillis();
         
@@ -104,10 +104,10 @@ public class ChangeFileToPDFService {
         
         return covertToPdf(fileUrl, destPdfPath);
     }
-    
+     
     public String covertToPdf(File localFile) throws IOException {
         String fileName = localFile.getName();
-        String fileUrl = zxcmConfig.getOnlyOffice().getCallback().getUrl() + "/api/download/temp?path=" + java.net.URLEncoder.encode("compose/"+fileName, "UTF-8");
+        String fileUrl = zxcmConfig.getApplication().getBaseUrl() + "/api/download/temp?path=" + java.net.URLEncoder.encode("compose/"+fileName, "UTF-8");
 
         String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
         String destPdfPath = zxcmConfig.getFileUpload().getRootPath() + File.separator + datePath + File.separator 
@@ -124,7 +124,7 @@ public class ChangeFileToPDFService {
     public String covertDocToDocx(FileInfo fileInfo) {
         try {
             // 构建文件下载URL，添加时间戳解决缓存问题
-            String downloadUrl = zxcmConfig.getOnlyOffice().getCallback().getUrl() + "/download/" + fileInfo.getId() 
+            String downloadUrl = zxcmConfig.getApplication().getBaseUrl() + "/download/" + fileInfo.getId() 
                 + "?fileId=" + fileInfo.getId() 
                 + "&t=" + System.currentTimeMillis();
             

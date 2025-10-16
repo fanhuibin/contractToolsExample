@@ -102,7 +102,7 @@ public class EnhancedRuleEngine {
     }
 
     /**
-     * 纯正则提取（支持occurrence和returnAll）
+     * 纯正则提取（支持occurrence）
      */
     private ExtractionResult extractByRegexPattern(String text, JSONObject config, boolean debug) {
         ExtractionResult result = new ExtractionResult();
@@ -130,10 +130,6 @@ public class EnhancedRuleEngine {
                 occurrence = 1;
             }
 
-            Boolean returnAll = config.getBoolean("returnAll");
-            if (returnAll == null) {
-                returnAll = false;
-            }
 
             if (debug) {
                 result.addDebugInfo("正则: " + pattern);
@@ -165,10 +161,7 @@ public class EnhancedRuleEngine {
                 }
             }
 
-            if (returnAll && !allMatches.isEmpty()) {
-                value = allMatches.get(0);
-                result.setAllMatches(allMatches);
-            } else if (value == null && count > 0) {
+            if (value == null && count > 0) {
                 if (debug) {
                     result.addDebugInfo("找到 " + count + " 个匹配，但请求第 " + occurrence + " 个");
                 }
@@ -182,9 +175,6 @@ public class EnhancedRuleEngine {
 
                 if (debug) {
                     result.addDebugInfo("匹配成功: " + value);
-                    if (returnAll) {
-                        result.addDebugInfo("所有匹配项数量: " + allMatches.size());
-                    }
                 }
 
                 return result;

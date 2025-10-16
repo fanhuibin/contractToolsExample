@@ -107,7 +107,7 @@ interface Props {
 const props = defineProps<Props>()
 
 const testText = ref('')
-const debugMode = ref(false)
+const debugMode = ref(true)
 const testing = ref(false)
 const results = ref<any[]>([])
 const detailVisible = ref(false)

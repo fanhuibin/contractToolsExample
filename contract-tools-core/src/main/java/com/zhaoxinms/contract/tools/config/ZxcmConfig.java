@@ -27,8 +27,13 @@ public class ZxcmConfig {
     private Server server = new Server();
     
     /**
-     * OnlyOffice配置
+     * 应用配置
      */
+    private Application application = new Application();
+    
+    /**
+     * OnlyOffice配置
+     */ 
     @Data
     public static class OnlyOffice {
         /**
@@ -208,5 +213,17 @@ public class ZxcmConfig {
              */
             private String contextPath = "";
         }
+    }
+    
+    /**
+     * 应用配置
+     */
+    @Data
+    public static class Application {
+        /**
+         * 应用基础URL（用于OnlyOffice回调下载文件）
+         * 例如：http://proxy.zhaoxinms.com:9103
+         */
+        private String baseUrl = "http://localhost:8080";
     }
 }

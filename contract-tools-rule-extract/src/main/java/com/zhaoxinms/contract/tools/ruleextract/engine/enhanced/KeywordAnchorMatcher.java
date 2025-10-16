@@ -26,7 +26,6 @@ import java.util.regex.Pattern;
  *   "caseSensitive": true,
  *   "multiline": false,
  *   "occurrence": 1,               // 提取第几个匹配项（1-based）
- *   "returnAll": false,            // 是否返回所有匹配项
  *   "delimiter": "："
  * }
  *
@@ -71,16 +70,20 @@ public class KeywordAnchorMatcher {
             Boolean caseSensitive = getOrDefault(config, "caseSensitive", true);
             Boolean multiline = getOrDefault(config, "multiline", false);
             Integer occurrence = getOrDefault(config, "occurrence", 1);
-            Boolean returnAll = getOrDefault(config, "returnAll", false);
+            Integer anchorOccurrence = getOrDefault(config, "anchorOccurrence", 1);
 
             if (debug) {
                 result.addDebugInfo("锚点: " + anchor);
                 result.addDebugInfo("方向: " + direction);
                 result.addDebugInfo("提取方法: " + extractMethod);
+                result.addDebugInfo("正则表达式: " + pattern);
+                if (anchorOccurrence > 1) {
+                    result.addDebugInfo("锚点序号: " + anchorOccurrence);
+                }
             }
 
             // 查找锚点位置
-            AnchorResult anchorResult = findAnchor(text, anchor, ignoreCase);
+            AnchorResult anchorResult = findAnchor(text, anchor, ignoreCase, anchorOccurrence);
             if (anchorResult == null || anchorResult.position == -1) {
                 if (debug) {
                     result.addDebugInfo("未找到锚点关键词");
@@ -92,6 +95,16 @@ public class KeywordAnchorMatcher {
                 result.addDebugInfo("锚点: " + anchorResult.matchedKeyword);
                 result.addDebugInfo("锚点位置: " + anchorResult.position);
             }
+            
+            // 添加锚点查找的详细日志
+            log.info("锚点匹配详情: anchor='{}', anchorOccurrence={}, foundPosition={}, matchedKeyword='{}'", 
+                anchor, anchorOccurrence, anchorResult.position, anchorResult.matchedKeyword);
+            
+            // 显示锚点周围的文本用于调试
+            int contextStart = Math.max(0, anchorResult.position - 50);
+            int contextEnd = Math.min(text.length(), anchorResult.position + anchorResult.matchedKeyword.length() + 100);
+            String context = text.substring(contextStart, contextEnd);
+            log.info("锚点上下文: {}", context);
 
             // 根据方向获取搜索范围（使用实际匹配的关键词长度）
             int anchorPos = anchorResult.position;
@@ -106,24 +119,21 @@ public class KeywordAnchorMatcher {
             }
 
             if (debug) {
-                result.addDebugInfo("搜索范围: " + searchText.substring(0, Math.min(50, searchText.length())) + "...");
+                result.addDebugInfo("搜索范围: " + searchText.substring(0, Math.min(100, searchText.length())) + "...");
                 result.addDebugInfo("搜索范围起始位置: " + searchRangeStartPos);
+                result.addDebugInfo("搜索范围长度: " + searchText.length());
             }
 
             // 根据提取方法提取内容
             String extracted = null;
-            List<String> allMatches = new ArrayList<>();
+            
+            // 添加搜索范围的详细日志
+            log.info("搜索范围详情: method={}, pattern={}, searchText='{}'", 
+                extractMethod, pattern, searchText.length() > 200 ? searchText.substring(0, 200) + "..." : searchText);
             
             switch (extractMethod) {
                 case "regex":
-                    if (returnAll) {
-                        allMatches = extractAllByRegex(searchText, pattern, multiline, debug, result);
-                        if (!allMatches.isEmpty()) {
-                            extracted = allMatches.get(0);
-                        }
-                    } else {
-                        extracted = extractByRegex(searchText, pattern, multiline, occurrence, debug, result);
-                    }
+                    extracted = extractByRegex(searchText, pattern, multiline, occurrence, debug, result);
                     break;
                 case "line":
                     extracted = extractByLine(searchText, pattern, multiline, debug, result);
@@ -137,8 +147,11 @@ public class KeywordAnchorMatcher {
             }
 
             if (extracted == null || extracted.trim().isEmpty()) {
+                log.warn("提取失败: extracted={}, searchText长度={}", extracted, searchText.length());
                 return ExtractionResult.failure("未提取到内容");
             }
+            
+            log.info("提取成功: extracted='{}'", extracted);
 
             // 清理结果
             if (trim) {
@@ -147,9 +160,6 @@ public class KeywordAnchorMatcher {
 
             result.setSuccess(true);
             result.setValue(extracted);
-            if (returnAll && !allMatches.isEmpty()) {
-                result.setAllMatches(allMatches);
-            }
             
             // 在搜索范围内查找提取内容的位置，然后加上搜索范围的起始位置得到绝对位置
             int relativePos = searchText.indexOf(extracted);
@@ -175,9 +185,6 @@ public class KeywordAnchorMatcher {
 
             if (debug) {
                 result.addDebugInfo("提取成功: " + extracted);
-                if (returnAll) {
-                    result.addDebugInfo("所有匹配项数量: " + allMatches.size());
-                }
             }
 
             return result;
@@ -189,49 +196,67 @@ public class KeywordAnchorMatcher {
     }
 
     /**
-     * 查找锚点位置（支持用|分隔多个关键词）
-     * 返回最早出现的关键词及其位置
+     * 查找锚点位置（支持用|分隔多个关键词和锚点序号）
+     * 返回指定序号的关键词及其位置
      */
-    private AnchorResult findAnchor(String text, String anchor, boolean ignoreCase) {
+    private AnchorResult findAnchor(String text, String anchor, boolean ignoreCase, int anchorOccurrence) {
         // 检查是否包含多个关键词（用|分隔）
         if (anchor.contains("|")) {
             String[] keywords = anchor.split("\\|");
-            int minPos = -1;
-            String matchedKeyword = null;
+            List<AnchorResult> allMatches = new ArrayList<>();
             
-            // 查找所有关键词，返回最早出现的位置
+            // 查找所有关键词的所有匹配位置
             for (String keyword : keywords) {
                 keyword = keyword.trim();
                 if (StrUtil.isBlank(keyword)) {
                     continue;
                 }
                 
-                int pos;
-                if (ignoreCase) {
-                    pos = text.toLowerCase().indexOf(keyword.toLowerCase());
-                } else {
-                    pos = text.indexOf(keyword);
-                }
+                String searchText = ignoreCase ? text.toLowerCase() : text;
+                String searchKeyword = ignoreCase ? keyword.toLowerCase() : keyword;
                 
-                // 找到更早的位置
-                if (pos != -1 && (minPos == -1 || pos < minPos)) {
-                    minPos = pos;
-                    matchedKeyword = keyword;
+                int pos = 0;
+                while ((pos = searchText.indexOf(searchKeyword, pos)) != -1) {
+                    allMatches.add(new AnchorResult(pos, keyword));
+                    pos += searchKeyword.length();
                 }
             }
             
-            return minPos == -1 ? null : new AnchorResult(minPos, matchedKeyword);
+            // 按位置排序
+            allMatches.sort((a, b) -> Integer.compare(a.position, b.position));
+            
+            // 返回指定序号的匹配
+            if (anchorOccurrence > 0 && anchorOccurrence <= allMatches.size()) {
+                return allMatches.get(anchorOccurrence - 1);
+            }
+            
+            return null;
         }
         
-        // 单个关键词
-        int pos;
-        if (ignoreCase) {
-            pos = text.toLowerCase().indexOf(anchor.toLowerCase());
-        } else {
-            pos = text.indexOf(anchor);
+        // 单个关键词，支持序号
+        String searchText = ignoreCase ? text.toLowerCase() : text;
+        String searchKeyword = ignoreCase ? anchor.toLowerCase() : anchor;
+        
+        int pos = 0;
+        int count = 0;
+        List<Integer> allPositions = new ArrayList<>();
+        
+        while ((pos = searchText.indexOf(searchKeyword, pos)) != -1) {
+            count++;
+            allPositions.add(pos);
+            log.info("找到锚点 '{}' 第{}次出现，位置: {}", anchor, count, pos);
+            
+            if (count == anchorOccurrence) {
+                log.info("选择第{}次出现的锚点，位置: {}", anchorOccurrence, pos);
+                return new AnchorResult(pos, anchor);
+            }
+            pos += searchKeyword.length();
         }
         
-        return pos == -1 ? null : new AnchorResult(pos, anchor);
+        log.warn("锚点 '{}' 总共找到{}次，但请求第{}次出现。所有位置: {}", 
+            anchor, count, anchorOccurrence, allPositions);
+        
+        return null;
     }
 
     /**
@@ -296,12 +321,24 @@ public class KeywordAnchorMatcher {
             while (matcher.find()) {
                 count++;
                 if (count == occurrence) {
-                    return matcher.group();
+                    String matched = matcher.group();
+                    if (debug) {
+                        result.addDebugInfo("正则匹配成功: " + matched);
+                    }
+                    return matched;
                 }
             }
             
-            if (debug && count > 0) {
-                result.addDebugInfo("找到 " + count + " 个匹配，但请求第 " + occurrence + " 个");
+            if (debug) {
+                result.addDebugInfo("正则匹配结果: 找到 " + count + " 个匹配，请求第 " + occurrence + " 个");
+                if (count == 0) {
+                    result.addDebugInfo("正则匹配失败，可能的原因：");
+                    result.addDebugInfo("1. 正则表达式不匹配文本内容");
+                    result.addDebugInfo("2. 搜索范围内没有符合条件的文本");
+                    result.addDebugInfo("3. 文本格式与预期不符");
+                    result.addDebugInfo("4. 搜索文本: '" + text + "'");
+                    result.addDebugInfo("5. 正则表达式: '" + patternStr + "'");
+                }
             }
         } catch (Exception e) {
             if (debug) {
@@ -311,39 +348,6 @@ public class KeywordAnchorMatcher {
         return null;
     }
     
-    /**
-     * 正则提取所有匹配项
-     */
-    private List<String> extractAllByRegex(String text, String patternStr, boolean multiline, boolean debug, ExtractionResult result) {
-        List<String> matches = new ArrayList<>();
-        if (StrUtil.isBlank(patternStr)) {
-            patternStr = ".+?(?=\\s|$|\\n)";
-        }
-
-        try {
-            int flags = 0;
-            if (multiline) {
-                flags = Pattern.MULTILINE | Pattern.DOTALL;
-            }
-            
-            Pattern pattern = Pattern.compile(patternStr, flags);
-            Matcher matcher = pattern.matcher(text);
-            
-            while (matcher.find()) {
-                matches.add(matcher.group());
-            }
-            
-            if (debug) {
-                result.addDebugInfo("找到 " + matches.size() + " 个匹配项");
-            }
-        } catch (Exception e) {
-            if (debug) {
-                result.addDebugInfo("正则匹配失败: " + e.getMessage());
-            }
-        }
-        return matches;
-    }
-
     /**
      * 按行提取（支持正则后处理）
      */
@@ -367,7 +371,14 @@ public class KeywordAnchorMatcher {
                 result.addDebugInfo("应用正则表达式: " + pattern);
             }
             String extracted = extractByRegex(line, pattern, multiline, 1, debug, result);
-            return extracted != null ? extracted : line;
+            if (extracted != null) {
+                return extracted;
+            } else {
+                if (debug) {
+                    result.addDebugInfo("正则表达式匹配失败，不返回原始行内容");
+                }
+                return null; // 正则匹配失败时返回null，而不是原始行
+            }
         }
         
         return line;
@@ -411,7 +422,14 @@ public class KeywordAnchorMatcher {
                 result.addDebugInfo("应用正则表达式: " + pattern);
             }
             String regexResult = extractByRegex(extracted, pattern, multiline, 1, debug, result);
-            return regexResult != null ? regexResult : extracted;
+            if (regexResult != null) {
+                return regexResult;
+            } else {
+                if (debug) {
+                    result.addDebugInfo("正则表达式匹配失败，不返回原始内容");
+                }
+                return null; // 正则匹配失败时返回null，而不是原始内容
+            }
         }
         
         return extracted;

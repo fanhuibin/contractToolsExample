@@ -92,16 +92,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'OnlyOffice演示' }
       },
       {
-        path: '/auto-fulfillment',
-        name: 'AutoFulfillment',
-        component: () => import('@/views/contracts/AutoFulfillment.vue'),
-        meta: { title: '自动履约任务' }
-      },
-      {
         path: '/contract-extract',
         name: 'ContractExtract',
         component: () => import('@/views/contracts/ContractExtract.vue'),
         meta: { title: '合同信息提取' }
+      },
+      {
+        path: '/document-convert',
+        name: 'DocumentConvert',
+        component: () => import('@/views/documents/DocumentConvert.vue'),
+        meta: { title: '文档格式转换' }
       },
       {
         path: '/contract-review',
@@ -163,12 +163,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/extract/EnhancedContractInfoExtract.vue'),
         meta: { title: '智能信息提取 - 增强版' }
       },
-      // 规则抽取模块（重构版本）
+      // 规则提取模块（重构版本）
       {
         path: '/rule-extract',
         name: 'RuleExtract',
         component: () => import('@/views/rule-extract/ExtractMain.vue'),
-        meta: { title: '规则抽取' }
+        meta: { title: '规则提取' }
       },
       {
         path: '/rule-extract/templates',
@@ -186,7 +186,14 @@ const routes: RouteRecordRaw[] = [
         path: '/rule-extract/result/:taskId',
         name: 'RuleExtractResult',
         component: () => import('@/views/rule-extract/RuleExtractResult.vue'),
-        meta: { title: '抽取结果' }
+        meta: { title: '提取结果' }
+      },
+      // OCR文本提取
+      {
+        path: '/ocr-extract',
+        name: 'OcrExtract',
+        component: () => import('@/views/ocr/OcrExtract.vue'),
+        meta: { title: 'OCR文本提取' }
       },
       
     ]

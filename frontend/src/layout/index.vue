@@ -17,13 +17,9 @@
           <el-icon><House /></el-icon>
           <span>首页</span>
         </el-menu-item>
-        <el-menu-item index="/auto-fulfillment">
-          <el-icon><Calendar /></el-icon>
-          <span>自动履约任务</span>
-        </el-menu-item>
         <el-menu-item index="/contract-extract">
           <el-icon><Document /></el-icon>
-          <span>合同抽取</span>
+          <span>合同提取</span>
         </el-menu-item>
         <el-menu-item index="/info-extract">
           <el-icon><Search /></el-icon>
@@ -31,7 +27,11 @@
         </el-menu-item>
         <el-menu-item index="/rule-extract">
           <el-icon><Grid /></el-icon>
-          <span>规则抽取</span>
+          <span>规则提取</span>
+        </el-menu-item>
+        <el-menu-item index="/ocr-extract">
+          <el-icon><Reading /></el-icon>
+          <span>OCR文本提取</span>
         </el-menu-item>
         <el-menu-item index="/contract-review">
           <el-icon><DocumentChecked /></el-icon>
@@ -40,6 +40,10 @@
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
           <span>OnlyOffice预览</span>
+        </el-menu-item>
+        <el-menu-item index="/document-convert">
+          <el-icon><Refresh /></el-icon>
+          <span>文档格式转换</span>
         </el-menu-item>
         <!-- <el-menu-item index="/compare">
           <el-icon><Files /></el-icon>
@@ -115,7 +119,9 @@ import {
   DocumentChecked,
   DataAnalysis,
   Edit,
-  Grid
+  Grid,
+  Reading,
+  Refresh
 } from '@element-plus/icons-vue'
 import AiChat from '@/components/ai/AiChat.vue'
 

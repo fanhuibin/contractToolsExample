@@ -11,7 +11,7 @@
             <el-icon><ArrowLeft /></el-icon>
             返回
           </el-button>
-          规则抽取结果
+          规则提取结果
           <el-tag v-if="taskInfo" :type="statusType" size="large" style="margin-left: 12px;">
             {{ statusText }}
           </el-tag>
@@ -138,7 +138,7 @@
             </el-card>
           </div>
 
-          <!-- 右侧面板 - 抽取结果 -->
+          <!-- 右侧面板 - 提取结果 -->
           <div class="right-panel">
             <el-card 
               class="results-card"
@@ -146,7 +146,7 @@
             >
               <template #header>
                 <div class="panel-header">
-                  抽取结果
+                  提取结果
                   <el-tag size="small" type="info">共 {{ resultData.length }} 个字段</el-tag>
                 </div>
               </template>
@@ -185,7 +185,34 @@
                     <div class="field-value">
                       <span class="label">值：</span>
                       <div class="value-content">
-                        <template v-if="Array.isArray(item.value)">
+                        <!-- 表格数据的图形化显示 -->
+                        <template v-if="item.tableData && Array.isArray(item.tableData)">
+                          <div class="table-display">
+                            <el-table 
+                              :data="item.tableData" 
+                              border 
+                              size="small"
+                              style="width: 100%; margin-top: 8px;"
+                              max-height="300"
+                            >
+                              <el-table-column 
+                                v-for="(header, headerIndex) in getTableHeaders(item.tableData)"
+                                :key="headerIndex"
+                                :prop="header"
+                                :label="header"
+                                :min-width="80"
+                                show-overflow-tooltip
+                              />
+                            </el-table>
+                            <div class="table-info">
+                              <el-tag size="small" type="info">
+                                表格数据：{{ item.tableData.length }} 行
+                              </el-tag>
+                            </div>
+                          </div>
+                        </template>
+                        <!-- 数组数据 -->
+                        <template v-else-if="Array.isArray(item.value)">
                           <el-tag 
                             v-for="(val, idx) in item.value" 
                             :key="idx" 
@@ -195,9 +222,77 @@
                             {{ val }}
                           </el-tag>
                         </template>
+                        <!-- 格式化字段类型数据（金额、数字、日期、布尔等） -->
                         <template v-else-if="item.value && typeof item.value === 'object'">
-                          <pre class="json-value">{{ JSON.stringify(item.value, null, 2) }}</pre>
+                          <div class="formatted-value-display">
+                            <!-- 金额类型 -->
+                            <template v-if="item.fieldType === 'amount' && item.value.value !== undefined">
+                              <div class="amount-display">
+                                <div class="primary-value">
+                                  <el-tag type="success" size="large">{{ item.value.formatted || item.value.value }}</el-tag>
+                                </div>
+                                <div class="secondary-info">
+                                  <el-descriptions :column="2" size="small" border>
+                                    <el-descriptions-item label="原始文本">{{ item.value.raw }}</el-descriptions-item>
+                                    <el-descriptions-item label="数值">{{ item.value.value }}</el-descriptions-item>
+                                    <el-descriptions-item label="中文大写" :span="2">{{ item.value.chinese }}</el-descriptions-item>
+                                  </el-descriptions>
+                                </div>
+                              </div>
+                            </template>
+                            <!-- 数字类型 -->
+                            <template v-else-if="item.fieldType === 'number' && item.value.value !== undefined">
+                              <div class="number-display">
+                                <div class="primary-value">
+                                  <el-tag type="primary" size="large">{{ item.value.formatted || item.value.value }}</el-tag>
+                                </div>
+                                <div class="secondary-info">
+                                  <el-descriptions :column="2" size="small" border>
+                                    <el-descriptions-item label="原始文本">{{ item.value.raw }}</el-descriptions-item>
+                                    <el-descriptions-item label="数值">{{ item.value.value }}</el-descriptions-item>
+                                    <el-descriptions-item label="类型">{{ item.value.type === 'decimal' ? '小数' : '整数' }}</el-descriptions-item>
+                                  </el-descriptions>
+                                </div>
+                              </div>
+                            </template>
+                            <!-- 日期类型 -->
+                            <template v-else-if="item.fieldType === 'date' && item.value.iso !== undefined">
+                              <div class="date-display">
+                                <div class="primary-value">
+                                  <el-tag type="warning" size="large">{{ item.value.chinese || item.value.iso }}</el-tag>
+                                </div>
+                                <div class="secondary-info">
+                                  <el-descriptions :column="2" size="small" border>
+                                    <el-descriptions-item label="原始文本">{{ item.value.raw }}</el-descriptions-item>
+                                    <el-descriptions-item label="ISO格式">{{ item.value.iso }}</el-descriptions-item>
+                                    <el-descriptions-item label="中文格式" :span="2">{{ item.value.chinese }}</el-descriptions-item>
+                                  </el-descriptions>
+                                </div>
+                              </div>
+                            </template>
+                            <!-- 布尔类型 -->
+                            <template v-else-if="item.fieldType === 'boolean' && item.value.value !== undefined">
+                              <div class="boolean-display">
+                                <div class="primary-value">
+                                  <el-tag :type="item.value.value ? 'success' : 'info'" size="large">
+                                    {{ item.value.display }}
+                                  </el-tag>
+                                </div>
+                                <div class="secondary-info">
+                                  <el-descriptions :column="2" size="small" border>
+                                    <el-descriptions-item label="原始文本">{{ item.value.raw }}</el-descriptions-item>
+                                    <el-descriptions-item label="布尔值">{{ item.value.english }}</el-descriptions-item>
+                                  </el-descriptions>
+                                </div>
+                              </div>
+                            </template>
+                            <!-- 其他对象类型，显示为JSON -->
+                            <template v-else>
+                              <pre class="json-value">{{ JSON.stringify(item.value, null, 2) }}</pre>
+                            </template>
+                          </div>
                         </template>
+                        <!-- 普通文本数据 -->
                         <template v-else>
                           <span :class="{ 'empty-value': !item.value }">
                             {{ item.value || '-' }}
@@ -209,7 +304,7 @@
                 </div>
               </div>
               
-              <el-empty v-else description="暂无抽取结果" />
+              <el-empty v-else description="暂无提取结果" />
             </el-card>
           </div>
         </div>
@@ -311,7 +406,7 @@ const loadResult = async () => {
         totalPages.value = 1
       }
       
-      // 处理抽取结果
+      // 处理提取结果
       if (res.data.extractResults) {
         // 如果是对象格式，转换为数组
         if (typeof res.data.extractResults === 'object' && !Array.isArray(res.data.extractResults)) {
@@ -381,25 +476,35 @@ const exportResult = () => {
     return
   }
 
-  // 转换为CSV格式
-  const headers = ['字段名称', '字段编码', '抽取值', '状态']
-  const rows = resultData.value.map(item => [
-    item.fieldName,
-    item.fieldCode,
-    Array.isArray(item.value) ? item.value.join('; ') : (item.value || ''),
-    item.success ? '成功' : '失败'
-  ])
+  // 构建导出数据
+  const exportData = {
+    taskId: taskId.value,
+    taskInfo: {
+      templateName: taskInfo.value?.templateName,
+      fileName: taskInfo.value?.fileName,
+      status: taskInfo.value?.status,
+      durationSeconds: taskInfo.value?.durationSeconds,
+      exportTime: new Date().toISOString()
+    },
+    extractResults: resultData.value.map(item => ({
+      fieldName: item.fieldName,
+      fieldCode: item.fieldCode,
+      value: item.value,
+      status: item.success ? '成功' : '失败',
+      success: item.success,
+      charInterval: item.charInterval,
+      tableData: item.tableData
+    }))
+  }
 
-  const csvContent = [
-    headers.join(','),
-    ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-  ].join('\n')
+  // 转换为JSON格式
+  const jsonContent = JSON.stringify(exportData, null, 2)
 
   // 创建下载链接
-  const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `规则抽取结果_${taskId.value}_${Date.now()}.csv`
+  link.download = `规则提取结果_${taskId.value}_${Date.now()}.json`
   link.click()
   URL.revokeObjectURL(link.href)
 
@@ -429,6 +534,15 @@ const onExtractionClick = (extraction: any) => {
       }])
     }
   }
+}
+
+// 获取表格的表头
+const getTableHeaders = (tableData: any[]) => {
+  if (!tableData || tableData.length === 0) return []
+  
+  // 从第一行数据中获取所有键作为表头
+  const firstRow = tableData[0]
+  return Object.keys(firstRow)
 }
 
 // 监听页码变化，加载图片
@@ -633,6 +747,63 @@ onMounted(() => {
               .empty-value {
                 color: #c0c4cc;
                 font-style: italic;
+              }
+              
+              .table-display {
+                .table-info {
+                  margin-top: 8px;
+                  text-align: right;
+                }
+                
+                :deep(.el-table) {
+                  .el-table__header-wrapper {
+                    th {
+                      background-color: #f5f7fa;
+                      font-weight: 600;
+                    }
+                  }
+                  
+                  .el-table__body-wrapper {
+                    td {
+                      padding: 8px;
+                    }
+                  }
+                }
+              }
+              
+              .formatted-value-display {
+                .primary-value {
+                  margin-bottom: 12px;
+                  
+                  :deep(.el-tag) {
+                    font-size: 16px;
+                    padding: 8px 16px;
+                    font-weight: 500;
+                  }
+                }
+                
+                .secondary-info {
+                  :deep(.el-descriptions) {
+                    .el-descriptions__label {
+                      background-color: #f5f7fa;
+                      font-weight: 500;
+                      width: 80px;
+                    }
+                    
+                    .el-descriptions__content {
+                      background-color: #fff;
+                    }
+                  }
+                }
+                
+                .amount-display,
+                .number-display,
+                .date-display,
+                .boolean-display {
+                  padding: 8px;
+                  border-radius: 4px;
+                  background: #fafafa;
+                }
               }
             }
           }

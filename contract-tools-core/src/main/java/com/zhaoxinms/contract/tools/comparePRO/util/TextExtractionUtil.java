@@ -362,7 +362,7 @@ public class TextExtractionUtil {
         }
 
         return layouts;
-    }
+    } 
 
     /**
      * 按位置对布局项进行排序
@@ -550,11 +550,17 @@ public class TextExtractionUtil {
         public final double[] bbox; // [x1,y1,x2,y2]
         public final String category;
         public final String text; // may be empty for Picture
+        public final String rawHtml; // 原始HTML内容（仅用于表格类型）
 
         public LayoutItem(double[] bbox, String category, String text) {
+            this(bbox, category, text, null);
+        }
+        
+        public LayoutItem(double[] bbox, String category, String text, String rawHtml) {
             this.bbox = bbox;
             this.category = category;
             this.text = text;
+            this.rawHtml = rawHtml;
         }
     }
 

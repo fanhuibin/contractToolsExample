@@ -14,6 +14,7 @@ import com.zhaoxinms.contract.tools.ruleextract.model.FieldDefinitionModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleExtractTaskModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleTemplateModel;
 import com.zhaoxinms.contract.tools.ruleextract.storage.JsonFileStorage;
+import com.zhaoxinms.contract.tools.ruleextract.utils.FormatConverter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -50,6 +51,14 @@ public class RuleExtractService {
      * 创建抽取任务
      */
     public String createTask(MultipartFile file, String templateId, String ocrProvider) {
+        return createTask(file, templateId, ocrProvider, true, 12.0, 12.0);
+    }
+
+    /**
+     * 创建抽取任务（支持页眉页脚设置）
+     */
+    public String createTask(MultipartFile file, String templateId, String ocrProvider,
+                           boolean ignoreHeaderFooter, double headerHeightPercent, double footerHeightPercent) {
         try {
             // 验证模板
             RuleTemplateModel template = storage.load("template", templateId, RuleTemplateModel.class);
@@ -72,6 +81,9 @@ public class RuleExtractService {
             task.setFilePath(filePath);
             task.setFileSize(file.getSize());
             task.setOcrProvider(ocrProvider != null ? ocrProvider : "mineru");
+            task.setIgnoreHeaderFooter(ignoreHeaderFooter);
+            task.setHeaderHeightPercent(headerHeightPercent);
+            task.setFooterHeightPercent(footerHeightPercent);
             task.setStatus("pending");
             task.setProgress(0);
             task.setMessage("任务已创建，等待处理");
@@ -128,8 +140,7 @@ public class RuleExtractService {
             
             // 保存OCR文本到文件
             try {
-                String dataRoot = System.getProperty("user.dir") + File.separator + "rule-extract-data";
-                String ocrTextDir = dataRoot + File.separator + "ocr-texts";
+                String ocrTextDir = storage.getDataRoot() + File.separator + "ocr-texts";
                 FileUtil.mkdir(ocrTextDir);
                 String ocrTextPath = ocrTextDir + File.separator + taskId + ".txt";
                 FileUtil.writeUtf8String(ocrText, ocrTextPath);
@@ -149,7 +160,7 @@ public class RuleExtractService {
 
             // 4. 提取信息
             updateTaskStatus(taskId, "extracting", 75, "信息提取中...", null);
-            List<JSONObject> results = extractInformation(task.getTemplateId(), ocrText);
+            List<JSONObject> results = extractInformation(task, ocrText);
             updateTaskStatus(taskId, "extracting", 95, "信息提取完成", null);
 
             // 5. 保存结果
@@ -177,16 +188,41 @@ public class RuleExtractService {
      */
     private OCRProvider.OCRResult performOCR(RuleExtractTaskModel task) {
         try {
-            log.info("开始OCR处理: taskId={}, provider={}, file={}", 
-                task.getTaskId(), task.getOcrProvider(), task.getFileName());
+            log.info("开始OCR处理: taskId={}, provider={}, file={}, 忽略页眉页脚={}", 
+                task.getTaskId(), task.getOcrProvider(), task.getFileName(), task.getIgnoreHeaderFooter());
             
             File pdfFile = new File(task.getFilePath());
+            log.info("PDF文件路径: 相对={}, 绝对={}, 存在={}", 
+                task.getFilePath(), pdfFile.getAbsolutePath(), pdfFile.exists());
+            
             if (!pdfFile.exists()) {
                 throw new RuntimeException("文件不存在: " + task.getFilePath());
             }
 
-            // 调用OCR服务（通过接口）
-            OCRProvider.OCRResult ocrResult = ocrProvider.recognizePdf(pdfFile);
+            // 调用OCR服务（通过反射支持页眉页脚设置，避免循环依赖）
+            OCRProvider.OCRResult ocrResult;
+            try {
+                // 尝试调用带页眉页脚参数的方法（如果OCR服务支持）
+                java.lang.reflect.Method method = ocrProvider.getClass().getMethod(
+                    "recognizePdf", 
+                    File.class, boolean.class, double.class, double.class
+                );
+                ocrResult = (OCRProvider.OCRResult) method.invoke(
+                    ocrProvider,
+                    pdfFile,
+                    task.getIgnoreHeaderFooter() != null ? task.getIgnoreHeaderFooter() : true,
+                    task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 12.0,
+                    task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 12.0
+                );
+                log.info("使用页眉页脚参数调用OCR服务成功");
+            } catch (NoSuchMethodException e) {
+                // 如果不支持，使用默认方法
+                log.info("OCR服务不支持页眉页脚参数，使用默认方法");
+                ocrResult = ocrProvider.recognizePdf(pdfFile);
+            } catch (Exception e) {
+                log.warn("调用带参数的OCR方法失败，使用默认方法: {}", e.getMessage());
+                ocrResult = ocrProvider.recognizePdf(pdfFile);
+            }
             String content = ocrResult.getContent();
             
             if (content == null || content.trim().isEmpty()) {
@@ -205,9 +241,9 @@ public class RuleExtractService {
     /**
      * 提取信息
      */
-    private List<JSONObject> extractInformation(String templateId, String content) {
+    private List<JSONObject> extractInformation(RuleExtractTaskModel task, String content) {
         // 加载模板
-        RuleTemplateModel template = storage.load("template", templateId, RuleTemplateModel.class);
+        RuleTemplateModel template = storage.load("template", task.getTemplateId(), RuleTemplateModel.class);
         if (template == null) {
             throw new RuntimeException("模板不存在");
         }
@@ -245,10 +281,29 @@ public class RuleExtractService {
                         ExtractionResult extractionResult = matchByRuleWithPosition(content, rule);
                         if (extractionResult != null && extractionResult.getSuccess() && 
                             extractionResult.getValue() != null && !extractionResult.getValue().trim().isEmpty()) {
-                            result.put("rawValue", extractionResult.getValue());
+                            
+                            // 栏位验证功能已移除
+                            
+                            String rawValue = extractionResult.getValue();
+                            result.put("rawValue", rawValue);
                             result.put("matchedRule", rule.getRuleName());
-                            // TODO: 格式转换
-                            result.put("value", extractionResult.getValue());
+                            
+                            // 格式转换
+                            Object formattedValue = rawValue;
+                            try {
+                                if (field.getFieldType() != null) {
+                                    FormatConverter.FieldType fieldType = FormatConverter.FieldType.valueOf(
+                                        field.getFieldType().toUpperCase()
+                                    );
+                                    formattedValue = FormatConverter.convert(rawValue, fieldType, field.getOutputFormat());
+                                }
+                            } catch (Exception e) {
+                                log.warn("字段类型转换失败: field={}, type={}, error={}", 
+                                    field.getFieldName(), field.getFieldType(), e.getMessage());
+                                // 转换失败时使用原始值
+                            }
+                            
+                            result.put("value", formattedValue);
                             result.put("status", "success");
                             
                             // 保存位置信息
@@ -258,6 +313,11 @@ public class RuleExtractService {
                                 charInterval.put("endPos", extractionResult.getEndPosition());
                                 charInterval.put("sourceText", extractionResult.getValue());
                                 result.put("charInterval", charInterval);
+                            }
+                            
+                            // 保存表格数据（如果有）
+                            if (extractionResult.getTableData() != null) {
+                                result.put("tableData", extractionResult.getTableData());
                             }
                             
                             matched = true;
@@ -382,6 +442,8 @@ public class RuleExtractService {
                 
                 if (metaJson != null) {
                     log.info("Metadata keys: {}", metaJson.keySet());
+                    log.info("Metadata charBoxes字段存在: {}", metaJson.containsKey("charBoxes"));
+                    log.info("Metadata pageDimensions字段存在: {}", metaJson.containsKey("pageDimensions"));
                     
                     if (metaJson.containsKey("totalPages")) {
                         resultJson.put("totalPages", metaJson.getInteger("totalPages"));
@@ -397,6 +459,15 @@ public class RuleExtractService {
                         log.info("保存CharBox数据，长度: {}", charBoxesJson.length());
                     } else {
                         log.warn("Metadata中没有charBoxes字段");
+                    }
+                    
+                    if (metaJson.containsKey("pageDimensions")) {
+                        // 保存页面尺寸信息到task
+                        String pageDimensionsStr = JSON.toJSONString(metaJson.get("pageDimensions"));
+                        task.setPageDimensions(pageDimensionsStr);
+                        log.info("保存页面尺寸信息: {}", pageDimensionsStr);
+                    } else {
+                        log.warn("Metadata中没有pageDimensions字段");
                     }
                 } else {
                     log.warn("无法解析metadata为JSONObject");
@@ -770,8 +841,7 @@ public class RuleExtractService {
         }
 
         // 回退方案：从OCR输出目录查找
-        String dataRoot = System.getProperty("user.dir") + File.separator + "rule-extract-data";
-        File ocrOutputDir = new File(dataRoot, "ocr-output");
+        File ocrOutputDir = new File(storage.getDataRoot(), "ocr-output");
         
         // 尝试多种可能的图片路径
         List<File> possibleDirs = new ArrayList<>();
@@ -838,5 +908,7 @@ public class RuleExtractService {
         
         return null;
     }
+    
+    // 栏位验证功能已移除
 }
 
