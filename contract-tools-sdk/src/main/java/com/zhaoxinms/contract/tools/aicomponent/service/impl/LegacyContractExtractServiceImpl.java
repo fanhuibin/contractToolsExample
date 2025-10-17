@@ -124,7 +124,7 @@ public class LegacyContractExtractServiceImpl implements ContractExtractService 
                     .addSystemMessage("你是一个专业的合同分析助手，擅长从文档中提取关键信息。请以JSON格式返回提取结果，确保输出可以被解析为有效的JSON。")
                     .addSystemMessage("fileid://" + fileId)
                     .addUserMessage(finalPrompt)
-                    .model(aiProperties.getChat().getMode())
+                    .model(aiProperties.getModel().getMode())
                     .build();
             
             StringBuilder fullResponse = new StringBuilder();

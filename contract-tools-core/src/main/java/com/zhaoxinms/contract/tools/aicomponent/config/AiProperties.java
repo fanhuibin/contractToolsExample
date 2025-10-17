@@ -34,11 +34,6 @@ public class AiProperties {
     private List<String> apiKey;
 
     /**
-     * 默认模型
-     */
-    private String model = "qwen-turbo";
-
-    /**
      * 超时时间
      */
     private Long timeout = 30L;
@@ -69,9 +64,9 @@ public class AiProperties {
     private PdfConfig pdf = new PdfConfig();
 
     /**
-     * 聊天配置
+     * AI模型配置
      */
-    private ChatConfig chat = new ChatConfig();
+    private ModelConfig model = new ModelConfig();
 
     /**
      * 代理配置
@@ -115,10 +110,10 @@ public class AiProperties {
     }
 
     /**
-     * 聊天配置
+     * AI模型配置
      */
     @Data
-    public static class ChatConfig {
+    public static class ModelConfig {
         /**
          * 模型名称
          */

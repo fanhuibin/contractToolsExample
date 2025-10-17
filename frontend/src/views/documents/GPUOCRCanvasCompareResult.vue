@@ -2,7 +2,7 @@
   <div class="gpu-compare-fullscreen">
     <div class="compare-toolbar">
       <div class="left">
-        <div class="title">合同比对 </div>
+        <div class="title">智能文档比对 </div>
       </div>
       <div class="center">
         <el-button-group>

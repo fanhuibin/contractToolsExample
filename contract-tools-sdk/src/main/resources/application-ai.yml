@@ -10,8 +10,6 @@ zxcm:
     # API密钥，请替换为实际的API密钥
     api-key: 
       - sk-3e160de89efd4862923a24e22e72ed08
-    # 默认使用的模型
-    model: qwen-turbo
     # 请求超时时间(秒)
     timeout: 30
     # 用户请求限制
@@ -21,8 +19,8 @@ zxcm:
     total-limit-count: 500
     total-limit-time: 1m
     
-    # 聊天配置
-    chat:
+    # AI模型配置
+    model:
       # 模型名称: qwen-max, qwen-turbo, qwen2.5-72b-instruct, qwen2.5-3b-instruct, qwen-vl-ocr-latest
       mode: qwen-long
       # 随机种子

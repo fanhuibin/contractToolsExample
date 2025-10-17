@@ -387,7 +387,7 @@ const loadPageImage = async (pageNum: number): Promise<HTMLImageElement | null> 
     let imageUrl: string
     if (props.apiPrefix === '/api/rule-extract/extract/page-image' || 
         props.apiPrefix === '/api/ocr/extract/page-image') {
-      // 规则提取和OCR提取API格式
+      // 智能文档抽取和智能文档解析API格式
       imageUrl = `${props.apiPrefix}/${props.taskId}/${pageNum}`
     } else {
       // 智能提取API格式（默认）
@@ -920,7 +920,7 @@ const findMappingForExtraction = (extraction: any) => {
       mappingStart = mapping.interval.startPos || mapping.interval.start || 0
       mappingEnd = mapping.interval.endPos || mapping.interval.end || 0
     } else {
-      // 格式2: { startPos, endPos, bboxes: [...] }（规则提取使用的格式）
+      // 格式2: { startPos, endPos, bboxes: [...] }（智能文档抽取使用的格式）
       mappingStart = mapping.startPos || 0
       mappingEnd = mapping.endPos || 0
     }

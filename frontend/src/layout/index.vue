@@ -1,8 +1,5 @@
 <template>
   <el-container class="layout-container">
-    <!-- AI组件 -->
-    <AiChat v-model="showAiChat" />
-    
     <!-- 侧边栏（使用 Element Plus 菜单） -->
     <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
       <div class="logo">
@@ -17,6 +14,22 @@
           <el-icon><House /></el-icon>
           <span>首页</span>
         </el-menu-item>
+        <el-menu-item index="/rule-extract">
+          <el-icon><Grid /></el-icon>
+          <span>智能文档抽取</span>
+        </el-menu-item>
+        <el-menu-item index="/gpu-ocr-compare">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>智能文档比对</span>
+        </el-menu-item>
+        <el-menu-item index="/compose/start">
+          <el-icon><Edit /></el-icon>
+          <span>智能合同合成</span>
+        </el-menu-item>
+        <el-menu-item index="/ocr-extract">
+          <el-icon><Reading /></el-icon>
+          <span>智能文档解析</span>
+        </el-menu-item>
         <el-menu-item index="/contract-extract">
           <el-icon><Document /></el-icon>
           <span>合同提取</span>
@@ -25,37 +38,13 @@
           <el-icon><Search /></el-icon>
           <span>智能信息提取</span>
         </el-menu-item>
-        <el-menu-item index="/rule-extract">
-          <el-icon><Grid /></el-icon>
-          <span>规则提取</span>
-        </el-menu-item>
-        <el-menu-item index="/ocr-extract">
-          <el-icon><Reading /></el-icon>
-          <span>OCR文本提取</span>
-        </el-menu-item>
-        <el-menu-item index="/contract-review">
-          <el-icon><DocumentChecked /></el-icon>
-          <span>合同智能审核</span>
-        </el-menu-item>
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
-          <span>OnlyOffice预览</span>
+          <span>文档在线编辑</span>
         </el-menu-item>
         <el-menu-item index="/document-convert">
           <el-icon><Refresh /></el-icon>
           <span>文档格式转换</span>
-        </el-menu-item>
-        <!-- <el-menu-item index="/compare">
-          <el-icon><Files /></el-icon>
-          <span>PDF合同比对</span>
-        </el-menu-item> -->
-        <el-menu-item index="/gpu-ocr-compare">
-          <el-icon><DataAnalysis /></el-icon>
-          <span>合同比对</span>
-        </el-menu-item>
-        <el-menu-item index="/compose/start">
-          <el-icon><Edit /></el-icon>
-          <span>智能合同合成</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -73,26 +62,20 @@
         <div class="header-right">
           <el-button 
             type="primary" 
-            class="ai-button" 
-            @click="showAiChat = true"
+            link 
+            @click="openUrl('http://zhaoxinms.com')"
           >
-            <el-icon><ChatDotRound /></el-icon>
-            AI助手
+            <el-icon><Reading /></el-icon>
+            文档中心
           </el-button>
-          
-
-          
-          <el-dropdown>
-            <span class="user-info">
-              管理员 <el-icon><ArrowDown /></el-icon>
-            </span>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item>个人信息</el-dropdown-item>
-                <el-dropdown-item>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <el-button 
+            type="primary" 
+            link 
+            @click="openUrl('http://zhaoxinms.com')"
+          >
+            <el-icon><Key /></el-icon>
+            授权信息
+          </el-button>
         </div>
       </el-header>
 
@@ -105,31 +88,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
   Document, 
-  Files, 
   Monitor, 
-  ArrowDown, 
-  ChatDotRound, 
   House, 
-  Calendar,
   Search,
-  DocumentChecked,
   DataAnalysis,
   Edit,
   Grid,
   Reading,
-  Refresh
+  Refresh,
+  Key
 } from '@element-plus/icons-vue'
-import AiChat from '@/components/ai/AiChat.vue'
 
 const route = useRoute()
 const router = useRouter()
-
-// AI组件状态
-const showAiChat = ref(false)
 
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
@@ -142,6 +117,11 @@ const currentTitle = computed(() => {
 // 菜单选择处理
 function handleMenuSelect(index: string) {
   router.push(index)
+}
+
+// 打开外部链接
+function openUrl(url: string) {
+  window.open(url, '_blank')
 }
 </script>
 
@@ -194,19 +174,15 @@ function handleMenuSelect(index: string) {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 16px;
 }
 
-.ai-button {
-  display: flex;
-  align-items: center;
+.header-right :deep(.el-button) {
+  font-size: 14px;
 }
 
-.user-info {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  color: #606266;
+.header-right :deep(.el-button .el-icon) {
+  margin-right: 4px;
 }
 
 .main {

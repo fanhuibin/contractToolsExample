@@ -5,7 +5,7 @@
         <div class="card-header">
           <div class="card-title">
             <el-icon><Document /></el-icon>
-            合同OCR文本提取
+            智能文档解析
           </div>
         </div>
       </template>
@@ -87,7 +87,7 @@
         <!-- 工具栏 -->
         <div class="result-toolbar">
           <div class="display-controls">
-            <span class="toolbar-title">OCR提取结果</span>
+            <span class="toolbar-title">文档解析结果</span>
           </div>
 
           <div class="action-buttons">
@@ -286,7 +286,7 @@ const handleFileUpload = async (file: File) => {
     // baseRequest拦截器已处理，直接返回data对象
     if (response && response.data) {
       taskId.value = response.data.taskId
-      ElMessage.success('文件上传成功，开始OCR提取...')
+      ElMessage.success('文件上传成功，开始智能解析...')
       startPolling()
     } else {
       throw new Error('上传失败')
@@ -401,7 +401,7 @@ const loadResults = async () => {
         bboxMappings.value = []
       }
       
-      ElMessage.success('OCR提取完成')
+      ElMessage.success('文档解析完成')
     } else {
       console.error('结果响应格式错误:', resultResponse)
     }

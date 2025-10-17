@@ -45,39 +45,39 @@ const router = useRouter()
 // 服务数据（与图片命名、功能路径一一对应，桌面端四列一行）
 const services = ref([
   {
-    title: '合同智能审核',
-    description: 'AI 识别风险条款与整改建议，支持锚点定位与联动。',
-    image: '/images/contract-review.webp',
+    title: '智能文档抽取',
+    description: '采用版面分析、文档检索与规则引擎技术，精准定位关键信息，支持自定义模板快速抽取。',
+    image: '/images/contract-extract.webp',
     button_text: '进入功能',
-    link: '/contract-review'
+    link: '/rule-extract'
   },
   {
-    title: '合同合成',
+    title: '智能文档比对',
+    description: '智能比对两份文档差异，精准定位修改位置，支持可视化标注与一键导出比对报告。',
+    image: '/images/ocr-compare.webp',
+    button_text: '进入功能',
+    link: '/gpu-ocr-compare'
+  },
+  {
+    title: '智能合同合成',
     description: '基于模板的SDT占位符自动填充，快速生成标准合同。',
     image: '/images/contract-compose.webp',
     button_text: '进入功能',
     link: '/contract-compose'
   },
   {
-    title: '合同比对',
-    description: '基于加速的识别和智能比对，提供更快的处理速度和更高的准确率。',
-    image: '/images/ocr-compare.webp',
-    button_text: '进入功能',
-    link: '/gpu-ocr-compare'
-  },
-  {
-    title: '合同信息提取',
-    description: '提取合同关键信息字段并规范化输出，支持多模板。',
-    image: '/images/contract-extract.webp',
-    button_text: '进入功能',
-    link: '/contract-extract'
-  },
-  {
-    title: 'OCR文本提取',
-    description: 'PDF文档OCR识别，支持页眉页脚过滤，图文对照显示。',
-    image: '/images/ocr-extract.webp',
+    title: '智能文档解析',
+    description: 'GPU加速OCR识别技术，精准提取文档内容，支持页眉页脚过滤与图文对照显示。',
+    image: '/images/auto-fulfillment.webp',
     button_text: '进入功能',
     link: '/ocr-extract'
+  },
+  {
+    title: '文档在线编辑',
+    description: '基于OnlyOffice的在线文档编辑器，支持Word、Excel、PPT等多种格式的在线编辑与协作。',
+    image: '/images/contract-compose.webp',
+    button_text: '进入功能',
+    link: '/onlyoffice'
   }
 ])
 

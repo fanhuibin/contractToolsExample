@@ -78,11 +78,11 @@ public class DefaultOpenAiServiceImpl implements OpenAiService {
                 formattedMessages.add(msgMap);
             }
 
-            requestMap.put("model", aiProperties.getChat().getMode());
+            requestMap.put("model", aiProperties.getModel().getMode());
             requestMap.put("messages", formattedMessages);
-            requestMap.put("max_tokens", aiProperties.getChat().getMaxTokens());
-            requestMap.put("temperature", aiProperties.getChat().getTemperature());
-            requestMap.put("top_p", aiProperties.getChat().getTopP());
+            requestMap.put("max_tokens", aiProperties.getModel().getMaxTokens());
+            requestMap.put("temperature", aiProperties.getModel().getTemperature());
+            requestMap.put("top_p", aiProperties.getModel().getTopP());
 
             String jsonBody = objectMapper.writeValueAsString(requestMap);
             log.debug("Sending request to AI API: {}", jsonBody);

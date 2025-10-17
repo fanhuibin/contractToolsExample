@@ -1,7 +1,7 @@
 import baseRequest from '@/utils/request'
 
 /**
- * 上传PDF文件进行OCR提取
+ * 上传PDF文件进行智能文档解析
  */
 export const uploadPdfForOcr = (formData: FormData) => {
   return baseRequest.post('/ocr/extract/upload', formData, {
@@ -19,7 +19,7 @@ export const getOcrTaskStatus = (taskId: string) => {
 }
 
 /**
- * 获取OCR提取结果
+ * 获取智能文档解析结果
  */
 export const getOcrResult = (taskId: string) => {
   return baseRequest.get(`/ocr/extract/result/${taskId}`)

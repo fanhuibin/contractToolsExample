@@ -917,7 +917,7 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
                     .addSystemMessage("你是一个专业的合同审核助手。请只返回有效JSON。")
                     .addSystemMessage("fileid://" + fobj.id())
                     .addUserMessage(sb.toString())
-                    .model(aiProperties.getChat().getMode());
+                    .model(aiProperties.getModel().getMode());
 
             // 降温与上限，缩时提稳
             try {
@@ -936,13 +936,13 @@ public class RiskLibraryServiceImpl implements RiskLibraryService {
             try {
                 data = objectMapper.readValue(json, new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>(){});
             } catch (Exception parseEx) {
-                // 一次纠偏重试：追加“仅返回JSON”提醒
+                // 一次纠偏重试：追加"仅返回JSON"提醒
                 OpenAIClient client2 = createClient();
                 ChatCompletionCreateParams chat2 = ChatCompletionCreateParams.builder()
                         .addSystemMessage("只返回严格JSON，不要解释。")
                         .addSystemMessage("fileid://" + fobj.id())
                         .addUserMessage(sb.toString())
-                        .model(aiProperties.getChat().getMode())
+                        .model(aiProperties.getModel().getMode())
                         .build();
                 StringBuilder full2 = new StringBuilder();
                 try (StreamResponse<ChatCompletionChunk> stream2 = client2.chat().completions().createStreaming(chat2)) {

@@ -2,8 +2,8 @@
   <div class="extract-main-page">
     <!-- 使用 PageHeader 组件 -->
     <PageHeader 
-      title="规则提取" 
-      description="基于预定义规则和模板的合同信息提取功能，无需AI，快速准确"
+      title="智能文档抽取" 
+      description="采用深度版面分析、OCR识别与智能文档检索技术，结合规则引擎精准定位，实现结构化信息高效抽取"
       :icon="Document"
       tag="规则引擎"
       tag-type="success"

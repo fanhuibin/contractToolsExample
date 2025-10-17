@@ -1,7 +1,7 @@
 <template>
   <div class="compare-page">
     <PageHeader 
-      title="PDF合同比对"
+      title="智能文档比对"
       description="上传两个版本或提供两个URL，系统将对比差异并给出结果。"
       :icon="DocumentCopy"
     />

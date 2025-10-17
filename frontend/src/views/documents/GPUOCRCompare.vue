@@ -1,8 +1,8 @@
 <template>
   <div class="gpu-ocr-compare-page">
     <PageHeader 
-      title="合同比对" 
-      description="通过视觉大模型进行合同比对，支持pdf格式文档。"
+      title="智能文档比对" 
+      description="智能比对两份文档差异，精准定位修改位置，支持可视化标注与一键导出比对报告。"
       :icon="Search"
       tag="专业版"
       tag-type="success"
@@ -51,7 +51,7 @@
       </el-form>
 
       <el-alert
-        title="肇新合同比对专业版，基于先进的AI模型进行文字识别和比对。已广泛应用于合同管理、招投标管理、合同风险控制等场景。"
+        title="肇新智能文档比对，智能比对文档差异，精准定位每一处修改。支持可视化标注、差异导航与导出比对报告，广泛应用于合同审查、文档版本管理、招投标文档核对等场景。"
         type="success"
         show-icon
         :closable="false"
@@ -479,11 +479,11 @@ const doUploadGPUOCRCompare = async () => {
       }
     }).catch(() => {})
 
-    ElMessage.success('GPU OCR比对任务已提交，正在处理中...')
+    ElMessage.success('智能文档比对任务已提交，正在处理中...')
 
   } catch (e: any) {
-    console.error('GPU OCR比对失败:', e) // 添加调试日志
-    ElMessage.error(e?.message || 'GPU OCR比对任务提交失败')
+    console.error('智能文档比对失败:', e) // 添加调试日志
+    ElMessage.error(e?.message || '智能文档比对任务提交失败')
   } finally {
     uploading.value = false
   }
@@ -569,9 +569,9 @@ const updateTaskStatus = async (taskId: string) => {
 
       if (res.data.status === 'COMPLETED') {
         // 进度会通过 progressCalculator 自动冲刺到 100%
-        ElMessage.success('GPU OCR比对完成！')
+        ElMessage.success('智能文档比对完成！')
       } else if (res.data.status === 'FAILED') {
-        ElMessage.error('GPU OCR比对失败: ' + res.data.errorMessage)
+        ElMessage.error('智能文档比对失败: ' + res.data.errorMessage)
       }
     }
 

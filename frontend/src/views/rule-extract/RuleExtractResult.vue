@@ -11,7 +11,7 @@
             <el-icon><ArrowLeft /></el-icon>
             返回
           </el-button>
-          规则提取结果
+          智能文档抽取结果
           <el-tag v-if="taskInfo" :type="statusType" size="large" style="margin-left: 12px;">
             {{ statusText }}
           </el-tag>
@@ -504,7 +504,7 @@ const exportResult = () => {
   const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
-  link.download = `规则提取结果_${taskId.value}_${Date.now()}.json`
+  link.download = `智能文档抽取结果_${taskId.value}_${Date.now()}.json`
   link.click()
   URL.revokeObjectURL(link.href)
 
