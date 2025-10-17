@@ -134,9 +134,9 @@ public class OcrExtractServiceImpl implements OcrExtractService {
         // 更新状态：OCR识别中
         updateTaskStatus(taskId, "processing", 30, "正在进行OCR识别...");
 
-        // 调用统一OCR服务
+        // 调用统一OCR服务（传入taskId和输出目录，确保中间文件保存到正确位置）
         OCRProvider.OCRResult ocrResult = unifiedOCRService.recognizePdf(
-                pdfFile, ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
+                pdfFile, taskId, taskDir, ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
 
         if (ocrResult == null) {
             throw new RuntimeException("OCR识别失败");

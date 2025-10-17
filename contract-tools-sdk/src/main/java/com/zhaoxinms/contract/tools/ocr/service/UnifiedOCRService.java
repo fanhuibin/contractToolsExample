@@ -59,21 +59,43 @@ public class UnifiedOCRService implements OCRProvider {
      */
     public OCRProvider.OCRResult recognizePdf(File pdfFile, boolean ignoreHeaderFooter, 
                                              double headerHeightPercent, double footerHeightPercent) {
-        log.info("使用 MinerU OCR 识别PDF: {}, 忽略页眉页脚: {}", pdfFile.getName(), ignoreHeaderFooter);
+        // 使用自动生成的taskId和默认输出目录
+        String taskId = UUID.randomUUID().toString();
+        File ocrOutputDir = new File(uploadRootPath, "rule-extract-data/ocr-output");
+        if (!ocrOutputDir.exists()) {
+            ocrOutputDir.mkdirs();
+        }
+        File taskOutputDir = new File(ocrOutputDir, taskId);
+        taskOutputDir.mkdirs();
+        
+        return recognizePdf(pdfFile, taskId, taskOutputDir, ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
+    }
+    
+    /**
+     * 识别PDF（支持指定taskId和输出目录）
+     * 
+     * @param pdfFile PDF文件
+     * @param taskId 任务ID
+     * @param taskOutputDir 任务输出目录（中间文件将保存到此目录下的mineru_intermediate子目录）
+     * @param ignoreHeaderFooter 是否忽略页眉页脚
+     * @param headerHeightPercent 页眉高度百分比
+     * @param footerHeightPercent 页脚高度百分比
+     */
+    public OCRProvider.OCRResult recognizePdf(File pdfFile, String taskId, File taskOutputDir,
+                                             boolean ignoreHeaderFooter, 
+                                             double headerHeightPercent, double footerHeightPercent) {
+        log.info("使用 MinerU OCR 识别PDF: {}, 任务ID: {}, 输出目录: {}, 忽略页眉页脚: {}", 
+            pdfFile.getName(), taskId, taskOutputDir.getAbsolutePath(), ignoreHeaderFooter);
         
         if (mineruOcrService == null) {
             throw new RuntimeException("MinerU OCR 服务未启用，请检查配置");
         }
         
         try {
-            // 创建持久化输出目录（使用配置的上传路径）
-            String taskId = UUID.randomUUID().toString();
-            File ocrOutputDir = new File(uploadRootPath, "rule-extract-data/ocr-output");
-            if (!ocrOutputDir.exists()) {
-                ocrOutputDir.mkdirs();
+            // 确保输出目录存在
+            if (!taskOutputDir.exists()) {
+                taskOutputDir.mkdirs();
             }
-            File taskOutputDir = new File(ocrOutputDir, taskId);
-            taskOutputDir.mkdirs();
             
             // 创建选项并设置页眉页脚参数
             CompareOptions options = new CompareOptions();
@@ -295,8 +317,8 @@ public class UnifiedOCRService implements OCRProvider {
         }
         
         try {
-            // 创建输出目录
-            File outputDir = new File("uploads/extract-tasks/" + taskId);
+            // 创建输出目录（规则抽取功能使用 extract-tasks）
+            File outputDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }

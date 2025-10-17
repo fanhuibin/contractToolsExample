@@ -21,6 +21,31 @@ public class TextBox {
         this.endPos = endPos;
     }
 
+    // Getter方法 - Jackson序列化需要
+    public int getPage() {
+        return page;
+    }
+
+    public String getText() {
+        return text;
+    }
+
+    public double[] getBbox() {
+        return bbox;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
+    public int getStartPos() {
+        return startPos;
+    }
+
+    public int getEndPos() {
+        return endPos;
+    }
+
     @Override
     public String toString() {
         return String.format("TextBox{page=%d, text='%s', bbox=[%.1f,%.1f,%.1f,%.1f], category='%s', pos=[%d-%d]}",

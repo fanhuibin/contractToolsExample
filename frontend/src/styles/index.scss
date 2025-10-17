@@ -4,7 +4,7 @@
  */
 
 // 1. 导入设计令牌（变量）
-@import './variables/design-tokens.scss';
+@use './variables/design-tokens.scss';
 
 // 2. 基础样式
 * {

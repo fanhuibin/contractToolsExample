@@ -409,6 +409,10 @@ public class MinerUOCRService {
         // 按页面组织LayoutItem
         Map<Integer, List<TextExtractionUtil.LayoutItem>> pageLayoutItems = new HashMap<>();
         
+        // 跟踪已经匹配过的middle_json表格，防止多个content_list表格匹配到同一个middle_json表格
+        // key: "pageIdx-tableIndex", value: true
+        Set<String> matchedMiddleJsonTables = new HashSet<>();
+        
         int contentListIndex = 0;
         for (JsonNode item : contentListNode) {
             int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
@@ -434,7 +438,8 @@ public class MinerUOCRService {
                 pdfPageSizes.get(pageIdx),
                 middleJsonNode,
                 pageIdx,
-                docMode
+                docMode,
+                matchedMiddleJsonTables
             );
             
             if (!pageLayoutItems.containsKey(pageIdx)) {
@@ -547,7 +552,8 @@ public class MinerUOCRService {
             double[] pdfPageSize,
             JsonNode middleJsonNode,
             int pageIdx,
-            String docMode) {
+            String docMode,
+            Set<String> matchedMiddleJsonTables) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         
@@ -564,7 +570,7 @@ public class MinerUOCRService {
         if ("table".equals(itemType)) {
             log.info("📊 [表格检测] 页{} 检测到表格，将从 middle_json 获取精确 bbox", pageIdx + 1);
             log.debug("📊 [表格检测] content_list 表格数据: {}", item.toString());
-            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx, docMode));
+            items.addAll(handleTableItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx, docMode, matchedMiddleJsonTables));
         }
         // 处理图片类型
         else if ("image".equals(itemType)) {
@@ -607,7 +613,8 @@ public class MinerUOCRService {
             double pdfWidth, double pdfHeight,
             JsonNode middleJsonNode,
             int pageIdx,
-            String docMode) {
+            String docMode,
+            Set<String> matchedMiddleJsonTables) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         
@@ -615,7 +622,7 @@ public class MinerUOCRService {
         log.info("📊 [表格处理] 图片尺寸: {}x{}, PDF尺寸: {}x{}", imageWidth, imageHeight, pdfWidth, pdfHeight);
         
         // 从 middle_json 中查找对应页面的表格块
-        TableBlockInfo tableBlockInfo = findTableBlocksInMiddleJson(middleJsonNode, pageIdx, item);
+        TableBlockInfo tableBlockInfo = findTableBlocksInMiddleJson(middleJsonNode, pageIdx, item, matchedMiddleJsonTables);
         
         if (tableBlockInfo != null && tableBlockInfo.blocks != null && 
             tableBlockInfo.blocks.isArray() && tableBlockInfo.blocks.size() > 0) {
@@ -623,20 +630,35 @@ public class MinerUOCRService {
             log.info("📊 [表格处理] ✅ 从 middle_json 中找到表格精确 bbox，页{}, 子块数量: {}, middle_json页面尺寸: {}x{}", 
                 pageIdx + 1, tableBlockInfo.blocks.size(), tableBlockInfo.pageWidth, tableBlockInfo.pageHeight);
             
-            // 只处理 table_caption 和 table_footnote，table_body 使用 content_list 的逻辑
+            // 先收集所有表格子项（caption、body、footnote），然后按index排序
+            // index是MinerU确定的正确阅读顺序
+            List<TableSubItem> subItems = new ArrayList<>();
+            int captionCount = 0, footnoteCount = 0;
+            
+            // 第一步：处理 middle_json 中的 caption 和 footnote
             for (int i = 0; i < tableBlockInfo.blocks.size(); i++) {
                 JsonNode block = tableBlockInfo.blocks.get(i);
                 String blockType = block.has("type") ? block.get("type").asText() : "";
                 
+                // 获取index字段（MinerU的阅读顺序）
+                int blockIndex = block.has("index") ? block.get("index").asInt() : i;
+                
                 // 跳过 table_body，它将在后面用 content_list 逻辑处理
                 if ("table_body".equals(blockType)) {
-                    log.info("📊 [表格处理] 跳过 table_body（将使用 content_list 逻辑处理）");
+                    log.info("📊 [表格处理] 跳过 table_body（将使用 content_list 逻辑处理），index={}", blockIndex);
                     continue;
+                }
+                
+                // 统计caption和footnote数量
+                if ("table_caption".equals(blockType)) {
+                    captionCount++;
+                } else if ("table_footnote".equals(blockType)) {
+                    footnoteCount++;
                 }
                 
                 JsonNode bboxNode = block.get("bbox");
                 
-                log.info("📊 [表格处理] 处理子块 {}/{}: type={}", i + 1, tableBlockInfo.blocks.size(), blockType);
+                log.info("📊 [表格处理] 处理子块 {}/{}: type={}, index={}", i + 1, tableBlockInfo.blocks.size(), blockType, blockIndex);
                 
                 if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
                     log.warn("📊 [表格处理] ⚠️  子块 {} 缺少有效 bbox，跳过", blockType);
@@ -672,19 +694,33 @@ public class MinerUOCRService {
                 String text = extractTextFromMiddleJsonBlock(block);
                 
                 if (text != null && !text.trim().isEmpty()) {
-                    // table_caption 和 table_footnote 都设置为 Text 类型
-                    items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Text", text));
-                    log.info("📊 [表格处理] ✅ 添加表格子块: type={}, category=Text, bbox=[{}, {}, {}, {}], 文本长度={}, 文本预览: {}", 
-                        blockType, imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], text.length(),
+                    // 添加到临时列表，使用index作为排序依据
+                    subItems.add(new TableSubItem(blockType, imageBbox, text, blockIndex));
+                    log.info("📊 [表格处理] 收集表格子块: type={}, index={}, 文本预览: {}", 
+                        blockType, blockIndex,
                         text.length() > 50 ? text.substring(0, 50) + "..." : text);
                 } else {
                     log.warn("📊 [表格处理] ⚠️  子块 {} 文本为空，跳过", blockType);
+                    log.info("📊 [表格处理] 子块详细信息: {}", block.toString());
                 }
             }
-            log.info("📊 [表格处理] 从 middle_json 共添加 {} 个子块（caption/footnote）", items.size());
+            log.info("📊 [表格处理] 从 middle_json 收集到 {} 个子块（caption: {}, footnote: {}）", subItems.size(), captionCount, footnoteCount);
             
-            // 现在处理 table_body（使用 content_list 的逻辑）
+            // 第二步：处理 table_body（使用 content_list 的逻辑）
             log.info("📊 [表格处理] 开始处理 table_body（使用 content_list）");
+            
+            // 从middle_json的blocks中找到table_body的index
+            int tableBodyIndex = -1;
+            for (int i = 0; i < tableBlockInfo.blocks.size(); i++) {
+                JsonNode block = tableBlockInfo.blocks.get(i);
+                String blockType = block.has("type") ? block.get("type").asText() : "";
+                if ("table_body".equals(blockType)) {
+                    tableBodyIndex = block.has("index") ? block.get("index").asInt() : i;
+                    log.info("📊 [表格处理] 找到 table_body 的 index={}", tableBodyIndex);
+                    break;
+                }
+            }
+            
             JsonNode bboxNode = item.get("bbox");
             
             if (bboxNode != null && bboxNode.isArray() && bboxNode.size() >= 4) {
@@ -696,24 +732,48 @@ public class MinerUOCRService {
                     String tableBodyHtml = item.get("table_body").asText();
                     if (tableBodyHtml != null && !tableBodyHtml.trim().isEmpty()) {
                         // 根据 docMode 决定是否保留HTML
+                        String readableTableBody = convertLatexToReadableText(tableBodyHtml);
+                        
+                        // 将table_body也添加到临时列表，用于排序
                         if ("extract".equals(docMode)) {
-                            // 规则抽取模式：保留原始HTML，同时提供可读文本
-                            String readableTableBody = convertLatexToReadableText(tableBodyHtml);
-                            items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n", tableBodyHtml));
-                            log.info("📊 [表格处理] ✅ 添加 table_body（保留HTML）: bbox=[{}, {}, {}, {}], HTML长度={}", 
-                                imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                            subItems.add(new TableSubItem("table_body", imageBbox, readableTableBody + "\n", tableBodyIndex, tableBodyHtml));
+                            log.info("📊 [表格处理] 收集 table_body（保留HTML）: index={}, HTML长度={}", 
+                                tableBodyIndex, tableBodyHtml.length());
                         } else {
-                            // 合同比对模式：去除HTML，只保留文本
-                            String readableTableBody = convertLatexToReadableText(tableBodyHtml);
-                            items.add(new TextExtractionUtil.LayoutItem(imageBbox, "Table", readableTableBody + "\n"));
-                            log.info("📊 [表格处理] ✅ 添加 table_body（去除HTML）: bbox=[{}, {}, {}, {}], HTML长度={}", 
-                                imageBbox[0], imageBbox[1], imageBbox[2], imageBbox[3], tableBodyHtml.length());
+                            subItems.add(new TableSubItem("table_body", imageBbox, readableTableBody + "\n", tableBodyIndex, null));
+                            log.info("📊 [表格处理] 收集 table_body（去除HTML）: index={}, HTML长度={}", 
+                                tableBodyIndex, tableBodyHtml.length());
                         }
                     }
                 }
             } else {
                 log.warn("📊 [表格处理] ⚠️  content_list 中缺少 bbox 信息，无法处理 table_body");
             }
+            
+            // 第三步：按index排序所有子项（确保顺序：caption -> body -> footnote）
+            subItems.sort((a, b) -> Integer.compare(a.index, b.index));
+            log.info("📊 [表格处理] 已按index排序 {} 个子项", subItems.size());
+            
+            // 第四步：按排序后的顺序添加到items列表
+            for (TableSubItem subItem : subItems) {
+                if ("table_body".equals(subItem.type)) {
+                    // table_body 使用 Table 类型
+                    if (subItem.htmlContent != null) {
+                        items.add(new TextExtractionUtil.LayoutItem(subItem.bbox, "Table", subItem.text, subItem.htmlContent));
+                    } else {
+                        items.add(new TextExtractionUtil.LayoutItem(subItem.bbox, "Table", subItem.text));
+                    }
+                    log.info("📊 [表格处理] ✅ 添加 table_body: index={}, bbox=[{}, {}, {}, {}]", 
+                        subItem.index, subItem.bbox[0], subItem.bbox[1], subItem.bbox[2], subItem.bbox[3]);
+                } else {
+                    // caption 和 footnote 使用 Text 类型
+                    items.add(new TextExtractionUtil.LayoutItem(subItem.bbox, "Text", subItem.text));
+                    log.info("📊 [表格处理] ✅ 添加 {}: index={}, bbox=[{}, {}, {}, {}], 文本预览: {}", 
+                        subItem.type, subItem.index, subItem.bbox[0], subItem.bbox[1], subItem.bbox[2], subItem.bbox[3],
+                        subItem.text.length() > 50 ? subItem.text.substring(0, 50) + "..." : subItem.text);
+                }
+            }
+            log.info("📊 [表格处理] 共添加 {} 个表格子项（已按index排序）", items.size());
         } else {
             // 如果未找到 middle_json 数据，使用 content_list 中的合并 bbox（降级处理）
             log.warn("📊 [表格处理] ⚠️  未从 middle_json 中找到表格精确 bbox，使用 content_list 的合并 bbox（降级模式）");
@@ -799,7 +859,9 @@ public class MinerUOCRService {
                             };
                             // 转换 LaTeX 格式为可读文本
                             String readableFootnoteText = convertLatexToReadableText(footnoteText);
-                            items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "text", readableFootnoteText + "\n"));
+                            items.add(new TextExtractionUtil.LayoutItem(footnoteBbox, "Text", readableFootnoteText + "\n"));
+                            log.info("📊 [表格处理] ✅ 添加 table_footnote（降级模式）: bbox=[{}, {}, {}, {}], 文本: {}", 
+                                footnoteBbox[0], footnoteBbox[1], footnoteBbox[2], footnoteBbox[3], readableFootnoteText);
                         }
                     }
                 }
@@ -1184,7 +1246,7 @@ public class MinerUOCRService {
             
             log.info("✅ 保存 MinerU 原始响应: {}", rawFile.getAbsolutePath());
         } catch (Exception e) {
-            log.warn("保存 MinerU 原始响应失败: {}", e.getMessage());
+            log.error("❌ 保存 MinerU 原始响应失败: {}", e.getMessage(), e);
         }
     }
     
@@ -1222,9 +1284,11 @@ public class MinerUOCRService {
                 
                 // 2.3 额外保存一个带统计信息的版本
                 saveContentListWithStats(contentListNode, intermediateDir, docMode);
+            } else {
+                log.warn("⚠️  未找到有效的 content_list 数据，请检查 API 参数 return_content_list");
             }
         } catch (Exception e) {
-            log.warn("保存格式化 content_list 失败: {}", e.getMessage());
+            log.error("❌ 保存格式化 content_list 失败: {}", e.getMessage(), e);
         }
     }
     
@@ -1275,10 +1339,10 @@ public class MinerUOCRService {
                 }
             }
             
-            log.debug("未找到 middle_json 数据（MinerU API 可能未返回此字段）");
+            log.warn("⚠️  未找到 middle_json 数据（MinerU API 可能未返回此字段，请检查 API 参数 return_middle_json）");
             
         } catch (Exception e) {
-            log.warn("保存 middle_json 失败: {}", e.getMessage());
+            log.error("❌ 保存 middle_json 失败: {}", e.getMessage(), e);
         }
     }
     
@@ -1381,7 +1445,7 @@ public class MinerUOCRService {
             log.info("✅ 保存易读格式的 content_list: {}", readableFile.getAbsolutePath());
             
         } catch (Exception e) {
-            log.warn("保存易读格式 content_list 失败: {}", e.getMessage());
+            log.error("❌ 保存易读格式 content_list 失败: {}", e.getMessage(), e);
         }
     }
     
@@ -1481,9 +1545,9 @@ public class MinerUOCRService {
             
             Files.write(statsFile.toPath(), stats.toString().getBytes(StandardCharsets.UTF_8));
             
-            log.info("保存 content_list 统计信息: {}", statsFile.getAbsolutePath());
+            log.info("✅ 保存 content_list 统计信息: {}", statsFile.getAbsolutePath());
         } catch (Exception e) {
-            log.warn("保存统计信息失败: {}", e.getMessage());
+            log.error("❌ 保存统计信息失败: {}", e.getMessage(), e);
         }
     }
     
@@ -1496,7 +1560,7 @@ public class MinerUOCRService {
      * @param text 包含 LaTeX/Markdown 格式的文本
      * @return 转换后的纯文本
      */
-    private String convertLatexToReadableText(String text) {
+    private String convertLatexToReadableText(String text) { 
         if (text == null || text.isEmpty()) {
             return text;
         }
@@ -1802,9 +1866,10 @@ public class MinerUOCRService {
      * @param middleJsonNode middle_json 数据
      * @param pageIdx 页索引（0-based）
      * @param contentItem content_list 中的表格项（用于匹配）
+     * @param matchedMiddleJsonTables 已匹配的middle_json表格集合（防止重复匹配）
      * @return 表格块信息（包含子块数组和页面尺寸）
      */
-    private TableBlockInfo findTableBlocksInMiddleJson(JsonNode middleJsonNode, int pageIdx, JsonNode contentItem) {
+    private TableBlockInfo findTableBlocksInMiddleJson(JsonNode middleJsonNode, int pageIdx, JsonNode contentItem, Set<String> matchedMiddleJsonTables) {
         log.info("📊 [表格匹配] 开始在 middle_json 中查找表格，页{}", pageIdx + 1);
         
         if (middleJsonNode == null || !middleJsonNode.isArray()) {
@@ -1813,6 +1878,16 @@ public class MinerUOCRService {
         }
         
         log.info("📊 [表格匹配] middle_json 总页数: {}", middleJsonNode.size());
+        
+        // 检查content_list中是否有table_footnote
+        boolean hasContentListFootnote = false;
+        if (contentItem.has("table_footnote")) {
+            JsonNode footnoteNode = contentItem.get("table_footnote");
+            if (footnoteNode.isArray() && footnoteNode.size() > 0) {
+                hasContentListFootnote = true;
+                log.info("📊 [表格匹配] content_list中有table_footnote: {}", footnoteNode.toString());
+            }
+        }
         
         try {
             // 提取 content_list 中表格的文本内容（用于匹配）
@@ -1851,6 +1926,12 @@ public class MinerUOCRService {
                 
                 if (paraBlocks != null && paraBlocks.isArray()) {
                     int tableCount = 0;
+                    // 先检查content_list中表格是否有caption或footnote
+                    boolean hasContentListCaption = contentItem.has("table_caption") && 
+                        contentItem.get("table_caption").isArray() && 
+                        contentItem.get("table_caption").size() > 0;
+                    boolean hasContentListFootnoteLocal = hasContentListFootnote;
+                    
                     // 遍历页面中的所有块
                     for (int i = 0; i < paraBlocks.size(); i++) {
                         JsonNode block = paraBlocks.get(i);
@@ -1858,11 +1939,26 @@ public class MinerUOCRService {
                         
                         if ("table".equals(blockType)) {
                             tableCount++;
-                            log.info("📊 [表格匹配] 找到第 {} 个表格块（块索引 {}）", tableCount, i);
+                            int blockIndex = block.has("index") ? block.get("index").asInt() : i;
+                            String tableKey = pageIdx + "-" + blockIndex;
+                            
+                            log.info("📊 [表格匹配] 找到第 {} 个表格块（块索引 {}, index={}）", tableCount, i, blockIndex);
+                            
+                            // 检查这个表格是否已经被匹配过
+                            if (matchedMiddleJsonTables.contains(tableKey)) {
+                                log.info("📊 [表格匹配] ⚠️  表格 {} 已被匹配使用，跳过", tableKey);
+                                continue;
+                            }
                             
                             JsonNode subBlocks = block.get("blocks");
                             if (subBlocks != null && subBlocks.isArray()) {
                                 log.info("📊 [表格匹配] 表格有 {} 个子块", subBlocks.size());
+                                
+                                // 如果content_list有caption/footnote，优先匹配有多个子块的表格
+                                if ((hasContentListCaption || hasContentListFootnoteLocal) && subBlocks.size() == 1) {
+                                    log.info("📊 [表格匹配] ⚠️  content_list有caption/footnote但此表格只有1个子块，跳过（可能是跨页表格延续）");
+                                    continue;
+                                }
                                 
                                 // 检查这个表格是否匹配（通过对比 table_body 的文本）
                                 for (JsonNode subBlock : subBlocks) {
@@ -1877,11 +1973,15 @@ public class MinerUOCRService {
                                         // 简单匹配：如果文本内容相似，认为是同一个表格
                                         if (middleBodyText != null && middleBodyText.length() >= 50 && 
                                             tableBodyText.contains(middleBodyText.substring(0, Math.min(50, middleBodyText.length())))) {
-                                            log.info("📊 [表格匹配] ✅ 匹配成功！返回表格子块");
+                                            // 标记为已匹配
+                                            matchedMiddleJsonTables.add(tableKey);
+                                            log.info("📊 [表格匹配] ✅ 匹配成功！标记表格 {} 为已使用，返回表格子块", tableKey);
                                             return new TableBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
                                         } else if (middleBodyText != null && middleBodyText.length() < 50 && 
                                                    tableBodyText.contains(middleBodyText)) {
-                                            log.info("📊 [表格匹配] ✅ 匹配成功（短文本）！返回表格子块");
+                                            // 标记为已匹配
+                                            matchedMiddleJsonTables.add(tableKey);
+                                            log.info("📊 [表格匹配] ✅ 匹配成功（短文本）！标记表格 {} 为已使用，返回表格子块", tableKey);
                                             return new TableBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
                                         } else {
                                             log.warn("📊 [表格匹配] ❌ 文本不匹配，继续查找");
@@ -1930,23 +2030,63 @@ public class MinerUOCRService {
         StringBuilder text = new StringBuilder();
         
         try {
+            String blockType = block.has("type") ? block.get("type").asText() : "unknown";
             JsonNode lines = block.get("lines");
+            
             if (lines != null && lines.isArray()) {
+                log.debug("📝 [extractTextFromMiddleJsonBlock] 块类型: {}, lines数量: {}", blockType, lines.size());
                 for (JsonNode line : lines) {
                     JsonNode spans = line.get("spans");
                     if (spans != null && spans.isArray()) {
                         for (JsonNode span : spans) {
                             String content = span.has("content") ? span.get("content").asText() : "";
-                            text.append(content);
+                            if (!content.isEmpty()) {
+                                text.append(content);
+                                log.debug("📝 [extractTextFromMiddleJsonBlock] 提取到文本: {}", content);
+                            }
                         }
+                    } else {
+                        log.debug("📝 [extractTextFromMiddleJsonBlock] line没有spans或不是数组");
                     }
                 }
+            } else {
+                log.debug("📝 [extractTextFromMiddleJsonBlock] 块{}没有lines或不是数组", blockType);
             }
         } catch (Exception e) {
-            log.debug("提取块文本失败: {}", e.getMessage());
+            log.warn("提取块文本失败: {}", e.getMessage(), e);
         }
         
-        return text.toString().trim();
+        String result = text.toString().trim();
+        log.debug("📝 [extractTextFromMiddleJsonBlock] 最终提取的文本长度: {}, 内容: {}", 
+            result.length(), result.length() > 100 ? result.substring(0, 100) + "..." : result);
+        return result;
+    }
+    
+    /**
+     * 表格子项包装类（用于排序）
+     */
+    private static class TableSubItem {
+        String type;         // table_caption, table_body, table_footnote
+        double[] bbox;       // 图片坐标
+        String text;         // 文本内容
+        int index;           // MinerU的index字段（阅读顺序）
+        String htmlContent;  // HTML内容（仅table_body有）
+        
+        public TableSubItem(String type, double[] bbox, String text, int index) {
+            this.type = type;
+            this.bbox = bbox;
+            this.text = text;
+            this.index = index;
+            this.htmlContent = null;
+        }
+        
+        public TableSubItem(String type, double[] bbox, String text, int index, String htmlContent) {
+            this.type = type;
+            this.bbox = bbox;
+            this.text = text;
+            this.index = index;
+            this.htmlContent = htmlContent;
+        }
     }
 }
 

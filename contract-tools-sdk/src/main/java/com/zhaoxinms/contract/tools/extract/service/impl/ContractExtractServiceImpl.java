@@ -1058,7 +1058,7 @@ public class ContractExtractServiceImpl implements ContractExtractService {
      */
     private Map<String, Object> loadTaskStatusFromFile(String taskId) {
         try {
-            File taskDir = new File("uploads/extract-tasks/" + taskId);
+            File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             File statusFile = new File(taskDir, "task_status.json");
             
             if (!statusFile.exists()) {

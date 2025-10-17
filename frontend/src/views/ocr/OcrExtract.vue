@@ -429,7 +429,13 @@ const onBboxClick = (bboxInfo: any) => {
     return
   }
   
-  // 调用MarkdownViewer的方法高亮对应的文本
+  // 1. 高亮左侧被点击的bbox本身
+  if (canvasViewer.value) {
+    canvasViewer.value.highlightBbox(bboxInfo)
+    console.log('✅ 已高亮bbox:', `页码 ${bboxInfo.page}`)
+  }
+  
+  // 2. 高亮右侧对应的文本
   if (markdownViewer.value) {
     markdownViewer.value.highlightTextByBox(bboxInfo)
     console.log('✅ 已高亮文本:', `字符索引 ${bboxInfo.startPos}-${bboxInfo.endPos}`)

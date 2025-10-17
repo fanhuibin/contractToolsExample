@@ -18,8 +18,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineEmits, defineProps } from 'vue'
-
 interface Service {
   title: string
   description: string

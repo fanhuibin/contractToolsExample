@@ -17,6 +17,23 @@ public class CharBox {
         this.category = category;
     }
 
+    // Getter方法 - Jackson序列化需要
+    public int getPage() {
+        return page;
+    }
+
+    public char getCh() {
+        return ch;
+    }
+
+    public double[] getBbox() {
+        return bbox;
+    }
+
+    public String getCategory() {
+        return category;
+    }
+
     @Override
     public String toString() {
         return String.format("CharBox{page=%d, ch='%c', bbox=[%.1f,%.1f,%.1f,%.1f], category='%s'}",

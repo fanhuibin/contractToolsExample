@@ -839,7 +839,9 @@ const findBboxAtPosition = (x: number, y: number, pageIndex: number): any => {
                 ...bboxInfo,
                 mappingId: mapping.interval?.id,
                 text: mapping.text,
-                fieldName: mapping.fieldName || mapping.field || mapping.name
+                fieldName: mapping.fieldName || mapping.field || mapping.name,
+                startPos: mapping.interval?.startPos,
+                endPos: mapping.interval?.endPos
               }
             }
           }

@@ -10,6 +10,13 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler' // 使用新版 Sass API，避免 legacy-js-api 警告
+      }
+    }
+  },
   server: {
     port: 3000,
     proxy: {
