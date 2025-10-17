@@ -139,18 +139,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/compose/ContractComposeStampResult.vue'),
         meta: { title: '合同合成盖章结果' }
       },
-      {
-        path: '/info-extract',
-        name: 'ContractInfoExtract',
-        component: () => import('@/views/extract/ContractInfoExtract.vue'),
-        meta: { title: '智能信息提取' }
-      },
-      {
-        path: '/info-extract-enhanced',
-        name: 'EnhancedContractInfoExtract',
-        component: () => import('@/views/extract/EnhancedContractInfoExtract.vue'),
-        meta: { title: '智能信息提取 - 增强版' }
-      },
       // 智能文档抽取模块（重构版本）
       {
         path: '/rule-extract',

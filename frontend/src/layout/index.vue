@@ -30,14 +30,6 @@
           <el-icon><Reading /></el-icon>
           <span>智能文档解析</span>
         </el-menu-item>
-        <el-menu-item index="/contract-extract">
-          <el-icon><Document /></el-icon>
-          <span>合同提取</span>
-        </el-menu-item>
-        <el-menu-item index="/info-extract">
-          <el-icon><Search /></el-icon>
-          <span>智能信息提取</span>
-        </el-menu-item>
         <el-menu-item index="/onlyoffice">
           <el-icon><Monitor /></el-icon>
           <span>文档在线编辑</span>
@@ -94,7 +86,6 @@ import {
   Document, 
   Monitor, 
   House, 
-  Search,
   DataAnalysis,
   Edit,
   Grid,

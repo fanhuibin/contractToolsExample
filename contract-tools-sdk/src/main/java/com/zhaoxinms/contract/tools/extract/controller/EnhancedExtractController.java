@@ -40,7 +40,7 @@ public class EnhancedExtractController {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     /**

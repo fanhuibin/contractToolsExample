@@ -25,7 +25,7 @@ import java.nio.file.Paths;
 @RequestMapping("/api/download")
 public class FileDownloadController {
 
-    @Value("${zxcm.file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     @GetMapping("/temp")

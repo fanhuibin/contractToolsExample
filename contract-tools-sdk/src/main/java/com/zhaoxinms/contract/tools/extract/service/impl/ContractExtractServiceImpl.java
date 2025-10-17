@@ -50,7 +50,7 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 public class ContractExtractServiceImpl implements ContractExtractService {
     
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
     
     @Value("${zhaoxin.extract.aliyun.api-key}")

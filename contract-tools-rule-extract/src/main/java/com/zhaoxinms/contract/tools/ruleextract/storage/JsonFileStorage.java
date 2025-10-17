@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 @Component
 public class JsonFileStorage {
 
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
     
     // 数据存储根目录（延迟初始化）

@@ -116,8 +116,8 @@ public class CompareImageService {
     public DocumentImageInfo getDocumentImageInfo(String taskId, String mode) throws Exception {
         DocumentImageInfo info = new DocumentImageInfo();
         
-        // 使用 gpuOcrConfig 的 uploadPath，与生成图片时保持一致
-        String uploadRootPath = gpuOcrConfig.getUploadPath();
+        // 使用 zxcmConfig 的 uploadPath，与生成图片时保持一致
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
         Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
         
         logger.debug("获取文档图片信息: taskId={}, mode={}, imagesDir={}", taskId, mode, imagesDir);
@@ -183,8 +183,8 @@ public class CompareImageService {
         Map<String, Object> info = new HashMap<>();
         List<Map<String, Object>> pages = new ArrayList<>();
         
-        // 使用 gpuOcrConfig 的 uploadPath，与生成图片时保持一致
-        String uploadRootPath = gpuOcrConfig.getUploadPath();
+        // 使用 zxcmConfig 的 uploadPath，与生成图片时保持一致
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
         Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
         
         logger.debug("生成实际图片信息: taskId={}, mode={}, imagesDir={}", taskId, mode, imagesDir);
@@ -315,7 +315,7 @@ public class CompareImageService {
      * @return 图片目录路径
      */
     public Path getImageDirectory(String taskId, String mode) {
-        String uploadRootPath = gpuOcrConfig.getUploadPath();
+        String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
         return Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
     }
     

@@ -120,13 +120,13 @@ public class CompareService {
 		taskQueue.adjustMaxPoolSize(gpuOcrConfig.getParallelThreads());
 		System.out.println("GPU OCR比对服务初始化完成，最大并发线程数: " + gpuOcrConfig.getParallelThreads());
         
-        // 检查MinerU服务
+        // 检查ZXOCR服务
         if (mineruOcrService != null) {
-            System.out.println("✅ MinerU OCR服务已注入并可用");
-            System.out.println("   MinerU API: " + gpuOcrConfig.getMineru().getApiUrl());
-            System.out.println("   Backend: " + gpuOcrConfig.getMineru().getBackend());
+            System.out.println("✅ ZXOCR服务已注入并可用");
+            System.out.println("   API地址: " + gpuOcrConfig.getApiUrl());
+            System.out.println("   Backend: " + gpuOcrConfig.getBackend());
         } else {
-            System.out.println("⚠️  MinerU OCR服务未注入（可选）");
+            System.out.println("⚠️  ZXOCR服务未注入");
         }
         
         // 启动时加载已完成的任务到内存中
@@ -719,26 +719,18 @@ public class CompareService {
                 options = CompareOptions.createDefault();
             }
             
-            // 【关键】使用配置文件中的OCR服务，忽略前端传递的值
-            String configuredOcrService = gpuOcrConfig.getDefaultOcrService();
-            options.setOcrServiceType(configuredOcrService);
+            // 使用 ZXOCR (MinerU) 服务
+            options.setOcrServiceType("mineru");
             
-            System.out.println("🔍 OCR服务配置: " + configuredOcrService);
-            progressManager.logStepDetail("使用配置文件指定的OCR服务: {}", configuredOcrService);
+            System.out.println("🔍 使用 ZXOCR 服务");
+            progressManager.logStepDetail("使用 ZXOCR 服务");
             
-            // 根据options选择OCR服务
-            boolean useThirdPartyOcr = options.isUseThirdPartyOcr();
-            boolean useMinerU = options.isUseMinerU();
-            
-            System.out.println("🔍 DEBUG: 最终判断 - useMinerU = " + useMinerU + ", useThirdPartyOcr = " + useThirdPartyOcr);
-            System.out.println("🔍 DEBUG: mineruOcrService == null? " + (mineruOcrService == null));
-            
-                // 使用MinerU OCR
-                if (mineruOcrService == null) {
-                    throw new RuntimeException("MinerU服务未启用，请检查配置");
-                }
-                System.out.println("✅ DEBUG: 将使用MinerU OCR服务");
-                progressManager.logStepDetail("✅ 使用MinerU OCR服务");
+            // 检查 MinerU 服务
+            if (mineruOcrService == null) {
+                throw new RuntimeException("ZXOCR 服务未启用，请检查配置");
+            }
+            System.out.println("✅ ZXOCR 服务已就绪");
+            progressManager.logStepDetail("✅ ZXOCR 服务已就绪");
             
             progressManager.completeStep(TaskStep.INIT);
 
@@ -1804,7 +1796,7 @@ public class CompareService {
 			}
 			
 			// 准备输出目录
-			Path taskDir = Paths.get(gpuOcrConfig.getUploadPath(), "compare-pro", "tasks", taskId);
+			Path taskDir = Paths.get(zxcmConfig.getFileUpload().getRootPath(), "compare-pro", "tasks", taskId);
 			java.io.File outputDir = taskDir.toFile();
 			if (!outputDir.exists()) {
 				outputDir.mkdirs();

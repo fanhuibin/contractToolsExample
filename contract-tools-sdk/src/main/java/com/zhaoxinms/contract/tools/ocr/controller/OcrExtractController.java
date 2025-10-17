@@ -29,7 +29,7 @@ public class OcrExtractController {
     @Autowired
     private OcrExtractService ocrExtractService;
 
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     /**

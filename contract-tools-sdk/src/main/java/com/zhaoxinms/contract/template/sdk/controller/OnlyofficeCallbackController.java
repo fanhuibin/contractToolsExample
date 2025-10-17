@@ -43,7 +43,7 @@ public class OnlyofficeCallbackController {
 	@Qualifier("fileInfoServiceImpl")
 	private FileInfoService fileInfoService;
 
-	@Value("${zxcm.file.upload.root-path:./uploads}")
+	@Value("${zxcm.file-upload.root-path:./uploads}")
 	private String uploadRootPath;
 
 	/**

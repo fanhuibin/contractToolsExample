@@ -122,8 +122,7 @@ public class MinerUOCRService {
     private String callMinerUAPI(File pdfFile) throws Exception {
         String boundary = "----WebKitFormBoundary" + System.currentTimeMillis();
         
-        ZxOcrConfig.MinerUConfig mineruConfig = zxOcrConfig.getMineru();
-        URL url = new URL(mineruConfig.getApiUrl() + "/file_parse");
+        URL url = new URL(zxOcrConfig.getApiUrl() + "/file_parse");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setDoOutput(true);
         conn.setDoInput(true);
@@ -156,13 +155,13 @@ public class MinerUOCRService {
             // 设置backend
             writer.append("--").append(boundary).append("\r\n");
             writer.append("Content-Disposition: form-data; name=\"backend\"\r\n\r\n");
-            writer.append(mineruConfig.getBackend()).append("\r\n");
+            writer.append(zxOcrConfig.getBackend()).append("\r\n");
             
             // 如果使用vlm-http-client，添加server_url
-            if ("vlm-http-client".equals(mineruConfig.getBackend())) {
+            if ("vlm-http-client".equals(zxOcrConfig.getBackend())) {
                 writer.append("--").append(boundary).append("\r\n");
                 writer.append("Content-Disposition: form-data; name=\"server_url\"\r\n\r\n");
-                writer.append(mineruConfig.getVllmServerUrl()).append("\r\n");
+                writer.append(zxOcrConfig.getVllmServerUrl()).append("\r\n");
             }
             
             // 返回content_list（最终的结构化列表）
@@ -236,13 +235,12 @@ public class MinerUOCRService {
             int cachedCount = 0;
             int renderedCount = 0;
             
-            // 获取图片格式配置（PNG 或 JPEG）
+            // 获取图片格式配置（PNG 无损格式）
             String imageFormat = zxOcrConfig.getImageFormat() != null ? 
                 zxOcrConfig.getImageFormat().toUpperCase() : "PNG";
-            float jpegQuality = zxOcrConfig.getJpegQuality();
-            String imageExt = imageFormat.equalsIgnoreCase("JPEG") ? ".jpg" : ".png";
+            String imageExt = ".png";
             
-            log.info("图片格式: {}, JPEG质量: {}", imageFormat, jpegQuality);
+            log.info("图片格式: {}", imageFormat);
             
             // PDFRenderer 不是线程安全的，必须串行处理
             // 【内存优化】逐页处理并立即释放内存
@@ -317,7 +315,7 @@ public class MinerUOCRService {
                                 image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                                 imageWidth = image.getWidth();
                                 imageHeight = image.getHeight();
-                                saveImage(image, imageFile, imageFormat, jpegQuality);
+                                saveImage(image, imageFile);
                                 log.info("✅ 重新生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                                     imageFile.getName(), imageWidth, imageHeight,
                                     imageFile.length() / 1024);
@@ -330,7 +328,7 @@ public class MinerUOCRService {
                             image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                             imageWidth = image.getWidth();
                             imageHeight = image.getHeight();
-                            saveImage(image, imageFile, imageFormat, jpegQuality);
+                            saveImage(image, imageFile);
                             log.info("✅ 重新生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                                 imageFile.getName(), imageWidth, imageHeight,
                                 imageFile.length() / 1024);
@@ -341,7 +339,7 @@ public class MinerUOCRService {
                         image = renderer.renderImageWithDPI(i, actualDpi, ImageType.RGB);
                         imageWidth = image.getWidth();
                         imageHeight = image.getHeight();
-                        saveImage(image, imageFile, imageFormat, jpegQuality);
+                        saveImage(image, imageFile);
                         log.info("✅ 生成页面图片: {}, 实际尺寸: {}x{}, 大小: {}KB", 
                             imageFile.getName(), imageWidth, imageHeight,
                             imageFile.length() / 1024);
@@ -1668,31 +1666,14 @@ public class MinerUOCRService {
     }
     
     /**
-     * 保存图片（支持 PNG 和 JPEG 格式）
+     * 保存图片到文件（PNG 无损格式）
      * 
      * @param image 图片对象
      * @param imageFile 输出文件
-     * @param format 图片格式（PNG 或 JPEG）
-     * @param jpegQuality JPEG 质量（0.0-1.0）
      */
-    private void saveImage(BufferedImage image, File imageFile, String format, float jpegQuality) throws IOException {
-        if ("JPEG".equalsIgnoreCase(format) || "JPG".equalsIgnoreCase(format)) {
-            // 保存为 JPEG 格式，使用指定质量
-            ImageWriter writer = ImageIO.getImageWritersByFormatName("JPEG").next();
-            ImageWriteParam writeParam = writer.getDefaultWriteParam();
-            writeParam.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
-            writeParam.setCompressionQuality(jpegQuality);
-            
-            try (ImageOutputStream outputStream = ImageIO.createImageOutputStream(imageFile)) {
-                writer.setOutput(outputStream);
-                writer.write(null, new javax.imageio.IIOImage(image, null, null), writeParam);
-            } finally {
-                writer.dispose();
-            }
-        } else {
-            // 保存为 PNG 格式（无损）
-            ImageIO.write(image, "PNG", imageFile);
-        }
+    private void saveImage(BufferedImage image, File imageFile) throws IOException {
+        // 保存为 PNG 格式（无损）
+        ImageIO.write(image, "PNG", imageFile);
     }
     
     /**

@@ -34,7 +34,7 @@ public class TemplateDesignController {
     
     // FileInfoService 预留字段移除，避免未使用告警
     
-    @Value("${zxcm.file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     @Autowired(required = false)

@@ -35,7 +35,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     // 任务状态缓存

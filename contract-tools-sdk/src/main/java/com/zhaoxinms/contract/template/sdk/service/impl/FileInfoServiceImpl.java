@@ -38,7 +38,7 @@ public class FileInfoServiceImpl implements FileInfoService {
     @Value("${server.port:8081}")
     private String serverPort;
     
-    @Value("${zxcm.file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     @Autowired(required = false)

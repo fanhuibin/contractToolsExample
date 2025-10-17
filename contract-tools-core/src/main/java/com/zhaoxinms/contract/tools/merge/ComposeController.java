@@ -49,7 +49,7 @@ public class ComposeController {
 	private static final Logger logger = LoggerFactory.getLogger(ComposeController.class);
     private static final OkHttpClient HTTP = new OkHttpClient();
 
-    @Value("${file.upload.root-path:./uploads}")
+    @Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
 
     @Autowired(required = false)

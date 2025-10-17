@@ -37,7 +37,7 @@ public class ContractInfoExtractController {
     @Autowired
     private ObjectMapper objectMapper;
     
-    @org.springframework.beans.factory.annotation.Value("${file.upload.root-path:./uploads}")
+    @org.springframework.beans.factory.annotation.Value("${zxcm.file-upload.root-path:./uploads}")
     private String uploadRootPath;
     
     /**
