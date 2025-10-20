@@ -1,5 +1,7 @@
 package com.zhaoxinms.contract.tools.auth.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import lombok.Data;
 
@@ -11,6 +13,7 @@ import java.util.Set;
  * License信息模型
  */
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class LicenseInfo {
     
     /**
@@ -76,9 +79,10 @@ public class LicenseInfo {
     /**
      * 检查许可证是否有效
      */
+    @JsonIgnore
     public boolean isValid() {
         LocalDateTime now = LocalDateTime.now();
-        return now.isAfter(startDate) && now.isBefore(expireDate);
+        return now.isAfter(startDate) && (expireDate == null || now.isBefore(expireDate));
     }
     
     /**

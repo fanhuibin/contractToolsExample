@@ -1,5 +1,7 @@
 package com.zhaoxinms.contract.tools.auth.aspect;
 
+import com.zhaoxinms.contract.tools.api.common.ApiCode;
+import com.zhaoxinms.contract.tools.api.exception.BusinessException;
 import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.core.utils.CommonUtils;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
@@ -33,7 +35,9 @@ public class LicenseAspect {
             if (!licenseService.hasModulePermission(moduleType)) {
                 String message = requireFeature.message();
                 log.warn("模块 '{}' 授权检查失败: {}", moduleType.getName(), message);
-                throw new RuntimeException(message + ": " + moduleType.getName());
+                // 使用授权错误码，前端会特殊处理
+                throw BusinessException.of(ApiCode.MODULE_UNAUTHORIZED, 
+                    message + "：" + moduleType.getName());
             }
             log.debug("模块 '{}' 授权检查通过", moduleType.getName());
         } else if (CommonUtils.isNotEmpty(requireFeature.value())) {
@@ -42,12 +46,14 @@ public class LicenseAspect {
             if (!licenseService.hasFeature(feature)) {
                 String message = requireFeature.message();
                 log.warn("功能 '{}' 授权检查失败: {}", feature, message);
-                throw new RuntimeException(message + ": " + feature);
+                // 使用授权错误码，前端会特殊处理
+                throw BusinessException.of(ApiCode.MODULE_UNAUTHORIZED, 
+                    message + "：" + feature);
             }
             log.debug("功能 '{}' 授权检查通过", feature);
         } else {
             log.warn("@RequireFeature注解必须指定module或value参数");
-            throw new RuntimeException("授权配置错误");
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "授权配置错误");
         }
         
         return joinPoint.proceed();

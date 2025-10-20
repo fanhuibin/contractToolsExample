@@ -387,30 +387,30 @@ const loadResult = async () => {
   try {
     const res: any = await getRuleExtractTaskResult(taskId.value)
     
-    if (res.code === 200 || res.code === 0) {
-      taskInfo.value = res.data
+    if (res.data.code === 200 || res.data.code === 0) {
+      taskInfo.value = res.data.data
       
       // 处理OCR文本
-      if (res.data.ocrText) {
-        ocrText.value = res.data.ocrText
-      } else if (res.data.text) {
-        ocrText.value = res.data.text
+      if (res.data.data.ocrText) {
+        ocrText.value = res.data.data.ocrText
+      } else if (res.data.data.text) {
+        ocrText.value = res.data.data.text
       }
       
       // 处理页数
-      if (res.data.totalPages) {
-        totalPages.value = res.data.totalPages
-      } else if (res.data.pageCount) {
-        totalPages.value = res.data.pageCount
+      if (res.data.data.totalPages) {
+        totalPages.value = res.data.data.totalPages
+      } else if (res.data.data.pageCount) {
+        totalPages.value = res.data.data.pageCount
       } else {
         totalPages.value = 1
       }
       
       // 处理提取结果
-      if (res.data.extractResults) {
+      if (res.data.data.extractResults) {
         // 如果是对象格式，转换为数组
-        if (typeof res.data.extractResults === 'object' && !Array.isArray(res.data.extractResults)) {
-          resultData.value = Object.entries(res.data.extractResults).map(([key, value]: [string, any]) => ({
+        if (typeof res.data.data.extractResults === 'object' && !Array.isArray(res.data.data.extractResults)) {
+          resultData.value = Object.entries(res.data.data.extractResults).map(([key, value]: [string, any]) => ({
             fieldName: value.fieldName || key,
             fieldCode: value.fieldCode || key,
             value: value.value,
@@ -418,34 +418,34 @@ const loadResult = async () => {
             charInterval: value.charInterval || null
           }))
         } else {
-          resultData.value = res.data.extractResults.map((item: any) => ({
+          resultData.value = res.data.data.extractResults.map((item: any) => ({
             ...item,
             success: item.status === 'success' || item.success !== false
           }))
         }
-      } else if (res.data.results) {
-        resultData.value = res.data.results
-      } else if (res.data.fields) {
-        resultData.value = res.data.fields
+      } else if (res.data.data.results) {
+        resultData.value = res.data.data.results
+      } else if (res.data.data.fields) {
+        resultData.value = res.data.data.fields
       }
       
       // 处理位置映射数据
-      if (res.data.bboxMappings) {
+      if (res.data.data.bboxMappings) {
         try {
-          bboxMappings.value = typeof res.data.bboxMappings === 'string' 
-            ? JSON.parse(res.data.bboxMappings) 
-            : res.data.bboxMappings
+          bboxMappings.value = typeof res.data.data.bboxMappings === 'string' 
+            ? JSON.parse(res.data.data.bboxMappings) 
+            : res.data.data.bboxMappings
         } catch (e) {
           console.warn('解析bboxMappings失败:', e)
         }
       }
       
       // 处理字符框数据
-      if (res.data.charBoxes) {
+      if (res.data.data.charBoxes) {
         try {
-          charBoxes.value = typeof res.data.charBoxes === 'string' 
-            ? JSON.parse(res.data.charBoxes) 
-            : res.data.charBoxes
+          charBoxes.value = typeof res.data.data.charBoxes === 'string' 
+            ? JSON.parse(res.data.data.charBoxes) 
+            : res.data.data.charBoxes
         } catch (e) {
           console.warn('解析charBoxes失败:', e)
         }

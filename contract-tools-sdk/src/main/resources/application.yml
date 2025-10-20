@@ -46,6 +46,33 @@ spring:
         login-username: admin
         login-password: admin
 
+# 肇新配置（zhaoxin命名空间）
+zhaoxin:
+  # 授权模块配置
+  auth:
+    enabled: true  # 启用授权模块
+    license:
+      # 授权文件路径
+      # 开发环境：使用 classpath:license.lic (从resources目录读取)
+      # 生产环境：文件加载优先级
+      #   1. jar包同级目录: ./license.lic
+      #   2. config目录: ./config/license.lic
+      #   3. classpath: classpath:license.lic (开发环境)
+      file-path: classpath:license.lic
+    signature:
+      # 公钥文件路径（同上优先级规则）
+      public-key-path: classpath:public.key
+  
+  # 合同提取功能配置
+  extract:
+    aliyun:
+      # 阿里云通义千问API密钥
+      # 获取方式：https://dashscope.console.aliyun.com/apiKey
+      api-key: your-aliyun-api-key-here
+      # 使用的模型，默认 qwen-plus
+      # 可选值: qwen-turbo, qwen-plus, qwen-max
+      model: qwen-plus
+
 # 日志配置
 logging:
   level:
@@ -114,3 +141,22 @@ zxcm:
       
       # 图片格式：PNG 无损格式
       image-format: PNG
+  
+  # Swagger API文档配置
+  swagger:
+    enabled: true  # 是否启用Swagger文档，生产环境建议设置为false
+    require-password: true  # 是否需要密码访问Swagger文档
+    password: zxcm  # Swagger访问密码（当require-password=true时生效）
+    
+    # 企业信息配置
+    company:
+      name: 肇新科技  # 企业名称
+      url: https://www.zhaoxinms.com  # 企业网址
+      email: develop@zhaoxinms.com  # 联系邮箱
+    
+    # API文档信息
+    api:
+      title: 肇新合同工具集API文档  # API文档标题
+      description: 提供合同比对、模板设计、规则提取等功能的RESTful API接口  # API描述
+      version: 1.0.0  # API版本号
+      base-package: com.zhaoxinms.contract  # 扫描的基础包路径

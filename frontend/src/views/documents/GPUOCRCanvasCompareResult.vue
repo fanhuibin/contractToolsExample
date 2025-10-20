@@ -1701,8 +1701,9 @@ const handleDragEnd = () => {
 const checkStatusAndMaybePoll = async (id: string) => {
   try {
     const res = await getGPUOCRCompareTaskStatus(id)
-    const code = (res as any)?.code
-    const data = (res as any)?.data
+    // 响应格式：{ data: { code: 200, message: "...", data: {...} } }
+    const code = (res as any)?.data?.code
+    const data = (res as any)?.data?.data
     
     if (code !== 200 || !data) {
       viewerLoading.value = true
@@ -1755,21 +1756,22 @@ const fetchResult = async (id: string) => {
   loading.value = true
   try {
     const res = await getGPUOCRCanvasCompareResult(id)
+    // 响应格式：{ data: { code: 200, message: "...", data: {...} } }
 
-    if ((res as any)?.code === 202) {
+    if ((res as any)?.data?.code === 202) {
       viewerLoading.value = true
       if (!hasShownProcessingTip.value) {
-        const statusData = (res as any)?.data
-        ElMessage.info(statusData?.message || '比对任务处理中，请稍候...')
+        const statusData = (res as any)?.data?.data
+        ElMessage.info((res as any)?.data?.message || '比对任务处理中，请稍候...')
         hasShownProcessingTip.value = true
       }
       return
-    } else if ((res as any)?.code !== 200) {
-      ElMessage.error((res as any)?.message || '获取比对结果失败')
+    } else if ((res as any)?.data?.code !== 200) {
+      ElMessage.error((res as any)?.data?.message || '获取比对结果失败')
       return
     }
 
-    const data = (res as any)?.data
+    const data = (res as any)?.data?.data
     if (data) {
       // 设置图片信息
       oldImageInfo.value = data.oldImageInfo

@@ -35,7 +35,7 @@ zhaoxin:
   auth:
     enabled: true
     license:
-      filePath: "license.dat"
+      filePath: "license.lic"
       hardwareBound: true
     signature:
       publicKey: "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
@@ -143,7 +143,7 @@ request.setHardwareBound(true);
 
 // 签名配置
 request.setPrivateKeyPath("private.key");
-request.setOutputPath("license.dat");
+request.setOutputPath("license.lic");
 
 // 生成License
 boolean success = generator.generateLicense(request);

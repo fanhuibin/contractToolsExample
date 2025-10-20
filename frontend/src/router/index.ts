@@ -171,7 +171,13 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/ocr/OcrExtract.vue'),
         meta: { title: '智能文档解析' }
       },
-      
+      // 授权信息
+      {
+        path: '/license',
+        name: 'LicenseView',
+        component: () => import('@/views/license/LicenseView.vue'),
+        meta: { title: '授权信息' }
+      }
     ]
   }
 ]

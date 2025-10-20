@@ -283,13 +283,13 @@ const loadTemplate = async () => {
 
   try {
     const res: any = await getTemplate(id as any)
-    if (res.code === 200 && res.data) {
-      templateName.value = res.data.templateName
-      templateCode.value = res.data.templateCode
-      templateDescription.value = res.data.description
-      templateStatus.value = res.data.status
+    if (res.data.code === 200 && res.data.data) {
+      templateName.value = res.data.data.templateName
+      templateCode.value = res.data.data.templateCode
+      templateDescription.value = res.data.data.description
+      templateStatus.value = res.data.data.status
       // 转换后端字段格式为前端格式
-      fieldList.value = (res.data.fields || []).map((field: any) => convertFieldFromBackend(field))
+      fieldList.value = (res.data.data.fields || []).map((field: any) => convertFieldFromBackend(field))
     }
   } catch (error: any) {
     ElMessage.error('加载模板失败：' + (error.message || '未知错误'))
@@ -482,10 +482,10 @@ const handleTest = async (testText: string) => {
       debug: true
     })
 
-    if (res.code === 200) {
-      testResult.value = res.data
+    if (res.data.code === 200) {
+      testResult.value = res.data.data
     } else {
-      ElMessage.error('测试失败：' + (res.message || '未知错误'))
+      ElMessage.error('测试失败：' + (res.data.message || '未知错误'))
     }
   } catch (error: any) {
     ElMessage.error('测试失败：' + (error.message || '未知错误'))

@@ -22,8 +22,11 @@ import org.slf4j.LoggerFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
+import io.swagger.annotations.Api;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareUrlRequest;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareImageService;
 import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
@@ -32,10 +35,17 @@ import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
 import com.zhaoxinms.contract.tools.comparePRO.util.FileDownloadUtil;
 
 /**
- * GPU OCR比对控制器 - 基于DotsOcrCompareDemoTest的完整比对功能
+ * 智能文档比对控制器
+ * 
+ * 基于GPU OCR的文档智能比对功能
+ * 
+ * @author zhaoxin
+ * @since 2024-10-09
  */
 @RestController
 @RequestMapping("/api/compare-pro")
+@RequireFeature(module = ModuleType.SMART_DOCUMENT_COMPARE, message = "智能文档比对功能需要授权")
+@Api(tags = "智能文档比对")
 public class GPUCompareController {
 
     private static final Logger log = LoggerFactory.getLogger(GPUCompareController.class);
@@ -51,7 +61,7 @@ public class GPUCompareController {
      * 提交GPU OCR比对任务（使用文件上传）
      */
     @PostMapping("/submit")
-    public ResponseEntity<Result<Map<String, String>>> submitCompareTask(
+    public ApiResponse<String> submitCompareTask(
             @RequestParam("oldFile") MultipartFile oldFile,
             @RequestParam("newFile") MultipartFile newFile,
             @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") boolean ignoreHeaderFooter,
@@ -85,13 +95,11 @@ public class GPUCompareController {
             // 提交比对任务
             String taskId = compareService.submitCompareTask(oldFile, newFile, options);
 
-            Map<String, String> data = new HashMap<>();
-            data.put("taskId", taskId);
-
-            return ResponseEntity.ok(Result.success("GPU OCR比对任务提交成功", data));
+            // 直接返回taskId字符串
+            return ApiResponse.success("GPU OCR比对任务提交成功", taskId);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("提交GPU OCR比对任务失败: " + e.getMessage()));
+            return ApiResponse.<String>serverError().errorDetail("提交GPU OCR比对任务失败: " + e.getMessage());
         }
     }
 
@@ -99,16 +107,16 @@ public class GPUCompareController {
      * 提交合同比对任务（使用JSON + URL格式）- 对外接口
      */
     @PostMapping("/submit-url")
-    public ResponseEntity<Result<Map<String, String>>> submitCompareTaskByUrl(
+    public ApiResponse<String> submitCompareTaskByUrl(
             @RequestBody CompareUrlRequest request) {
 
         try {
             // 验证必需参数
             if (request.getOldFileUrl() == null || request.getOldFileUrl().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error(400, "缺少必需参数: oldFileUrl"));
+                return ApiResponse.paramError("缺少必需参数: oldFileUrl");
             }
             if (request.getNewFileUrl() == null || request.getNewFileUrl().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error(400, "缺少必需参数: newFileUrl"));
+                return ApiResponse.paramError("缺少必需参数: newFileUrl");
             }
 
             // 下载文件
@@ -120,19 +128,19 @@ public class GPUCompareController {
             } catch (IllegalArgumentException e) {
                 String message = e.getMessage();
                 if (message.contains("文件格式") || message.contains("PDF格式")) {
-                    return ResponseEntity.status(415).body(Result.error(415, "原文档格式不支持，仅支持PDF格式"));
+                    return ApiResponse.paramError("原文档格式不支持，仅支持PDF格式");
                 }
-                return ResponseEntity.badRequest().body(Result.error(400, "原文档URL无效: " + e.getMessage()));
+                return ApiResponse.paramError("原文档URL无效: " + e.getMessage());
             } catch (IOException e) {
                 String message = e.getMessage();
                 if (message.contains("文件大小超过") || message.contains("超过限制")) {
-                    return ResponseEntity.status(413).body(Result.error(413, "原文档文件过大，最大支持50MB"));
+                    return ApiResponse.paramError("原文档文件过大，最大支持50MB");
                 } else if (message.contains("超时") || message.contains("timeout")) {
-                    return ResponseEntity.status(408).body(Result.error(408, "原文档下载超时"));
+                    return ApiResponse.paramError("原文档下载超时");
                 }
-                return ResponseEntity.status(422).body(Result.error(422, "原文档下载失败"));
+                return ApiResponse.paramError("原文档下载失败");
             } catch (Exception e) {
-                return ResponseEntity.status(404).body(Result.error(404, "无法访问原文档URL: " + request.getOldFileUrl()));
+                return ApiResponse.paramError("无法访问原文档URL: " + request.getOldFileUrl());
             }
             
             try {
@@ -140,19 +148,19 @@ public class GPUCompareController {
             } catch (IllegalArgumentException e) {
                 String message = e.getMessage();
                 if (message.contains("文件格式") || message.contains("PDF格式")) {
-                    return ResponseEntity.status(415).body(Result.error(415, "新文档格式不支持，仅支持PDF格式"));
+                    return ApiResponse.paramError("新文档格式不支持，仅支持PDF格式");
                 }
-                return ResponseEntity.badRequest().body(Result.error(400, "新文档URL无效: " + e.getMessage()));
+                return ApiResponse.paramError("新文档URL无效: " + e.getMessage());
             } catch (IOException e) {
                 String message = e.getMessage();
                 if (message.contains("文件大小超过") || message.contains("超过限制")) {
-                    return ResponseEntity.status(413).body(Result.error(413, "新文档文件过大，最大支持50MB"));
+                    return ApiResponse.paramError("新文档文件过大，最大支持50MB");
                 } else if (message.contains("超时") || message.contains("timeout")) {
-                    return ResponseEntity.status(408).body(Result.error(408, "新文档下载超时"));
+                    return ApiResponse.paramError("新文档下载超时");
                 }
-                return ResponseEntity.status(422).body(Result.error(422, "新文档下载失败"));
+                return ApiResponse.paramError("新文档下载失败");
             } catch (Exception e) {
-                return ResponseEntity.status(404).body(Result.error(404, "无法访问新文档URL: " + request.getNewFileUrl()));
+                return ApiResponse.paramError("无法访问新文档URL: " + request.getNewFileUrl());
             }
 
             // 转换比对选项
@@ -161,13 +169,11 @@ public class GPUCompareController {
             // 提交比对任务
             String taskId = compareService.submitCompareTask(oldFile, newFile, options);
 
-            Map<String, String> data = new HashMap<>();
-            data.put("taskId", taskId);
-
-            return ResponseEntity.ok(Result.success("合同比对pro版任务提交成功", data));
+            // 直接返回taskId字符串
+            return ApiResponse.success("合同比对pro版任务提交成功", taskId);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("提交合同比对任务失败: " + e.getMessage()));
+            return ApiResponse.<String>serverError().errorDetail("提交合同比对任务失败: " + e.getMessage());
         }
     }
 
@@ -175,11 +181,11 @@ public class GPUCompareController {
      * 获取比对任务状态（包含进度信息）
      */
     @GetMapping("/task/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getTaskStatus(@PathVariable String taskId) {
+    public ApiResponse<Map<String, Object>> getTaskStatus(@PathVariable String taskId) {
         try {
             CompareTask task = compareService.getTaskStatus(taskId);
             if (task == null) {
-                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+                return ApiResponse.notFound("任务不存在");
             }
             
             // 构建返回数据
@@ -239,10 +245,10 @@ public class GPUCompareController {
                 responseData.put("failedPagesCount", task.getFailedPages().size());
             }
             
-            return ResponseEntity.ok(Result.success("获取任务状态成功", responseData));
+            return ApiResponse.success("获取任务状态成功", responseData);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取任务状态失败: " + e.getMessage()));
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail("获取任务状态失败: " + e.getMessage());
         }
     }
 
@@ -251,7 +257,7 @@ public class GPUCompareController {
      * 获取所有比对任务（简化版本，只返回核心信息）
      */
     @GetMapping("/tasks")
-    public ResponseEntity<Result<List<Map<String, Object>>>> getAllTasks() {
+    public ApiResponse<List<Map<String, Object>>> getAllTasks() {
         try {
             List<CompareTask> tasks = compareService.getAllTasks();
             List<Map<String, Object>> simplifiedTasks = new ArrayList<>();
@@ -294,10 +300,10 @@ public class GPUCompareController {
                 return timeB.compareTo(timeA);
             });
             
-            return ResponseEntity.ok(Result.success("获取任务列表成功", simplifiedTasks));
+            return ApiResponse.success("获取任务列表成功", simplifiedTasks);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取任务列表失败: " + e.getMessage()));
+            return ApiResponse.<List<Map<String, Object>>>serverError().errorDetail("获取任务列表失败: " + e.getMessage());
         }
     }
 
@@ -305,17 +311,17 @@ public class GPUCompareController {
      * 删除比对任务
      */
     @DeleteMapping("/task/{taskId}")
-    public ResponseEntity<Result<Void>> deleteTask(@PathVariable String taskId) {
+    public ApiResponse<Void> deleteTask(@PathVariable String taskId) {
         try {
             boolean deleted = compareService.deleteTask(taskId);
             if (deleted) {
-                return ResponseEntity.ok(Result.success("删除成功", null));
+                return ApiResponse.success("删除成功", null);
             } else {
-                return ResponseEntity.ok(Result.error(404, "任务不存在或已删除"));
+                return ApiResponse.<Void>notFound("任务不存在或已删除");
             }
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("删除任务失败: " + e.getMessage()));
+            return ApiResponse.<Void>serverError().errorDetail("删除任务失败: " + e.getMessage());
         }
     }
 
@@ -323,32 +329,28 @@ public class GPUCompareController {
      * 获取Canvas版本的比对结果（包含图片信息和原始坐标）
      */
     @GetMapping("/canvas-result/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getCanvasCompareResult(@PathVariable String taskId) {
+    public ApiResponse<Map<String, Object>> getCanvasCompareResult(@PathVariable String taskId) {
         try {
             CompareTask task = compareService.getTaskStatus(taskId);
 
             if (task == null) {
-                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+                return ApiResponse.notFound("任务不存在");
             }
 
             if (task.getStatus() != CompareTask.Status.COMPLETED) {
-                Map<String, Object> responseData = new HashMap<>();
-                responseData.put("success", false);
-                responseData.put("message", "比对任务尚未完成，当前状态: " + task.getStatus().getDescription());
-                responseData.put("status", task.getStatus().name());
-                return ResponseEntity.ok(new Result<>(202, "任务尚未完成", responseData));
+                return ApiResponse.fail(202, "比对任务尚未完成，当前状态: " + task.getStatus().getDescription());
             }
 
             // 获取Canvas版本的比对结果
             Map<String, Object> canvasResult = compareService.getCanvasFrontendResult(taskId);
             if (canvasResult != null) {
-                return ResponseEntity.ok(Result.success("获取Canvas比对结果成功", canvasResult));
+                return ApiResponse.success("获取Canvas比对结果成功", canvasResult);
             }
 
-            return ResponseEntity.ok(Result.error("Canvas比对结果不存在"));
+            return ApiResponse.<Map<String, Object>>businessError("Canvas比对结果不存在");
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取Canvas比对结果失败: " + e.getMessage()));
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail("获取Canvas比对结果失败: " + e.getMessage());
         }
     }
 
@@ -356,30 +358,30 @@ public class GPUCompareController {
      * 获取文档图片信息
      */
     @GetMapping("/images/{taskId}/{mode}")
-    public ResponseEntity<Result<CompareImageService.DocumentImageInfo>> getDocumentImages(
+    public ApiResponse<CompareImageService.DocumentImageInfo> getDocumentImages(
             @PathVariable String taskId, 
             @PathVariable String mode) {
         try {
             CompareTask task = compareService.getTaskStatus(taskId);
 
             if (task == null) {
-                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+                return ApiResponse.notFound("任务不存在");
             }
 
             if (task.getStatus() != CompareTask.Status.COMPLETED) {
-                return ResponseEntity.ok(Result.error(202, "任务尚未完成"));
+                return ApiResponse.businessError("任务尚未完成");
             }
 
             // 验证mode参数
             if (!mode.equals("old") && !mode.equals("new")) {
-                return ResponseEntity.badRequest().body(Result.error("mode参数必须是old或new"));
+                return ApiResponse.paramError("mode参数必须是old或new");
             }
 
             CompareImageService.DocumentImageInfo imageInfo = imageService.getDocumentImageInfo(taskId, mode);
-            return ResponseEntity.ok(Result.success("获取文档图片信息成功", imageInfo));
+            return ApiResponse.success("获取文档图片信息成功", imageInfo);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取文档图片信息失败: " + e.getMessage()));
+            return ApiResponse.<CompareImageService.DocumentImageInfo>serverError().errorDetail("获取文档图片信息失败: " + e.getMessage());
         }
     }
 
@@ -387,12 +389,12 @@ public class GPUCompareController {
      * 获取原始坐标数据（用于调试坐标转换）
      */
     @GetMapping("/debug/raw-coords/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getRawCoordinates(@PathVariable String taskId) {
+    public ApiResponse<Map<String, Object>> getRawCoordinates(@PathVariable String taskId) {
         try {
             CompareTask task = compareService.getTaskStatus(taskId);
 
             if (task == null) {
-                return ResponseEntity.ok(Result.error(404, "任务不存在"));
+                return ApiResponse.notFound("任务不存在");
             }
 
             if (task.getStatus() != CompareTask.Status.COMPLETED) {
@@ -400,19 +402,19 @@ public class GPUCompareController {
                 responseData.put("success", false);
                 responseData.put("message", "比对任务尚未完成，当前状态: " + task.getStatus().getDescription());
                 responseData.put("status", task.getStatus().name());
-                return ResponseEntity.ok(new Result<>(202, "任务尚未完成", responseData));
+                return ApiResponse.fail(202, "任务尚未完成");
             }
 
             // 获取原始坐标数据（未经转换的）
             Map<String, Object> rawResult = compareService.getRawFrontendResult(taskId);
             if (rawResult != null) {
-                return ResponseEntity.ok(Result.success("获取原始坐标数据成功", rawResult));
+                return ApiResponse.success("获取原始坐标数据成功", rawResult);
             }
 
-            return ResponseEntity.ok(Result.error("原始坐标数据不存在"));
+            return ApiResponse.<Map<String, Object>>businessError("原始坐标数据不存在");
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取原始坐标数据失败: " + e.getMessage()));
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail("获取原始坐标数据失败: " + e.getMessage());
         }
     }
 
@@ -420,13 +422,13 @@ public class GPUCompareController {
      * 获取任务队列状态
      */
     @GetMapping("/queue/stats")
-    public ResponseEntity<Result<CompareTaskQueue.TaskQueueStats>> getQueueStats() {
+    public ApiResponse<CompareTaskQueue.TaskQueueStats> getQueueStats() {
         try {
             CompareTaskQueue.TaskQueueStats stats = compareService.getQueueStats();
-            return ResponseEntity.ok(Result.success("获取队列状态成功", stats));
+            return ApiResponse.success("获取队列状态成功", stats);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取队列状态失败: " + e.getMessage()));
+            return ApiResponse.<CompareTaskQueue.TaskQueueStats>serverError().errorDetail("获取队列状态失败: " + e.getMessage());
         }
     }
 
@@ -434,7 +436,7 @@ public class GPUCompareController {
      * 检查队列是否繁忙
      */
     @GetMapping("/queue/busy")
-    public ResponseEntity<Result<Map<String, Object>>> checkQueueBusy() {
+    public ApiResponse<Map<String, Object>> checkQueueBusy() {
         try {
             boolean isBusy = compareService.isQueueBusy();
             CompareTaskQueue.TaskQueueStats stats = compareService.getQueueStats();
@@ -445,10 +447,10 @@ public class GPUCompareController {
             data.put("activeThreads", stats.getActiveThreads());
             data.put("maxThreads", stats.getMaxThreads());
             
-            return ResponseEntity.ok(Result.success("获取队列繁忙状态成功", data));
+            return ApiResponse.success("获取队列繁忙状态成功", data);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("获取队列繁忙状态失败: " + e.getMessage()));
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail("获取队列繁忙状态失败: " + e.getMessage());
         }
     }
 
@@ -456,17 +458,17 @@ public class GPUCompareController {
      * 动态调整最大并发线程数
      */
     @PostMapping("/queue/adjust-concurrency")
-    public ResponseEntity<Result<String>> adjustMaxConcurrency(@RequestParam int maxThreads) {
+    public ApiResponse<String> adjustMaxConcurrency(@RequestParam int maxThreads) {
         try {
             if (maxThreads < 1 || maxThreads > 20) {
-                return ResponseEntity.badRequest().body(Result.error("线程数必须在1-20之间"));
+                return ApiResponse.paramError("线程数必须在1-20之间");
             }
             
             compareService.adjustMaxConcurrency(maxThreads);
-            return ResponseEntity.ok(Result.success("调整并发线程数成功", "最大线程数已设置为: " + maxThreads));
+            return ApiResponse.success("调整并发线程数成功", "最大线程数已设置为: " + maxThreads);
 
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body(Result.error("调整并发线程数失败: " + e.getMessage()));
+            return ApiResponse.<String>serverError().errorDetail("调整并发线程数失败: " + e.getMessage());
         }
     }
 
@@ -478,11 +480,11 @@ public class GPUCompareController {
         try {
             // 验证请求参数
             if (request.getTaskId() == null || request.getTaskId().trim().isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error("任务ID不能为空"));
+                return ResponseEntity.badRequest().body(ApiResponse.paramError("任务ID不能为空"));
             }
             
             if (request.getFormats() == null || request.getFormats().isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error("导出格式不能为空"));
+                return ResponseEntity.badRequest().body(ApiResponse.paramError("导出格式不能为空"));
             }
 
             // 转换为service层DTO
@@ -504,7 +506,7 @@ public class GPUCompareController {
                     filename = "比对报告_" + request.getTaskId() + ".docx";
                     contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
                 } else {
-                    return ResponseEntity.badRequest().body(Result.error("不支持的导出格式: " + format));
+                    return ResponseEntity.badRequest().body(ApiResponse.paramError("不支持的导出格式: " + format));
                 }
             } else {
                 // 多种格式，返回ZIP
@@ -522,7 +524,7 @@ public class GPUCompareController {
 
         } catch (Exception e) {
             log.error("导出比对报告失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("导出失败: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(ApiResponse.serverError().errorDetail("导出失败: " + e.getMessage()));
         }
     }
 
@@ -530,15 +532,15 @@ public class GPUCompareController {
      * 保存用户修改（忽略差异、添加备注）
      */
     @PostMapping("/save-user-modifications/{taskId}")
-    public ResponseEntity<Result<String>> saveUserModifications(
+    public ApiResponse<Void> saveUserModifications(
             @PathVariable String taskId,
             @RequestBody UserModificationsRequest request) {
         try {
             compareService.saveUserModifications(taskId, request);
-            return ResponseEntity.ok(Result.success("用户修改已保存", null));
+            return ApiResponse.success("用户修改已保存", null);
         } catch (Exception e) {
             log.error("保存用户修改失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("保存用户修改失败: " + e.getMessage()));
+            return ApiResponse.<Void>serverError().errorDetail("保存用户修改失败: " + e.getMessage());
         }
     }
 
@@ -546,13 +548,13 @@ public class GPUCompareController {
      * 获取用户修改（页面刷新后恢复状态）
      */
     @GetMapping("/get-user-modifications/{taskId}")
-    public ResponseEntity<Result<UserModificationsRequest>> getUserModifications(@PathVariable String taskId) {
+    public ApiResponse<UserModificationsRequest> getUserModifications(@PathVariable String taskId) {
         try {
             UserModificationsRequest modifications = compareService.getUserModifications(taskId);
-            return ResponseEntity.ok(Result.success("获取用户修改成功", modifications));
+            return ApiResponse.success("获取用户修改成功", modifications);
         } catch (Exception e) {
             log.error("获取用户修改失败", e);
-            return ResponseEntity.internalServerError().body(Result.error("获取用户修改失败: " + e.getMessage()));
+            return ApiResponse.<UserModificationsRequest>serverError().errorDetail("获取用户修改失败: " + e.getMessage());
         }
     }
 

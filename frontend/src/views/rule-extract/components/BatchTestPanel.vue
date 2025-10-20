@@ -138,18 +138,18 @@ const runTest = async () => {
         debug: debugMode.value
       })
 
-      if (res.code === 200) {
+      if (res.data.code === 200) {
         results.value.push({
           fieldName: field.fieldName,
           fieldCode: field.fieldCode,
-          ...res.data
+          ...res.data.data
         })
       } else {
         results.value.push({
           fieldName: field.fieldName,
           fieldCode: field.fieldCode,
           success: false,
-          errorMessage: res.message
+          errorMessage: res.data.message
         })
       }
     }

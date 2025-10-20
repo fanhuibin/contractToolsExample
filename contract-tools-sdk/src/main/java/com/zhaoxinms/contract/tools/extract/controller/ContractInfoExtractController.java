@@ -1,10 +1,9 @@
 package com.zhaoxinms.contract.tools.extract.controller;
 
 import com.zhaoxinms.contract.tools.extract.service.ContractExtractService;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -44,7 +43,7 @@ public class ContractInfoExtractController {
      * 上传文件并提取信息
      */
     @PostMapping("/upload")
-    public Result<Map<String, Object>> extractFromUpload(
+    public ApiResponse<Map<String, Object>> extractFromUpload(
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "schemaType", defaultValue = "contract") String schemaType,
             @RequestParam(value = "extractionPasses", defaultValue = "3") int extractionPasses,
@@ -59,7 +58,7 @@ public class ContractInfoExtractController {
         try {
             // 验证文件
             if (file.isEmpty()) {
-                return Result.error("文件不能为空");
+                return ApiResponse.paramError("文件不能为空");
             }
             
             String originalFilename = file.getOriginalFilename();
@@ -67,7 +66,7 @@ public class ContractInfoExtractController {
                                            !originalFilename.toLowerCase().endsWith(".png") &&
                                            !originalFilename.toLowerCase().endsWith(".jpg") &&
                                            !originalFilename.toLowerCase().endsWith(".jpeg"))) {
-                return Result.error("仅支持PDF、PNG、JPG、JPEG格式的文件");
+                return ApiResponse.paramError("仅支持PDF、PNG、JPG、JPEG格式的文件");
             }
             
             log.info("收到文件提取请求: 文件名={}, 大小={} bytes, 模式={}, 忽略页眉页脚={}", 
@@ -95,11 +94,11 @@ public class ContractInfoExtractController {
             response.put("schemaType", schemaType);
             response.put("estimatedTime", estimateProcessingTime(file.getSize(), enableChunking));
             
-            return Result.success(response);
+            return ApiResponse.success(response);
             
         } catch (Exception e) {
             log.error("文件提取失败", e);
-            return Result.error("文件提取失败: " + e.getMessage());
+            return ApiResponse.paramError("文件提取失败: " + e.getMessage());
         }
     }
     
@@ -107,7 +106,7 @@ public class ContractInfoExtractController {
      * 从文本直接提取信息
      */
     @PostMapping("/text")
-    public Result<Map<String, Object>> extractFromText(
+    public ApiResponse<Map<String, Object>> extractFromText(
             @RequestParam("text") String text,
             @RequestParam(value = "schemaType", defaultValue = "contract") String schemaType,
             @RequestParam(value = "extractionPasses", defaultValue = "3") int extractionPasses,
@@ -118,11 +117,11 @@ public class ContractInfoExtractController {
         
         try {
             if (text == null || text.trim().isEmpty()) {
-                return Result.error("文本内容不能为空");
+                return ApiResponse.paramError("文本内容不能为空");
             }
             
             if (text.length() > 500000) { // 限制500KB文本
-                return Result.error("文本内容过长，请使用文件上传方式");
+                return ApiResponse.paramError("文本内容过长，请使用文件上传方式");
             }
             
             log.info("收到文本提取请求: 文本长度={} 字符, 模式={}", text.length(), schemaType);
@@ -146,11 +145,11 @@ public class ContractInfoExtractController {
             response.put("schemaType", schemaType);
             response.put("estimatedTime", estimateProcessingTime(text.length(), enableChunking));
             
-            return Result.success(response);
+            return ApiResponse.success(response);
             
         } catch (Exception e) {
             log.error("文本提取失败", e);
-            return Result.error("文本提取失败: " + e.getMessage());
+            return ApiResponse.paramError("文本提取失败: " + e.getMessage());
         }
     }
     
@@ -158,18 +157,18 @@ public class ContractInfoExtractController {
      * 获取任务状态
      */
     @GetMapping("/status/{taskId}")
-    public Result<Map<String, Object>> getTaskStatus(@PathVariable("taskId") String taskId) {
+    public ApiResponse<Map<String, Object>> getTaskStatus(@PathVariable("taskId") String taskId) {
         try {
             Map<String, Object> status = extractService.getTaskStatus(taskId);
             if (status == null) {
-                return Result.error("任务不存在: " + taskId);
+                return ApiResponse.paramError("任务不存在: " + taskId);
             }
             
-            return Result.success(status);
+            return ApiResponse.success(status);
             
         } catch (Exception e) {
             log.error("获取任务状态失败: {}", taskId, e);
-            return Result.error("获取任务状态失败: " + e.getMessage());
+            return ApiResponse.paramError("获取任务状态失败: " + e.getMessage());
         }
     }
     
@@ -177,11 +176,11 @@ public class ContractInfoExtractController {
      * 获取提取结果
      */
     @GetMapping("/result/{taskId}")
-    public Result<Map<String, Object>> getExtractResult(@PathVariable("taskId") String taskId) {
+    public ApiResponse<Map<String, Object>> getExtractResult(@PathVariable("taskId") String taskId) {
         try {
             ContractExtractService.ExtractResult result = extractService.getResult(taskId);
             if (result == null) {
-                return Result.error("结果不存在或任务未完成: " + taskId);
+                return ApiResponse.paramError("结果不存在或任务未完成: " + taskId);
             }
             
             // 构建响应数据
@@ -192,11 +191,11 @@ public class ContractInfoExtractController {
             response.put("statistics", buildStatistics(result));
             response.put("metadata", result.getMetadata());
             
-            return Result.success(response);
+            return ApiResponse.success(response);
             
         } catch (Exception e) {
             log.error("获取提取结果失败: {}", taskId, e);
-            return Result.error("获取提取结果失败: " + e.getMessage());
+            return ApiResponse.paramError("获取提取结果失败: " + e.getMessage());
         }
     }
     
@@ -239,7 +238,7 @@ public class ContractInfoExtractController {
      * 获取支持的提取模式
      */
     @GetMapping("/schemas")
-    public Result<Map<String, Object>> getSupportedSchemas() {
+    public ApiResponse<Map<String, Object>> getSupportedSchemas() {
         try {
             List<String> schemas = extractService.getSupportedSchemas();
             
@@ -248,11 +247,11 @@ public class ContractInfoExtractController {
             response.put("defaultSchema", "contract");
             response.put("descriptions", getSchemaDescriptions());
             
-            return Result.success(response);
+            return ApiResponse.success(response);
             
         } catch (Exception e) {
             log.error("获取支持的模式失败", e);
-            return Result.error("获取支持的模式失败: " + e.getMessage());
+            return ApiResponse.paramError("获取支持的模式失败: " + e.getMessage());
         }
     }
     
@@ -260,7 +259,7 @@ public class ContractInfoExtractController {
      * 取消任务
      */
     @PostMapping("/cancel/{taskId}")
-    public Result<Map<String, Object>> cancelTask(@PathVariable("taskId") String taskId) {
+    public ApiResponse<Map<String, Object>> cancelTask(@PathVariable("taskId") String taskId) {
         try {
             boolean cancelled = extractService.cancelTask(taskId);
             
@@ -269,11 +268,11 @@ public class ContractInfoExtractController {
             response.put("cancelled", cancelled);
             response.put("message", cancelled ? "任务已取消" : "任务无法取消（可能已完成或不存在）");
             
-            return Result.success(response);
+            return ApiResponse.success(response);
             
         } catch (Exception e) {
             log.error("取消任务失败: {}", taskId, e);
-            return Result.error("取消任务失败: " + e.getMessage());
+            return ApiResponse.paramError("取消任务失败: " + e.getMessage());
         }
     }
     
@@ -405,14 +404,14 @@ public class ContractInfoExtractController {
      * 获取任务的CharBox数据
      */
     @GetMapping("/charboxes/{taskId}")
-    public Result<Object> getTaskCharBoxes(@PathVariable String taskId) {
+    public ApiResponse<Object> getTaskCharBoxes(@PathVariable String taskId) {
         try {
             File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             File charBoxFile = new File(taskDir, "char_boxes.json");
             
             if (!charBoxFile.exists()) {
                 log.warn("CharBox文件不存在: {}", charBoxFile.getAbsolutePath());
-                return Result.success(new ArrayList<>());
+                return ApiResponse.success(new ArrayList<>());
             }
             
             // 读取CharBox数据
@@ -420,11 +419,11 @@ public class ContractInfoExtractController {
             Object charBoxData = objectMapper.readValue(charBoxJson, Object.class);
             
             log.debug("成功获取CharBox数据: {}", taskId);
-            return Result.success(charBoxData);
+            return ApiResponse.success(charBoxData);
             
         } catch (Exception e) {
             log.error("获取CharBox数据失败: {}", taskId, e);
-            return Result.error("获取CharBox数据失败: " + e.getMessage());
+            return ApiResponse.paramError("获取CharBox数据失败: " + e.getMessage());
         }
     }
     
@@ -432,14 +431,14 @@ public class ContractInfoExtractController {
      * 获取任务的位置映射数据
      */
     @GetMapping("/bbox-mappings/{taskId}")
-    public Result<Object> getTaskBboxMappings(@PathVariable String taskId) {
+    public ApiResponse<Object> getTaskBboxMappings(@PathVariable String taskId) {
         try {
             File taskDir = new File(uploadRootPath, "extract-tasks/" + taskId);
             File bboxMappingFile = new File(taskDir, "bbox_mappings.json");
             
             if (!bboxMappingFile.exists()) {
                 log.warn("BboxMapping文件不存在: {}", bboxMappingFile.getAbsolutePath());
-                return Result.success(new ArrayList<>());
+                return ApiResponse.success(new ArrayList<>());
             }
             
             // 读取BboxMapping数据
@@ -447,11 +446,11 @@ public class ContractInfoExtractController {
             Object bboxMappingData = objectMapper.readValue(bboxMappingJson, Object.class);
             
             log.debug("成功获取BboxMapping数据: {}", taskId);
-            return Result.success(bboxMappingData);
+            return ApiResponse.success(bboxMappingData);
             
         } catch (Exception e) {
             log.error("获取BboxMapping数据失败: {}", taskId, e);
-            return Result.error("获取BboxMapping数据失败: " + e.getMessage());
+            return ApiResponse.paramError("获取BboxMapping数据失败: " + e.getMessage());
         }
     }
 

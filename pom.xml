@@ -38,8 +38,10 @@
 
     <!-- 子模块 -->
     <modules>
-        <module>contract-tools-core</module>
+        <module>contract-tools-api</module>
         <module>contract-tools-auth</module>
+        <module>contract-tools-auth-generator</module>
+        <module>contract-tools-core</module>
         <module>contract-tools-backend</module>
         <module>contract-tools-sdk</module>
         <module>contract-tools-extract</module>
@@ -59,6 +61,11 @@
             </dependency>
 
             <!-- 内部模块依赖 -->
+            <dependency>
+                <groupId>com.zhaoxinms</groupId>
+                <artifactId>contract-tools-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.zhaoxinms</groupId>
                 <artifactId>contract-tools-core</artifactId>

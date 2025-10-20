@@ -229,8 +229,8 @@ const startConvert = async () => {
     progressText.value = '转换完成'
     
     // 处理转换结果
-    // 响应拦截器返回的格式：{code: 200, message: "...", data: {...}}
-    const resultData = response.data
+    // 响应拦截器返回的格式：{ data: { code: 200, message: "...", data: {...} } }
+    const resultData = response.data.data
     if (resultData && resultData.success) {
       convertResult.value = {
         success: true,

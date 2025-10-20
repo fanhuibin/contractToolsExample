@@ -62,11 +62,32 @@
             <version>1.10.0</version>
         </dependency>
 
+        <!-- 内部依赖 - API基础设施 -->
+        <dependency>
+            <groupId>com.zhaoxinms</groupId>
+            <artifactId>contract-tools-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
         <!-- 内部依赖 -->
         <dependency>
             <groupId>com.zhaoxinms</groupId>
             <artifactId>contract-tools-core</artifactId>
             <version>${project.version}</version>
+        </dependency>
+        
+        <!-- 内部依赖 - 授权模块 -->
+        <dependency>
+            <groupId>com.zhaoxinms</groupId>
+            <artifactId>contract-tools-auth</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        
+        <!-- Swagger注解 -->
+        <dependency>
+            <groupId>io.swagger</groupId>
+            <artifactId>swagger-annotations</artifactId>
+            <version>1.6.2</version>
         </dependency>
         <!-- Test -->
         <dependency>

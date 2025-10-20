@@ -1,5 +1,7 @@
 package com.zhaoxinms.contract.tools.auth.service;
 
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.PublicKey;
@@ -9,7 +11,10 @@ import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StreamUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -35,6 +40,9 @@ public class LicenseService {
     @Autowired
     private AuthProperties authProperties;
     
+    @Autowired
+    private ResourceLoader resourceLoader;
+    
     private final ObjectMapper objectMapper;
     
     public LicenseService() {
@@ -49,11 +57,15 @@ public class LicenseService {
         try {
             // 读取License文件
             String licenseFilePath = authProperties.getLicense().getFilePath();
-            if (!Files.exists(Paths.get(licenseFilePath))) {
+            Resource resource = loadResource(licenseFilePath);
+            if (resource == null || !resource.exists()) {
                 return LicenseValidationResult.failure("License文件不存在: " + licenseFilePath);
             }
             
-            String licenseContent = new String(Files.readAllBytes(Paths.get(licenseFilePath)));
+            String licenseContent;
+            try (InputStream inputStream = resource.getInputStream()) {
+                licenseContent = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+            }
             if (CommonUtils.isEmpty(licenseContent)) {
                 return LicenseValidationResult.failure("License文件内容为空");
             }
@@ -160,28 +172,172 @@ public class LicenseService {
     }
 
     /**
+     * 加载资源文件
+     * 优先级：
+     * 1. jar包同级目录 (./license.lic)
+     * 2. jar包同级config目录 (./config/license.lic)
+     * 3. classpath (classpath:license.lic)
+     */
+    private Resource loadResource(String path) {
+        try {
+            // 如果是classpath:前缀，先尝试外部文件
+            if (path.startsWith("classpath:")) {
+                String fileName = path.substring("classpath:".length());
+                
+                // 1. 尝试jar包同级目录
+                Resource fileResource = resourceLoader.getResource("file:./" + fileName);
+                if (fileResource.exists()) {
+                    log.info("从jar包同级目录加载文件: ./{}", fileName);
+                    return fileResource;
+                }
+                
+                // 2. 尝试jar包同级config目录
+                Resource configResource = resourceLoader.getResource("file:./config/" + fileName);
+                if (configResource.exists()) {
+                    log.info("从config目录加载文件: ./config/{}", fileName);
+                    return configResource;
+                }
+                
+                // 3. 最后使用classpath（开发环境）
+                Resource classpathResource = resourceLoader.getResource(path);
+                if (classpathResource.exists()) {
+                    log.info("从classpath加载文件: {}", path);
+                    return classpathResource;
+                }
+                
+                log.warn("文件不存在: {} (已尝试: ./{}, ./config/{}, classpath)", fileName, fileName, fileName);
+                return null;
+            } else {
+                // 非classpath路径，直接加载
+                return resourceLoader.getResource(path);
+            }
+        } catch (Exception e) {
+            log.error("加载资源文件失败: {}", path, e);
+            return null;
+        }
+    }
+
+    /**
      * 验证签名
      */
     private boolean verifySignature(String data, String signature) {
         try {
             String publicKeyStr = authProperties.getSignature().getPublicKey();
             if (CommonUtils.isEmpty(publicKeyStr)) {
-                // 尝试从文件读取公钥
+                // 尝试从文件读取公钥（仅支持 classpath 加载以提高安全性）
                 String publicKeyPath = authProperties.getSignature().getPublicKeyPath();
-                if (Files.exists(Paths.get(publicKeyPath))) {
-                    publicKeyStr = new String(Files.readAllBytes(Paths.get(publicKeyPath)));
-                } else {
-                    LoggerHelper.error("公钥未配置且公钥文件不存在");
-                    return false;
+                
+                // 安全检查：只允许从 classpath 加载公钥
+                if (publicKeyPath == null || !publicKeyPath.startsWith("classpath:")) {
+                    String errorMsg = "【致命错误】出于安全考虑，公钥只能从classpath加载（需要以classpath:开头）: " + publicKeyPath;
+                    LoggerHelper.error(errorMsg);
+                    throw new RuntimeException(errorMsg);
+                }
+                
+                Resource publicKeyResource = loadPublicKeyFromClasspath(publicKeyPath);
+                if (publicKeyResource == null || !publicKeyResource.exists()) {
+                    String errorMsg = "【致命错误】公钥文件不存在: " + publicKeyPath + "，系统无法启动";
+                    LoggerHelper.error(errorMsg);
+                    throw new RuntimeException(errorMsg);
+                }
+                
+                try (InputStream inputStream = publicKeyResource.getInputStream()) {
+                    publicKeyStr = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+                    log.info("从classpath加载公钥: {}", publicKeyPath);
+                    
+                    // 验证公钥指纹（从classpath加载）- 强制验证
+                    String expectedFingerprint = loadPublicKeyFingerprint(publicKeyPath);
+                    if (CommonUtils.isEmpty(expectedFingerprint)) {
+                        String errorMsg = "【致命错误】公钥指纹文件不存在: " + publicKeyPath + ".fingerprint，系统无法启动";
+                        LoggerHelper.error(errorMsg);
+                        LoggerHelper.error("请确保以下文件存在：");
+                        LoggerHelper.error("  1. " + publicKeyPath);
+                        LoggerHelper.error("  2. " + publicKeyPath + ".fingerprint");
+                        throw new RuntimeException(errorMsg);
+                    }
+                    
+                    String currentFingerprint = calculateFingerprint(publicKeyStr);
+                    if (!expectedFingerprint.equals(currentFingerprint)) {
+                        String errorMsg = "【致命错误】公钥指纹验证失败！公钥文件已被篡改，系统拒绝启动";
+                        LoggerHelper.error(errorMsg);
+                        LoggerHelper.error("期望指纹: " + expectedFingerprint);
+                        LoggerHelper.error("实际指纹: " + currentFingerprint);
+                        LoggerHelper.error("公钥文件可能被非法修改，请立即检查系统安全性！");
+                        throw new RuntimeException(errorMsg);
+                    }
+                    
+                    log.info("✓ 公钥指纹验证通过");
                 }
             }
             
             PublicKey publicKey = SignatureUtils.stringToPublicKey(publicKeyStr);
             return SignatureUtils.verify(data, signature, publicKey);
             
+        } catch (RuntimeException e) {
+            // 直接抛出RuntimeException，让系统启动失败
+            throw e;
         } catch (Exception e) {
             LoggerHelper.error("验证签名时发生错误", e);
-            return false;
+            throw new RuntimeException("【致命错误】公钥验证失败: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 加载公钥指纹
+     * 指纹文件命名规则：公钥文件名 + .fingerprint
+     * 例如：publicCerts.store -> publicCerts.store.fingerprint
+     */
+    private String loadPublicKeyFingerprint(String publicKeyPath) {
+        try {
+            String fingerprintPath = publicKeyPath + ".fingerprint";
+            Resource fingerprintResource = resourceLoader.getResource(fingerprintPath);
+            if (fingerprintResource != null && fingerprintResource.exists()) {
+                try (InputStream inputStream = fingerprintResource.getInputStream()) {
+                    String fingerprint = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8).trim();
+                    log.info("从classpath加载公钥指纹: {}", fingerprintPath);
+                    return fingerprint;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("加载公钥指纹失败: {}", e.getMessage());
+        }
+        return null;
+    }
+    
+    /**
+     * 计算公钥指纹（SHA-256哈希）
+     */
+    private String calculateFingerprint(String publicKeyStr) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(publicKeyStr.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            LoggerHelper.error("计算公钥指纹失败", e);
+            return "";
+        }
+    }
+    
+    /**
+     * 从classpath加载公钥（安全加载，不允许外部文件覆盖）
+     * 
+     * @param classpathPath classpath路径
+     * @return 公钥资源
+     */
+    private Resource loadPublicKeyFromClasspath(String classpathPath) {
+        try {
+            // 强制从 classpath 内部加载，不检查外部文件
+            // 这样可以防止用户替换jar包外的公钥文件来绕过授权
+            return resourceLoader.getResource(classpathPath);
+        } catch (Exception e) {
+            LoggerHelper.error("加载公钥失败: " + classpathPath, e);
+            return null;
         }
     }
 

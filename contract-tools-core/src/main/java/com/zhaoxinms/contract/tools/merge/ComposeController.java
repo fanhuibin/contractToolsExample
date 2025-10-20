@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.merge.mergeImpl.ContentControlMerge;
@@ -61,20 +61,20 @@ public class ComposeController {
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     @PostMapping(value = "/sdt", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Result<ComposeResponse> composeBySdt(@RequestBody ComposeRequest req) {
+    public ApiResponse<ComposeResponse> composeBySdt(@RequestBody ComposeRequest req) {
         try {
             if (req == null || req.getTemplateFileId() == null || req.getTemplateFileId().trim().isEmpty()) {
-                return Result.error("templateFileId 不能为空");
+                return ApiResponse.paramError("templateFileId 不能为空");
             }
             if (req.getValues() == null || req.getValues().isEmpty()) {
-                return Result.error("values 不能为空");
+                return ApiResponse.paramError("values 不能为空");
             }
 
             // 解析模板本地路径（统一通过文件服务获取，不做硬编码）
             String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(req.getTemplateFileId()) : null;
             
             if (templatePath == null || templatePath.trim().isEmpty()) {
-                return Result.error("无法获取模板文件路径");
+                return ApiResponse.paramError("无法获取模板文件路径");
             }
 
             // 生成工作目录与输出文件
@@ -155,7 +155,7 @@ public class ComposeController {
             // 注册文件到文件服务，返回fileId
             FileInfo registered = registerComposedFile(outDocx);
             if (registered == null) {
-                return Result.error("注册合成文件失败");
+                return ApiResponse.<ComposeResponse>serverError().errorDetail("注册合成文件失败");
             }
 
             // === 转PDF并按用户URL优先执行盖章 ===
@@ -247,26 +247,26 @@ public class ComposeController {
             resp.setPdfPath(pdfRelPath);
             resp.setStampedPdfPath(stampedRelPath);
             resp.setRidingStampPdfPath(ridingRelPath);
-            return Result.success(resp);
+            return ApiResponse.success(resp);
         } catch (Exception e) {
-            return Result.error("合成失败: " + e.getMessage());
+            return ApiResponse.<ComposeResponse>serverError().errorDetail("合成失败: " + e.getMessage());
         }
     }
 
     @PostMapping(value = "/compose-with-stamp", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Result<ComposeWithStampResponse> composeWithStamp(@RequestBody ComposeRequest req) {
+    public ApiResponse<ComposeWithStampResponse> composeWithStamp(@RequestBody ComposeRequest req) {
         try {
             if (req == null || req.getTemplateFileId() == null || req.getTemplateFileId().trim().isEmpty()) {
-                return Result.error("templateFileId 不能为空");
+                return ApiResponse.paramError("templateFileId 不能为空");
             }
             if (req.getValues() == null || req.getValues().isEmpty()) {
-                return Result.error("values 不能为空");
+                return ApiResponse.paramError("values 不能为空");
             }
 
             // 1. 合成DOCX
             String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(req.getTemplateFileId()) : null;
             if (templatePath == null || templatePath.trim().isEmpty()) {
-                return Result.error("无法获取模板文件路径");
+                return ApiResponse.paramError("无法获取模板文件路径");
             }
 
             String ts = TS.format(LocalDateTime.now());
@@ -284,7 +284,7 @@ public class ComposeController {
             // 2. 转换为PDF
             String pdfPath = changeFileToPDFService.covertToPdf(outDocx);
             if (pdfPath == null) {
-                return Result.error("DOCX转PDF失败");
+                return ApiResponse.<ComposeWithStampResponse>serverError().errorDetail("DOCX转PDF失败");
             }
             File outPdf = new File(pdfPath);
 
@@ -306,10 +306,10 @@ public class ComposeController {
             resp.setStampedPdfPath(getRelativePath(stampedPdf));
             resp.setRidingStampPdfPath(getRelativePath(ridingStampPdf));
             
-            return Result.success(resp);
+            return ApiResponse.success(resp);
         } catch (Exception e) {
             e.printStackTrace();
-            return Result.error("合成或盖章失败: " + e.getMessage());
+            return ApiResponse.<ComposeWithStampResponse>serverError().errorDetail("合成或盖章失败: " + e.getMessage());
         }
     }
 

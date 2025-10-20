@@ -349,8 +349,8 @@ const loadTemplates = async () => {
   try {
     loadingTemplates.value = true
     const res: any = await listTemplates({ status: 'active' })
-    if (res.code === 200) {
-      templates.value = res.data || []
+    if (res.data.code === 200) {
+      templates.value = res.data.data || []
     }
   } catch (error: any) {
     ElMessage.error('加载模板失败：' + (error.message || '未知错误'))
@@ -362,8 +362,8 @@ const loadTemplates = async () => {
 const loadRecentTasks = async () => {
   try {
     const res: any = await listRuleExtractTasks()
-    if (res.code === 200) {
-      recentTasks.value = res.data || []
+    if (res.data.code === 200) {
+      recentTasks.value = res.data.data || []
     }
   } catch (error) {
     console.error('加载任务历史失败', error)
@@ -423,8 +423,8 @@ const startExtraction = async () => {
 
     const res: any = await uploadAndExtract(formData)
     
-    if (res.code === 200) {
-      const taskId = res.data.taskId
+    if (res.data.code === 200) {
+      const taskId = res.data.data.taskId
       ElMessage.success('任务创建成功，开始处理...')
       
       currentTask.value = {
@@ -454,8 +454,8 @@ const startStatusPolling = (taskId: string) => {
   statusCheckTimer = setInterval(async () => {
     try {
       const res: any = await getRuleExtractTaskStatus(taskId)
-      if (res.code === 200) {
-        currentTask.value = res.data
+      if (res.data.code === 200) {
+        currentTask.value = res.data.data
         
         if (['completed', 'failed', 'cancelled'].includes(currentTask.value.status)) {
           stopStatusPolling()

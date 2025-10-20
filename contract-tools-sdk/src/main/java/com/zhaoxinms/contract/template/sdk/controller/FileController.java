@@ -2,7 +2,7 @@ package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -109,23 +109,23 @@ public class FileController {
 
     @GetMapping("/{fileId}")
     @ApiOperation("获取文件信息")
-    public Result<FileInfo> getFileInfo(
+    public ApiResponse<FileInfo> getFileInfo(
             @ApiParam(value = "文件ID", required = true) 
             @PathVariable String fileId) {
         try {
             FileInfo fileInfo = fileInfoService.getById(fileId);
             if (fileInfo == null) {
-                return Result.error("文件不存在");
+                return ApiResponse.<FileInfo>notFound("文件不存在");
             }
-            return Result.success(fileInfo);
+            return ApiResponse.success(fileInfo);
         } catch (Exception e) {
-            return Result.error("获取文件信息失败：" + e.getMessage());
+            return ApiResponse.<FileInfo>serverError().errorDetail("获取文件信息失败：" + e.getMessage());
         }
     }
 
     @GetMapping("/list")
     @ApiOperation("获取所有文件列表")
-    public Result<List<FileInfo>> getFileList() {
+    public ApiResponse<List<FileInfo>> getFileList() {
         try {
             // 若找不到模板设计示例文件，则自动注册一个指向 uploads/templateDesign.docx 的记录
             List<FileInfo> files = fileInfoService.getAllFiles();
@@ -145,9 +145,9 @@ public class FileController {
                     files.add(info);
                 }
             }
-            return Result.success(files);
+            return ApiResponse.success(files);
         } catch (Exception e) {
-            return Result.error("获取文件列表失败：" + e.getMessage());
+            return ApiResponse.<List<FileInfo>>serverError().errorDetail("获取文件列表失败：" + e.getMessage());
         }
     }
     

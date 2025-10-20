@@ -60,14 +60,14 @@
             <el-icon><Reading /></el-icon>
             文档中心
           </el-button>
-          <el-button 
-            type="primary" 
-            link 
-            @click="openUrl('http://zhaoxinms.com')"
-          >
-            <el-icon><Key /></el-icon>
-            授权信息
-          </el-button>
+        <el-button
+          type="primary"
+          link
+          @click="router.push('/license')"
+        >
+          <el-icon><Key /></el-icon>
+          授权信息
+        </el-button>
         </div>
       </el-header>
 

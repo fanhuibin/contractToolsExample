@@ -1,6 +1,6 @@
 package com.zhaoxinms.contract.tools.aicomponent.controller;
 
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -26,9 +26,9 @@ public class ContractReviewController {
 
     @PostMapping("/upload")
     @ResponseBody
-    public Result<UploadResponse> uploadFile(@RequestParam("file") MultipartFile file) {
+    public ApiResponse<UploadResponse> uploadFile(@RequestParam("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return Result.error("上传的文件不能为空");
+            return ApiResponse.paramError("上传的文件不能为空");
         }
 
         try {
@@ -49,11 +49,11 @@ public class ContractReviewController {
             file.transferTo(dest);
             log.info("文件已上传至: {}", dest.getAbsolutePath());
 
-            return Result.success(new UploadResponse(fileId));
+            return ApiResponse.success(new UploadResponse(fileId));
 
         } catch (IOException e) {
             log.error("文件上传失败", e);
-            return Result.error("文件上传失败: " + e.getMessage());
+            return ApiResponse.<UploadResponse>serverError().errorDetail("文件上传失败: " + e.getMessage());
         }
     }
 

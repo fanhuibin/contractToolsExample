@@ -464,7 +464,8 @@ const doUploadGPUOCRCompare = async () => {
     const res = await uploadGPUOCRCompare(formData)
 
     // 检查响应结构，获取正确的任务ID
-    let taskId = res.data?.taskId
+    // res.data 是整个 ApiResponse，res.data.data 是实际的 taskId 字符串
+    let taskId = res.data?.data
     if (!taskId) {
       throw new Error('无法获取任务ID，响应格式异常')
     }
@@ -544,15 +545,17 @@ const updateTaskStatus = async (taskId: string) => {
 
   try {
     const res = await getGPUOCRCompareTaskStatus(taskId)
-    currentTask.value = res.data
+    // res.data 是整个 ApiResponse，res.data.data 是实际的任务状态对象
+    currentTask.value = res.data?.data
 
     // 启动平滑进度定时器（如果还没启动）
     if (!smoothTimer.value) {
       smoothTimer.value = setInterval(updateSmoothProgress, 300) // 每300ms更新一次
     }
 
-    // 如果任务完成，停止监控
-    if (res.data.status === 'COMPLETED' || res.data.status === 'FAILED' || res.data.status === 'TIMEOUT') {
+    // 如果任务完成，停止监控（注意：状态在 res.data.data 中）
+    const taskData = res.data?.data
+    if (taskData && (taskData.status === 'COMPLETED' || taskData.status === 'FAILED' || taskData.status === 'TIMEOUT')) {
       if (progressTimer.value) {
         clearInterval(progressTimer.value)
         progressTimer.value = null
@@ -567,11 +570,11 @@ const updateTaskStatus = async (taskId: string) => {
       // 刷新任务历史
       refreshTasks()
 
-      if (res.data.status === 'COMPLETED') {
+      if (taskData.status === 'COMPLETED') {
         // 进度会通过 progressCalculator 自动冲刺到 100%
         ElMessage.success('智能文档比对完成！')
-      } else if (res.data.status === 'FAILED') {
-        ElMessage.error('智能文档比对失败: ' + res.data.errorMessage)
+      } else if (taskData.status === 'FAILED') {
+        ElMessage.error('智能文档比对失败: ' + (taskData.errorMessage || '未知错误'))
       }
     }
 
@@ -585,7 +588,9 @@ const refreshTasks = async () => {
   try {
     const res = await getAllGPUOCRCompareTasks()
     // 后端返回格式：{code: 200, message: "...", data: [...]}
-    taskHistory.value = ((res.data || []) as any[]).sort(
+    // res.data 是整个ApiResponse对象，res.data.data 才是任务数组
+    const tasks = (res.data?.data || []) as any[]
+    taskHistory.value = tasks.sort(
       (a: any, b: any) =>
         new Date(b.startTime || 0).getTime() - new Date(a.startTime || 0).getTime()
     )
@@ -708,8 +713,8 @@ const startDebugCompare = async () => {
     })
 
 
-    // 获取任务ID
-    const taskId = res.data?.taskId
+    // 获取任务ID（注意：res.data 是 ApiResponse，res.data.data 是实际返回的数据）
+    const taskId = res.data?.data
 
     if (!taskId) {
       throw new Error('任务ID为空')

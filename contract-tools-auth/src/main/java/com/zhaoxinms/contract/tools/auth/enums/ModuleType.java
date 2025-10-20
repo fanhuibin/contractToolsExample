@@ -6,34 +6,34 @@ package com.zhaoxinms.contract.tools.auth.enums;
 public enum ModuleType {
     
     /**
-     * 合同模板设计模块
+     * 智能文档抽取模块（规则提取）
      */
-    CONTRACT_TEMPLATE_DESIGN("contract_template_design", "合同模板设计模块"),
+    SMART_DOCUMENT_EXTRACTION("smart_document_extraction", "智能文档抽取"),
     
     /**
-     * 合同合成模块
+     * 智能文档比对模块（GPU OCR比对）
      */
-    CONTRACT_SYNTHESIS("contract_synthesis", "合同合成模块"),
+    SMART_DOCUMENT_COMPARE("smart_document_compare", "智能文档比对"),
     
     /**
-     * 合同比对PRO模块
+     * 智能合同合成模块
      */
-    CONTRACT_COMPARE_PRO("contract_compare_pro", "合同比对PRO模块"),
+    SMART_CONTRACT_SYNTHESIS("smart_contract_synthesis", "智能合同合成"),
     
     /**
-     * 合同信息抽取模块
+     * 智能文档解析模块（OCR文本提取）
      */
-    CONTRACT_INFO_EXTRACTION("contract_info_extraction", "合同信息抽取模块"),
+    SMART_DOCUMENT_PARSE("smart_document_parse", "智能文档解析"),
     
     /**
-     * 合同智能审核模块
+     * 文档在线编辑模块（OnlyOffice）
      */
-    CONTRACT_INTELLIGENT_REVIEW("contract_intelligent_review", "合同智能审核模块"),
+    DOCUMENT_ONLINE_EDIT("document_online_edit", "文档在线编辑"),
     
     /**
-     * 履约任务生成模块
+     * 文档格式转换模块
      */
-    PERFORMANCE_TASK_GENERATION("performance_task_generation", "履约任务生成模块");
+    DOCUMENT_FORMAT_CONVERT("document_format_convert", "文档格式转换");
     
     private final String code;
     private final String name;

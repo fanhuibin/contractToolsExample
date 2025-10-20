@@ -283,9 +283,9 @@ const handleFileUpload = async (file: File) => {
     // 上传文件并开始提取
     const response: any = await uploadPdfForOcr(formData)
     
-    // baseRequest拦截器已处理，直接返回data对象
-    if (response && response.data) {
-      taskId.value = response.data.taskId
+    // baseRequest拦截器已处理，返回格式为 { data: { code, message, data } }
+    if (response && response.data && response.data.data) {
+      taskId.value = response.data.data.taskId
       ElMessage.success('文件上传成功，开始智能解析...')
       startPolling()
     } else {
@@ -311,9 +311,9 @@ const startPolling = () => {
     try {
       const response: any = await getOcrTaskStatus(taskId.value)
       
-      // baseRequest拦截器已处理，response就是data对象
-      if (response && response.data) {
-        const status = response.data
+      // baseRequest拦截器已处理，返回格式为 { data: { code, message, data } }
+      if (response && response.data && response.data.data) {
+        const status = response.data.data
         progress.value = status.progress || 0
         statusMessage.value = status.message || ''
         currentStep.value = stepMapping[status.status] || 0
@@ -346,9 +346,9 @@ const loadResults = async () => {
     const resultResponse: any = await getOcrResult(taskId.value)
     console.log('OCR结果响应:', resultResponse)
     
-    // baseRequest拦截器已处理，resultResponse就是data对象
-    if (resultResponse && resultResponse.data) {
-      ocrResult.value = resultResponse.data
+    // baseRequest拦截器已处理，返回格式为 { data: { code, message, data } }
+    if (resultResponse && resultResponse.data && resultResponse.data.data) {
+      ocrResult.value = resultResponse.data.data
       totalPages.value = ocrResult.value.totalPages || 0
       
       console.log('OCR结果:', ocrResult.value)

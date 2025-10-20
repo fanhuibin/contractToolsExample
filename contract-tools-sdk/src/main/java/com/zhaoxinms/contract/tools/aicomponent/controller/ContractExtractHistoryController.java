@@ -2,7 +2,7 @@ package com.zhaoxinms.contract.tools.aicomponent.controller;
 
 import com.zhaoxinms.contract.tools.aicomponent.model.ContractExtractHistory;
 import com.zhaoxinms.contract.tools.aicomponent.service.ContractExtractHistoryService;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -16,9 +16,9 @@ public class ContractExtractHistoryController {
     private final ContractExtractHistoryService historyService;
 
     @GetMapping("/list")
-    public Result<List<ContractExtractHistory>> getHistory(@RequestParam String userId) {
+    public ApiResponse<List<ContractExtractHistory>> getHistory(@RequestParam String userId) {
         List<ContractExtractHistory> historyList = historyService.getHistoryByUserId(userId);
-        return Result.success(historyList);
+        return ApiResponse.success(historyList);
     }
 }
 

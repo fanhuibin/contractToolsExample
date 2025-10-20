@@ -9,7 +9,7 @@ import javax.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.json.simple.JSONObject;
 // removed unused imports
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -184,7 +184,7 @@ public class OnlyofficeCallbackController {
 	 * @return 健康状态
 	 */
 	@GetMapping("/health")
-	public Result<String> health() {
-		return Result.success("OnlyOffice回调服务正常运行");
+	public ApiResponse<String> health() {
+		return ApiResponse.<String>success("OnlyOffice回调服务正常运行", "OK");
 	}
 }

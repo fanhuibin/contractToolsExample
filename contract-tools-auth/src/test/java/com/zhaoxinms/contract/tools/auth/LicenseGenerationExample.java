@@ -60,9 +60,9 @@ public class LicenseGenerationExample {
         
         // 授权模块
         Set<ModuleType> authorizedModules = Set.of(
-            ModuleType.CONTRACT_TEMPLATE_DESIGN,    // 合同模板设计
-            ModuleType.CONTRACT_SYNTHESIS,          // 合同合成
-            ModuleType.CONTRACT_COMPARE_PRO         // 合同比对PRO
+            ModuleType.DOCUMENT_ONLINE_EDIT,        // 文档在线编辑
+            ModuleType.SMART_CONTRACT_SYNTHESIS,    // 智能合同合成
+            ModuleType.SMART_DOCUMENT_COMPARE       // 智能文档比对
         );
         request.setAuthorizedModules(authorizedModules);
         
@@ -80,7 +80,7 @@ public class LicenseGenerationExample {
         request.setPrivateKeyPath("./keys/private.key");
         
         // 输出文件
-        request.setOutputPath("./license.dat");
+        request.setOutputPath("./license.lic");
         
         // 生成License
         boolean success = generator.generateLicense(request);
@@ -107,7 +107,7 @@ public class LicenseGenerationExample {
             System.out.println("  auth:");
             System.out.println("    enabled: true");
             System.out.println("    license:");
-            System.out.println("      filePath: \"license.dat\"");
+            System.out.println("      filePath: \"license.lic\"");
             System.out.println("      hardwareBound: true");
             System.out.println("    signature:");
             System.out.println("      publicKeyPath: \"public.key\"");
@@ -152,7 +152,7 @@ public class LicenseGenerationExample {
         System.out.println("=== 验证License文件示例 ===");
         
         // 验证License文件
-        LicenseReadResult result = reader.readLicense("./license.dat", "./keys/public.key");
+        LicenseReadResult result = reader.readLicense("./license.lic", "./keys/public.key");
         
         // 显示详细信息
         reader.printLicenseInfo(result);
@@ -210,15 +210,15 @@ public class LicenseGenerationExample {
         request.setContactPerson("测试用户");
         request.setContactPhone("13800138000");
         request.setAuthorizedModules(Set.of(
-            ModuleType.CONTRACT_TEMPLATE_DESIGN,
-            ModuleType.CONTRACT_COMPARE_PRO
+            ModuleType.DOCUMENT_ONLINE_EDIT,
+            ModuleType.SMART_DOCUMENT_COMPARE
         ));
         request.setStartDate(LocalDateTime.now());
         request.setExpireDate(LocalDateTime.now().plusMonths(3)); // 3个月后到期
         request.setMaxUsers(5);
         request.setHardwareBound(true);
         request.setPrivateKeyContent(keyResult.getPrivateKeyContent());
-        request.setOutputPath("./example-license.dat");
+        request.setOutputPath("./example-license.lic");
         
         boolean generateSuccess = generator.generateLicense(request);
         if (!generateSuccess) {
@@ -238,12 +238,12 @@ public class LicenseGenerationExample {
                 keyResult.getPublicKeyContent().getBytes()
             );
             
-            LicenseReadResult result = reader.readLicense("./example-license.dat", "./example-public.key");
+            LicenseReadResult result = reader.readLicense("./example-license.lic", "./example-public.key");
             reader.printLicenseInfo(result);
             
             // 清理临时文件
             java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get("./example-public.key"));
-            java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get("./example-license.dat"));
+            java.nio.file.Files.deleteIfExists(java.nio.file.Paths.get("./example-license.lic"));
             
         } catch (Exception e) {
             System.out.println("❌ 验证过程失败: " + e.getMessage());

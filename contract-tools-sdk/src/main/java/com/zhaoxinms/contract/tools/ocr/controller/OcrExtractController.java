@@ -1,7 +1,15 @@
 package com.zhaoxinms.contract.tools.ocr.controller;
 
-import com.zhaoxinms.contract.tools.common.Result;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhaoxinms.contract.tools.api.common.ApiCode;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.api.exception.BusinessException;
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.ocr.service.OcrExtractService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -14,16 +22,22 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Map;
 
 /**
- * OCR提取控制器
- * 提供PDF文档OCR文本提取功能，支持页眉页脚忽略和bbox可视化
+ * 智能文档解析控制器
+ * 
+ * 基于GPU OCR的文档智能解析功能，支持页眉页脚过滤和图文对照显示
+ * 
+ * @author zhaoxin
+ * @since 2024-10-09
  */
 @RestController
 @RequestMapping("/api/ocr/extract")
 @Slf4j
+@RequireFeature(module = ModuleType.SMART_DOCUMENT_PARSE, message = "智能文档解析功能需要授权")
+@Api(tags = "智能文档解析")
 public class OcrExtractController {
 
     @Autowired
@@ -33,184 +47,175 @@ public class OcrExtractController {
     private String uploadRootPath;
 
     /**
-     * 上传PDF文件进行OCR提取
+     * 上传PDF文件进行智能解析
      */
     @PostMapping("/upload")
-    public ResponseEntity<Result<Map<String, Object>>> uploadFile(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") Boolean ignoreHeaderFooter,
-            @RequestParam(value = "headerHeightPercent", defaultValue = "12.0") Double headerHeightPercent,
-            @RequestParam(value = "footerHeightPercent", defaultValue = "12.0") Double footerHeightPercent) {
+    @ApiOperation(value = "上传文件进行智能解析", notes = "支持页眉页脚过滤，返回任务ID")
+    public ApiResponse<Map<String, Object>> uploadFile(
+            @ApiParam(value = "PDF文件", required = true) @RequestParam("file") MultipartFile file,
+            @ApiParam(value = "是否忽略页眉页脚", example = "true") @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") Boolean ignoreHeaderFooter,
+            @ApiParam(value = "页眉高度百分比", example = "12.0") @RequestParam(value = "headerHeightPercent", defaultValue = "12.0") Double headerHeightPercent,
+            @ApiParam(value = "页脚高度百分比", example = "12.0") @RequestParam(value = "footerHeightPercent", defaultValue = "12.0") Double footerHeightPercent) throws Exception {
 
-        try {
-            log.info("接收到OCR提取请求，文件: {}, 忽略页眉页脚: {}, 页眉高度: {}%, 页脚高度: {}%",
-                    file.getOriginalFilename(), ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
+        log.info("接收到智能解析请求，文件: {}, 忽略页眉页脚: {}, 页眉高度: {}%, 页脚高度: {}%",
+                file.getOriginalFilename(), ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
 
-            // 验证文件
-            if (file.isEmpty()) {
-                return ResponseEntity.badRequest().body(Result.error("文件不能为空"));
-            }
-
-            String fileName = file.getOriginalFilename();
-            if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
-                return ResponseEntity.badRequest().body(Result.error("只支持PDF格式文件"));
-            }
-
-            // 调用服务进行OCR提取
-            String taskId = ocrExtractService.extractPdf(
-                    file, 
-                    ignoreHeaderFooter, 
-                    headerHeightPercent, 
-                    footerHeightPercent
-            );
-
-            Map<String, Object> data = new HashMap<>();
-            data.put("taskId", taskId);
-            data.put("message", "文件上传成功，开始OCR提取...");
-
-            return ResponseEntity.ok(Result.success(data));
-
-        } catch (Exception e) {
-            log.error("OCR提取上传失败", e);
-            return ResponseEntity.status(500).body(Result.error("上传失败: " + e.getMessage()));
+        // 验证文件
+        if (file == null || file.isEmpty()) {
+            throw BusinessException.of(ApiCode.FILE_EMPTY);
         }
+
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
+            throw BusinessException.of(ApiCode.FILE_TYPE_NOT_SUPPORTED, "只支持PDF格式文件");
+        }
+
+        // 调用服务进行OCR提取
+        String taskId = ocrExtractService.extractPdf(
+                file, 
+                ignoreHeaderFooter, 
+                headerHeightPercent, 
+                footerHeightPercent
+        );
+
+        return ApiResponse.success("文件上传成功，开始智能解析", Map.of(
+            "taskId", taskId,
+            "message", "文件上传成功，开始智能解析..."
+        ));
     }
 
     /**
      * 获取任务状态
      */
     @GetMapping("/status/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getTaskStatus(@PathVariable String taskId) {
-        try {
-            log.info("查询OCR提取任务状态，任务ID: {}", taskId);
+    @ApiOperation(value = "查询任务状态", notes = "获取解析任务的执行状态和进度")
+    public ApiResponse<Map<String, Object>> getTaskStatus(
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId) throws Exception {
+        
+        log.info("查询智能解析任务状态，任务ID: {}", taskId);
 
-            Map<String, Object> status = ocrExtractService.getTaskStatus(taskId);
-            if (status == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok(Result.success(status));
-
-        } catch (Exception e) {
-            log.error("获取任务状态失败，任务ID: {}", taskId, e);
-            return ResponseEntity.status(500).body(Result.error("获取状态失败: " + e.getMessage()));
+        Map<String, Object> status = ocrExtractService.getTaskStatus(taskId);
+        if (status == null) {
+            throw BusinessException.of(ApiCode.PARSE_TASK_NOT_FOUND, "任务不存在: " + taskId);
         }
+
+        return ApiResponse.success(status);
     }
 
     /**
-     * 获取OCR提取结果
+     * 获取解析结果
      */
     @GetMapping("/result/{taskId}")
-    public ResponseEntity<Result<Map<String, Object>>> getResult(@PathVariable String taskId) {
-        try {
-            log.info("获取OCR提取结果，任务ID: {}", taskId);
+    @ApiOperation(value = "获取解析结果", notes = "获取解析完成后的完整结果数据")
+    public ApiResponse<Map<String, Object>> getResult(
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId) throws Exception {
+        
+        log.info("获取智能解析结果，任务ID: {}", taskId);
 
-            // 检查任务状态
-            Map<String, Object> status = ocrExtractService.getTaskStatus(taskId);
-            if (status == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            String taskStatus = (String) status.get("status");
-            if (!"completed".equals(taskStatus)) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("status", taskStatus);
-                response.put("message", status.get("message"));
-                response.put("progress", status.get("progress"));
-                return ResponseEntity.ok(Result.success(response));
-            }
-
-            // 加载结果数据
-            Map<String, Object> result = ocrExtractService.getTaskResult(taskId);
-
-            return ResponseEntity.ok(Result.success(result));
-
-        } catch (Exception e) {
-            log.error("获取OCR提取结果失败，任务ID: {}", taskId, e);
-            return ResponseEntity.status(500).body(Result.error("获取结果失败: " + e.getMessage()));
+        // 检查任务状态
+        Map<String, Object> status = ocrExtractService.getTaskStatus(taskId);
+        if (status == null) {
+            throw BusinessException.of(ApiCode.PARSE_TASK_NOT_FOUND, "任务不存在: " + taskId);
         }
+
+        String taskStatus = (String) status.get("status");
+        
+        // 如果任务未完成，返回状态信息
+        if (!"completed".equals(taskStatus)) {
+            return ApiResponse.success(Map.of(
+                "status", taskStatus,
+                "message", status.get("message"),
+                "progress", status.get("progress")
+            ));
+        }
+
+        // 加载结果数据
+        Map<String, Object> result = ocrExtractService.getTaskResult(taskId);
+        if (result == null) {
+            throw BusinessException.of(ApiCode.PARSE_RESULT_NOT_FOUND, "解析结果不存在: " + taskId);
+        }
+
+        return ApiResponse.success(result);
     }
 
     /**
      * 获取页面图片
      */
     @GetMapping("/page-image/{taskId}/{pageNum}")
+    @ApiOperation(value = "获取页面图片", notes = "获取文档指定页的渲染图片")
     public ResponseEntity<Resource> getPageImage(
-            @PathVariable String taskId,
-            @PathVariable int pageNum) {
-        try {
-            log.debug("获取页面图片，任务ID: {}, 页码: {}", taskId, pageNum);
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId,
+            @ApiParam(value = "页码", required = true, example = "1") @PathVariable int pageNum) {
+        
+        log.debug("获取页面图片，任务ID: {}, 页码: {}", taskId, pageNum);
 
-            File imageFile = ocrExtractService.getPageImage(taskId, pageNum);
-            if (imageFile == null || !imageFile.exists()) {
-                return ResponseEntity.notFound().build();
-            }
-
-            Resource resource = new FileSystemResource(imageFile);
-            
-            // 根据文件扩展名设置Content-Type
-            String contentType = MediaType.IMAGE_PNG_VALUE;
-            if (imageFile.getName().toLowerCase().endsWith(".jpg") || 
-                imageFile.getName().toLowerCase().endsWith(".jpeg")) {
-                contentType = MediaType.IMAGE_JPEG_VALUE;
-            }
-
-            return ResponseEntity.ok()
-                    .contentType(MediaType.parseMediaType(contentType))
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + imageFile.getName() + "\"")
-                    .body(resource);
-
-        } catch (Exception e) {
-            log.error("获取页面图片失败，任务ID: {}, 页码: {}", taskId, pageNum, e);
-            return ResponseEntity.status(500).build();
+        File imageFile = ocrExtractService.getPageImage(taskId, pageNum);
+        if (imageFile == null || !imageFile.exists()) {
+            throw BusinessException.of(ApiCode.FILE_NOT_FOUND, 
+                String.format("页面图片不存在: taskId=%s, page=%d", taskId, pageNum));
         }
+
+        Resource resource = new FileSystemResource(imageFile);
+        
+        // 根据文件扩展名设置Content-Type
+        String contentType = MediaType.IMAGE_PNG_VALUE;
+        if (imageFile.getName().toLowerCase().endsWith(".jpg") || 
+            imageFile.getName().toLowerCase().endsWith(".jpeg")) {
+            contentType = MediaType.IMAGE_JPEG_VALUE;
+        }
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + imageFile.getName() + "\"")
+                .body(resource);
     }
 
     /**
      * 获取TextBox数据
      */
     @GetMapping("/textboxes/{taskId}")
-    public ResponseEntity<Result<Object>> getTextBoxes(@PathVariable String taskId) {
-        try {
-            Object textBoxes = ocrExtractService.getTextBoxes(taskId);
-            if (textBoxes == null) {
-                return ResponseEntity.notFound().build();
-            }
-
-            return ResponseEntity.ok(Result.success(textBoxes));
-
-        } catch (Exception e) {
-            log.error("获取TextBox数据失败，任务ID: {}", taskId, e);
-            return ResponseEntity.status(500).body(Result.error("获取数据失败: " + e.getMessage()));
+    @ApiOperation(value = "获取TextBox数据", notes = "获取文档的文本块标注数据")
+    public ApiResponse<Object> getTextBoxes(
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId) throws Exception {
+        
+        Object textBoxes = ocrExtractService.getTextBoxes(taskId);
+        if (textBoxes == null) {
+            throw BusinessException.of(ApiCode.PARSE_RESULT_NOT_FOUND, "TextBox数据不存在: " + taskId);
         }
+
+        return ApiResponse.success(textBoxes);
     }
 
     /**
      * 获取Bbox映射数据（用于处理跨页表格等）
      */
     @GetMapping("/bbox-mappings/{taskId}")
-    public ResponseEntity<Result<Object>> getBboxMappings(@PathVariable String taskId) {
+    @ApiOperation(value = "获取Bbox映射数据", notes = "获取跨页表格等特殊布局的边界框映射关系")
+    public ApiResponse<Object> getBboxMappings(
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId) {
+        
+        log.info("获取Bbox映射数据，任务ID: {}", taskId);
+        
+        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File bboxMappingFile = new File(taskDir, "bbox_mappings.json");
+        
+        if (!bboxMappingFile.exists()) {
+            log.warn("BboxMapping文件不存在: {}", bboxMappingFile.getAbsolutePath());
+            // 返回空数组而不是抛异常，因为bbox_mappings是可选的
+            return ApiResponse.success(new ArrayList<>());
+        }
+        
         try {
-            log.info("获取Bbox映射数据，任务ID: {}", taskId);
-            
-            File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
-            File bboxMappingFile = new File(taskDir, "bbox_mappings.json");
-            
-            if (!bboxMappingFile.exists()) {
-                log.warn("BboxMapping文件不存在: {}", bboxMappingFile.getAbsolutePath());
-                return ResponseEntity.ok(Result.success(new java.util.ArrayList<>()));
-            }
-            
             // 读取BboxMapping数据
-            com.fasterxml.jackson.databind.ObjectMapper objectMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            ObjectMapper objectMapper = new ObjectMapper();
             Object bboxMappingData = objectMapper.readValue(bboxMappingFile, Object.class);
             
             log.debug("成功获取BboxMapping数据: {}", taskId);
-            return ResponseEntity.ok(Result.success(bboxMappingData));
+            return ApiResponse.success(bboxMappingData);
             
         } catch (Exception e) {
-            log.error("获取BboxMapping数据失败: {}", taskId, e);
-            return ResponseEntity.status(500).body(Result.error("获取数据失败: " + e.getMessage()));
+            log.error("读取BboxMapping数据失败: {}", taskId, e);
+            throw BusinessException.of(ApiCode.FILE_READ_ERROR, "读取数据失败: " + e.getMessage());
         }
     }
 
@@ -218,18 +223,18 @@ public class OcrExtractController {
      * 删除任务
      */
     @DeleteMapping("/task/{taskId}")
-    public ResponseEntity<Result<String>> deleteTask(@PathVariable String taskId) {
+    @ApiOperation(value = "删除任务", notes = "删除解析任务及相关文件")
+    public ApiResponse<Void> deleteTask(
+            @ApiParam(value = "任务ID", required = true) @PathVariable String taskId) {
+        
+        log.info("删除智能解析任务，任务ID: {}", taskId);
+
         try {
-            log.info("删除OCR提取任务，任务ID: {}", taskId);
-
             ocrExtractService.deleteTask(taskId);
-
-            return ResponseEntity.ok(Result.success("任务删除成功", null));
-
+            return ApiResponse.success();
         } catch (Exception e) {
-            log.error("删除任务失败，任务ID: {}", taskId, e);
-            return ResponseEntity.status(500).body(Result.error("删除失败: " + e.getMessage()));
+            log.error("删除任务失败: {}", taskId, e);
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "删除任务失败: " + e.getMessage());
         }
     }
 }
-

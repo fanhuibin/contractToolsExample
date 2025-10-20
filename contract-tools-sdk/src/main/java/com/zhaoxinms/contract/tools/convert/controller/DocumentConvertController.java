@@ -22,18 +22,32 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.zhaoxinms.contract.tools.api.common.ApiCode;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.api.exception.BusinessException;
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * 文档格式转换控制器
- * 支持Word、Excel等格式转换为PDF
+ * 
+ * 支持Word、Excel、PPT等格式转换为PDF
+ * 
+ * @author zhaoxin
+ * @since 2024-10-09
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/convert")
+@RequireFeature(module = ModuleType.DOCUMENT_FORMAT_CONVERT, message = "文档格式转换功能需要授权")
+@Api(tags = "文档格式转换")
 public class DocumentConvertController {
 
     @Autowired
@@ -44,44 +58,33 @@ public class DocumentConvertController {
 
     /**
      * 上传并转换文档为PDF
-     * @param file 上传的文档文件（支持.doc, .docx, .xls, .xlsx等）
-     * @return 转换结果，包含下载链接
      */
     @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> convertToPdf(
-            @RequestParam("file") MultipartFile file) {
+    @ApiOperation(value = "上传并转换文档为PDF", notes = "支持doc、docx、xls、xlsx、ppt、pptx格式")
+    public ApiResponse<Map<String, Object>> convertToPdf(
+            @ApiParam(value = "文档文件", required = true) @RequestParam("file") MultipartFile file) {
         
-        Map<String, Object> result = new HashMap<>();
+        // 验证文件
+        if (file == null || file.isEmpty()) {
+            throw BusinessException.of(ApiCode.FILE_EMPTY, "请选择要转换的文件");
+        }
+        
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, "文件名无效");
+        }
+        
+        // 验证文件格式
+        String extension = getFileExtension(originalFilename).toLowerCase();
+        if (!isSupportedFormat(extension)) {
+            throw BusinessException.of(ApiCode.FILE_TYPE_NOT_SUPPORTED, 
+                "不支持的文件格式。支持的格式：doc, docx, xls, xlsx, ppt, pptx");
+        }
+        
+        log.info("收到文档转换请求: 文件名={}, 大小={} bytes, 格式={}", 
+            originalFilename, file.getSize(), extension);
         
         try {
-            // 验证文件
-            if (file == null || file.isEmpty()) {
-                result.put("code", 400);
-                result.put("message", "请选择要转换的文件");
-                result.put("data", null);
-                return ResponseEntity.badRequest().body(result);
-            }
-            
-            String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null) {
-                result.put("code", 400);
-                result.put("message", "文件名无效"); 
-                result.put("data", null);
-                return ResponseEntity.badRequest().body(result);
-            }
-            
-            // 验证文件格式
-            String extension = getFileExtension(originalFilename).toLowerCase();
-            if (!isSupportedFormat(extension)) {
-                result.put("code", 400);
-                result.put("message", "不支持的文件格式。支持的格式：doc, docx, xls, xlsx, ppt, pptx");
-                result.put("data", null);
-                return ResponseEntity.badRequest().body(result);
-            }
-            
-            log.info("收到文档转换请求: 文件名={}, 大小={} bytes, 格式={}", 
-                originalFilename, file.getSize(), extension);
-            
             // 获取基础路径并转换为绝对路径
             String rootPath = zxcmConfig.getFileUpload().getRootPath();
             File rootFile = new File(rootPath);
@@ -126,10 +129,7 @@ public class DocumentConvertController {
                 if (tempFile.exists()) {
                     tempFile.delete();
                 }
-                result.put("code", 500);
-                result.put("message", "文档转换失败，请检查OnlyOffice服务状态");
-                result.put("data", null);
-                return ResponseEntity.ok(result);
+                throw BusinessException.of(ApiCode.CONVERT_FAILED, "文档转换失败，请检查OnlyOffice服务状态");
             }
             
             log.info("文档转换成功: {}", convertedPath);
@@ -150,29 +150,23 @@ public class DocumentConvertController {
             data.put("fileName", pdfFileName);
             data.put("originalName", originalFilename.replaceFirst("\\.[^.]+$", ".pdf"));
             
-            result.put("code", 200);
-            result.put("message", "转换成功");
-            result.put("data", data);
+            return ApiResponse.success("转换成功", data);
             
-            return ResponseEntity.ok(result);
-            
+        } catch (BusinessException e) {
+            throw e;  // 重新抛出业务异常
         } catch (Exception e) {
             log.error("文档转换异常", e);
-            result.put("code", 500);
-            result.put("message", "文档转换失败: " + e.getMessage());
-            result.put("data", null);
-            return ResponseEntity.ok(result);
+            throw BusinessException.of(ApiCode.CONVERT_FAILED, "文档转换失败: " + e.getMessage());
         }
     }
     
     /**
      * 下载转换后的PDF文件
-     * @param fileName PDF文件名
-     * @param response HTTP响应
      */
     @GetMapping("/download/{fileName}")
+    @ApiOperation(value = "下载转换后的PDF", notes = "根据文件名下载已转换的PDF文件")
     public void downloadPdf(
-            @PathVariable("fileName") String fileName,
+            @ApiParam(value = "PDF文件名", required = true) @PathVariable("fileName") String fileName,
             HttpServletResponse response) {
         
         try {
@@ -214,12 +208,11 @@ public class DocumentConvertController {
     
     /**
      * 提供临时文件访问（供OnlyOffice转换服务使用）
-     * @param fileName 临时文件名
-     * @param response HTTP响应
      */
     @GetMapping("/temp-file/{fileName}")
+    @ApiOperation(value = "获取临时文件", notes = "内部接口，供OnlyOffice转换服务使用")
     public void getTempFile(
-            @PathVariable("fileName") String fileName,
+            @ApiParam(value = "临时文件名", required = true) @PathVariable("fileName") String fileName,
             HttpServletResponse response) {
         
         try {

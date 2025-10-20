@@ -634,7 +634,7 @@ public class MinerUOCRService {
         }
         // 处理列表类型
         else if ("list".equals(itemType) || item.has("list_items")) {
-            items.addAll(handleListItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+            items.addAll(handleListItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx));
         }
         // 处理公式类型
         else if ("isolate_formula".equals(itemType) || "isolated".equals(itemType)) {
@@ -1029,11 +1029,14 @@ public class MinerUOCRService {
     
     /**
      * 处理列表类型的内容
+     * 优先从 middle_json 中获取每个列表项的精确 bbox
      */
     private List<TextExtractionUtil.LayoutItem> handleListItem(
             JsonNode item,
             int imageWidth, int imageHeight,
-            double pdfWidth, double pdfHeight) {
+            double pdfWidth, double pdfHeight,
+            JsonNode middleJsonNode,
+            int pageIdx) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
         JsonNode listItemsNode = item.get("list_items");
@@ -1047,30 +1050,84 @@ public class MinerUOCRService {
             return items;
         }
         
-        double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
-        double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        // 从 middle_json 中获取列表数据（以 middle_json 为准）
+        ListBlockInfo listBlockInfo = findListBlockInMiddleJson(middleJsonNode, pageIdx, item);
         
-        // 计算每个列表项的高度
-        double totalHeight = imageBbox[3] - imageBbox[1];
-        double itemHeight = totalHeight / listItemsNode.size();
+        if (listBlockInfo == null) {
+            log.error("📋 [列表处理] ❌ 未能从 middle_json 找到列表数据，页{}，跳过该列表", pageIdx + 1);
+            return items;
+        }
         
-        // 为每个列表项创建LayoutItem
-        for (int i = 0; i < listItemsNode.size(); i++) {
-            String itemText = listItemsNode.get(i).asText();
+        if (listBlockInfo.blocks == null || !listBlockInfo.blocks.isArray()) {
+            log.error("📋 [列表处理] ❌ middle_json 列表块数据无效，页{}，跳过该列表", pageIdx + 1);
+            return items;
+        }
+        
+        int blockCount = listBlockInfo.blocks.size();
+        int contentListItemCount = listItemsNode.size();
+        
+        log.info("📋 [列表处理] ✅ 从 middle_json 中找到列表数据，页{}, middle_json 块数量: {}, content_list 项数量: {}, 页面尺寸: {}x{}", 
+            pageIdx + 1, blockCount, contentListItemCount, listBlockInfo.pageWidth, listBlockInfo.pageHeight);
+        
+        if (blockCount != contentListItemCount) {
+            log.warn("📋 [列表处理] ⚠️  middle_json ({}) 与 content_list ({}) 数量不一致，以 middle_json 为准（使用 middle_json 的文本和坐标）", 
+                blockCount, contentListItemCount);
+        }
+        
+        // 【关键】以 middle_json 为准，遍历所有 blocks
+        for (int i = 0; i < blockCount; i++) {
+            JsonNode block = listBlockInfo.blocks.get(i);
             
-            // 计算列表项bbox
-            double[] itemBbox = new double[]{
-                imageBbox[0],
-                imageBbox[1] + i * itemHeight,
-                imageBbox[2],
-                imageBbox[1] + (i + 1) * itemHeight
+            // 从 middle_json 的 block 中提取文本
+            String itemText = extractTextFromMiddleJsonBlock(block);
+            
+            if (itemText == null || itemText.trim().isEmpty()) {
+                log.warn("📋 [列表处理] ⚠️  列表项 {} 文本为空，跳过", i + 1);
+                continue;
+            }
+            
+            JsonNode blockBboxNode = block.get("bbox");
+            if (blockBboxNode == null || !blockBboxNode.isArray() || blockBboxNode.size() < 4) {
+                log.warn("📋 [列表处理] ⚠️  列表项 {} 缺少有效 bbox，跳过", i + 1);
+                continue;
+            }
+            
+            // middle_json 的 bbox 是基于页面实际尺寸的，需要先归一化到 1000x1000
+            double[] rawBbox = new double[]{
+                blockBboxNode.get(0).asDouble(),
+                blockBboxNode.get(1).asDouble(),
+                blockBboxNode.get(2).asDouble(),
+                blockBboxNode.get(3).asDouble()
             };
+            log.info("📋 [列表处理] 列表项 {} - middle_json 原始 bbox (页面坐标): [{}, {}, {}, {}]", 
+                i + 1, rawBbox[0], rawBbox[1], rawBbox[2], rawBbox[3]);
+            
+            // 归一化到 1000x1000（与 content_list 保持一致）
+            double[] mineruBbox = new double[]{
+                rawBbox[0] * 1000.0 / listBlockInfo.pageWidth,
+                rawBbox[1] * 1000.0 / listBlockInfo.pageHeight,
+                rawBbox[2] * 1000.0 / listBlockInfo.pageWidth,
+                rawBbox[3] * 1000.0 / listBlockInfo.pageHeight
+            };
+            log.info("📋 [列表处理] 列表项 {} - 归一化后 bbox (MinerU归一化): [{}, {}, {}, {}]", 
+                i + 1, mineruBbox[0], mineruBbox[1], mineruBbox[2], mineruBbox[3]);
+            
+            // 转换到图片坐标系（使用与 content_list 相同的转换逻辑）
+            double[] itemBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+            log.info("📋 [列表处理] 列表项 {} - 转换后 bbox (图片坐标): [{}, {}, {}, {}]", 
+                i + 1, itemBbox[0], itemBbox[1], itemBbox[2], itemBbox[3]);
             
             // 转换 LaTeX 格式为可读文本
             String readableItemText = convertLatexToReadableText(itemText);
             
             items.add(new TextExtractionUtil.LayoutItem(itemBbox, "Text", readableItemText + "\n"));
+            
+            log.info("📋 [列表处理] 列表项 {}/{}: 文本预览（来自 middle_json）: {}", 
+                i + 1, blockCount,
+                readableItemText.length() > 50 ? readableItemText.substring(0, 50) + "..." : readableItemText);
         }
+        
+        log.info("📋 [列表处理] 完成，共处理 {} 个列表项（全部来自 middle_json）", blockCount);
         
         return items;
     }
@@ -2056,6 +2113,126 @@ public class MinerUOCRService {
             this.pageWidth = pageWidth;
             this.pageHeight = pageHeight;
         }
+    }
+    
+    /**
+     * 列表块信息包装类（包含块数据和页面尺寸）
+     */
+    private static class ListBlockInfo {
+        JsonNode blocks;  // 列表的子块数组（每个子块对应一个列表项）
+        double pageWidth;
+        double pageHeight;
+        
+        public ListBlockInfo(JsonNode blocks, double pageWidth, double pageHeight) {
+            this.blocks = blocks;
+            this.pageWidth = pageWidth;
+            this.pageHeight = pageHeight;
+        }
+    }
+    
+    /**
+     * 从 middle_json 中查找列表块
+     * 
+     * @param middleJsonNode middle_json 数据
+     * @param pageIdx 页面索引
+     * @param contentItem content_list 中的列表项
+     * @return 列表块信息（包含子块数组和页面尺寸）
+     */
+    private ListBlockInfo findListBlockInMiddleJson(JsonNode middleJsonNode, int pageIdx, JsonNode contentItem) {
+        log.debug("📋 [列表匹配] 开始在 middle_json 中查找列表，页{}", pageIdx + 1);
+        
+        if (middleJsonNode == null || !middleJsonNode.isArray()) {
+            log.warn("📋 [列表匹配] ⚠️  middle_json 为空或不是数组");
+            return null;
+        }
+        
+        if (pageIdx < 0 || pageIdx >= middleJsonNode.size()) {
+            log.warn("📋 [列表匹配] ⚠️  页面索引 {} 超出范围 (总页数: {})", pageIdx, middleJsonNode.size());
+            return null;
+        }
+        
+        JsonNode listItemsNode = contentItem.get("list_items");
+        if (listItemsNode == null || !listItemsNode.isArray() || listItemsNode.size() == 0) {
+            log.warn("📋 [列表匹配] ⚠️  content_list 中没有 list_items");
+            return null;
+        }
+        int expectedListItemCount = listItemsNode.size();
+        
+        try {
+            JsonNode pageNode = middleJsonNode.get(pageIdx);
+            
+            if (pageNode == null || !pageNode.isObject()) {
+                log.warn("📋 [列表匹配] ⚠️  页{} 的数据为空或格式错误", pageIdx + 1);
+                return null;
+            }
+            
+            // 获取页面尺寸
+            double middleJsonPageWidth = 0;
+            double middleJsonPageHeight = 0;
+            
+            if (pageNode.has("page_info") && pageNode.get("page_info").isObject()) {
+                JsonNode pageInfo = pageNode.get("page_info");
+                if (pageInfo.has("page_size") && pageInfo.get("page_size").isArray()) {
+                    JsonNode pageSize = pageInfo.get("page_size");
+                    if (pageSize.size() >= 2) {
+                        middleJsonPageWidth = pageSize.get(0).asDouble();
+                        middleJsonPageHeight = pageSize.get(1).asDouble();
+                        log.debug("📋 [列表匹配] middle_json 页面尺寸: {}x{}", middleJsonPageWidth, middleJsonPageHeight);
+                    }
+                }
+            } else if (pageNode.has("page_size") && pageNode.get("page_size").isArray()) {
+                // 尝试直接从 pageNode 获取 page_size
+                JsonNode pageSize = pageNode.get("page_size");
+                if (pageSize.size() >= 2) {
+                    middleJsonPageWidth = pageSize.get(0).asDouble();
+                    middleJsonPageHeight = pageSize.get(1).asDouble();
+                    log.debug("📋 [列表匹配] middle_json 页面尺寸（直接获取）: {}x{}", middleJsonPageWidth, middleJsonPageHeight);
+                }
+            }
+            
+            // 验证页面尺寸
+            if (middleJsonPageWidth <= 0 || middleJsonPageHeight <= 0) {
+                log.warn("📋 [列表匹配] ⚠️  页{} 的 page_size 无效或缺失 ({}x{})，无法进行坐标转换", 
+                    pageIdx + 1, middleJsonPageWidth, middleJsonPageHeight);
+                return null;
+            }
+            
+            // 获取 para_blocks
+            JsonNode paraBlocks = pageNode.get("para_blocks");
+            
+            log.debug("📋 [列表匹配] 页{} para_blocks 块数量: {}", 
+                pageIdx + 1, 
+                paraBlocks != null ? paraBlocks.size() : 0);
+            
+            if (paraBlocks != null && paraBlocks.isArray()) {
+                // 遍历页面中的所有块，查找 list 类型（直接返回第一个找到的列表块）
+                for (int i = 0; i < paraBlocks.size(); i++) {
+                    JsonNode block = paraBlocks.get(i);
+                    String blockType = block.has("type") ? block.get("type").asText() : "";
+                    
+                    if ("list".equals(blockType)) {
+                        JsonNode subBlocks = block.get("blocks");
+                        
+                        if (subBlocks != null && subBlocks.isArray()) {
+                            int actualBlockCount = subBlocks.size();
+                            
+                            log.info("📋 [列表匹配] ✅ 找到列表块！页{}, 块索引: {}, 列表项数量: {} (content_list 期望: {})", 
+                                pageIdx + 1, i, actualBlockCount, expectedListItemCount);
+                            
+                            // 直接返回，以 middle_json 为准，不管数量是否匹配
+                            return new ListBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                        }
+                    }
+                }
+                
+                log.warn("📋 [列表匹配] ⚠️  未找到列表块，页{}", pageIdx + 1);
+            }
+            
+        } catch (Exception e) {
+            log.error("📋 [列表匹配] 查找列表块时发生错误: ", e);
+        }
+        
+        return null;
     }
     
     /**

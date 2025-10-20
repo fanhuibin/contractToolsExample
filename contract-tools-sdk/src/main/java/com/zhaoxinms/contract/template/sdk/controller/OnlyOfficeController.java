@@ -8,7 +8,7 @@ import com.zhaoxinms.contract.tools.onlyoffice.enums.Action;
 import com.zhaoxinms.contract.tools.onlyoffice.enums.Type;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,7 +53,7 @@ public class OnlyOfficeController {
      */
     @RequestMapping(value = "/editor/config", method = RequestMethod.GET)
     @ResponseBody
-    public Result<OnlyofficeFileModel> getEditorConfig(
+    public ApiResponse<OnlyofficeFileModel> getEditorConfig(
             @RequestParam("fileId") String fileId,
             @RequestParam(value = "canEdit", defaultValue = "false") Boolean canEdit,
             @RequestParam(value = "canReview", defaultValue = "false") Boolean canReview,
@@ -87,9 +87,9 @@ public class OnlyOfficeController {
                         .pluginsData(java.util.Arrays.asList(zxcmConfig.getOnlyOffice().getPlugins()))
                         .build()
                 );
-                return Result.success(tempModel);
+                return ApiResponse.success(tempModel);
             }
-            return Result.error("文件不存在");
+            return ApiResponse.notFound("文件不存在");
         }
 
         // 生成OnlyOffice key（如果不存在或需要更新）
@@ -125,7 +125,7 @@ public class OnlyOfficeController {
                 .build()
         );
 
-        return Result.success(fileModel);
+        return ApiResponse.success(fileModel);
     }
 
     /**
@@ -135,7 +135,7 @@ public class OnlyOfficeController {
      */
     @RequestMapping(value = "/server/info", method = RequestMethod.GET)
     @ResponseBody
-    public Result<ServerInfo> getServerInfo() {
+    public ApiResponse<ServerInfo> getServerInfo() {
         ServerInfo serverInfo = new ServerInfo();
         String domain = zxcmConfig.getOnlyOffice().getDomain();
         String port = zxcmConfig.getOnlyOffice().getPort();
@@ -152,7 +152,7 @@ public class OnlyOfficeController {
             serverInfo.setFullUrl("http://" + domain + ":" + port);
         }
         
-        return Result.success(serverInfo);
+        return ApiResponse.success(serverInfo);
     }
 
     /**

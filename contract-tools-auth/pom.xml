@@ -17,10 +17,23 @@
     <description>提供用户认证、权限管理、JWT令牌等授权相关功能</description>
 
     <dependencies>
-        <!-- 依赖核心模块 -->
+        <!-- API通用模块（提供ApiResponse统一响应格式） -->
         <dependency>
             <groupId>com.zhaoxinms</groupId>
-            <artifactId>contract-tools-core</artifactId>
+            <artifactId>contract-tools-api</artifactId>
+        </dependency>
+
+        <!-- Swagger API文档注解（通过contract-tools-api已包含） -->
+        <!-- swagger-annotations 已通过 contract-tools-api 传递依赖 -->
+
+        <!-- Spring Web -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
         </dependency>
 
         <!-- 基础的授权检查支持，不依赖Spring Security -->

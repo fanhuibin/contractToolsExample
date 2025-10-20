@@ -38,7 +38,7 @@ public class AuthProperties {
         /**
          * 许可证文件路径
          */
-        private String filePath = "license.dat";
+        private String filePath = "license.lic";
         
         /**
          * 到期时间

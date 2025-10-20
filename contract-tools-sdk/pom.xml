@@ -22,17 +22,22 @@
     </properties>
 
     <dependencies>
+        <!-- 依赖API基础设施 -->
+        <dependency>
+            <groupId>com.zhaoxinms</groupId>
+            <artifactId>contract-tools-api</artifactId>
+        </dependency>
+        
         <!-- 依赖核心模块（始终需要） -->
         <dependency>
             <groupId>com.zhaoxinms</groupId>
             <artifactId>contract-tools-core</artifactId>
         </dependency>
 
-        <!-- 根据需要选择依赖授权模块 -->
+        <!-- 授权模块（必需） -->
         <dependency>
             <groupId>com.zhaoxinms</groupId>
             <artifactId>contract-tools-auth</artifactId>
-            <optional>true</optional>
         </dependency>
         
         <!-- 信息提取模块 -->

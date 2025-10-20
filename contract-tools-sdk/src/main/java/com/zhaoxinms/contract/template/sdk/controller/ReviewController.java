@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.zhaoxinms.contract.template.sdk.service.impl.FileInfoServiceImpl;
-import com.zhaoxinms.contract.tools.common.Result;
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 
@@ -39,34 +39,34 @@ public class ReviewController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @ApiOperation("上传文件以供智能审核")
-    public Result<Map<String, String>> uploadForReview(@RequestPart("file") MultipartFile file) {
+    public ApiResponse<Map<String, String>> uploadForReview(@RequestPart("file") MultipartFile file) {
         if (file.isEmpty()) {
-            return Result.error("上传的文件不能为空");
+            return ApiResponse.paramError("上传的文件不能为空");
         }
         try {
             FileInfo fileInfo = fileInfoService.saveNewFile(file);
             // 可选：上传后将文件转换为 PDF 并注册（保留原 fileId 作为源，PDF 另行返回）
             Map<String, String> data = new HashMap<>();
             data.put("fileId", String.valueOf(fileInfo.getId()));
-            return Result.success("上传成功", data);
+            return ApiResponse.success("上传成功", data);
         } catch (Exception e) {
-            return Result.error("文件上传失败: " + e.getMessage());
+            return ApiResponse.<Map<String, String>>serverError().errorDetail("文件上传失败: " + e.getMessage());
         }
     }
 
     @PostMapping("/persist-pdf-anchors-from-results")
     @ApiOperation("将 DOCX 源转 PDF，并根据 AI results 在 PDF 中插入书签（标题=卡片名），返回 PDF 文件ID")
-    public Result<Map<String, String>> persistPdfAnchorsFromResults(@RequestParam("fileId") String fileId,
+    public ApiResponse<Map<String, String>> persistPdfAnchorsFromResults(@RequestParam("fileId") String fileId,
                                                                      @RequestBody AiResultsRequest request) {
         try {
             FileInfo src = fileInfoService.getById(fileId);
-            if (src == null) return Result.error("fileId 不存在");
+            if (src == null) return ApiResponse.notFound("fileId 不存在");
             // 1) 先转 PDF
             java.nio.file.Path outPdf = java.nio.file.Files.createTempFile("review_pdf_", ".pdf");
             String downloadUrl = fileInfoService.getFileDownloadUrl(fileId);
-            if (changeFileToPDFService == null) return Result.error("PDF转换服务不可用");
+            if (changeFileToPDFService == null) return ApiResponse.businessError("PDF转换服务不可用");
             String pdfPath = changeFileToPDFService.covertToPdf(downloadUrl, outPdf.toString());
-            if (pdfPath == null) return Result.error("PDF转换失败");
+            if (pdfPath == null) return ApiResponse.businessError("PDF转换失败");
 
             // 2) 打开 PDF 并插入书签（页级，标题=decisionType 或 pointId）
             try (PDDocument doc = PDDocument.load(new java.io.File(pdfPath))) {
@@ -107,30 +107,30 @@ public class ReviewController {
             Map<String, String> data = new HashMap<>();
             data.put("fileId", String.valueOf(newInfo.getId()));
             data.put("fileName", newInfo.getFileName());
-            return Result.success("PDF已生成并写入书签", data);
+            return ApiResponse.success("PDF已生成并写入书签", data);
         } catch (Exception e) {
-            return Result.error("PDF书签持久化失败: " + e.getMessage());
+            return ApiResponse.<Map<String, String>>serverError().errorDetail("PDF书签持久化失败: " + e.getMessage());
         }
     }
 
     @PostMapping("/persist-anchors")
     @ApiOperation("克隆当前文件并将 anchors 持久化为书签，返回新文件ID")
-    public Result<Map<String, String>> persistAnchors(@RequestParam("fileId") String fileId,
+    public ApiResponse<Map<String, String>> persistAnchors(@RequestParam("fileId") String fileId,
                                                       @RequestBody PersistAnchorsRequest request) {
         try {
             FileInfo newInfo = persistOnClonedFile(fileId, anchorsFromRequest(request));
             java.util.Map<String, String> data = new java.util.HashMap<>();
             data.put("fileId", String.valueOf(newInfo.getId()));
             data.put("fileName", newInfo.getFileName());
-            return Result.success("书签已写入并生成新文件", data);
+            return ApiResponse.success("书签已写入并生成新文件", data);
         } catch (Exception e) {
-            return Result.error("持久化书签失败: " + e.getMessage());
+            return ApiResponse.<Map<String, String>>serverError().errorDetail("持久化书签失败: " + e.getMessage());
         }
     }
 
     @PostMapping("/persist-anchors-from-results")
     @ApiOperation("根据AI返回的results JSON生成书签并克隆新文件")
-    public Result<Map<String, String>> persistAnchorsFromResults(@RequestParam("fileId") String fileId,
+    public ApiResponse<Map<String, String>> persistAnchorsFromResults(@RequestParam("fileId") String fileId,
                                                                  @RequestBody AiResultsRequest request) {
         try {
             java.util.List<Anchor> anchors = new java.util.ArrayList<>();
@@ -152,9 +152,9 @@ public class ReviewController {
             java.util.Map<String, String> data = new java.util.HashMap<>();
             data.put("fileId", String.valueOf(newInfo.getId()));
             data.put("fileName", newInfo.getFileName());
-            return Result.success("书签已写入并生成新文件", data);
+            return ApiResponse.success("书签已写入并生成新文件", data);
         } catch (Exception e) {
-            return Result.error("持久化书签失败: " + e.getMessage());
+            return ApiResponse.<Map<String, String>>serverError().errorDetail("持久化书签失败: " + e.getMessage());
         }
     }
 

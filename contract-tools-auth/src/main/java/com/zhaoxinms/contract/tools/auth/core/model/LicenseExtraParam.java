@@ -11,6 +11,11 @@ import java.util.List;
 public class LicenseExtraParam {
     
     /**
+     * 操作系统名称
+     */
+    private String osName;
+    
+    /**
      * IP地址列表
      */
     private List<String> ipAddress;

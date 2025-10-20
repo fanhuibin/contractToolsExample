@@ -170,10 +170,10 @@ public class LicenseGeneratorCLI {
         request.setPrivateKeyPath(scanner.nextLine().trim());
         
         // 输出路径
-        System.out.print("License文件输出路径 (默认 license.dat): ");
+        System.out.print("License文件输出路径 (默认 license.lic): ");
         String outputPath = scanner.nextLine().trim();
         if (outputPath.isEmpty()) {
-            outputPath = "license.dat";
+            outputPath = "license.lic";
         }
         request.setOutputPath(outputPath);
         
@@ -199,10 +199,10 @@ public class LicenseGeneratorCLI {
     private static void validateAndShowLicense(Scanner scanner) {
         System.out.println("\n=== 验证并显示License详细信息 ===");
         
-        System.out.print("请输入License文件路径 (默认: license.dat): ");
+        System.out.print("请输入License文件路径 (默认: license.lic): ");
         String licenseFilePath = scanner.nextLine().trim();
         if (licenseFilePath.isEmpty()) {
-            licenseFilePath = "license.dat";
+            licenseFilePath = "license.lic";
         }
         
         System.out.print("请输入公钥文件路径 (默认: public.key, 留空跳过签名验证): ");

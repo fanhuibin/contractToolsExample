@@ -38,6 +38,7 @@ public abstract class AServerInfos {
         LicenseExtraParam result = new LicenseExtraParam();
         try {
             initServerInfos();
+            result.setOsName(getDetailedOsName());
             result.setIpAddress(GxServerInfosContainer.ipAddress);
             result.setMacAddress(GxServerInfosContainer.macAddress);
             result.setCpuSerial(GxServerInfosContainer.cpuSerial);
@@ -46,6 +47,155 @@ public abstract class AServerInfos {
             LoggerHelper.error("获取服务器硬件信息失败", e);
         }
         return result;
+    }
+    
+    /**
+     * 获取详细的操作系统名称（包括版本号）
+     * 
+     * @return 操作系统详细信息
+     */
+    private String getDetailedOsName() {
+        String osName = System.getProperty("os.name");
+        String osVersion = System.getProperty("os.version");
+        String osArch = System.getProperty("os.arch");
+        
+        LoggerHelper.info("OS检测 - osName: " + osName + ", osVersion: " + osVersion + ", osArch: " + osArch);
+        
+        // Windows系统判断
+        if (osName != null && osName.toLowerCase().contains("windows")) {
+            return getWindowsDetailedName(osName, osVersion, osArch);
+        }
+        
+        // Linux系统判断
+        if (osName != null && osName.toLowerCase().contains("linux")) {
+            return getLinuxDetailedName(osName, osVersion, osArch);
+        }
+        
+        // Mac系统判断
+        if (osName != null && (osName.toLowerCase().contains("mac") || osName.toLowerCase().contains("darwin"))) {
+            return getMacDetailedName(osName, osVersion, osArch);
+        }
+        
+        // 其他系统，返回系统名称 + 版本 + 架构
+        return osName + " " + osVersion + " (" + osArch + ")";
+    }
+    
+    /**
+     * 获取Windows系统详细信息
+     */
+    private String getWindowsDetailedName(String osName, String osVersion, String osArch) {
+        // Windows 11 的内部版本号是 10.0.22000 或更高
+        if (osVersion != null && osVersion.startsWith("10.0")) {
+            try {
+                String[] versionParts = osVersion.split("\\.");
+                LoggerHelper.info("Windows版本解析 - 版本部分: " + String.join(", ", versionParts));
+                
+                if (versionParts.length >= 3) {
+                    int buildNumber = Integer.parseInt(versionParts[2]);
+                    LoggerHelper.info("Windows构建号: " + buildNumber);
+                    
+                    // Windows 11 的构建号从 22000 开始
+                    if (buildNumber >= 22000) {
+                        LoggerHelper.info("检测为 Windows 11");
+                        return "Windows 11 (" + osArch + ")";
+                    } else {
+                        LoggerHelper.info("检测为 Windows 10 (构建号 < 22000)");
+                        return "Windows 10 (" + osArch + ")";
+                    }
+                } else {
+                    LoggerHelper.warn("Windows版本部分不足3段: " + versionParts.length);
+                }
+            } catch (NumberFormatException e) {
+                LoggerHelper.error("解析Windows构建号失败: " + e.getMessage(), e);
+            } catch (Exception e) {
+                LoggerHelper.error("解析Windows版本失败", e);
+            }
+        }
+        
+        // 无法准确识别，返回原始信息
+        return osName + " (" + osArch + ")";
+    }
+    
+    /**
+     * 获取Linux系统详细信息
+     */
+    private String getLinuxDetailedName(String osName, String osVersion, String osArch) {
+        try {
+            // 尝试读取 /etc/os-release 获取更详细的信息
+            java.io.File osReleaseFile = new java.io.File("/etc/os-release");
+            if (osReleaseFile.exists()) {
+                try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(osReleaseFile))) {
+                    String line;
+                    String prettyName = null;
+                    String name = null;
+                    String version = null;
+                    
+                    while ((line = reader.readLine()) != null) {
+                        if (line.startsWith("PRETTY_NAME=")) {
+                            prettyName = line.substring(12).replaceAll("\"", "");
+                        } else if (line.startsWith("NAME=")) {
+                            name = line.substring(5).replaceAll("\"", "");
+                        } else if (line.startsWith("VERSION=")) {
+                            version = line.substring(8).replaceAll("\"", "");
+                        }
+                    }
+                    
+                    // 优先使用 PRETTY_NAME
+                    if (prettyName != null && !prettyName.isEmpty()) {
+                        LoggerHelper.info("Linux发行版检测: " + prettyName);
+                        return prettyName + " (" + osArch + ")";
+                    }
+                    
+                    // 否则组合 NAME + VERSION
+                    if (name != null && version != null) {
+                        return name + " " + version + " (" + osArch + ")";
+                    }
+                }
+            }
+            
+            // 尝试通过 lsb_release 命令获取信息
+            Process process = Runtime.getRuntime().exec("lsb_release -d");
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String line = reader.readLine();
+                if (line != null && line.contains(":")) {
+                    String distribution = line.substring(line.indexOf(":") + 1).trim();
+                    LoggerHelper.info("Linux发行版检测(lsb): " + distribution);
+                    return distribution + " (" + osArch + ")";
+                }
+            }
+            process.waitFor();
+            
+        } catch (Exception e) {
+            LoggerHelper.warn("获取Linux详细信息失败: " + e.getMessage());
+        }
+        
+        // 返回基本信息
+        return osName + " " + osVersion + " (" + osArch + ")";
+    }
+    
+    /**
+     * 获取Mac系统详细信息
+     */
+    private String getMacDetailedName(String osName, String osVersion, String osArch) {
+        try {
+            // 尝试获取 macOS 版本名称
+            Process process = Runtime.getRuntime().exec("sw_vers -productVersion");
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(
+                    new java.io.InputStreamReader(process.getInputStream()))) {
+                String version = reader.readLine();
+                if (version != null && !version.isEmpty()) {
+                    LoggerHelper.info("macOS版本检测: " + version);
+                    return "macOS " + version + " (" + osArch + ")";
+                }
+            }
+            process.waitFor();
+        } catch (Exception e) {
+            LoggerHelper.warn("获取macOS详细信息失败: " + e.getMessage());
+        }
+        
+        // 返回基本信息
+        return osName + " " + osVersion + " (" + osArch + ")";
     }
 
     /**
@@ -187,7 +337,20 @@ public abstract class AServerInfos {
      */
     private String getMacByInetAddress(InetAddress inetAddr) {
         try {
-            byte[] mac = NetworkInterface.getByInetAddress(inetAddr).getHardwareAddress();
+            if (inetAddr == null) {
+                return null;
+            }
+            
+            NetworkInterface network = NetworkInterface.getByInetAddress(inetAddr);
+            if (network == null) {
+                return null;
+            }
+            
+            byte[] mac = network.getHardwareAddress();
+            if (mac == null || mac.length == 0) {
+                return null;
+            }
+            
             StringBuilder stringBuilder = new StringBuilder();
             for (int i = 0; i < mac.length; i++) {
                 if (i != 0) {

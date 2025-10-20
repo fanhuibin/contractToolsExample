@@ -430,8 +430,8 @@ const startExtraction = async () => {
     
     const response = await extractFromFile(formData)
     
-    if (response && response.data) {
-      const taskId = response.data.taskId
+    if (response && response.data && response.data.data) {
+      const taskId = response.data.data.taskId
       ElMessage.success('提取任务已启动')
       
       // 开始轮询任务状态
@@ -449,18 +449,19 @@ const startExtraction = async () => {
 const pollTaskStatus = async (taskId: string) => {
   try {
     const response = await getTaskStatus(taskId)
-    if (response && response.data) {
-      currentTask.value = response.data
+    if (response && response.data && response.data.data) {
+      const taskData = response.data.data
+      currentTask.value = taskData
       
-      if (response.data?.status === 'completed') {
+      if (taskData.status === 'completed') {
         // 任务完成，获取结果
         await loadExtractResult(taskId)
         isExtracting.value = false
         ElMessage.success('信息提取完成')
-      } else if (response.data?.status === 'failed') {
+      } else if (taskData.status === 'failed') {
         // 任务失败
         isExtracting.value = false
-        ElMessage.error('提取失败: ' + (response.data?.message || ''))
+        ElMessage.error('提取失败: ' + (taskData.message || ''))
       } else {
         // 任务进行中，继续轮询
         setTimeout(() => pollTaskStatus(taskId), 2000)
@@ -476,8 +477,8 @@ const pollTaskStatus = async (taskId: string) => {
 const loadExtractResult = async (taskId: string) => {
   try {
     const response = await getExtractResult(taskId)
-    if (response && response.data) {
-      extractResult.value = response.data
+    if (response && response.data && response.data.data) {
+      extractResult.value = response.data.data
     }
   } catch (error) {
     console.error('获取提取结果失败:', error)

@@ -1,24 +1,40 @@
 package com.zhaoxinms.contract.tools.auth.controller;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.auth.config.AuthProperties;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
+import com.zhaoxinms.contract.tools.auth.generator.LicenseReader;
+import com.zhaoxinms.contract.tools.auth.generator.LicenseReader.LicenseReadResult;
 import com.zhaoxinms.contract.tools.auth.model.LicenseInfo;
 import com.zhaoxinms.contract.tools.auth.model.LicenseValidationResult;
 import com.zhaoxinms.contract.tools.auth.service.LicenseService;
-import com.zhaoxinms.contract.tools.auth.generator.LicenseReader;
-import com.zhaoxinms.contract.tools.auth.generator.LicenseReader.LicenseReadResult;
-import com.zhaoxinms.contract.tools.auth.config.AuthProperties;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
 
-import java.util.HashMap;
-import java.util.Map;
+import io.swagger.annotations.Api;
+import io.swagger.annotations.ApiOperation;
+import io.swagger.annotations.ApiParam;
 
 /**
  * 授权管理控制器
  * 提供授权状态查询接口
+ * 
+ * @author zhaoxin
+ * @since 2025-10-18
  */
+@Api(tags = "授权管理")
 @RestController
 @RequestMapping("/api/auth")
 @ConditionalOnProperty(prefix = "zhaoxin.auth", name = "enabled", havingValue = "true", matchIfMissing = false)
@@ -34,23 +50,17 @@ public class LicenseController {
      * 获取授权信息
      */
     @GetMapping("/license-info")
-    public ResponseEntity<Map<String, Object>> getLicenseInfo() {
+    @ApiOperation(value = "获取授权信息", notes = "获取当前系统的授权许可信息")
+    public ApiResponse<LicenseInfo> getLicenseInfo() {
         try {
             LicenseInfo info = licenseService.getLicenseInfo();
-            Map<String, Object> response = new HashMap<>();
             if (info != null) {
-                response.put("success", true);
-                response.put("data", info);
+                return ApiResponse.success(info);
             } else {
-                response.put("success", false);
-                response.put("message", "未找到有效的授权信息");
+                return ApiResponse.<LicenseInfo>businessError("未找到有效的授权信息");
             }
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "获取授权信息失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<LicenseInfo>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -58,28 +68,25 @@ public class LicenseController {
      * 检查指定模块的授权状态
      */
     @GetMapping("/check-module")
-    public ResponseEntity<Map<String, Object>> checkModule(@RequestParam String moduleCode) {
+    @ApiOperation(value = "检查模块授权", notes = "检查指定模块是否已授权")
+    public ApiResponse<Map<String, Object>> checkModule(
+            @ApiParam(value = "模块代码", required = true, example = "smart_document_extraction")
+            @RequestParam String moduleCode) {
         try {
             ModuleType moduleType = ModuleType.fromCode(moduleCode);
-            Map<String, Object> response = new HashMap<>();
             
             if (moduleType == null) {
-                response.put("success", false);
-                response.put("message", "无效的模块代码: " + moduleCode);
-                return ResponseEntity.ok(response);
+                return ApiResponse.<Map<String, Object>>paramError("无效的模块代码: " + moduleCode);
             }
             
             boolean hasPermission = licenseService.hasModulePermission(moduleType);
-            response.put("success", true);
-            response.put("data", hasPermission);
-            response.put("moduleName", moduleType.getName());
+            Map<String, Object> data = new HashMap<>();
+            data.put("hasPermission", hasPermission);
+            data.put("moduleName", moduleType.getName());
             
-            return ResponseEntity.ok(response);
+            return ApiResponse.success(data);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "检查模块授权失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -87,18 +94,15 @@ public class LicenseController {
      * 检查指定功能的授权状态（兼容旧接口）
      */
     @GetMapping("/check-feature")
-    public ResponseEntity<Map<String, Object>> checkFeature(@RequestParam String feature) {
+    @ApiOperation(value = "检查功能授权", notes = "检查指定功能是否已授权（兼容旧接口）")
+    public ApiResponse<Boolean> checkFeature(
+            @ApiParam(value = "功能名称", required = true)
+            @RequestParam String feature) {
         try {
             boolean hasFeature = licenseService.hasFeature(feature);
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", hasFeature);
-            return ResponseEntity.ok(response);
+            return ApiResponse.success(hasFeature);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "检查功能授权失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<Boolean>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -106,24 +110,18 @@ public class LicenseController {
      * 验证授权
      */
     @GetMapping("/validate")
-    public ResponseEntity<Map<String, Object>> validateLicense() {
+    @ApiOperation(value = "验证授权", notes = "验证当前授权许可是否有效")
+    public ApiResponse<LicenseInfo> validateLicense() {
         try {
             LicenseValidationResult result = licenseService.validateLicense();
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", result.isValid());
             
             if (result.isValid()) {
-                response.put("data", result.getLicenseInfo());
+                return ApiResponse.success(result.getLicenseInfo());
             } else {
-                response.put("message", result.getErrorMessage());
+                return ApiResponse.<LicenseInfo>businessError(result.getErrorMessage());
             }
-            
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "授权验证失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<LicenseInfo>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -131,18 +129,13 @@ public class LicenseController {
      * 获取所有可用模块
      */
     @GetMapping("/modules")
-    public ResponseEntity<Map<String, Object>> getAvailableModules() {
+    @ApiOperation(value = "获取所有模块", notes = "获取系统所有可用模块列表")
+    public ApiResponse<ModuleType[]> getAvailableModules() {
         try {
             ModuleType[] modules = ModuleType.values();
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", modules);
-            return ResponseEntity.ok(response);
+            return ApiResponse.success(modules);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "获取模块列表失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<ModuleType[]>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -150,7 +143,10 @@ public class LicenseController {
      * 批量检查模块权限
      */
     @PostMapping("/check-modules")
-    public ResponseEntity<Map<String, Object>> checkModules(@RequestBody String[] moduleCodes) {
+    @ApiOperation(value = "批量检查模块权限", notes = "批量检查多个模块的授权状态")
+    public ApiResponse<Map<String, Boolean>> checkModules(
+            @ApiParam(value = "模块代码列表", required = true)
+            @RequestBody String[] moduleCodes) {
         try {
             Map<String, Boolean> modulePermissions = new HashMap<>();
             
@@ -164,15 +160,9 @@ public class LicenseController {
                 }
             }
             
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("data", modulePermissions);
-            return ResponseEntity.ok(response);
+            return ApiResponse.success(modulePermissions);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "批量检查模块权限失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<Map<String, Boolean>>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -180,16 +170,14 @@ public class LicenseController {
      * 获取License文件详细信息（包含签名验证和硬件匹配验证）
      */
     @GetMapping("/license-details")
-    public ResponseEntity<Map<String, Object>> getLicenseDetails() {
+    @ApiOperation(value = "获取授权详细信息", notes = "获取授权许可的完整信息，包括验证状态")
+    public ApiResponse<Map<String, Object>> getLicenseDetails() {
         try {
             LicenseReader reader = new LicenseReader();
             String licenseFilePath = authProperties.getLicense().getFilePath();
             String publicKeyPath = authProperties.getSignature().getPublicKeyPath();
             
             LicenseReadResult result = reader.readLicense(licenseFilePath, publicKeyPath);
-            
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", result.isSuccess());
             
             if (result.isSuccess()) {
                 Map<String, Object> details = new HashMap<>();
@@ -223,17 +211,12 @@ public class LicenseController {
                 }
                 
                 details.put("validation", validation);
-                response.put("data", details);
+                return ApiResponse.success(details);
             } else {
-                response.put("message", result.getErrorMessage());
+                return ApiResponse.<Map<String, Object>>businessError(result.getErrorMessage());
             }
-            
-            return ResponseEntity.ok(response);
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "获取License详细信息失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -241,34 +224,30 @@ public class LicenseController {
      * 验证硬件匹配
      */
     @GetMapping("/hardware-validation")
-    public ResponseEntity<Map<String, Object>> validateHardware() {
+    @ApiOperation(value = "验证硬件匹配", notes = "验证当前服务器硬件是否与授权绑定的硬件匹配")
+    public ApiResponse<Map<String, Object>> validateHardware() {
         try {
             LicenseInfo licenseInfo = licenseService.getLicenseInfo();
-            Map<String, Object> response = new HashMap<>();
             
             if (licenseInfo == null) {
-                response.put("success", false);
-                response.put("message", "无法获取License信息");
-                return ResponseEntity.ok(response);
+                return ApiResponse.<Map<String, Object>>businessError("无法获取License信息");
             }
             
             if (licenseInfo.getHardwareBound() == null || !licenseInfo.getHardwareBound()) {
-                response.put("success", true);
-                response.put("message", "License未启用硬件绑定");
-                response.put("data", Map.of(
-                    "hardwareBound", false,
-                    "matched", true
-                ));
-                return ResponseEntity.ok(response);
+                Map<String, Object> data = new HashMap<>();
+                data.put("hardwareBound", false);
+                data.put("matched", true);
+                data.put("message", "License未启用硬件绑定");
+                return ApiResponse.success(data);
             }
             
             // 获取当前硬件信息
             com.zhaoxinms.contract.tools.auth.core.service.AServerInfos serverInfos = 
                 com.zhaoxinms.contract.tools.auth.core.service.AServerInfos.getServer(null);
-            java.util.List<String> currentHardware = new java.util.ArrayList<>();
+            List<String> currentHardware = new ArrayList<>();
             
             // 收集MAC地址
-            java.util.List<String> macAddresses = serverInfos.getMacAddress();
+            List<String> macAddresses = serverInfos.getMacAddress();
             if (macAddresses != null) {
                 currentHardware.addAll(macAddresses);
             }
@@ -287,7 +266,7 @@ public class LicenseController {
             
             // 检查匹配
             boolean matched = false;
-            java.util.List<String> boundHardware = licenseInfo.getBoundHardwareInfo();
+            List<String> boundHardware = licenseInfo.getBoundHardwareInfo();
             if (boundHardware != null && !boundHardware.isEmpty()) {
                 for (String hardware : currentHardware) {
                     if (boundHardware.contains(hardware)) {
@@ -303,15 +282,10 @@ public class LicenseController {
             data.put("currentHardware", currentHardware);
             data.put("boundHardware", boundHardware);
             
-            response.put("success", true);
-            response.put("data", data);
-            return ResponseEntity.ok(response);
+            return ApiResponse.success(data);
             
         } catch (Exception e) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", false);
-            response.put("message", "硬件验证失败: " + e.getMessage());
-            return ResponseEntity.ok(response);
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail(e.getMessage());
         }
     }
 }

@@ -18,12 +18,14 @@
     "element-plus": "^2.3.8",
     "pinia": "^2.1.6",
     "three": "0.160.0",
+    "uuid": "^13.0.0",
     "vue": "^3.3.4",
     "vue-router": "^4.2.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
     "@types/node": "^20.4.5",
+    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-vue": "^4.2.3",
     "@vue/eslint-config-typescript": "^11.0.3",
     "@vue/tsconfig": "^0.4.0",

@@ -243,12 +243,12 @@ const handleFileUpload = async (file: File) => {
     // 上传文件并开始提取
     const response = await uploadFileEnhanced(formData)
     
-    if (response.code === 200) {
-      taskId.value = response.data.taskId
+    if (response.data.code === 200 && response.data.data) {
+      taskId.value = response.data.data.taskId
       ElMessage.success('文件上传成功，开始提取...')
       startPolling()
     } else {
-      throw new Error(response.message || '上传失败')
+      throw new Error(response.data.message || '上传失败')
     }
     
   } catch (err: any) {
@@ -273,8 +273,8 @@ const startPolling = () => {
     try {
       const statusResponse = await getTaskStatus(taskId.value)
       
-      if (statusResponse && statusResponse.data) {
-        const status = statusResponse.data
+      if (statusResponse && statusResponse.data && statusResponse.data.data) {
+        const status = statusResponse.data.data
         progress.value = status.progress || 0
         statusMessage.value = status.message || ''
         currentStep.value = stepMapping.value[status.status as keyof typeof stepMapping.value] || 0
@@ -303,8 +303,8 @@ const loadResults = async () => {
   try {
     const resultResponse = await getEnhancedTaskResult(taskId.value)
     
-    if (resultResponse.code === 200) {
-      const data = resultResponse.data
+    if (resultResponse.data.code === 200 && resultResponse.data.data) {
+      const data = resultResponse.data.data
       extractResult.value = data.extractResult
       ocrResult.value = data.ocrResult
       ocrMetadata.value = data.ocrMetadata
@@ -313,8 +313,8 @@ const loadResults = async () => {
       // 加载CharBox数据
       try {
         const charBoxResponse = await getTaskCharBoxes(taskId.value)
-        if (charBoxResponse.code === 200) {
-          charBoxes.value = charBoxResponse.data || []
+        if (charBoxResponse.data.code === 200 && charBoxResponse.data.data) {
+          charBoxes.value = charBoxResponse.data.data || []
           console.log('CharBox数据加载完成:', charBoxes.value.length)
         }
       } catch (charBoxErr) {
