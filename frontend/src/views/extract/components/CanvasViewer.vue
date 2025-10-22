@@ -188,30 +188,26 @@ const totalHeight = computed(() => {
 // 可见页面计算（智能渲染）
 const visiblePages = computed(() => {
   if (pageLayout.value.length === 0) {
-    console.log('⚠️ visiblePages: pageLayout为空')
     return []
   }
   
-  // 【修复】页面数少于20页时，直接渲染所有页面
+  // 页面数少于20页时，直接渲染所有页面
   if (props.totalPages <= MAX_VIRTUAL_PAGES) {
-    console.log(`✅ visiblePages: 页面数≤${MAX_VIRTUAL_PAGES}，返回所有 ${pageLayout.value.length} 页`)
     return pageLayout.value
   }
   
   // 页面数较多时才使用虚拟滚动
   if (!canvasContainer.value) {
-    console.log('⚠️ visiblePages: canvasContainer为空，返回第一页')
-    // 【修复】即使容器未就绪，也返回第一页，确保初始渲染
+    // 即使容器未就绪，也返回第一页，确保初始渲染
     return pageLayout.value.length > 0 ? [pageLayout.value[0]] : []
   }
   
-  // 【修复】使用响应式的scrollTop，而不是直接读取DOM
+  // 使用响应式的scrollTop，而不是直接读取DOM
   const currentScrollTop = scrollTop.value
   const containerHeight = canvasContainer.value.clientHeight
   
-  // 【修复】如果容器高度为0（可能还没渲染完成），返回第一页
+  // 如果容器高度为0（可能还没渲染完成），返回第一页
   if (containerHeight === 0) {
-    console.log('⚠️ visiblePages: 容器高度为0，返回第一页')
     return pageLayout.value.length > 0 ? [pageLayout.value[0]] : []
   }
   
@@ -223,14 +219,10 @@ const visiblePages = computed(() => {
     return pageBottom >= visibleTop && page.y <= visibleBottom
   })
   
-  // 【修复】如果没有可见页面，至少返回第一页
+  // 如果没有可见页面，至少返回第一页
   if (visible.length === 0) {
-    console.log('⚠️ visiblePages: 没有可见页面，返回第一页')
     return pageLayout.value.length > 0 ? [pageLayout.value[0]] : []
   }
-  
-  console.log(`📊 visiblePages [虚拟滚动]: scrollTop=${scrollTop.value}, 可见范围=[${visibleTop}, ${visibleBottom}], 可见页面数=${visible.length}`, 
-    visible.map(p => p.index + 1))
   
   return visible
 })
@@ -256,8 +248,6 @@ const preloadPages = computed(() => {
   const preloadEnd = Math.min(pageLayout.value.length - 1, maxVisible + PRELOAD_PAGES)
   
   const preloadList = pageLayout.value.slice(preloadStart, preloadEnd + 1)
-  
-  console.log(`🔄 preloadPages: 可见范围[${minVisible + 1}-${maxVisible + 1}], 预加载范围[${preloadStart + 1}-${preloadEnd + 1}], 预加载页数=${preloadList.length}`)
   
   return preloadList
 })
@@ -333,11 +323,8 @@ const fitToWidth = () => {
 // 初始化页面布局
 const initializePages = async () => {
   if (!props.taskId || props.totalPages === 0) {
-    console.warn('CanvasViewer: 无法初始化页面', { taskId: props.taskId, totalPages: props.totalPages })
     return
   }
-  
-  console.log('CanvasViewer: 开始初始化页面', { totalPages: props.totalPages, taskId: props.taskId })
   
   try {
     loading.value = true
@@ -351,14 +338,10 @@ const initializePages = async () => {
     
     // 页面数少时，一次性加载所有图片
     if (props.totalPages <= MAX_VIRTUAL_PAGES) {
-      console.log('CanvasViewer: 一次性加载所有页面')
-      
       for (let i = 0; i < props.totalPages; i++) {
-        console.log(`CanvasViewer: 加载第 ${i + 1} 页`)
         const img = await loadPageImage(i + 1)
         if (img) {
           pageImages.value.set(i, img)
-          console.log(`CanvasViewer: 第 ${i + 1} 页加载成功`, { width: img.naturalWidth, height: img.naturalHeight })
           
           // 计算缩放后的尺寸
           const aspectRatio = img.naturalHeight / img.naturalWidth
@@ -420,24 +403,14 @@ const initializePages = async () => {
       }
     }
     
-    console.log('CanvasViewer: 页面布局初始化完成', { 
-      totalPages: props.totalPages, 
-      loadedPages: pageImages.value.size,
-      pageLayoutLength: pageLayout.value.length
-    })
-    
     loading.value = false
     
-    // 【修复】立即触发首次渲染和预加载
+    // 立即触发首次渲染和预加载
     await nextTick()
-    
-    // 强制触发渲染
-    console.log('CanvasViewer: 触发首次渲染')
     await renderVisiblePages()
     
-    // 【修复】对于大文档，立即触发预加载
+    // 对于大文档，立即触发预加载
     if (props.totalPages > MAX_VIRTUAL_PAGES) {
-      console.log('CanvasViewer: 触发预加载')
       await nextTick()
       preloadImages()
     }
@@ -463,20 +436,12 @@ const loadPageImage = async (pageNum: number): Promise<HTMLImageElement | null> 
       imageUrl = `${props.apiPrefix}/${props.taskId}/images/page-${pageNum}.png`
     }
     
-    console.log(`CanvasViewer: 开始加载图片`, { pageNum, imageUrl })
-    
     const img = new Image()
     img.crossOrigin = 'anonymous'
     
     await new Promise((resolve, reject) => {
-      img.onload = () => {
-        console.log(`CanvasViewer: 图片加载成功`, { pageNum, url: imageUrl })
-        resolve(null)
-      }
-      img.onerror = () => {
-        console.error(`CanvasViewer: 图片加载失败`, { pageNum, url: imageUrl })
-        reject(new Error(`页面${pageNum}图像加载失败`))
-      }
+      img.onload = () => resolve(null)
+      img.onerror = () => reject(new Error(`页面${pageNum}图像加载失败`))
       img.src = imageUrl
     })
     
@@ -503,26 +468,21 @@ const preloadImages = async () => {
     return
   }
   
-  console.log(`🔄 开始预加载图片`, pagesToPreload.map(p => p.index + 1))
-  
   // 并行预加载，但不阻塞主线程
   const preloadPromises = pagesToPreload.map(async (page) => {
     try {
       const img = await loadPageImage(page.index + 1)
       if (img) {
         pageImages.value.set(page.index, img)
-        console.log(`✅ 预加载成功: 第${page.index + 1}页`)
       }
     } catch (err) {
-      console.warn(`⚠️ 预加载失败: 第${page.index + 1}页`, err)
+      // 预加载失败不影响主流程
     }
   })
   
   // 不等待预加载完成，让它在后台进行
-  Promise.all(preloadPromises).then(() => {
-    console.log(`✅ 预加载完成，共预加载 ${pagesToPreload.length} 页`)
-  }).catch((err) => {
-    console.warn('⚠️ 部分预加载失败:', err)
+  Promise.all(preloadPromises).catch(() => {
+    // 忽略预加载错误
   })
 }
 
@@ -561,28 +521,14 @@ const setCanvasRef = (el: HTMLCanvasElement | null, pageIndex: number) => {
 
 // 渲染可见页面
 const renderVisiblePages = async () => {
-  console.log('🎨 renderVisiblePages开始', { 
-    visiblePagesCount: visiblePages.value.length,
-    visiblePagesIndexes: visiblePages.value.map(p => p.index + 1),
-    totalPages: props.totalPages,
-    taskId: props.taskId
-  })
-  
   if (visiblePages.value.length === 0) {
-    console.warn('⚠️ renderVisiblePages: 没有可见页面需要渲染')
     return
   }
   
   // 等待DOM更新完成
   await nextTick()
   
-  // 【调试】检查DOM中的canvas元素
-  const allCanvasElements = document.querySelectorAll('canvas[data-page]')
-  console.log(`📊 DOM中找到 ${allCanvasElements.length} 个canvas元素`)
-  
   for (const page of visiblePages.value) {
-    console.log(`🖼️ 准备渲染页面 ${page.index + 1}`)
-    
     let canvas = canvasRefs.value.get(page.index)
     if (!canvas) {
       // 尝试重新查找Canvas元素
@@ -590,10 +536,7 @@ const renderVisiblePages = async () => {
       if (canvasEl) {
         canvasRefs.value.set(page.index, canvasEl)
         canvas = canvasEl
-        console.log(`  ✅ 找到Canvas元素 (页${page.index + 1})`)
       } else {
-        console.warn(`  ⚠️ 未找到Canvas元素 (页${page.index + 1})`)
-        console.warn(`  可用的canvas元素:`, Array.from(allCanvasElements).map(c => c.getAttribute('data-page')))
         continue
       }
     }
@@ -601,18 +544,13 @@ const renderVisiblePages = async () => {
     // 确保图片已加载
     let img = pageImages.value.get(page.index)
     if (!img) {
-      console.log(`  📥 开始加载图片 (页${page.index + 1})`)
       const loadedImg = await loadPageImage(page.index + 1)
       if (loadedImg) {
         img = loadedImg
         pageImages.value.set(page.index, img)
-        console.log(`  ✅ 图片加载成功 (页${page.index + 1})`)
       } else {
-        console.error(`  ❌ 页面 ${page.index + 1} 图片加载失败`)
         continue
       }
-    } else {
-      console.log(`  ♻️ 使用缓存图片 (页${page.index + 1})`)
     }
     
     // 设置Canvas尺寸
@@ -709,16 +647,11 @@ const scrollToBbox = (bboxInfo: any) => {
 
 // 滚动事件处理
 const onScroll = () => {
-  // 【修复】更新响应式的scrollTop，触发visiblePages重新计算
+  // 更新响应式的scrollTop，触发visiblePages重新计算
   if (canvasContainer.value) {
     scrollTop.value = canvasContainer.value.scrollTop
   }
   
-  console.log('🔄 onScroll触发', { 
-    scrollTop: scrollTop.value,
-    totalPages: props.totalPages,
-    pageLayoutLength: pageLayout.value.length
-  })
   updateCurrentPage()
   // 注意：不需要手动调用renderVisiblePages，因为scrollTop变化会触发visiblePages重新计算，
   // 然后watch(visiblePages)会自动调用renderVisiblePages
@@ -752,21 +685,6 @@ const updateCurrentPage = () => {
 
 // 绘制页面的提取内容
 const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
-  console.log(`🎨 开始绘制第${page.index + 1}页的提取内容`, {
-    charBoxesCount: props.charBoxes.length,
-    bboxMappingsCount: props.bboxMappings?.length || 0
-  })
-  
-  // 【调试】输出前几个charBoxes的详细信息
-  if (props.charBoxes.length > 0) {
-    console.log('📦 charBoxes示例（前3个）:', props.charBoxes.slice(0, 3))
-  }
-  
-  // 【调试】输出前几个bboxMappings的详细信息
-  if (props.bboxMappings && props.bboxMappings.length > 0) {
-    console.log('📦 bboxMappings示例（前3个）:', props.bboxMappings.slice(0, 3))
-  }
-  
   // 创建高亮bbox的查找集合（用于快速判断）
   const highlightedSet = new Set(
     highlightedBboxes.value
@@ -774,95 +692,40 @@ const drawPageExtractions = (ctx: CanvasRenderingContext2D, page: any) => {
       .map(b => `${b.page}-${b.bbox.join('-')}`)
   )
   
-  let drawnCount = 0
-  
-  // 【修复】判断是否为OCR模式 - 检查charBoxes是否为textBoxes格式
+  // 判断是否为OCR模式 - 检查charBoxes是否为textBoxes格式
   const hasTextBoxes = props.charBoxes.length > 0 && props.charBoxes[0]?.text !== undefined
-  // 【修复】处理bboxMappings可能是undefined的情况
   const bboxMappingsCount = props.bboxMappings?.length || 0
   const isOcrMode = hasTextBoxes && bboxMappingsCount === 0
   
-  console.log(`📊 绘制模式判断:`, {
-    hasTextBoxes,
-    isOcrMode,
-    charBoxesLength: props.charBoxes.length,
-    bboxMappingsLength: bboxMappingsCount,
-    bboxMappingsRaw: props.bboxMappings,
-    firstCharBox: props.charBoxes[0]
-  })
-  
   if (isOcrMode) {
-    // 【修复】OCR模式：charBoxes实际是textBoxes，直接绘制
+    // OCR模式：charBoxes实际是textBoxes，直接绘制
     const pageTextBoxes = props.charBoxes.filter((tb: any) => tb.page === page.index + 1)
     
-    console.log(`📝 OCR模式: 第${page.index + 1}页找到 ${pageTextBoxes.length} 个textBox`)
-    
-    // 【调试】输出前几个textBox的详细信息
-    if (pageTextBoxes.length > 0) {
-      console.log('📦 当前页textBox示例（前3个）:', pageTextBoxes.slice(0, 3))
-    }
-    
-    pageTextBoxes.forEach((textBox: any, index: number) => {
+    pageTextBoxes.forEach((textBox: any) => {
       if (textBox.bbox && textBox.bbox.length >= 4) {
         const bboxKey = `${textBox.page}-${textBox.bbox.join('-')}`
         const isHighlighted = highlightedSet.has(bboxKey)
-        
-        // 【调试】输出前几个bbox的绘制参数
-        if (index < 3) {
-          console.log(`  绘制textBox[${index}]:`, {
-            page: textBox.page,
-            bbox: textBox.bbox,
-            text: textBox.text?.substring(0, 20),
-            isHighlighted
-          })
-        }
-        
         drawExtractionBbox(ctx, textBox, page, isHighlighted)
-        drawnCount++
-      } else {
-        console.warn(`  ⚠️ textBox[${index}] bbox无效:`, textBox)
       }
     })
-    
-    console.log(`✅ OCR模式：第${page.index + 1}页绘制了 ${drawnCount} 个bbox`)
   } else if (bboxMappingsCount > 0) {
     // 智能提取模式：直接遍历bboxMappings
-    props.bboxMappings!.forEach((mapping, mappingIndex) => {
+    props.bboxMappings!.forEach((mapping) => {
       // 检查这个mapping是否在当前页面
       if (mapping.pages && mapping.pages.includes(page.index + 1)) {
         // 遍历该mapping的所有bbox（已经合并过，不是字符级的）
         if (mapping.bboxes && Array.isArray(mapping.bboxes)) {
-          mapping.bboxes.forEach((bboxInfo: any, bboxIndex: number) => {
+          mapping.bboxes.forEach((bboxInfo: any) => {
             // 只绘制当前页面的bbox
             if (bboxInfo.page === page.index + 1) {
               const bboxKey = `${bboxInfo.page}-${bboxInfo.bbox.join('-')}`
               const isHighlighted = highlightedSet.has(bboxKey)
-              
-              // 【调试】输出前几个bbox的绘制参数
-              if (drawnCount < 3) {
-                console.log(`  绘制bboxMapping[${mappingIndex}].bbox[${bboxIndex}]:`, {
-                  page: bboxInfo.page,
-                  bbox: bboxInfo.bbox,
-                  isHighlighted
-                })
-              }
-              
-              // 直接绘制，每个bbox只绘制一次
               drawExtractionBbox(ctx, bboxInfo, page, isHighlighted)
-              drawnCount++
             }
           })
         }
       }
     })
-    
-    if (drawnCount > 0) {
-      console.log(`✅ 智能提取模式：第${page.index + 1}页绘制了 ${drawnCount} 个bbox`)
-    } else {
-      console.warn(`⚠️ 智能提取模式：第${page.index + 1}页没有绘制任何bbox`)
-    }
-  } else {
-    console.warn(`⚠️ 第${page.index + 1}页没有可绘制的bbox数据`)
   }
 }
 
@@ -928,56 +791,39 @@ const mergeCharBoxesToWords = (charBoxes: any[]): any[] => {
 // 绘制提取内容的bbox（参考合同比对实现）
 const drawExtractionBbox = (ctx: CanvasRenderingContext2D, bboxInfo: any, page: any, isHighlighted: boolean = false) => {
   if (!bboxInfo.bbox || bboxInfo.bbox.length < 4) {
-    console.warn('❌ 无效的bbox数据:', bboxInfo)
     return
   }
   
   const [x1, y1, x2, y2] = bboxInfo.bbox
   
-  // 【修复】计算缩放比例 - 确保使用正确的缩放算法
+  // 计算缩放比例 - 确保使用正确的缩放算法
   const scale = page.width / page.actualWidth
   
-  // 【修复】计算在Canvas上的精确位置 - 添加边界检查
+  // 计算在Canvas上的精确位置 - 添加边界检查
   const x = Math.max(0, Math.round(x1 * scale))
   const y = Math.max(0, Math.round(y1 * scale))
   const width = Math.min(page.width - x, Math.round((x2 - x1) * scale))
   const height = Math.min(page.height - y, Math.round((y2 - y1) * scale))
   
-  // 【调试】输出计算过程
-  const debugInfo = {
-    原始bbox: bboxInfo.bbox,
-    页面信息: { 
-      width: page.width, 
-      height: page.height,
-      actualWidth: page.actualWidth,
-      actualHeight: page.actualHeight
-    },
-    缩放比例: scale.toFixed(3),
-    计算结果: { x, y, width, height },
-    是否高亮: isHighlighted
-  }
-  
-  // 【修复】确保bbox有效尺寸
+  // 确保bbox有效尺寸
   if (width <= 0 || height <= 0) {
-    console.warn('❌ Bbox尺寸无效:', debugInfo)
     return
   }
   
-  // 【修复】确保bbox在Canvas范围内
+  // 确保bbox在Canvas范围内
   if (x >= page.width || y >= page.height) {
-    console.warn('❌ Bbox完全超出Canvas范围:', debugInfo)
     return
   }
   
-  // 【修复】保存和恢复Canvas状态，避免样式污染
+  // 保存和恢复Canvas状态，避免样式污染
   ctx.save()
   
   try {
     if (isHighlighted) {
       // 高亮状态：使用黄色边框突出显示
-      ctx.strokeStyle = '#E6A23C' // 橙黄色边框
-      ctx.lineWidth = 2 // 【修复】增加高亮时的边框宽度
-      ctx.setLineDash([]) // 【修复】确保是实线
+      ctx.strokeStyle = '#E6A23C'
+      ctx.lineWidth = 2
+      ctx.setLineDash([])
       
       // 黄色填充，透明度0.15，确保文字可读
       ctx.fillStyle = 'rgba(230, 162, 60, 0.15)'
@@ -985,13 +831,11 @@ const drawExtractionBbox = (ctx: CanvasRenderingContext2D, bboxInfo: any, page: 
       
       // 绘制边框
       ctx.strokeRect(x, y, width, height)
-      
-      console.log(`✅ 绘制高亮bbox成功:`, debugInfo)
     } else {
       // 普通状态：绿色边框
-      ctx.strokeStyle = 'rgba(103, 194, 58, 0.8)' // 【修复】增加透明度
+      ctx.strokeStyle = 'rgba(103, 194, 58, 0.8)'
       ctx.lineWidth = 1
-      ctx.setLineDash([]) // 【修复】确保是实线
+      ctx.setLineDash([])
       
       // 绿色填充，透明度0.08，更淡一些
       ctx.fillStyle = 'rgba(103, 194, 58, 0.08)'
@@ -1001,9 +845,9 @@ const drawExtractionBbox = (ctx: CanvasRenderingContext2D, bboxInfo: any, page: 
       ctx.strokeRect(x, y, width, height)
     }
   } catch (error) {
-    console.error('❌ 绘制bbox失败:', error, debugInfo)
+    console.error('绘制bbox失败:', error)
   } finally {
-    ctx.restore() // 【修复】恢复Canvas状态
+    ctx.restore()
   }
 }
 

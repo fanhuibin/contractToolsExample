@@ -344,35 +344,20 @@ const loadResults = async () => {
   try {
     // 获取OCR结果
     const resultResponse: any = await getOcrResult(taskId.value)
-    console.log('OCR结果响应:', resultResponse)
     
     // baseRequest拦截器已处理，返回格式为 { data: { code, message, data } }
     if (resultResponse && resultResponse.data && resultResponse.data.data) {
       ocrResult.value = resultResponse.data.data
       totalPages.value = ocrResult.value.totalPages || 0
       
-      console.log('OCR结果:', ocrResult.value)
-      console.log('总页数:', totalPages.value)
-      console.log('文本内容:', ocrResult.value.ocrText?.substring(0, 100))
-      
       // 如果TextBox数据在结果中
       if (ocrResult.value.textBoxes) {
         textBoxes.value = ocrResult.value.textBoxes
-        console.log('TextBox数量（从结果）:', textBoxes.value.length)
-        
-        // 调试：输出前几个TextBox的字符索引信息
-        if (textBoxes.value.length > 0) {
-          console.log('前3个TextBox示例:')
-          textBoxes.value.slice(0, 3).forEach((tb, idx) => {
-            console.log(`  [${idx}] 页码:${tb.page}, 索引:${tb.startPos}-${tb.endPos}, 文本:"${tb.text?.substring(0, 20)}..."`)
-          })
-        }
       } else if (ocrResult.value.textBoxesAvailable) {
         // 单独加载TextBox数据
         const textBoxResponse: any = await getTextBoxes(taskId.value)
         if (textBoxResponse && textBoxResponse.data) {
           textBoxes.value = textBoxResponse.data || []
-          console.log('TextBox数量（单独加载）:', textBoxes.value.length)
         }
       }
       
@@ -381,23 +366,8 @@ const loadResults = async () => {
         const bboxMappingResponse: any = await getBboxMappings(taskId.value)
         if (bboxMappingResponse && bboxMappingResponse.data) {
           bboxMappings.value = bboxMappingResponse.data || []
-          console.log('✅ BboxMapping加载成功')
-          console.log('  - TextBox数量:', textBoxes.value.length)
-          console.log('  - BboxMapping数量:', bboxMappings.value.length)
-          
-          if (bboxMappings.value.length > 0) {
-            console.log('前3个BboxMapping示例:')
-            bboxMappings.value.slice(0, 3).forEach((mapping, idx) => {
-              const interval = mapping.interval || {}
-              const text = mapping.text || ''
-              const bboxCount = mapping.bboxes?.length || 0
-              const pages = mapping.pages || []
-              console.log(`  [${idx}] 文本:"${text.substring(0, 20)}..." 字符索引:${interval.startPos}-${interval.endPos} bbox数:${bboxCount} 页码:[${pages.join(',')}]`)
-            })
-          }
         }
       } catch (err) {
-        console.warn('加载BboxMapping失败，将使用TextBox:', err)
         bboxMappings.value = []
       }
       
@@ -416,35 +386,18 @@ const loadResults = async () => {
  * 处理bbox点击 - 在图片上点击bbox，高亮对应的文本
  */
 const onBboxClick = (bboxInfo: any) => {
-  console.log('📍 OCR页面: 点击了bbox:', {
-    page: bboxInfo.page,
-    text: bboxInfo.text?.substring(0, 30) + '...',
-    startPos: bboxInfo.startPos,
-    endPos: bboxInfo.endPos,
-    bbox: bboxInfo.bbox
-  })
-  
   if (!bboxInfo) {
-    console.warn('⚠️ bbox信息为空')
     return
   }
-  
-  // 【增强】即使没有text也尝试处理，因为可能有其他标识信息
   
   // 1. 高亮左侧被点击的bbox本身
   if (canvasViewer.value) {
     canvasViewer.value.highlightBbox(bboxInfo)
-    console.log('✅ 已高亮左侧bbox:', `页码 ${bboxInfo.page}`)
-  } else {
-    console.warn('⚠️ CanvasViewer组件未就绪')
   }
   
   // 2. 高亮右侧对应的文本
   if (markdownViewer.value) {
     markdownViewer.value.highlightTextByBox(bboxInfo)
-    console.log('✅ 已尝试高亮右侧文本:', `字符索引 ${bboxInfo.startPos}-${bboxInfo.endPos}`)
-  } else {
-    console.warn('⚠️ MarkdownViewer组件未就绪')
   }
 }
 
@@ -452,30 +405,15 @@ const onBboxClick = (bboxInfo: any) => {
  * 处理文本点击 - 在文本上点击，高亮对应的图片bbox
  */
 const onTextClick = (textBoxIndex: number, textBox: any) => {
-  console.log('📝 OCR页面: 点击了文本:', {
-    index: textBoxIndex,
-    page: textBox.page,
-    text: textBox.text?.substring(0, 30) + '...',
-    startPos: textBox.startPos,
-    endPos: textBox.endPos
-  })
-  
-  if (!textBox) {
-    console.warn('⚠️ textBox信息为空')
+  if (!textBox || !canvasViewer.value) {
     return
   }
   
-  if (!canvasViewer.value) {
-    console.warn('⚠️ CanvasViewer组件未就绪')
-    return
-  }
-  
-  // 【增强】高亮对应的bbox（会自动滚动到bbox位置，类似合同比对的差异跳转）
+  // 高亮对应的bbox（会自动滚动到bbox位置，类似合同比对的差异跳转）
   try {
     canvasViewer.value.highlightBbox(textBox)
-    console.log('✅ 已高亮并滚动到左侧bbox，页码:', textBox.page, `字符索引 ${textBox.startPos}-${textBox.endPos}`)
   } catch (error) {
-    console.error('❌ 高亮bbox失败:', error)
+    console.error('高亮bbox失败:', error)
   }
 }
 
@@ -483,7 +421,7 @@ const onTextClick = (textBoxIndex: number, textBox: any) => {
  * 处理页面变化
  */
 const onPageChange = (page: number) => {
-  console.log('页面变化:', page)
+  // 页面变化处理
 }
 
 /**
