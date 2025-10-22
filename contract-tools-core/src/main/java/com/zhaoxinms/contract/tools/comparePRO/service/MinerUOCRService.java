@@ -646,7 +646,7 @@ public class MinerUOCRService {
         }
         // 处理普通文本
         else if (item.has("text")) {
-            items.addAll(handleTextItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight));
+            items.addAll(handleTextItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, middleJsonNode, pageIdx));
         }
         
         return items;
@@ -1139,9 +1139,17 @@ public class MinerUOCRService {
             JsonNode item,
             int imageWidth, int imageHeight,
             double pdfWidth, double pdfHeight) {
+        return handleTextItem(item, imageWidth, imageHeight, pdfWidth, pdfHeight, null, -1);
+    }
+    
+    private List<TextExtractionUtil.LayoutItem> handleTextItem(
+            JsonNode item,
+            int imageWidth, int imageHeight,
+            double pdfWidth, double pdfHeight,
+            JsonNode middleJsonNode,
+            int pageIdx) {
         
         List<TextExtractionUtil.LayoutItem> items = new ArrayList<>();
-        String text = item.get("text").asText();
         JsonNode bboxNode = item.get("bbox");
         
         if (bboxNode == null || !bboxNode.isArray() || bboxNode.size() < 4) {
@@ -1150,6 +1158,10 @@ public class MinerUOCRService {
         
         double[] mineruBbox = extractBbox(bboxNode, pdfWidth, pdfHeight);
         double[] imageBbox = convertAndValidateBbox(mineruBbox, pdfWidth, pdfHeight, imageWidth, imageHeight);
+        
+        // 直接使用 content_list 的 text 字段（旧逻辑）
+        // content_list 中的 text 字段已经包含了正确的 LaTeX 格式公式（用 $ 符号包围）
+        String text = item.has("text") ? item.get("text").asText() : "";
         
         // 转换 LaTeX/Markdown 格式为可读文本
         String cleanText = convertLatexToReadableText(text);
@@ -1674,8 +1686,11 @@ public class MinerUOCRService {
             return text;
         }
         
+        log.debug("🔍 [公式转换] 输入文本: {}", text.length() > 200 ? text.substring(0, 200) + "..." : text);
+        
         StringBuilder result = new StringBuilder();
         int i = 0;
+        int formulaCount = 0;
         
         while (i < text.length()) {
             // 检查是否是行间公式 $$...$$
@@ -1684,10 +1699,13 @@ public class MinerUOCRService {
                 if (endPos != -1) {
                     // 提取公式内容（不包括 $$ 符号）
                     String formula = text.substring(i + 2, endPos);
+                    log.debug("  📐 发现行间公式 $$...$$: {}", formula);
                     // 转换公式内容
                     String converted = convertLatexFormula(formula);
+                    log.debug("  ✅ 转换结果: {}", converted);
                     result.append(converted);
                     i = endPos + 2;  // 跳过结束的 $$
+                    formulaCount++;
                     continue;
                 }
             }
@@ -1698,10 +1716,13 @@ public class MinerUOCRService {
                 if (endPos != -1) {
                     // 提取公式内容（不包括 $ 符号）
                     String formula = text.substring(i + 1, endPos);
+                    log.debug("  📐 发现行内公式 $...$: {}", formula);
                     // 转换公式内容
                     String converted = convertLatexFormula(formula);
+                    log.debug("  ✅ 转换结果: {}", converted);
                     result.append(converted);
                     i = endPos + 1;  // 跳过结束的 $
+                    formulaCount++;
                     continue;
                 }
             }
@@ -1713,11 +1734,12 @@ public class MinerUOCRService {
         
         String finalResult = result.toString();
         
-        // 处理公式外的一些通用格式（如连续反斜杠、千分号等）
-        finalResult = finalResult.replace("\\text‰", "‰");
-        finalResult = finalResult.replaceAll("\\\\{4,}", "");  // 清理连续的多个反斜杠（4个或以上）
+        // 清理多余的空格
         finalResult = finalResult.replaceAll("\\s+", " ");
         finalResult = finalResult.trim();
+        
+        log.debug("🎯 [公式转换] 共处理 {} 个公式, 最终结果: {}", formulaCount, 
+            finalResult.length() > 200 ? finalResult.substring(0, 200) + "..." : finalResult);
         
         return finalResult;
     }
@@ -1740,11 +1762,29 @@ public class MinerUOCRService {
      * @return 转换后的可读文本
      */
     private String convertLatexFormula(String formula) {
+        log.debug("    🔧 [convertLatexFormula] 输入: {}", formula);
         String result = formula;
         
         // 0. 先处理双反斜杠的特殊情况（在公式内常见）
-        // \\% -> \% -> %
-        // \\sim -> \sim -> ~
+        // 注意：必须先处理具体的命令，再处理通用的双反斜杠
+        result = result.replace("\\\\text\\{", "PLACEHOLDER_TEXT_START");
+        result = result.replace("\\\\mathrm\\{", "PLACEHOLDER_MATHRM_START");
+        result = result.replace("\\\\mathbb\\{", "PLACEHOLDER_MATHBB_START");
+        result = result.replace("\\\\mathcal\\{", "PLACEHOLDER_MATHCAL_START");
+        result = result.replace("\\\\textbf\\{", "PLACEHOLDER_TEXTBF_START");
+        result = result.replace("\\\\textit\\{", "PLACEHOLDER_TEXTIT_START");
+        result = result.replace("\\\\underline\\{", "PLACEHOLDER_UNDERLINE_START");
+        
+        if (!result.equals(formula)) {
+            log.debug("      → 替换双反斜杠命令后: {}", result);
+        }
+        
+        // 处理省略号
+        result = result.replace("\\\\ldots", "PLACEHOLDER_LDOTS");
+        result = result.replace("\\\\cdots", "PLACEHOLDER_CDOTS");
+        result = result.replace("\\\\dots", "PLACEHOLDER_DOTS");
+        
+        // 处理特殊符号
         result = result.replace("\\\\%", "PLACEHOLDER_PERCENT");
         result = result.replace("\\\\sim", "PLACEHOLDER_SIM");
         result = result.replace("\\\\cdot", "PLACEHOLDER_CDOT");
@@ -1805,17 +1845,22 @@ public class MinerUOCRService {
         result = result.replaceAll("\\\\partial\\b", "∂");
         result = result.replaceAll("\\\\nabla\\b", "∇");
         
-        // 5. 处理求和、积分等符号
+        // 5. 处理省略号（单反斜杠版本）
+        result = result.replaceAll("\\\\ldots\\b", "…");
+        result = result.replaceAll("\\\\cdots\\b", "⋯");
+        result = result.replaceAll("\\\\dots\\b", "…");
+        
+        // 6. 处理求和、积分等符号
         result = result.replaceAll("\\\\sum\\b", "∑");
         result = result.replaceAll("\\\\int\\b", "∫");
         result = result.replaceAll("\\\\prod\\b", "∏");
         result = result.replaceAll("\\\\lim\\b", "lim");
         
-        // 6. 处理平方根
+        // 7. 处理平方根
         result = result.replaceAll("\\\\sqrt\\{([^}]+)\\}", "√($1)");
         result = result.replaceAll("\\\\sqrt\\[([^]]+)\\]\\{([^}]+)\\}", "$1√($2)");
         
-        // 7. 处理箭头
+        // 8. 处理箭头
         result = result.replaceAll("\\\\rightarrow\\b", "→");
         result = result.replaceAll("\\\\leftarrow\\b", "←");
         result = result.replaceAll("\\\\Rightarrow\\b", "⇒");
@@ -1823,13 +1868,13 @@ public class MinerUOCRService {
         result = result.replaceAll("\\\\leftrightarrow\\b", "↔");
         result = result.replaceAll("\\\\Leftrightarrow\\b", "⇔");
         
-        // 8. 处理下标 _{...} 和 ^{...}
+        // 9. 处理下标 _{...} 和 ^{...}
         result = result.replaceAll("_\\{([^}]+)\\}", "$1");
         result = result.replaceAll("\\^\\{([^}]+)\\}", "$1");
         result = result.replaceAll("_([a-zA-Z0-9])", "$1");
         result = result.replaceAll("\\^([a-zA-Z0-9])", "$1");
         
-        // 9. 处理文本命令
+        // 10. 处理单反斜杠的文本命令
         result = result.replaceAll("\\\\text\\{([^}]+)\\}", "$1");
         result = result.replaceAll("\\\\text([^a-zA-Z])", "$1");
         result = result.replaceAll("\\\\mathbb\\{([^}]+)\\}", "$1");
@@ -1839,11 +1884,21 @@ public class MinerUOCRService {
         result = result.replaceAll("\\\\textbf\\{([^}]+)\\}", "$1");
         result = result.replaceAll("\\\\textit\\{([^}]+)\\}", "$1");
         
-        // 10. 处理下划线
+        // 恢复占位符为最终内容（去掉命令,只保留内容）
+        // 使用正则表达式提取 PLACEHOLDER_XXX_START{...} 中的内容
+        result = result.replaceAll("PLACEHOLDER_TEXT_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_MATHRM_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_MATHBB_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_MATHCAL_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_TEXTBF_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_TEXTIT_START\\{([^}]+)\\}", "$1");
+        result = result.replaceAll("PLACEHOLDER_UNDERLINE_START\\{([^}]+)\\}", "$1");
+        
+        // 11. 处理下划线
         result = result.replaceAll("\\\\underline\\{([^}]+)\\}", "$1");
         result = result.replaceAll("\\\\underline\\s+", "");
         
-        // 11. 处理左右括号
+        // 12. 处理左右括号
         result = result.replaceAll("\\\\left\\(", "(");
         result = result.replaceAll("\\\\right\\)", ")");
         result = result.replaceAll("\\\\left\\[", "[");
@@ -1853,7 +1908,10 @@ public class MinerUOCRService {
         result = result.replaceAll("\\\\left\\|", "|");
         result = result.replaceAll("\\\\right\\|", "|");
         
-        // 12. 恢复占位符
+        // 13. 恢复占位符
+        result = result.replace("PLACEHOLDER_LDOTS", "…");
+        result = result.replace("PLACEHOLDER_CDOTS", "⋯");
+        result = result.replace("PLACEHOLDER_DOTS", "…");
         result = result.replace("PLACEHOLDER_PERCENT", "%");
         result = result.replace("PLACEHOLDER_SIM", "~");
         result = result.replace("PLACEHOLDER_CDOT", "·");
@@ -1865,7 +1923,7 @@ public class MinerUOCRService {
         result = result.replace("PLACEHOLDER_SPACE", " ");
         result = result.replace("PLACEHOLDER_DOUBLEBACKSLASH", "");
         
-        // 13. 处理特殊符号（单反斜杠的情况）
+        // 14. 处理特殊符号（单反斜杠的情况）
         result = result.replace("\\%", "%");
         result = result.replace("\\&", "&");
         result = result.replace("\\#", "#");
@@ -1874,9 +1932,11 @@ public class MinerUOCRService {
         result = result.replace("\\{", "{");
         result = result.replace("\\}", "}");
         
-        // 14. 清理多余的空格
+        // 15. 清理多余的空格
         result = result.replaceAll("\\s+", " ");
         result = result.trim();
+        
+        log.debug("    🎯 [convertLatexFormula] 输出: {}", result);
         
         return result;
     }
@@ -2302,6 +2362,87 @@ public class MinerUOCRService {
     }
     
     /**
+     * 从 middle_json 中根据 bbox 查找对应的文本块并提取文本
+     */
+    private String extractTextFromMiddleJsonByBbox(JsonNode middleJsonNode, int pageIdx, double[] targetBbox) {
+        try {
+            JsonNode pdfInfo = middleJsonNode.get("pdf_info");
+            if (pdfInfo == null || !pdfInfo.isArray() || pageIdx >= pdfInfo.size()) {
+                return null;
+            }
+            
+            JsonNode pageNode = pdfInfo.get(pageIdx);
+            JsonNode paraBlocks = pageNode.get("preproc_blocks");
+            if (paraBlocks == null || !paraBlocks.isArray()) {
+                return null;
+            }
+            
+            // 遍历所有文本块，找到 bbox 匹配的块
+            for (JsonNode block : paraBlocks) {
+                String blockType = block.has("type") ? block.get("type").asText() : "";
+                
+                // 处理 text 类型的块
+                if ("text".equals(blockType)) {
+                    JsonNode bboxNode = block.get("bbox");
+                    if (bboxNode != null && bboxNode.isArray() && bboxNode.size() == 4) {
+                        double[] blockBbox = new double[]{
+                            bboxNode.get(0).asDouble(),
+                            bboxNode.get(1).asDouble(),
+                            bboxNode.get(2).asDouble(),
+                            bboxNode.get(3).asDouble()
+                        };
+                        
+                        // 检查 bbox 是否匹配（允许小误差）
+                        if (isBboxMatching(targetBbox, blockBbox, 2.0)) {
+                            log.debug("📝 [文本匹配] 在 middle_json 中找到匹配的文本块，bbox: [{}, {}, {}, {}]", 
+                                blockBbox[0], blockBbox[1], blockBbox[2], blockBbox[3]);
+                            return extractTextFromMiddleJsonBlock(block);
+                        }
+                    }
+                }
+                // 处理 list 类型的块
+                else if ("list".equals(blockType)) {
+                    JsonNode bboxNode = block.get("bbox");
+                    if (bboxNode != null && bboxNode.isArray() && bboxNode.size() == 4) {
+                        double[] blockBbox = new double[]{
+                            bboxNode.get(0).asDouble(),
+                            bboxNode.get(1).asDouble(),
+                            bboxNode.get(2).asDouble(),
+                            bboxNode.get(3).asDouble()
+                        };
+                        
+                        // 检查 bbox 是否匹配（允许小误差）
+                        if (isBboxMatching(targetBbox, blockBbox, 2.0)) {
+                            log.debug("📝 [文本匹配] 在 middle_json 中找到匹配的列表块，bbox: [{}, {}, {}, {}]", 
+                                blockBbox[0], blockBbox[1], blockBbox[2], blockBbox[3]);
+                            return extractTextFromListBlock(block);
+                        }
+                    }
+                }
+            }
+            
+            log.debug("📝 [文本匹配] 未在 middle_json 中找到匹配的文本块，bbox: [{}, {}, {}, {}]", 
+                targetBbox[0], targetBbox[1], targetBbox[2], targetBbox[3]);
+        } catch (Exception e) {
+            log.warn("从 middle_json 提取文本失败: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 检查两个 bbox 是否匹配（允许小误差）
+     */
+    private boolean isBboxMatching(double[] bbox1, double[] bbox2, double tolerance) {
+        for (int i = 0; i < 4; i++) {
+            if (Math.abs(bbox1[i] - bbox2[i]) > tolerance) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    /**
      * 从 middle_json 的块中提取文本内容
      */
     private String extractTextFromMiddleJsonBlock(JsonNode block) {
@@ -2319,8 +2460,22 @@ public class MinerUOCRService {
                         for (JsonNode span : spans) {
                             String content = span.has("content") ? span.get("content").asText() : "";
                             if (!content.isEmpty()) {
-                                text.append(content);
-                                log.debug("📝 [extractTextFromMiddleJsonBlock] 提取到文本: {}", content);
+                                // 检查是否是公式类型的span
+                                String spanType = span.has("type") ? span.get("type").asText() : "";
+                                
+                                if ("inline_equation".equals(spanType) || "interline_equation".equals(spanType)) {
+                                    // 这是一个公式，需要添加 $ 符号
+                                    if ("interline_equation".equals(spanType)) {
+                                        text.append("$$").append(content).append("$$");
+                                        log.debug("📝 [extractTextFromMiddleJsonBlock] 提取到行间公式: $${}", content);
+                                    } else {
+                                        text.append("$").append(content).append("$");
+                                        log.debug("📝 [extractTextFromMiddleJsonBlock] 提取到行内公式: ${}", content);
+                                    }
+                                } else {
+                                    text.append(content);
+                                    log.debug("📝 [extractTextFromMiddleJsonBlock] 提取到文本: {}", content);
+                                }
                             }
                         }
                     } else {
@@ -2336,6 +2491,63 @@ public class MinerUOCRService {
         
         String result = text.toString().trim();
         log.debug("📝 [extractTextFromMiddleJsonBlock] 最终提取的文本长度: {}, 内容: {}", 
+            result.length(), result.length() > 100 ? result.substring(0, 100) + "..." : result);
+        return result;
+    }
+    
+    /**
+     * 从 middle_json 的 list 块中提取文本内容
+     * list 块包含 blocks 数组，每个 block 包含 lines -> spans 结构
+     */
+    private String extractTextFromListBlock(JsonNode listBlock) {
+        StringBuilder text = new StringBuilder();
+        
+        try {
+            JsonNode blocks = listBlock.get("blocks");
+            
+            if (blocks != null && blocks.isArray()) {
+                log.debug("📝 [extractTextFromListBlock] list块包含 {} 个子块", blocks.size());
+                
+                for (JsonNode block : blocks) {
+                    JsonNode lines = block.get("lines");
+                    
+                    if (lines != null && lines.isArray()) {
+                        for (JsonNode line : lines) {
+                            JsonNode spans = line.get("spans");
+                            if (spans != null && spans.isArray()) {
+                                for (JsonNode span : spans) {
+                                    String content = span.has("content") ? span.get("content").asText() : "";
+                                    if (!content.isEmpty()) {
+                                        // 检查是否是公式类型的span
+                                        String spanType = span.has("type") ? span.get("type").asText() : "";
+                                        
+                                        if ("inline_equation".equals(spanType)) {
+                                            // 这是一个行内公式，需要添加 $ 符号
+                                            text.append("$").append(content).append("$");
+                                            log.debug("📝 [extractTextFromListBlock] 提取到行内公式: ${}", content);
+                                        } else if ("interline_equation".equals(spanType)) {
+                                            // 这是一个行间公式，需要添加 $$ 符号
+                                            text.append("$$").append(content).append("$$");
+                                            log.debug("📝 [extractTextFromListBlock] 提取到行间公式: $${}", content);
+                                        } else {
+                                            text.append(content);
+                                            log.debug("📝 [extractTextFromListBlock] 提取到文本: {}", content);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                log.debug("📝 [extractTextFromListBlock] list块没有blocks或不是数组");
+            }
+        } catch (Exception e) {
+            log.warn("提取list块文本失败: {}", e.getMessage(), e);
+        }
+        
+        String result = text.toString().trim();
+        log.debug("📝 [extractTextFromListBlock] 最终提取的文本长度: {}, 内容: {}", 
             result.length(), result.length() > 100 ? result.substring(0, 100) + "..." : result);
         return result;
     }

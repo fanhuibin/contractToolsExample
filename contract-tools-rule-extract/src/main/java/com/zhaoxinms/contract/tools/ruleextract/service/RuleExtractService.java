@@ -28,6 +28,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -134,10 +135,8 @@ public class RuleExtractService {
             // 2. OCR处理
             updateTaskStatus(taskId, "ocr_processing", 20, "OCR处理中...", null);
             OCRProvider.OCRResult ocrResult = performOCR(task);
-            String ocrText = ocrResult.getContent();
             
-            // 【新增】执行跨页表格合并（处理MinerU未识别为同一表格的情况）
-            mergeContentListTables(task.getTaskId());
+            String ocrText = ocrResult.getContent();
             
             // 保存OCR文本和结果路径
             task = storage.load("task", taskId, RuleExtractTaskModel.class);
@@ -164,11 +163,20 @@ public class RuleExtractService {
 
             // 4. 提取信息
             updateTaskStatus(taskId, "extracting", 75, "信息提取中...", null);
-            List<JSONObject> results = extractInformation(task, ocrText);
+            
+            // 【规则提取专用】生成合并后的content_list并重新生成OCR文本
+            // 这样可以获得完整的跨页表格
+            String mergedOcrText = createMergedContentListAndRegenerateText(task.getTaskId(), ocrText);
+            
+            // 使用合并后的OCR文本进行规则提取
+            List<JSONObject> results = extractInformation(task, mergedOcrText);
             updateTaskStatus(taskId, "extracting", 95, "信息提取完成", null);
 
             // 5. 保存结果
-            saveResults(taskId, results, ocrResult);
+            // 注意：需要同时传入原始OCR文本和合并后的OCR文本
+            // - 合并后的文本用于前端显示和规则提取
+            // - 原始文本用于TextBox索引（因为TextBox基于原始文本生成）
+            saveResults(taskId, results, ocrResult, ocrText, mergedOcrText);
             
             // 6. 完成
             task = storage.load("task", taskId, RuleExtractTaskModel.class);
@@ -435,8 +443,15 @@ public class RuleExtractService {
 
     /**
      * 保存提取结果
+     * 
+     * @param taskId 任务ID
+     * @param results 提取结果（基于合并后OCR文本的索引）
+     * @param ocrResult 原始OCR结果（包含metadata和TextBox）
+     * @param originalOcrText 原始OCR文本（TextBox索引基于此）
+     * @param mergedOcrText 合并后的OCR文本（提取结果索引基于此，用于前端显示）
      */
-    private void saveResults(String taskId, List<JSONObject> results, OCRProvider.OCRResult ocrResult) {
+    private void saveResults(String taskId, List<JSONObject> results, OCRProvider.OCRResult ocrResult, 
+                            String originalOcrText, String mergedOcrText) {
         RuleExtractTaskModel task = storage.load("task", taskId, RuleExtractTaskModel.class);
         if (task == null) {
             return;
@@ -448,10 +463,8 @@ public class RuleExtractService {
         resultJson.put("totalFields", results.size());
         resultJson.put("extractResults", results);  // 改为 extractResults
         
-        // 保存OCR文本到resultJson
-        if (ocrResult != null && ocrResult.getContent() != null) {
-            resultJson.put("ocrText", ocrResult.getContent());
-        }
+        // 保存合并后的OCR文本到resultJson（前端显示用）
+        resultJson.put("ocrText", mergedOcrText);
         
         // 保存OCR元数据（从metadata中提取）
         JSONObject metaJson = null;
@@ -468,6 +481,11 @@ public class RuleExtractService {
                 } else if (metadata instanceof String) {
                     // 如果是JSON字符串，尝试解析
                     metaJson = JSON.parseObject((String) metadata);
+                } else if (metadata instanceof Map) {
+                    // 如果是Map，转换为JSONObject
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> metadataMap = (Map<String, Object>) metadata;
+                    metaJson = new JSONObject(metadataMap);
                 }
                 
                 if (metaJson != null) {
@@ -514,18 +532,21 @@ public class RuleExtractService {
             log.warn("OCR结果或metadata为空");
         }
         
-        // 生成BboxMappings（从提取结果和TextBox数据中）
+        // 生成BboxMappings
+        // 注意：提取结果的索引基于合并后的OCR文本，但TextBox索引基于原始OCR文本
+        // 需要建立索引映射
         try {
-            if (textBoxesJson != null && !textBoxesJson.isEmpty() && ocrResult != null && ocrResult.getContent() != null) {
-                List<JSONObject> bboxMappings = generateBboxMappingsFromTextBoxes(results, textBoxesJson, ocrResult.getContent());
+            if (textBoxesJson != null && !textBoxesJson.isEmpty()) {
+                List<JSONObject> bboxMappings = generateBboxMappingsWithIndexMapping(
+                    results, textBoxesJson, originalOcrText, mergedOcrText);
                 if (!bboxMappings.isEmpty()) {
                     task.setBboxMappings(JSON.toJSONString(bboxMappings));
-                    log.info("成功生成 {} 个BboxMapping", bboxMappings.size());
+                    log.info("成功生成 {} 个BboxMapping（已处理索引映射）", bboxMappings.size());
                 } else {
                     log.warn("未能生成任何BboxMapping");
                 }
             } else {
-                log.warn("TextBox数据或OCR结果为空，无法生成BboxMappings");
+                log.warn("TextBox数据为空，无法生成BboxMappings");
             }
         } catch (Exception e) {
             log.error("生成BboxMappings失败: {}", e.getMessage(), e);
@@ -546,6 +567,182 @@ public class RuleExtractService {
         double[] bbox;
     }
 
+    /**
+     * 生成BboxMappings（处理索引映射）
+     * 提取结果的索引基于合并后的OCR文本，TextBox索引基于原始OCR文本
+     * 
+     * @param results 提取结果（索引基于mergedOcrText）
+     * @param textBoxesJson TextBox数据（索引基于originalOcrText）
+     * @param originalOcrText 原始OCR文本
+     * @param mergedOcrText 合并后的OCR文本
+     */
+    private List<JSONObject> generateBboxMappingsWithIndexMapping(List<JSONObject> results, String textBoxesJson, 
+                                                                  String originalOcrText, String mergedOcrText) {
+        List<JSONObject> bboxMappings = new ArrayList<>();
+        
+        // 如果原始文本和合并后文本相同，直接使用原有逻辑
+        if (originalOcrText.equals(mergedOcrText)) {
+            log.info("OCR文本未发生合并，直接使用原有bbox映射逻辑");
+            return generateBboxMappingsFromTextBoxes(results, textBoxesJson, originalOcrText);
+        }
+        
+        log.info("检测到表格合并，OCR文本长度: 原始={}, 合并后={}", originalOcrText.length(), mergedOcrText.length());
+        
+        // 解析TextBox数据
+        List<TextBoxData> textBoxes = parseTextBoxes(textBoxesJson);
+        if (textBoxes.isEmpty()) {
+            return bboxMappings;
+        }
+        
+        log.info("开始生成BboxMappings（带索引映射），TextBox数: {}, 提取结果数: {}", textBoxes.size(), results.size());
+        
+        // 为每个提取结果生成bbox映射
+        for (JSONObject result : results) {
+            if (result.containsKey("charInterval") && result.getJSONObject("charInterval") != null) {
+                JSONObject charInterval = result.getJSONObject("charInterval");
+                Integer mergedStartPos = charInterval.getInteger("startPos");
+                Integer mergedEndPos = charInterval.getInteger("endPos");
+                String value = result.getString("value");
+                
+                if (mergedStartPos != null && mergedEndPos != null && value != null && !value.isEmpty()) {
+                    // 在合并后的文本中提取实际值
+                    String extractedValue = "";
+                    if (mergedStartPos >= 0 && mergedEndPos <= mergedOcrText.length()) {
+                        extractedValue = mergedOcrText.substring(mergedStartPos, mergedEndPos);
+                    }
+                    
+                    log.info("处理字段: {}, 合并后索引[{},{}], value长度={}, extractedValue长度={}", 
+                        result.getString("fieldName"), mergedStartPos, mergedEndPos, 
+                        value.length(), extractedValue.length());
+                    log.info("  extractedValue前100字符: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
+                    
+                    // 在原始文本中查找这个值（用于匹配TextBox）
+                    int originalStartPos = originalOcrText.indexOf(extractedValue);
+                    int originalEndPos = -1;
+                    
+                    // 如果直接找不到，可能是因为表格被合并了
+                    // 我们需要在原始文本中找到所有<table>标签
+                    if (originalStartPos < 0 && extractedValue.contains("<table>")) {
+                        log.info("  表格字段在原始文本中找不到完整内容，尝试查找所有表格片段");
+                        
+                        // 找到原始文本中的所有表格
+                        List<int[]> tableRanges = new ArrayList<>();
+                        int searchPos = 0;
+                        while (true) {
+                            int tableStart = originalOcrText.indexOf("<table>", searchPos);
+                            if (tableStart < 0) break;
+                            
+                            int tableEnd = originalOcrText.indexOf("</table>", tableStart);
+                            if (tableEnd < 0) break;
+                            tableEnd += 8; // "</table>".length()
+                            
+                            tableRanges.add(new int[]{tableStart, tableEnd});
+                            log.info("    找到原始表格片段: 位置[{},{}]", tableStart, tableEnd);
+                            searchPos = tableEnd;
+                        }
+                        
+                        if (!tableRanges.isEmpty()) {
+                            // 使用第一个表格的开始位置和最后一个表格的结束位置
+                            originalStartPos = tableRanges.get(0)[0];
+                            originalEndPos = tableRanges.get(tableRanges.size() - 1)[1];
+                            log.info("  ✅ 找到 {} 个表格片段，合并范围[{},{}]", tableRanges.size(), originalStartPos, originalEndPos);
+                        } else {
+                            log.error("❌ 在原始文本中未找到任何<table>标签!");
+                            log.error("  字段名: {}", result.getString("fieldName"));
+                            continue;
+                        }
+                    } else if (originalStartPos >= 0) {
+                        originalEndPos = originalStartPos + extractedValue.length();
+                        log.info("  ✅ 在原始文本中找到，位置[{},{}]", originalStartPos, originalEndPos);
+                    } else {
+                        // 普通字段也找不到
+                        log.error("❌ 在原始文本中未找到字段值!");
+                        log.error("  字段名: {}", result.getString("fieldName"));
+                        log.error("  查找的值: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
+                        continue;
+                    }
+                    
+                    // 确保找到了有效的位置
+                    if (originalStartPos < 0 || originalEndPos < 0) {
+                        log.error("❌ 位置无效: originalStartPos={}, originalEndPos={}", originalStartPos, originalEndPos);
+                        continue;
+                    }
+                    
+                    JSONObject mapping = new JSONObject();
+                    mapping.put("startPos", mergedStartPos);  // 保存合并后的索引给前端
+                    mapping.put("endPos", mergedEndPos);
+                    mapping.put("value", value);
+                    mapping.put("fieldName", result.getString("fieldName"));
+                    mapping.put("fieldCode", result.getString("fieldCode"));
+                    
+                    // 使用原始索引查找TextBox
+                    List<JSONObject> bboxes = new ArrayList<>();
+                    java.util.Set<Integer> pageSet = new java.util.HashSet<>();
+                    
+                    for (TextBoxData textBox : textBoxes) {
+                        if (textBox.startPos != null && textBox.endPos != null &&
+                            textBox.startPos < originalEndPos && textBox.endPos > originalStartPos) {
+                            
+                            JSONObject bbox = new JSONObject();
+                            bbox.put("page", textBox.page);
+                            bbox.put("bbox", textBox.bbox);
+                            bboxes.add(bbox);
+                            pageSet.add(textBox.page);
+                            
+                            log.info("    匹配TextBox: page={}, TextBox索引[{},{}]",
+                                textBox.page, textBox.startPos, textBox.endPos);
+                        }
+                    }
+                    
+                    mapping.put("bboxes", bboxes);
+                    mapping.put("pages", new ArrayList<>(pageSet));
+                    bboxMappings.add(mapping);
+                    
+                    if (bboxes.isEmpty()) {
+                        log.warn("  ⚠️ 字段 {} 未找到任何匹配的TextBox", result.getString("fieldName"));
+                    } else {
+                        log.info("  ✅ 字段 {} 找到 {} 个bbox", result.getString("fieldName"), bboxes.size());
+                    }
+                }
+            }
+        }
+        
+        log.info("成功生成 {} 个BboxMapping（带索引映射）", bboxMappings.size());
+        return bboxMappings;
+    }
+    
+    /**
+     * 解析TextBox数据
+     */
+    private List<TextBoxData> parseTextBoxes(String textBoxesJson) {
+        List<TextBoxData> textBoxes = new ArrayList<>();
+        try {
+            com.alibaba.fastjson2.JSONArray textBoxArray = JSON.parseArray(textBoxesJson);
+            for (int i = 0; i < textBoxArray.size(); i++) {
+                com.alibaba.fastjson2.JSONObject textBoxObj = textBoxArray.getJSONObject(i);
+                TextBoxData textBox = new TextBoxData();
+                textBox.page = textBoxObj.getInteger("page");
+                textBox.text = textBoxObj.getString("text");
+                textBox.startPos = textBoxObj.getInteger("startPos");
+                textBox.endPos = textBoxObj.getInteger("endPos");
+                com.alibaba.fastjson2.JSONArray bboxArray = textBoxObj.getJSONArray("bbox");
+                if (bboxArray != null && bboxArray.size() == 4) {
+                    textBox.bbox = new double[]{
+                        bboxArray.getDoubleValue(0),
+                        bboxArray.getDoubleValue(1),
+                        bboxArray.getDoubleValue(2),
+                        bboxArray.getDoubleValue(3)
+                    };
+                }
+                textBoxes.add(textBox);
+            }
+            log.info("成功解析 {} 个TextBox", textBoxes.size());
+        } catch (Exception e) {
+            log.error("解析TextBox数据失败: {}", e.getMessage(), e);
+        }
+        return textBoxes;
+    }
+    
     /**
      * 从TextBox数据生成BboxMappings（文本块级别，高效）
      */
@@ -604,12 +801,12 @@ public class RuleExtractService {
                     mapping.put("fieldName", result.getString("fieldName"));
                     mapping.put("fieldCode", result.getString("fieldCode"));
                     
-                    // 查找与该区间重叠的所有TextBox
+                    // 查找与该区间重叠的所有TextBox（基于字符索引）
                     List<JSONObject> bboxes = new ArrayList<>();
                     java.util.Set<Integer> pageSet = new java.util.HashSet<>();
                     
                     for (TextBoxData textBox : textBoxes) {
-                        // 检查TextBox的范围是否与提取结果的范围重叠
+                        // 检查TextBox的索引范围是否与提取结果的索引范围重叠
                         if (textBox.startPos != null && textBox.endPos != null &&
                             textBox.startPos < endPos && textBox.endPos > startPos) {
                             
@@ -906,62 +1103,138 @@ public class RuleExtractService {
     }
     
     /**
-     * 合并跨页表格（处理MinerU未识别为同一表格的情况）
-     * 读取OCR输出目录中的content_list文件，执行表格合并，并保存回去
+     * 为规则提取创建合并后的content_list并重新生成OCR文本
+     * 
+     * @param taskId 任务ID
+     * @param originalOcrText 原始OCR文本
+     * @return 基于合并后content_list生成的新OCR文本，如果合并失败则返回原始文本
      */
-    private void mergeContentListTables(String taskId) {
+    private String createMergedContentListAndRegenerateText(String taskId, String originalOcrText) {
         try {
-            log.info("📊 开始检查任务{}的跨页表格合并", taskId);
+            log.info("📊 开始为任务{}生成合并后的content_list", taskId);
             
             // 查找OCR输出目录中的content_list文件
             File ocrOutputDir = storage.getOcrOutputDir(taskId);
             File contentListFile = findContentListFile(ocrOutputDir);
             
             if (contentListFile == null || !contentListFile.exists()) {
-                log.warn("⚠️ 未找到content_list文件，跳过表格合并");
-                return;
+                log.warn("⚠️ 未找到content_list文件，跳过表格合并，使用原始OCR文本");
+                return originalOcrText;
             }
             
             log.info("✅ 找到content_list文件: {}", contentListFile.getAbsolutePath());
             
-            // 读取content_list
+            // 读取原始content_list
             String contentListJson = FileUtil.readUtf8String(contentListFile);
             JSONArray contentList = JSON.parseArray(contentListJson);
             
             if (contentList == null || contentList.isEmpty()) {
-                log.warn("⚠️ content_list为空，跳过表格合并");
-                return;
+                log.warn("⚠️ content_list为空，跳过表格合并，使用原始OCR文本");
+                return originalOcrText;
             }
             
-            log.info("📋 content_list包含{}个内容项", contentList.size());
+            log.info("📋 原始content_list包含{}个内容项", contentList.size());
             
             // 执行表格合并
             JSONArray mergedContentList = TableMergeUtil.mergeCrossPageTables(contentList);
             
-            // 如果发生了合并，保存回文件
-            if (mergedContentList.size() != contentList.size()) {
-                log.info("💾 保存合并后的content_list，项数: {} -> {}", 
-                    contentList.size(), mergedContentList.size());
-                
-                // 备份原文件
-                File backupFile = new File(contentListFile.getParent(), 
-                    contentListFile.getName() + ".before_merge.backup");
-                FileUtil.copy(contentListFile, backupFile, true);
-                log.info("💾 原content_list已备份到: {}", backupFile.getAbsolutePath());
-                
-                // 保存合并后的content_list（格式化输出）
-                String mergedJson = JSON.toJSONString(mergedContentList, 
-                    com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat);
-                FileUtil.writeUtf8String(mergedJson, contentListFile);
-                log.info("✅ 跨页表格合并完成，已保存到: {}", contentListFile.getAbsolutePath());
-            } else {
-                log.info("ℹ️ 未发现需要合并的跨页表格");
-            }
+            // 保存为新文件：02_content_list_merged.json
+            File mergedFile = new File(contentListFile.getParent(), "02_content_list_merged.json");
+            String mergedJson = JSON.toJSONString(mergedContentList, 
+                com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat);
+            FileUtil.writeUtf8String(mergedJson, mergedFile);
+            
+            log.info("✅ 已生成合并后的content_list: {}", mergedFile.getAbsolutePath());
+            
+            // 从合并后的content_list重新生成OCR文本
+            String newOcrText = generateTextFromContentList(mergedContentList);
+            
+            int originalLength = originalOcrText.length();
+            int newLength = newOcrText.length();
+            log.info("📝 OCR文本长度: 原始={}, 合并后={}, 差异={}", 
+                originalLength, newLength, newLength - originalLength);
+            
+            return newOcrText;
             
         } catch (Exception e) {
-            log.error("❌ 跨页表格合并失败，将继续执行后续流程", e);
-            // 不抛出异常，继续执行
+            log.error("❌ 生成合并后的content_list失败，使用原始OCR文本", e);
+            return originalOcrText;
         }
+    }
+    
+    /**
+     * 从content_list生成OCR文本
+     */
+    private String generateTextFromContentList(JSONArray contentList) {
+        StringBuilder text = new StringBuilder();
+        
+        for (int i = 0; i < contentList.size(); i++) {
+            JSONObject item = contentList.getJSONObject(i);
+            String type = item.getString("type");
+            
+            if ("text".equals(type) || "title".equals(type)) {
+                String itemText = item.getString("text");
+                if (itemText != null && !itemText.trim().isEmpty()) {
+                    text.append(itemText).append("\n");
+                }
+            } else if ("table".equals(type)) {
+                // 表格内容 - 需要标准化HTML格式
+                String tableBody = item.getString("table_body");
+                if (tableBody != null && !tableBody.trim().isEmpty()) {
+                    // 标准化HTML：移除标签间的换行,移除标签内的换行并替换为空格
+                    String normalizedHtml = normalizeTableHtml(tableBody);
+                    text.append(normalizedHtml).append("\n");
+                }
+                // 表格标题
+                JSONArray captions = item.getJSONArray("table_caption");
+                if (captions != null) {
+                    for (int j = 0; j < captions.size(); j++) {
+                        text.append(captions.getString(j)).append("\n");
+                    }
+                }
+                // 表格注释
+                JSONArray footnotes = item.getJSONArray("table_footnote");
+                if (footnotes != null) {
+                    for (int j = 0; j < footnotes.size(); j++) {
+                        text.append(footnotes.getString(j)).append("\n");
+                    }
+                }
+            } else if ("list".equals(type)) {
+                // 列表内容
+                JSONArray listItems = item.getJSONArray("list_items");
+                if (listItems == null) {
+                    listItems = item.getJSONArray("list");
+                }
+                if (listItems != null) {
+                    for (int j = 0; j < listItems.size(); j++) {
+                        text.append(listItems.getString(j)).append("\n");
+                    }
+                }
+            }
+        }
+        
+        return text.toString();
+    }
+    
+    /**
+     * 标准化表格HTML,移除换行符和多余空格,使其与原始OCR文本格式一致
+     */
+    private String normalizeTableHtml(String html) {
+        if (html == null) {
+            return "";
+        }
+        
+        // 1. 移除 >和< 之间的所有空白字符（包括换行、空格、制表符）
+        String normalized = html.replaceAll(">\\s+<", "><");
+        
+        // 2. 移除标签内容中的换行符,替换为单个空格
+        // 例如: <td>单价\n(元)</td> -> <td>单价 (元)</td>
+        normalized = normalized.replaceAll("\\n", " ");
+        
+        // 3. 移除多余的连续空格
+        normalized = normalized.replaceAll("  +", " ");
+        
+        return normalized;
     }
     
     /**
@@ -993,6 +1266,234 @@ public class RuleExtractService {
         log.warn("⚠️ 未找到content_list文件，尝试的路径: {}", 
             String.join(", ", possiblePaths));
         return null;
+    }
+    
+    /**
+     * 更新metadata中TextBox的字符索引
+     * 当表格合并后，需要重新计算TextBox的startPos和endPos
+     * 
+     * 策略：建立旧文本到新文本的索引映射
+     * 
+     * @param metadata 原始metadata
+     * @param oldText 旧的OCR文本
+     * @param newText 新的OCR文本
+     * @return 更新后的metadata
+     */
+    private Map<String, Object> updateTextBoxIndices(Map<String, Object> metadata, String oldText, String newText) {
+        if (metadata == null) {
+            return new java.util.HashMap<>();
+        }
+        
+        Map<String, Object> updatedMetadata = new java.util.HashMap<>(metadata);
+        
+        try {
+            // 获取TextBox数据
+            String textBoxesJson = (String) metadata.get("textBoxes");
+            if (textBoxesJson == null || textBoxesJson.isEmpty()) {
+                log.warn("metadata中没有textBoxes数据");
+                return updatedMetadata;
+            }
+            
+            com.alibaba.fastjson2.JSONArray textBoxArray = JSON.parseArray(textBoxesJson);
+            if (textBoxArray == null || textBoxArray.isEmpty()) {
+                return updatedMetadata;
+            }
+            
+            log.info("开始更新 {} 个TextBox的字符索引", textBoxArray.size());
+            
+            // 建立旧索引到新索引的映射
+            int[] indexMapping = buildIndexMapping(oldText, newText);
+            int updatedCount = 0;
+            
+            // 为每个TextBox重新计算索引
+            for (int i = 0; i < textBoxArray.size(); i++) {
+                com.alibaba.fastjson2.JSONObject textBox = textBoxArray.getJSONObject(i);
+                Integer oldStartPos = textBox.getInteger("startPos");
+                Integer oldEndPos = textBox.getInteger("endPos");
+                
+                if (oldStartPos != null && oldEndPos != null && 
+                    oldStartPos >= 0 && oldStartPos < indexMapping.length) {
+                    
+                    int newStartPos = indexMapping[oldStartPos];
+                    // endPos需要特殊处理：找到旧endPos在新文本中的位置
+                    int newEndPos = (oldEndPos < indexMapping.length) ? indexMapping[oldEndPos] : newText.length();
+                    
+                    if (newStartPos >= 0 && newEndPos > newStartPos && newEndPos <= newText.length()) {
+                        textBox.put("startPos", newStartPos);
+                        textBox.put("endPos", newEndPos);
+                        updatedCount++;
+                        
+                        if (Math.abs(newStartPos - oldStartPos) > 10) {
+                            String text = textBox.getString("text");
+                            if (text != null && !text.isEmpty()) {
+                                log.debug("TextBox索引更新: [{}] {} -> {}", 
+                                    text.substring(0, Math.min(20, text.length())),
+                                    oldStartPos, newStartPos);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 更新metadata
+            updatedMetadata.put("textBoxes", textBoxArray.toJSONString());
+            log.info("✅ 成功更新 {}/{} 个TextBox的字符索引", updatedCount, textBoxArray.size());
+            
+        } catch (Exception e) {
+            log.error("更新TextBox索引失败: {}", e.getMessage(), e);
+        }
+        
+        return updatedMetadata;
+    }
+    
+    /**
+     * 建立旧文本到新文本的索引映射
+     * 
+     * @param oldText 旧文本
+     * @param newText 新文本
+     * @return 索引映射数组，indexMapping[oldPos] = newPos
+     */
+    private int[] buildIndexMapping(String oldText, String newText) {
+        int[] mapping = new int[oldText.length() + 1];
+        
+        int oldPos = 0;
+        int newPos = 0;
+        
+        // 逐字符对比，建立映射关系
+        while (oldPos < oldText.length() && newPos < newText.length()) {
+            mapping[oldPos] = newPos;
+            
+            char oldChar = oldText.charAt(oldPos);
+            char newChar = newText.charAt(newPos);
+            
+            if (oldChar == newChar) {
+                // 字符相同，都前进
+                oldPos++;
+                newPos++;
+            } else {
+                // 字符不同，说明有插入或删除
+                // 尝试在新文本中找到相同的字符序列
+                boolean found = false;
+                
+                // 向前查找一小段，看是否能对齐
+                int lookAhead = Math.min(50, oldText.length() - oldPos);
+                String oldSegment = oldText.substring(oldPos, oldPos + lookAhead);
+                
+                // 在新文本的当前位置附近查找
+                int searchEnd = Math.min(newPos + 200, newText.length());
+                int foundPos = newText.indexOf(oldSegment, newPos);
+                
+                if (foundPos >= 0 && foundPos < searchEnd) {
+                    // 找到了，填充中间的映射
+                    while (newPos < foundPos) {
+                        newPos++;
+                    }
+                    found = true;
+                }
+                
+                if (!found) {
+                    // 没找到，可能是删除，跳过旧文本的这个字符
+                    oldPos++;
+                }
+            }
+        }
+        
+        // 填充剩余的映射
+        while (oldPos < oldText.length()) {
+            mapping[oldPos] = newPos;
+            oldPos++;
+        }
+        mapping[oldText.length()] = newText.length();
+        
+        return mapping;
+    }
+    
+    /**
+     * 从合并后的content_list重新生成OCR文本
+     * 
+     * @param taskId 任务ID
+     * @param originalOcrResult 原始OCR结果（用于获取metadata）
+     * @return 重新生成的OCR文本
+     */
+    private String regenerateOcrTextFromContentList(String taskId, OCRProvider.OCRResult originalOcrResult) {
+        try {
+            log.info("🔄 开始从合并后的content_list重新生成OCR文本");
+            
+            File ocrOutputDir = storage.getOcrOutputDir(taskId);
+            File contentListFile = findContentListFile(ocrOutputDir);
+            
+            if (contentListFile == null || !contentListFile.exists()) {
+                log.warn("⚠️ 未找到content_list文件，使用原始OCR文本");
+                return originalOcrResult.getContent();
+            }
+            
+            // 读取合并后的content_list
+            String contentListJson = FileUtil.readUtf8String(contentListFile);
+            JSONArray contentList = JSON.parseArray(contentListJson);
+            
+            if (contentList == null || contentList.isEmpty()) {
+                log.warn("⚠️ content_list为空，使用原始OCR文本");
+                return originalOcrResult.getContent();
+            }
+            
+            // 重新生成文本：遍历content_list，提取text和table_body
+            StringBuilder newText = new StringBuilder();
+            for (int i = 0; i < contentList.size(); i++) {
+                JSONObject item = contentList.getJSONObject(i);
+                String type = item.getString("type");
+                
+                if ("text".equals(type) || "title".equals(type)) {
+                    String text = item.getString("text");
+                    if (text != null && !text.trim().isEmpty()) {
+                        newText.append(text).append("\n");
+                    }
+                } else if ("table".equals(type)) {
+                    String tableBody = item.getString("table_body");
+                    if (tableBody != null && !tableBody.trim().isEmpty()) {
+                        newText.append(tableBody).append("\n");
+                    }
+                    // 添加table_caption
+                    JSONArray captions = item.getJSONArray("table_caption");
+                    if (captions != null) {
+                        for (int j = 0; j < captions.size(); j++) {
+                            newText.append(captions.getString(j)).append("\n");
+                        }
+                    }
+                    // 添加table_footnote
+                    JSONArray footnotes = item.getJSONArray("table_footnote");
+                    if (footnotes != null) {
+                        for (int j = 0; j < footnotes.size(); j++) {
+                            newText.append(footnotes.getString(j)).append("\n");
+                        }
+                    }
+                } else if ("list".equals(type)) {
+                    // 处理list类型，字段名可能是list_items或list
+                    JSONArray listItems = item.getJSONArray("list_items");
+                    if (listItems == null) {
+                        listItems = item.getJSONArray("list");
+                    }
+                    if (listItems != null) {
+                        for (int j = 0; j < listItems.size(); j++) {
+                            newText.append(listItems.getString(j)).append("\n");
+                        }
+                    }
+                }
+            }
+            
+            String regeneratedText = newText.toString();
+            int originalLength = originalOcrResult.getContent().length();
+            int newLength = regeneratedText.length();
+            int diff = newLength - originalLength;
+            
+            log.info("✅ 成功重新生成OCR文本，长度: {} (原始: {}), 差异: {}{}", 
+                newLength, originalLength, diff > 0 ? "+" : "", diff);
+            
+            return regeneratedText;
+            
+        } catch (Exception e) {
+            log.error("❌ 重新生成OCR文本失败，使用原始文本", e);
+            return originalOcrResult.getContent();
+        }
     }
     
     // 栏位验证功能已移除

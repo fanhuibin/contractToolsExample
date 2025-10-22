@@ -36,7 +36,7 @@ public class TableMergeUtil {
      * 合并跨页表格
      * 
      * @param contentList MinerU的content_list数据
-     * @return 合并后的content_list
+     * @return 合并后的content_list（会删除被合并的表格）
      */
     public static JSONArray mergeCrossPageTables(JSONArray contentList) {
         if (contentList == null || contentList.size() == 0) {
@@ -136,7 +136,7 @@ public class TableMergeUtil {
         int colCount2 = rows2.get(0).size();
         
         if (colCount1 != colCount2) {
-            log.debug("❌ 列数不同，无法合并: table1={}, table2={}", colCount1, colCount2);
+            log.debug("  ❌ 列数不同，无法合并: table1={}, table2={}", colCount1, colCount2);
             return false;
         }
         
@@ -153,7 +153,7 @@ public class TableMergeUtil {
             return false;
         }
         
-        log.debug("✅ 表格可以合并: 列数={}, 页码={}->{}", 
+        log.debug("  ✅ 表格可以合并: 列数={}, 页码={}->{}", 
             colCount1, 
             table1.getInteger("page_idx") + 1,
             table2.getInteger("page_idx") + 1);
@@ -281,6 +281,7 @@ public class TableMergeUtil {
     
     /**
      * 合并两个表格
+     * 将table2的内容合并到table1中，创建一个新的合并表格
      */
     private static JSONObject mergeTwoTables(JSONObject table1, JSONObject table2) {
         JSONObject merged = new JSONObject();
@@ -361,6 +362,7 @@ public class TableMergeUtil {
     
     /**
      * 合并两个表格的HTML内容
+     * 保持紧凑格式（无缩进和换行），与原始OCR文本的格式一致
      */
     private static String mergeTableBodies(String html1, String html2) {
         try {
@@ -381,7 +383,18 @@ public class TableMergeUtil {
                 table1.appendChild(row.clone());
             }
             
-            return table1.outerHtml();
+            // 设置输出格式为紧凑格式，与原始OCR文本保持一致
+            doc1.outputSettings()
+                .prettyPrint(false)  // 禁用格式化
+                .indentAmount(0)      // 无缩进
+                .syntax(Document.OutputSettings.Syntax.xml); // 使用XML语法，避免自动添加tbody等HTML5标签
+            
+            // 获取HTML并移除Jsoup可能添加的tbody标签，保持与原始格式一致
+            String mergedHtml = table1.outerHtml();
+            // 移除 <tbody> 和 </tbody> 标签（包括可能的空格）
+            mergedHtml = mergedHtml.replaceAll("<tbody>|</tbody>", "");
+            
+            return mergedHtml;
         } catch (Exception e) {
             log.error("合并表格HTML失败", e);
             return html1 + html2;
