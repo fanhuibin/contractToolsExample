@@ -2156,7 +2156,21 @@ public class MinerUOCRService {
             log.warn("📋 [列表匹配] ⚠️  content_list 中没有 list_items");
             return null;
         }
-        int expectedListItemCount = listItemsNode.size();
+        
+        // 获取content_list中的bbox（归一化坐标 1000x1000）
+        JsonNode contentBboxNode = contentItem.get("bbox");
+        if (contentBboxNode == null || !contentBboxNode.isArray() || contentBboxNode.size() < 4) {
+            log.warn("📋 [列表匹配] ⚠️  content_list 中没有有效的 bbox");
+            return null;
+        }
+        double[] contentBbox = new double[]{
+            contentBboxNode.get(0).asDouble(),
+            contentBboxNode.get(1).asDouble(),
+            contentBboxNode.get(2).asDouble(),
+            contentBboxNode.get(3).asDouble()
+        };
+        log.debug("📋 [列表匹配] content_list bbox (归一化1000x1000): [{}, {}, {}, {}]", 
+            contentBbox[0], contentBbox[1], contentBbox[2], contentBbox[3]);
         
         try {
             JsonNode pageNode = middleJsonNode.get(pageIdx);
@@ -2205,7 +2219,11 @@ public class MinerUOCRService {
                 paraBlocks != null ? paraBlocks.size() : 0);
             
             if (paraBlocks != null && paraBlocks.isArray()) {
-                // 遍历页面中的所有块，查找 list 类型（直接返回第一个找到的列表块）
+                // 【修复】遍历页面中的所有块，查找 list 类型，通过bbox坐标匹配
+                ListBlockInfo firstListBlock = null; // 记录第一个找到的list块作为fallback
+                ListBlockInfo bestMatchBlock = null;
+                double bestMatchScore = Double.MAX_VALUE; // 最小距离得分（越小越好）
+                
                 for (int i = 0; i < paraBlocks.size(); i++) {
                     JsonNode block = paraBlocks.get(i);
                     String blockType = block.has("type") ? block.get("type").asText() : "";
@@ -2216,13 +2234,61 @@ public class MinerUOCRService {
                         if (subBlocks != null && subBlocks.isArray()) {
                             int actualBlockCount = subBlocks.size();
                             
-                            log.info("📋 [列表匹配] ✅ 找到列表块！页{}, 块索引: {}, 列表项数量: {} (content_list 期望: {})", 
-                                pageIdx + 1, i, actualBlockCount, expectedListItemCount);
+                            // 记录第一个找到的list块
+                            if (firstListBlock == null) {
+                                firstListBlock = new ListBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                            }
                             
-                            // 直接返回，以 middle_json 为准，不管数量是否匹配
-                            return new ListBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                            // 获取middle_json中的bbox（页面坐标系）
+                            JsonNode middleBboxNode = block.get("bbox");
+                            if (middleBboxNode == null || !middleBboxNode.isArray() || middleBboxNode.size() < 4) {
+                                log.debug("📋 [列表匹配] 列表块 {} 没有有效bbox，跳过匹配", i);
+                                continue;
+                            }
+                            
+                            // middle_json的bbox是页面坐标系，需要归一化到1000x1000
+                            double[] middleBbox = new double[]{
+                                middleBboxNode.get(0).asDouble() * 1000.0 / middleJsonPageWidth,
+                                middleBboxNode.get(1).asDouble() * 1000.0 / middleJsonPageHeight,
+                                middleBboxNode.get(2).asDouble() * 1000.0 / middleJsonPageWidth,
+                                middleBboxNode.get(3).asDouble() * 1000.0 / middleJsonPageHeight
+                            };
+                            
+                            log.info("📋 [列表匹配] 页{}, 块索引: {}, 列表项数量: {}", 
+                                pageIdx + 1, i, actualBlockCount);
+                            log.info("📋 [列表匹配]   content_list bbox: [{}, {}, {}, {}]", 
+                                contentBbox[0], contentBbox[1], contentBbox[2], contentBbox[3]);
+                            log.info("📋 [列表匹配]   middle_json  bbox: [{}, {}, {}, {}] (归一化后)", 
+                                middleBbox[0], middleBbox[1], middleBbox[2], middleBbox[3]);
+                            
+                            // 【关键】计算bbox的匹配度（使用曼哈顿距离）
+                            double matchScore = Math.abs(contentBbox[0] - middleBbox[0]) +
+                                              Math.abs(contentBbox[1] - middleBbox[1]) +
+                                              Math.abs(contentBbox[2] - middleBbox[2]) +
+                                              Math.abs(contentBbox[3] - middleBbox[3]);
+                            
+                            log.info("📋 [列表匹配]   匹配得分 (距离): {}", matchScore);
+                            
+                            // 更新最佳匹配
+                            if (matchScore < bestMatchScore) {
+                                bestMatchScore = matchScore;
+                                bestMatchBlock = new ListBlockInfo(subBlocks, middleJsonPageWidth, middleJsonPageHeight);
+                                log.info("📋 [列表匹配]   ✅ 更新最佳匹配！");
+                            }
                         }
                     }
+                }
+                
+                // 如果找到了bbox匹配的块，并且匹配得分在合理范围内（阈值可以调整）
+                if (bestMatchBlock != null && bestMatchScore < 100) { // 阈值：归一化坐标系下的距离和 < 100
+                    log.info("📋 [列表匹配] ✅ 找到bbox匹配的列表块！匹配得分: {}", bestMatchScore);
+                    return bestMatchBlock;
+                }
+                
+                // 如果没有找到bbox匹配的，返回第一个找到的list块（兼容旧逻辑）
+                if (firstListBlock != null) {
+                    log.warn("📋 [列表匹配] ⚠️  未找到bbox匹配的列表块（最佳得分: {}），使用第一个找到的列表块", bestMatchScore);
+                    return firstListBlock;
                 }
                 
                 log.warn("📋 [列表匹配] ⚠️  未找到列表块，页{}", pageIdx + 1);
