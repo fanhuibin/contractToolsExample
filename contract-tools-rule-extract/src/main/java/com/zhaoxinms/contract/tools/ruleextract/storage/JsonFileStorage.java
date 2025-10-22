@@ -301,5 +301,14 @@ public class JsonFileStorage {
     public String getUploadsDir() {
         return uploadsDir;
     }
+
+    /**
+     * 获取OCR输出目录（用于存储页面图片等OCR中间结果）
+     */
+    public File getOcrOutputDir(String taskId) {
+        String ocrOutputRoot = dataRoot + File.separator + "ocr-output";
+        String taskOcrDir = ocrOutputRoot + File.separator + taskId;
+        return new File(taskOcrDir);
+    }
 }
 

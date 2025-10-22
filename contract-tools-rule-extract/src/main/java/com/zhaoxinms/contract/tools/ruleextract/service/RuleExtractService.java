@@ -2,7 +2,6 @@ package com.zhaoxinms.contract.tools.ruleextract.service;
 
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
-import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.EnhancedRuleEngine;
@@ -199,26 +198,52 @@ public class RuleExtractService {
                 throw new RuntimeException("文件不存在: " + task.getFilePath());
             }
 
-            // 调用OCR服务（通过反射支持页眉页脚设置，避免循环依赖）
+            // 调用OCR服务（通过反射支持taskId和输出目录，避免循环依赖）
             OCRProvider.OCRResult ocrResult;
             try {
-                // 尝试调用带页眉页脚参数的方法（如果OCR服务支持）
+                // 【修复】尝试调用支持taskId和输出目录的方法（确保图片和taskId一致）
                 java.lang.reflect.Method method = ocrProvider.getClass().getMethod(
                     "recognizePdf", 
-                    File.class, boolean.class, double.class, double.class
+                    File.class, String.class, File.class, boolean.class, double.class, double.class
                 );
+                
+                // 创建OCR输出目录（使用rule-extract的taskId）
+                File ocrOutputDir = storage.getOcrOutputDir(task.getTaskId());
+                if (!ocrOutputDir.exists()) {
+                    ocrOutputDir.mkdirs();
+                }
+                
                 ocrResult = (OCRProvider.OCRResult) method.invoke(
                     ocrProvider,
                     pdfFile,
+                    task.getTaskId(), // 传递rule-extract的taskId
+                    ocrOutputDir, // 传递输出目录
                     task.getIgnoreHeaderFooter() != null ? task.getIgnoreHeaderFooter() : true,
                     task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 12.0,
                     task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 12.0
                 );
-                log.info("使用页眉页脚参数调用OCR服务成功");
+                log.info("使用taskId和输出目录调用OCR服务成功: taskId={}, outputDir={}", task.getTaskId(), ocrOutputDir.getAbsolutePath());
             } catch (NoSuchMethodException e) {
-                // 如果不支持，使用默认方法
-                log.info("OCR服务不支持页眉页脚参数，使用默认方法");
-                ocrResult = ocrProvider.recognizePdf(pdfFile);
+                // Fallback: 尝试调用只带页眉页脚参数的方法
+                log.info("OCR服务不支持taskId参数，尝试只使用页眉页脚参数");
+                try {
+                    java.lang.reflect.Method method2 = ocrProvider.getClass().getMethod(
+                        "recognizePdf", 
+                        File.class, boolean.class, double.class, double.class
+                    );
+                    ocrResult = (OCRProvider.OCRResult) method2.invoke(
+                        ocrProvider,
+                        pdfFile,
+                        task.getIgnoreHeaderFooter() != null ? task.getIgnoreHeaderFooter() : true,
+                        task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 12.0,
+                        task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 12.0
+                    );
+                    log.info("使用页眉页脚参数调用OCR服务成功");
+                } catch (Exception e2) {
+                    // 最终fallback：使用默认方法
+                    log.info("OCR服务不支持页眉页脚参数，使用默认方法");
+                    ocrResult = ocrProvider.recognizePdf(pdfFile);
+                }
             } catch (Exception e) {
                 log.warn("调用带参数的OCR方法失败，使用默认方法: {}", e.getMessage());
                 ocrResult = ocrProvider.recognizePdf(pdfFile);
@@ -425,7 +450,7 @@ public class RuleExtractService {
         
         // 保存OCR元数据（从metadata中提取）
         JSONObject metaJson = null;
-        String charBoxesJson = null;
+        String textBoxesJson = null; // 使用TextBox格式（文本块级别，高效）
         
         if (ocrResult != null && ocrResult.getMetadata() != null) {
             try {
@@ -442,7 +467,7 @@ public class RuleExtractService {
                 
                 if (metaJson != null) {
                     log.info("Metadata keys: {}", metaJson.keySet());
-                    log.info("Metadata charBoxes字段存在: {}", metaJson.containsKey("charBoxes"));
+                    log.info("Metadata textBoxes字段存在: {}", metaJson.containsKey("textBoxes"));
                     log.info("Metadata pageDimensions字段存在: {}", metaJson.containsKey("pageDimensions"));
                     
                     if (metaJson.containsKey("totalPages")) {
@@ -452,13 +477,18 @@ public class RuleExtractService {
                     if (metaJson.containsKey("pageImagePaths")) {
                         resultJson.put("pageImagePaths", metaJson.get("pageImagePaths"));
                     }
-                    if (metaJson.containsKey("charBoxes")) {
-                        // 保存CharBox数据到task
-                        charBoxesJson = metaJson.getString("charBoxes");
+                    if (metaJson.containsKey("textBoxes")) {
+                        // 使用TextBox格式（文本块级别，更高效）
+                        textBoxesJson = metaJson.getString("textBoxes");
+                        task.setCharBoxes(textBoxesJson); // 复用CharBoxes字段存储TextBox数据
+                        log.info("保存TextBox数据，长度: {}", textBoxesJson.length());
+                    } else if (metaJson.containsKey("charBoxes")) {
+                        // 兼容旧的CharBox格式（不推荐，性能差）
+                        String charBoxesJson = metaJson.getString("charBoxes");
                         task.setCharBoxes(charBoxesJson);
-                        log.info("保存CharBox数据，长度: {}", charBoxesJson.length());
+                        log.warn("使用旧的CharBox格式（性能较差），建议升级到TextBox格式");
                     } else {
-                        log.warn("Metadata中没有charBoxes字段");
+                        log.warn("Metadata中没有textBoxes字段，无法生成bbox数据");
                     }
                     
                     if (metaJson.containsKey("pageDimensions")) {
@@ -479,15 +509,21 @@ public class RuleExtractService {
             log.warn("OCR结果或metadata为空");
         }
         
-        // 生成BboxMappings（从提取结果和CharBox数据中）
+        // 生成BboxMappings（从提取结果和TextBox数据中）
         try {
-            List<JSONObject> bboxMappings = generateBboxMappings(results, ocrResult, charBoxesJson);
-            if (!bboxMappings.isEmpty()) {
-                task.setBboxMappings(JSON.toJSONString(bboxMappings));
-                log.info("成功生成 {} 个BboxMapping", bboxMappings.size());
+            if (textBoxesJson != null && !textBoxesJson.isEmpty() && ocrResult != null && ocrResult.getContent() != null) {
+                List<JSONObject> bboxMappings = generateBboxMappingsFromTextBoxes(results, textBoxesJson, ocrResult.getContent());
+                if (!bboxMappings.isEmpty()) {
+                    task.setBboxMappings(JSON.toJSONString(bboxMappings));
+                    log.info("成功生成 {} 个BboxMapping", bboxMappings.size());
+                } else {
+                    log.warn("未能生成任何BboxMapping");
+                }
+            } else {
+                log.warn("TextBox数据或OCR结果为空，无法生成BboxMappings");
             }
         } catch (Exception e) {
-            log.warn("生成BboxMappings失败: {}", e.getMessage(), e);
+            log.error("生成BboxMappings失败: {}", e.getMessage(), e);
         }
 
         task.setResultJson(resultJson.toJSONString());
@@ -495,47 +531,57 @@ public class RuleExtractService {
     }
     
     /**
-     * 从提取结果生成BboxMappings（使用CharBox数据）
+     * TextBox数据辅助类（文本块级别，性能优于字符级别）
      */
-    private List<JSONObject> generateBboxMappings(List<JSONObject> results, OCRProvider.OCRResult ocrResult, String charBoxesJson) {
+    private static class TextBoxData {
+        Integer page;
+        String text;
+        Integer startPos;
+        Integer endPos;
+        double[] bbox;
+    }
+
+    /**
+     * 从TextBox数据生成BboxMappings（文本块级别，高效）
+     */
+    private List<JSONObject> generateBboxMappingsFromTextBoxes(List<JSONObject> results, String textBoxesJson, String fullText) {
         List<JSONObject> bboxMappings = new ArrayList<>();
         
-        if (ocrResult == null || ocrResult.getContent() == null) {
+        if (textBoxesJson == null || textBoxesJson.isEmpty()) {
+            log.warn("TextBox数据为空");
             return bboxMappings;
         }
         
-        String fullText = ocrResult.getContent();
-        
-        // 解析CharBox数据
-        List<CharBoxData> charBoxes = null;
-        if (charBoxesJson != null && !charBoxesJson.isEmpty()) {
-            try {
-                log.info("开始解析CharBox数据，字符串长度: {}", charBoxesJson.length());
-                com.alibaba.fastjson2.JSONArray charBoxArray = JSON.parseArray(charBoxesJson);
-                charBoxes = new ArrayList<>();
-                for (int i = 0; i < charBoxArray.size(); i++) {
-                    com.alibaba.fastjson2.JSONObject charBoxObj = charBoxArray.getJSONObject(i);
-                    CharBoxData charBox = new CharBoxData();
-                    charBox.page = charBoxObj.getInteger("page");
-                    charBox.ch = charBoxObj.getString("ch");
-                    com.alibaba.fastjson2.JSONArray bboxArray = charBoxObj.getJSONArray("bbox");
-                    if (bboxArray != null && bboxArray.size() == 4) {
-                        charBox.bbox = new double[]{
-                            bboxArray.getDoubleValue(0),
-                            bboxArray.getDoubleValue(1),
-                            bboxArray.getDoubleValue(2),
-                            bboxArray.getDoubleValue(3)
-                        };
-                    }
-                    charBoxes.add(charBox);
+        // 解析TextBox数据
+        List<TextBoxData> textBoxes = new ArrayList<>();
+        try {
+            log.info("开始解析TextBox数据，字符串长度: {}", textBoxesJson.length());
+            com.alibaba.fastjson2.JSONArray textBoxArray = JSON.parseArray(textBoxesJson);
+            for (int i = 0; i < textBoxArray.size(); i++) {
+                com.alibaba.fastjson2.JSONObject textBoxObj = textBoxArray.getJSONObject(i);
+                TextBoxData textBox = new TextBoxData();
+                textBox.page = textBoxObj.getInteger("page");
+                textBox.text = textBoxObj.getString("text");
+                textBox.startPos = textBoxObj.getInteger("startPos");
+                textBox.endPos = textBoxObj.getInteger("endPos");
+                com.alibaba.fastjson2.JSONArray bboxArray = textBoxObj.getJSONArray("bbox");
+                if (bboxArray != null && bboxArray.size() == 4) {
+                    textBox.bbox = new double[]{
+                        bboxArray.getDoubleValue(0),
+                        bboxArray.getDoubleValue(1),
+                        bboxArray.getDoubleValue(2),
+                        bboxArray.getDoubleValue(3)
+                    };
                 }
-                log.info("成功解析 {} 个CharBox数据", charBoxes.size());
-            } catch (Exception e) {
-                log.error("解析CharBox数据失败: {}", e.getMessage(), e);
+                textBoxes.add(textBox);
             }
-        } else {
-            log.warn("CharBox数据为空，无法生成bbox坐标");
+            log.info("成功解析 {} 个TextBox数据", textBoxes.size());
+        } catch (Exception e) {
+            log.error("解析TextBox数据失败: {}", e.getMessage(), e);
+            return bboxMappings;
         }
+        
+        log.info("开始从 {} 个TextBox生成BboxMappings，提取结果数: {}", textBoxes.size(), results.size());
         
         // 为每个提取结果生成bbox映射
         for (JSONObject result : results) {
@@ -553,95 +599,40 @@ public class RuleExtractService {
                     mapping.put("fieldName", result.getString("fieldName"));
                     mapping.put("fieldCode", result.getString("fieldCode"));
                     
-                    // 从CharBox数据中提取bbox坐标
-                    if (charBoxes != null && !charBoxes.isEmpty()) {
-                        List<JSONObject> bboxes = extractBboxesFromCharBoxes(charBoxes, startPos, endPos);
-                        mapping.put("bboxes", bboxes);
-                        
-                        // 提取页面列表
-                        java.util.Set<Integer> pageSet = new java.util.HashSet<>();
-                        for (JSONObject bbox : bboxes) {
-                            if (bbox.containsKey("page")) {
-                                pageSet.add(bbox.getInteger("page"));
-                            }
+                    // 查找与该区间重叠的所有TextBox
+                    List<JSONObject> bboxes = new ArrayList<>();
+                    java.util.Set<Integer> pageSet = new java.util.HashSet<>();
+                    
+                    for (TextBoxData textBox : textBoxes) {
+                        // 检查TextBox的范围是否与提取结果的范围重叠
+                        if (textBox.startPos != null && textBox.endPos != null &&
+                            textBox.startPos < endPos && textBox.endPos > startPos) {
+                            
+                            JSONObject bbox = new JSONObject();
+                            bbox.put("page", textBox.page);
+                            bbox.put("bbox", textBox.bbox);
+                            bboxes.add(bbox);
+                            pageSet.add(textBox.page);
+                            
+                            log.debug("  字段 {} 匹配TextBox: page={}, [{},{}] 与 [{},{}] 重叠",
+                                result.getString("fieldName"), textBox.page, 
+                                textBox.startPos, textBox.endPos, startPos, endPos);
                         }
-                        mapping.put("pages", new ArrayList<>(pageSet));
-                    } else {
-                        mapping.put("bboxes", new JSONArray());
-                        mapping.put("pages", new JSONArray());
                     }
                     
+                    mapping.put("bboxes", bboxes);
+                    mapping.put("pages", new ArrayList<>(pageSet));
+                    
                     bboxMappings.add(mapping);
+                    
+                    log.info("  字段 '{}': 找到 {} 个bbox，涉及 {} 个页面",
+                        result.getString("fieldName"), bboxes.size(), pageSet.size());
                 }
             }
         }
         
+        log.info("生成BboxMappings完成，共 {} 个映射", bboxMappings.size());
         return bboxMappings;
-    }
-    
-    /**
-     * 从CharBox数据中提取指定范围的bbox坐标
-     */
-    private List<JSONObject> extractBboxesFromCharBoxes(List<CharBoxData> charBoxes, int startPos, int endPos) {
-        List<JSONObject> bboxes = new ArrayList<>();
-        
-        if (startPos >= charBoxes.size() || endPos > charBoxes.size() || startPos >= endPos) {
-            return bboxes;
-        }
-        
-        // 合并相邻字符的bbox（按页面分组）
-        java.util.Map<Integer, List<double[]>> pageBoxes = new java.util.LinkedHashMap<>();
-        
-        for (int i = startPos; i < endPos && i < charBoxes.size(); i++) {
-            CharBoxData charBox = charBoxes.get(i);
-            if (charBox.bbox == null || charBox.page == null) continue;
-            
-            // 跳过换行符
-            if ("\n".equals(charBox.ch)) continue;
-            
-            // 跳过空bbox（分隔符等）
-            if (charBox.bbox[0] == 0 && charBox.bbox[1] == 0 && 
-                charBox.bbox[2] == 0 && charBox.bbox[3] == 0) continue;
-            
-            pageBoxes.computeIfAbsent(charBox.page, k -> new ArrayList<>()).add(charBox.bbox);
-        }
-        
-        // 为每个页面合并bbox
-        for (java.util.Map.Entry<Integer, List<double[]>> entry : pageBoxes.entrySet()) {
-            Integer page = entry.getKey();
-            List<double[]> boxes = entry.getValue();
-            
-            if (boxes.isEmpty()) continue;
-            
-            // 计算合并后的bbox
-            double minX = Double.MAX_VALUE;
-            double minY = Double.MAX_VALUE;
-            double maxX = Double.MIN_VALUE;
-            double maxY = Double.MIN_VALUE;
-            
-            for (double[] box : boxes) {
-                minX = Math.min(minX, box[0]);
-                minY = Math.min(minY, box[1]);
-                maxX = Math.max(maxX, box[2]);
-                maxY = Math.max(maxY, box[3]);
-            }
-            
-            JSONObject bboxInfo = new JSONObject();
-            bboxInfo.put("page", page);
-            bboxInfo.put("bbox", new double[]{minX, minY, maxX, maxY});
-            bboxes.add(bboxInfo);
-        }
-        
-        return bboxes;
-    }
-    
-    /**
-     * CharBox数据辅助类
-     */
-    private static class CharBoxData {
-        Integer page;
-        String ch;
-        double[] bbox;
     }
 
     /**

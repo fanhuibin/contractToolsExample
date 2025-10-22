@@ -323,7 +323,17 @@ const highlightClickedText = (element: HTMLElement) => {
  * 基于字符索引（startPos/endPos）精确查找
  */
 const highlightTextByBox = (textBox: any) => {
-  if (!textBox) return
+  if (!textBox) {
+    console.warn('⚠️ highlightTextByBox: textBox为空')
+    return
+  }
+  
+  console.log('📝 MarkdownViewer: 尝试高亮文本', {
+    page: textBox.page,
+    startPos: textBox.startPos,
+    endPos: textBox.endPos,
+    text: textBox.text?.substring(0, 30) + '...'
+  })
   
   // 优先使用字符索引查找
   if (textBox.startPos !== undefined && textBox.endPos !== undefined) {
@@ -333,8 +343,11 @@ const highlightTextByBox = (textBox: any) => {
     ) as HTMLElement
     
     if (element) {
+      console.log('✅ 通过字符索引找到文本元素')
       highlightClickedText(element)
       return
+    } else {
+      console.warn('⚠️ 通过字符索引未找到文本元素')
     }
   }
   
@@ -348,12 +361,35 @@ const highlightTextByBox = (textBox: any) => {
   if (index !== -1) {
     const element = document.querySelector(`[data-textbox-index="${index}"]`) as HTMLElement
     if (element) {
+      console.log('✅ 通过textBox索引找到文本元素')
       highlightClickedText(element)
       return
+    } else {
+      console.warn('⚠️ 通过textBox索引未找到文本元素')
     }
   }
   
-  console.warn('未找到对应的TextBox:', textBox)
+  // 【增强】尝试模糊匹配：通过文本内容查找
+  if (textBox.text && textBox.text.trim()) {
+    const textContent = textBox.text.trim()
+    const elements = document.querySelectorAll('.clickable-text')
+    
+    for (const element of elements) {
+      if (element.textContent && element.textContent.trim() === textContent) {
+        console.log('✅ 通过文本内容找到元素（模糊匹配）')
+        highlightClickedText(element as HTMLElement)
+        return
+      }
+    }
+  }
+  
+  console.warn('❌ 未找到对应的TextBox:', {
+    page: textBox.page,
+    startPos: textBox.startPos,
+    endPos: textBox.endPos,
+    text: textBox.text,
+    availableElements: document.querySelectorAll('.clickable-text').length
+  })
 }
 
 // 暴露方法给父组件

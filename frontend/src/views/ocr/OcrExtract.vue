@@ -416,7 +416,7 @@ const loadResults = async () => {
  * 处理bbox点击 - 在图片上点击bbox，高亮对应的文本
  */
 const onBboxClick = (bboxInfo: any) => {
-  console.log('📍 点击了bbox:', {
+  console.log('📍 OCR页面: 点击了bbox:', {
     page: bboxInfo.page,
     text: bboxInfo.text?.substring(0, 30) + '...',
     startPos: bboxInfo.startPos,
@@ -424,21 +424,25 @@ const onBboxClick = (bboxInfo: any) => {
     bbox: bboxInfo.bbox
   })
   
-  if (!bboxInfo || !bboxInfo.text) {
-    console.warn('⚠️ bbox缺少文本信息')
+  if (!bboxInfo) {
+    console.warn('⚠️ bbox信息为空')
     return
   }
+  
+  // 【增强】即使没有text也尝试处理，因为可能有其他标识信息
   
   // 1. 高亮左侧被点击的bbox本身
   if (canvasViewer.value) {
     canvasViewer.value.highlightBbox(bboxInfo)
-    console.log('✅ 已高亮bbox:', `页码 ${bboxInfo.page}`)
+    console.log('✅ 已高亮左侧bbox:', `页码 ${bboxInfo.page}`)
+  } else {
+    console.warn('⚠️ CanvasViewer组件未就绪')
   }
   
   // 2. 高亮右侧对应的文本
   if (markdownViewer.value) {
     markdownViewer.value.highlightTextByBox(bboxInfo)
-    console.log('✅ 已高亮文本:', `字符索引 ${bboxInfo.startPos}-${bboxInfo.endPos}`)
+    console.log('✅ 已尝试高亮右侧文本:', `字符索引 ${bboxInfo.startPos}-${bboxInfo.endPos}`)
   } else {
     console.warn('⚠️ MarkdownViewer组件未就绪')
   }
@@ -448,7 +452,7 @@ const onBboxClick = (bboxInfo: any) => {
  * 处理文本点击 - 在文本上点击，高亮对应的图片bbox
  */
 const onTextClick = (textBoxIndex: number, textBox: any) => {
-  console.log('📝 点击了文本:', {
+  console.log('📝 OCR页面: 点击了文本:', {
     index: textBoxIndex,
     page: textBox.page,
     text: textBox.text?.substring(0, 30) + '...',
@@ -456,14 +460,23 @@ const onTextClick = (textBoxIndex: number, textBox: any) => {
     endPos: textBox.endPos
   })
   
-  if (!textBox || !canvasViewer.value) {
-    console.warn('⚠️ textBox或CanvasViewer未就绪')
+  if (!textBox) {
+    console.warn('⚠️ textBox信息为空')
     return
   }
   
-  // 高亮对应的bbox（会自动滚动到bbox位置，类似合同比对的差异跳转）
-  canvasViewer.value.highlightBbox(textBox)
-  console.log('✅ 已高亮并滚动到bbox，页码:', textBox.page, `字符索引 ${textBox.startPos}-${textBox.endPos}`)
+  if (!canvasViewer.value) {
+    console.warn('⚠️ CanvasViewer组件未就绪')
+    return
+  }
+  
+  // 【增强】高亮对应的bbox（会自动滚动到bbox位置，类似合同比对的差异跳转）
+  try {
+    canvasViewer.value.highlightBbox(textBox)
+    console.log('✅ 已高亮并滚动到左侧bbox，页码:', textBox.page, `字符索引 ${textBox.startPos}-${textBox.endPos}`)
+  } catch (error) {
+    console.error('❌ 高亮bbox失败:', error)
+  }
 }
 
 /**
