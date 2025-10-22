@@ -99,6 +99,7 @@ import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { View } from '@element-plus/icons-vue'
 import { testExtractRule } from '@/api/rule-test'
+import { extractObjectData } from '@/utils/response-helper'
 
 interface Props {
   template: any
@@ -138,24 +139,27 @@ const runTest = async () => {
         debug: debugMode.value
       })
 
-      if (res.data.code === 200) {
+      const resultData = extractObjectData(res)
+
+      if (resultData && resultData.success !== false) {
         results.value.push({
           fieldName: field.fieldName,
           fieldCode: field.fieldCode,
-          ...res.data.data
+          ...resultData
         })
       } else {
         results.value.push({
           fieldName: field.fieldName,
           fieldCode: field.fieldCode,
           success: false,
-          errorMessage: res.data.message
+          errorMessage: resultData?.errorMessage || '测试失败'
         })
       }
     }
 
     ElMessage.success(`批量测试完成：成功 ${successCount.value}/${results.value.length}`)
   } catch (error: any) {
+    console.error('批量测试失败:', error)
     ElMessage.error('批量测试失败：' + (error.message || '未知错误'))
   } finally {
     testing.value = false

@@ -135,6 +135,7 @@ import {
   disableTemplate,
   copyTemplate as apiCopyTemplate
 } from '@/api/rule-extract'
+import { extractArrayData } from '@/utils/response-helper'
 
 const router = useRouter()
 
@@ -174,9 +175,11 @@ const loadList = async () => {
       params.status = searchStatus.value
     }
     const res: any = await listTemplates(params)
-    list.value = res.data || []
+    list.value = extractArrayData(res)
   } catch (error) {
+    console.error('加载模板列表失败:', error)
     ElMessage.error('加载模板列表失败')
+    list.value = []
   } finally {
     loading.value = false
   }

@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ruleextract.service;
 
 import cn.hutool.core.io.FileUtil;
 import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.EnhancedRuleEngine;
@@ -14,6 +15,7 @@ import com.zhaoxinms.contract.tools.ruleextract.model.RuleExtractTaskModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleTemplateModel;
 import com.zhaoxinms.contract.tools.ruleextract.storage.JsonFileStorage;
 import com.zhaoxinms.contract.tools.ruleextract.utils.FormatConverter;
+import com.zhaoxinms.contract.tools.ruleextract.utils.TableMergeUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -133,6 +135,9 @@ public class RuleExtractService {
             updateTaskStatus(taskId, "ocr_processing", 20, "OCR处理中...", null);
             OCRProvider.OCRResult ocrResult = performOCR(task);
             String ocrText = ocrResult.getContent();
+            
+            // 【新增】执行跨页表格合并（处理MinerU未识别为同一表格的情况）
+            mergeContentListTables(task.getTaskId());
             
             // 保存OCR文本和结果路径
             task = storage.load("task", taskId, RuleExtractTaskModel.class);
@@ -897,6 +902,96 @@ public class RuleExtractService {
             }
         }
         
+        return null;
+    }
+    
+    /**
+     * 合并跨页表格（处理MinerU未识别为同一表格的情况）
+     * 读取OCR输出目录中的content_list文件，执行表格合并，并保存回去
+     */
+    private void mergeContentListTables(String taskId) {
+        try {
+            log.info("📊 开始检查任务{}的跨页表格合并", taskId);
+            
+            // 查找OCR输出目录中的content_list文件
+            File ocrOutputDir = storage.getOcrOutputDir(taskId);
+            File contentListFile = findContentListFile(ocrOutputDir);
+            
+            if (contentListFile == null || !contentListFile.exists()) {
+                log.warn("⚠️ 未找到content_list文件，跳过表格合并");
+                return;
+            }
+            
+            log.info("✅ 找到content_list文件: {}", contentListFile.getAbsolutePath());
+            
+            // 读取content_list
+            String contentListJson = FileUtil.readUtf8String(contentListFile);
+            JSONArray contentList = JSON.parseArray(contentListJson);
+            
+            if (contentList == null || contentList.isEmpty()) {
+                log.warn("⚠️ content_list为空，跳过表格合并");
+                return;
+            }
+            
+            log.info("📋 content_list包含{}个内容项", contentList.size());
+            
+            // 执行表格合并
+            JSONArray mergedContentList = TableMergeUtil.mergeCrossPageTables(contentList);
+            
+            // 如果发生了合并，保存回文件
+            if (mergedContentList.size() != contentList.size()) {
+                log.info("💾 保存合并后的content_list，项数: {} -> {}", 
+                    contentList.size(), mergedContentList.size());
+                
+                // 备份原文件
+                File backupFile = new File(contentListFile.getParent(), 
+                    contentListFile.getName() + ".before_merge.backup");
+                FileUtil.copy(contentListFile, backupFile, true);
+                log.info("💾 原content_list已备份到: {}", backupFile.getAbsolutePath());
+                
+                // 保存合并后的content_list（格式化输出）
+                String mergedJson = JSON.toJSONString(mergedContentList, 
+                    com.alibaba.fastjson2.JSONWriter.Feature.PrettyFormat);
+                FileUtil.writeUtf8String(mergedJson, contentListFile);
+                log.info("✅ 跨页表格合并完成，已保存到: {}", contentListFile.getAbsolutePath());
+            } else {
+                log.info("ℹ️ 未发现需要合并的跨页表格");
+            }
+            
+        } catch (Exception e) {
+            log.error("❌ 跨页表格合并失败，将继续执行后续流程", e);
+            // 不抛出异常，继续执行
+        }
+    }
+    
+    /**
+     * 查找content_list文件
+     * 尝试多个可能的路径
+     */
+    private File findContentListFile(File ocrOutputDir) {
+        if (ocrOutputDir == null || !ocrOutputDir.exists()) {
+            return null;
+        }
+        
+        // 可能的路径列表
+        String[] possiblePaths = {
+            "mineru_intermediate/extract/02_content_list.json",
+            "mineru_intermediate/old/extract/02_content_list.json",
+            "mineru_intermediate/new/extract/02_content_list.json",
+            "extract/02_content_list.json",
+            "02_content_list.json"
+        };
+        
+        for (String path : possiblePaths) {
+            File file = new File(ocrOutputDir, path);
+            if (file.exists()) {
+                log.info("✅ 找到content_list文件: {}", file.getAbsolutePath());
+                return file;
+            }
+        }
+        
+        log.warn("⚠️ 未找到content_list文件，尝试的路径: {}", 
+            String.join(", ", possiblePaths));
         return null;
     }
     

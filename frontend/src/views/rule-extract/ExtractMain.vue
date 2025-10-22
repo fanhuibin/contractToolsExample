@@ -314,6 +314,7 @@ import {
   cancelRuleExtractTask,
   listRuleExtractTasks
 } from '@/api/rule-extract'
+import { extractArrayData } from '@/utils/response-helper'
 
 const router = useRouter()
 
@@ -349,11 +350,11 @@ const loadTemplates = async () => {
   try {
     loadingTemplates.value = true
     const res: any = await listTemplates({ status: 'active' })
-    if (res.data.code === 200) {
-      templates.value = res.data.data || []
-    }
+    templates.value = extractArrayData(res)
   } catch (error: any) {
+    console.error('加载模板失败:', error)
     ElMessage.error('加载模板失败：' + (error.message || '未知错误'))
+    templates.value = []
   } finally {
     loadingTemplates.value = false
   }
@@ -362,11 +363,10 @@ const loadTemplates = async () => {
 const loadRecentTasks = async () => {
   try {
     const res: any = await listRuleExtractTasks()
-    if (res.data.code === 200) {
-      recentTasks.value = res.data.data || []
-    }
+    recentTasks.value = extractArrayData(res)
   } catch (error) {
     console.error('加载任务历史失败', error)
+    recentTasks.value = []
   }
 }
 

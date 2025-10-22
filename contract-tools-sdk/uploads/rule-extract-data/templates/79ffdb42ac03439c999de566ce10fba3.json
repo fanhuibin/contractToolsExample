@@ -10,7 +10,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.7124704299687542",
+					"id":"rule_1761123005774_0.615816823645367",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"甲方\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5]+\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -27,7 +27,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.33081028902696485",
+					"id":"rule_1761123005774_0.23060026510407128",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"账号：\",\"direction\":\"after\",\"extractMethod\":\"line\",\"pattern\":\"-?\\\\d+\",\"maxDistance\":20,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false,\"anchorOccurrence\":4}",
@@ -38,17 +38,17 @@
 		},
 		{
 			"fieldCode":"field_3",
-			"fieldName":"货物清单",
+			"fieldName":"提取表格",
 			"fieldType":"string",
-			"id":"field_1760427149785_0.7993277701225409",
+			"id":"field_1761123005774_0.5154084141234472",
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.028117644588372626",
+					"id":"rule_1761123005774_0.6857580055745579",
 					"isEnabled":true,
 					"priority":1,
-					"ruleContent":"{\"extractMode\":\"table\",\"headerPattern\":\"序号|货物名称|规格型号\",\"targetColumn\":\"\",\"columnIndex\":null,\"rowMarker\":\"\",\"rowIndex\":null,\"format\":\"json\",\"occurrence\":1}",
-					"ruleName":"货物清单的提取规则",
+					"ruleContent":"{\"extractMode\":\"table\",\"headerPattern\":\"序号|名称|品牌/型号|参数\",\"targetColumn\":\"\",\"columnIndex\":null,\"rowMarker\":\"\",\"rowIndex\":null,\"format\":\"json\",\"occurrence\":1}",
+					"ruleName":"提取表格的提取规则",
 					"ruleType":"TABLE_CELL"
 				}
 			]
@@ -61,7 +61,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.7643714622549604",
+					"id":"rule_1761123005774_0.23190463666483907",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"乙方账号新\",\"direction\":\"after\",\"extractMethod\":\"line\",\"pattern\":\"-?\\\\d+\",\"maxDistance\":20,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -78,7 +78,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.4172957755161646",
+					"id":"rule_1761123005774_0.9830676836315086",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"extractMode\":\"cell\",\"headerPattern\":\"序号|货物名称|规格型号\",\"targetColumn\":\"\",\"columnIndex\":2,\"rowMarker\":\"\",\"rowIndex\":1,\"format\":\"json\",\"occurrence\":1}",
@@ -95,7 +95,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.1213373795355871",
+					"id":"rule_1761123005774_0.3018922273711814",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"乙方\",\"direction\":\"after\",\"extractMethod\":\"line\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5]+\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -112,7 +112,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.3928998789219731",
+					"id":"rule_1761123005774_0.409500463967128",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"本合同产品/服务合计金额为\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[¥$￥]?\\\\s*([\\\\d,]+(\\\\.\\\\d{1,2})?)\\\\s*[千万亿]?\\\\s*元?\",\"maxDistance\":30,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -129,7 +129,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.7058979045530479",
+					"id":"rule_1761123005774_0.39124301155488395",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"联系人：\",\"direction\":\"after\",\"extractMethod\":\"line\",\"pattern\":\".*\",\"maxDistance\":30,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -146,7 +146,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.2770201669955886",
+					"id":"rule_1761123005774_0.26860991504166365",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"联系人：\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\".*\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false,\"anchorOccurrence\":2}",
@@ -163,7 +163,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.9255538129620198",
+					"id":"rule_1761123005774_0.6020072377108008",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"纳税人识别号\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[0-9A-Z]{15,20}\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
@@ -180,7 +180,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.4468910510130796",
+					"id":"rule_1761123005774_0.20872770794444384",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"anchor\":\"纳税人识别号\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[0-9A-Z]{15,20}\",\"maxDistance\":50,\"delimiter\":\"：\",\"multiline\":false,\"occurrence\":1,\"anchorOccurrence\":2}",
@@ -197,7 +197,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.618936181484506",
+					"id":"rule_1761123005774_0.10420116310469385",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"startBoundary\":\"二、许可软件\",\"endBoundary\":\"三、产品授权信息\",\"extractPattern\":\"\",\"multiline\":false,\"occurrence\":1}",
@@ -214,7 +214,7 @@
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1760492812050_0.4704151520495644",
+					"id":"rule_1761123005774_0.6420149261116442",
 					"isEnabled":true,
 					"priority":1,
 					"ruleContent":"{\"pattern\":\"本合同产品/服务合计金额为¥(\\\\d+)\\\\s+元\",\"group\":1,\"multiline\":true,\"occurrence\":1}",
@@ -228,6 +228,6 @@
 	"status":"active",
 	"templateCode":"10",
 	"templateName":"官方演示模板",
-	"updatedAt":"2025-10-15 09:46:52.077177100",
-	"version":57
+	"updatedAt":"2025-10-22 16:50:05.792950500",
+	"version":59
 }

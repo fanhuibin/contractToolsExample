@@ -331,6 +331,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, ArrowRight, Download, Document } from '@element-plus/icons-vue'
 import { getRuleExtractTaskResult } from '@/api/rule-extract'
+import { extractObjectData } from '@/utils/response-helper'
 import CanvasViewer from '@/views/extract/components/CanvasViewer.vue'
 import TextViewer from '@/views/extract/components/TextViewer.vue'
 import request from '@/utils/request'
@@ -386,31 +387,32 @@ const loadResult = async () => {
   loading.value = true
   try {
     const res: any = await getRuleExtractTaskResult(taskId.value)
+    const resultInfo = extractObjectData(res)
     
-    if (res.data.code === 200 || res.data.code === 0) {
-      taskInfo.value = res.data.data
+    if (resultInfo) {
+      taskInfo.value = resultInfo
       
       // 处理OCR文本
-      if (res.data.data.ocrText) {
-        ocrText.value = res.data.data.ocrText
-      } else if (res.data.data.text) {
-        ocrText.value = res.data.data.text
+      if (resultInfo.ocrText) {
+        ocrText.value = resultInfo.ocrText
+      } else if (resultInfo.text) {
+        ocrText.value = resultInfo.text
       }
       
       // 处理页数
-      if (res.data.data.totalPages) {
-        totalPages.value = res.data.data.totalPages
-      } else if (res.data.data.pageCount) {
-        totalPages.value = res.data.data.pageCount
+      if (resultInfo.totalPages) {
+        totalPages.value = resultInfo.totalPages
+      } else if (resultInfo.pageCount) {
+        totalPages.value = resultInfo.pageCount
       } else {
         totalPages.value = 1
       }
       
       // 处理提取结果
-      if (res.data.data.extractResults) {
+      if (resultInfo.extractResults) {
         // 如果是对象格式，转换为数组
-        if (typeof res.data.data.extractResults === 'object' && !Array.isArray(res.data.data.extractResults)) {
-          resultData.value = Object.entries(res.data.data.extractResults).map(([key, value]: [string, any]) => ({
+        if (typeof resultInfo.extractResults === 'object' && !Array.isArray(resultInfo.extractResults)) {
+          resultData.value = Object.entries(resultInfo.extractResults).map(([key, value]: [string, any]) => ({
             fieldName: value.fieldName || key,
             fieldCode: value.fieldCode || key,
             value: value.value,
@@ -418,40 +420,40 @@ const loadResult = async () => {
             charInterval: value.charInterval || null
           }))
         } else {
-          resultData.value = res.data.data.extractResults.map((item: any) => ({
+          resultData.value = resultInfo.extractResults.map((item: any) => ({
             ...item,
             success: item.status === 'success' || item.success !== false
           }))
         }
-      } else if (res.data.data.results) {
-        resultData.value = res.data.data.results
-      } else if (res.data.data.fields) {
-        resultData.value = res.data.data.fields
+      } else if (resultInfo.results) {
+        resultData.value = resultInfo.results
+      } else if (resultInfo.fields) {
+        resultData.value = resultInfo.fields
       }
       
       // 处理位置映射数据
-      if (res.data.data.bboxMappings) {
+      if (resultInfo.bboxMappings) {
         try {
-          bboxMappings.value = typeof res.data.data.bboxMappings === 'string' 
-            ? JSON.parse(res.data.data.bboxMappings) 
-            : res.data.data.bboxMappings
+          bboxMappings.value = typeof resultInfo.bboxMappings === 'string' 
+            ? JSON.parse(resultInfo.bboxMappings) 
+            : resultInfo.bboxMappings
         } catch (e) {
           console.warn('解析bboxMappings失败:', e)
         }
       }
       
       // 处理字符框数据
-      if (res.data.data.charBoxes) {
+      if (resultInfo.charBoxes) {
         try {
-          charBoxes.value = typeof res.data.data.charBoxes === 'string' 
-            ? JSON.parse(res.data.data.charBoxes) 
-            : res.data.data.charBoxes
+          charBoxes.value = typeof resultInfo.charBoxes === 'string' 
+            ? JSON.parse(resultInfo.charBoxes) 
+            : resultInfo.charBoxes
         } catch (e) {
           console.warn('解析charBoxes失败:', e)
         }
       }
     } else {
-      ElMessage.error(res.message || '获取任务结果失败')
+      ElMessage.error('获取任务结果失败')
     }
   } catch (error: any) {
     console.error('Load result error:', error)
