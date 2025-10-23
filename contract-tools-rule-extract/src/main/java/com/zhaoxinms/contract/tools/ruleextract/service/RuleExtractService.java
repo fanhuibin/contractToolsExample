@@ -605,10 +605,14 @@ public class RuleExtractService {
                 String value = result.getString("value");
                 
                 if (mergedStartPos != null && mergedEndPos != null && value != null && !value.isEmpty()) {
-                    // 在合并后的文本中提取实际值
+                    // 【关键】先验证charInterval的索引在mergedOcrText中是否能正确提取到值
                     String extractedValue = "";
                     if (mergedStartPos >= 0 && mergedEndPos <= mergedOcrText.length()) {
                         extractedValue = mergedOcrText.substring(mergedStartPos, mergedEndPos);
+                    } else {
+                        log.error("❌ 字段 {} 的索引超出范围: [{},{}], 文本长度={}", 
+                            result.getString("fieldName"), mergedStartPos, mergedEndPos, mergedOcrText.length());
+                        continue;
                     }
                     
                     log.info("处理字段: {}, 合并后索引[{},{}], value长度={}, extractedValue长度={}", 
@@ -616,18 +620,65 @@ public class RuleExtractService {
                         value.length(), extractedValue.length());
                     log.info("  extractedValue前100字符: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
                     
-                    // 在原始文本中查找这个值（用于匹配TextBox）
-                    int originalStartPos = originalOcrText.indexOf(extractedValue);
+                    // 【验证】确认charInterval记录的索引能正确提取到值
+                    if (!extractedValue.equals(value) && !extractedValue.startsWith(value.substring(0, Math.min(50, value.length())))) {
+                        log.warn("⚠️  字段 {} 的charInterval索引提取的值与实际值不匹配！", result.getString("fieldName"));
+                        log.warn("  期望值: {}", value.substring(0, Math.min(100, value.length())));
+                        log.warn("  提取值: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
+                    }
+                    
+                    // 【核心修改】在原始文本中查找所有出现的位置，而不是只找第一个
+                    List<Integer> allOccurrences = new ArrayList<>();
+                    int searchPos = 0;
+                    while ((searchPos = originalOcrText.indexOf(extractedValue, searchPos)) >= 0) {
+                        allOccurrences.add(searchPos);
+                        searchPos += extractedValue.length();
+                    }
+                    
+                    int originalStartPos = -1;
                     int originalEndPos = -1;
                     
-                    // 如果直接找不到，可能是因为表格被合并了
-                    // 我们需要在原始文本中找到所有<table>标签
-                    if (originalStartPos < 0 && extractedValue.contains("<table>")) {
+                    if (!allOccurrences.isEmpty()) {
+                        if (allOccurrences.size() == 1) {
+                            // 只有一个出现位置，直接使用
+                            originalStartPos = allOccurrences.get(0);
+                            originalEndPos = originalStartPos + extractedValue.length();
+                            log.info("  ✅ 在原始文本中找到唯一匹配，位置[{},{}]", originalStartPos, originalEndPos);
+                        } else {
+                            // 多个出现位置，需要根据上下文判断
+                            log.warn("  ⚠️  字段 '{}' 的值在原始文本中出现了 {} 次", 
+                                result.getString("fieldName"), allOccurrences.size());
+                            
+                            // 方法1: 取第N个出现（基于mergedStartPos在mergedOcrText中的相对位置）
+                            double relativePos = (double) mergedStartPos / mergedOcrText.length();
+                            int estimatedOriginalPos = (int) (relativePos * originalOcrText.length());
+                            
+                            // 找到最接近估计位置的出现
+                            int closestIndex = 0;
+                            int minDistance = Math.abs(allOccurrences.get(0) - estimatedOriginalPos);
+                            for (int i = 1; i < allOccurrences.size(); i++) {
+                                int distance = Math.abs(allOccurrences.get(i) - estimatedOriginalPos);
+                                if (distance < minDistance) {
+                                    minDistance = distance;
+                                    closestIndex = i;
+                                }
+                            }
+                            
+                            originalStartPos = allOccurrences.get(closestIndex);
+                            originalEndPos = originalStartPos + extractedValue.length();
+                            log.info("  ✅ 选择第 {} 个出现（共{}个），位置[{},{}]，估计位置={}，距离={}", 
+                                closestIndex + 1, allOccurrences.size(), 
+                                originalStartPos, originalEndPos, estimatedOriginalPos, minDistance);
+                        }
+                    }
+                    // 如果普通文本找不到，判断是否是表格（Markdown或HTML格式）
+                    else if (extractedValue.contains("<table>") || extractedValue.startsWith("| ") || extractedValue.contains("\n| ")) {
                         log.info("  表格字段在原始文本中找不到完整内容，尝试查找所有表格片段");
+                        log.info("  提取值格式: {}", extractedValue.contains("<table>") ? "HTML" : "Markdown");
                         
-                        // 找到原始文本中的所有表格
+                        // 找到原始文本中的所有表格（HTML格式）
                         List<int[]> tableRanges = new ArrayList<>();
-                        int searchPos = 0;
+                        searchPos = 0;
                         while (true) {
                             int tableStart = originalOcrText.indexOf("<table>", searchPos);
                             if (tableStart < 0) break;
@@ -637,34 +688,80 @@ public class RuleExtractService {
                             tableEnd += 8; // "</table>".length()
                             
                             tableRanges.add(new int[]{tableStart, tableEnd});
-                            log.info("    找到原始表格片段: 位置[{},{}]", tableStart, tableEnd);
+                            log.info("    找到原始表格片段: 位置[{},{}], 长度={}", 
+                                tableStart, tableEnd, tableEnd - tableStart);
                             searchPos = tableEnd;
                         }
                         
                         if (!tableRanges.isEmpty()) {
-                            // 使用第一个表格的开始位置和最后一个表格的结束位置
-                            originalStartPos = tableRanges.get(0)[0];
-                            originalEndPos = tableRanges.get(tableRanges.size() - 1)[1];
-                            log.info("  ✅ 找到 {} 个表格片段，合并范围[{},{}]", tableRanges.size(), originalStartPos, originalEndPos);
+                            // 【关键】考虑跨页表格合并的情况
+                            // 如果提取值很长（可能是合并后的表格），使用所有表格片段
+                            if (tableRanges.size() > 1) {
+                                log.info("  检测到 {} 个表格片段，可能是跨页表格已被合并", tableRanges.size());
+                                // 使用第一个表格的开始位置和最后一个表格的结束位置
+                                originalStartPos = tableRanges.get(0)[0];
+                                originalEndPos = tableRanges.get(tableRanges.size() - 1)[1];
+                                log.info("  ✅ 合并所有表格片段，范围[{},{}]", originalStartPos, originalEndPos);
+                            } else {
+                                // 只有一个表格片段
+                                originalStartPos = tableRanges.get(0)[0];
+                                originalEndPos = tableRanges.get(0)[1];
+                                log.info("  ✅ 使用单个表格片段，范围[{},{}]", originalStartPos, originalEndPos);
+                            }
                         } else {
                             log.error("❌ 在原始文本中未找到任何<table>标签!");
                             log.error("  字段名: {}", result.getString("fieldName"));
+                            log.error("  提取值前100字符: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
                             continue;
                         }
-                    } else if (originalStartPos >= 0) {
-                        originalEndPos = originalStartPos + extractedValue.length();
-                        log.info("  ✅ 在原始文本中找到，位置[{},{}]", originalStartPos, originalEndPos);
                     } else {
                         // 普通字段也找不到
                         log.error("❌ 在原始文本中未找到字段值!");
                         log.error("  字段名: {}", result.getString("fieldName"));
-                        log.error("  查找的值: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
+                        log.error("  查找的值前100字符: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
                         continue;
                     }
                     
                     // 确保找到了有效的位置
                     if (originalStartPos < 0 || originalEndPos < 0) {
                         log.error("❌ 位置无效: originalStartPos={}, originalEndPos={}", originalStartPos, originalEndPos);
+                        continue;
+                    }
+                    
+                    // 【最终验证】从原始文本中提取内容，确认是否匹配
+                    String verifyText = "";
+                    boolean isTableField = extractedValue.contains("<table>") || extractedValue.startsWith("| ") || extractedValue.contains("\n| ");
+                    
+                    if (originalStartPos >= 0 && originalEndPos <= originalOcrText.length()) {
+                        verifyText = originalOcrText.substring(originalStartPos, originalEndPos);
+                        
+                        // 对于表格字段，格式可能不同（Markdown vs HTML），只验证是否都是表格
+                        if (isTableField) {
+                            boolean verifyIsTable = verifyText.contains("<table>");
+                            if (verifyIsTable) {
+                                log.info("  ✅ 验证通过：原始文本[{}, {}]确认为表格内容", originalStartPos, originalEndPos);
+                            } else {
+                                log.error("❌ 验证失败！期望是表格，但原始文本不包含<table>标签");
+                                log.error("  字段名: {}", result.getString("fieldName"));
+                                log.error("  原始文本前100字符: {}", verifyText.substring(0, Math.min(100, verifyText.length())));
+                                continue;
+                            }
+                        } else {
+                            // 普通字段，需要精确匹配
+                            if (!verifyText.equals(extractedValue)) {
+                                log.error("❌ 验证失败！从原始文本提取的内容与期望值不匹配");
+                                log.error("  字段名: {}", result.getString("fieldName"));
+                                log.error("  期望: {}", extractedValue.substring(0, Math.min(100, extractedValue.length())));
+                                log.error("  实际: {}", verifyText.substring(0, Math.min(100, verifyText.length())));
+                                log.error("  原始索引: [{}, {}]", originalStartPos, originalEndPos);
+                                continue;
+                            } else {
+                                log.info("  ✅ 验证通过：原始文本[{}, {}]提取内容与期望值匹配", originalStartPos, originalEndPos);
+                            }
+                        }
+                    } else {
+                        log.error("❌ 原始索引超出范围: [{}, {}], 文本长度={}", 
+                            originalStartPos, originalEndPos, originalOcrText.length());
                         continue;
                     }
                     
