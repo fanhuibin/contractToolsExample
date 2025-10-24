@@ -447,8 +447,16 @@ const newCanvasClickableAreas = new Map<string, ClickableArea>()
 // 中间Canvas点击区域映射
 const middleCanvasClickableAreas = new Map<string, ClickableArea>()
 
-// 选中的差异项状态
+// 选中的差异项状态（原始索引）
 const selectedDiffIndex = ref<number | null>(null)
+
+// 计算选中项在过滤结果中的索引
+const selectedFilteredIndex = computed(() => {
+  if (selectedDiffIndex.value === null) return null
+  const selectedDiff = results.value[selectedDiffIndex.value]
+  if (!selectedDiff) return null
+  return filteredResults.value.findIndex(r => r === selectedDiff)
+})
 
 // 中间Canvas交互实例
 let middleCanvasInteraction: MiddleCanvasInteraction | null = null
@@ -628,10 +636,12 @@ const initMiddleCanvasInteraction = () => {
     filteredResults: filteredResults.value,
     oldImageInfo: oldImageInfo.value,
     newImageInfo: newImageInfo.value,
-    selectedDiffIndex: selectedDiffIndex.value,
+    selectedDiffIndex: selectedFilteredIndex.value,
     clickableAreas: middleCanvasClickableAreas,
-    onDiffClick: (diffIndex, operation) => {
-      jumpTo(diffIndex)
+    onDiffClick: (filteredIndex, operation) => {
+      // 将过滤后的索引转换为原始索引
+      const originalIndex = indexInAll(filteredIndex)
+      jumpTo(originalIndex)
     },
     onSelectionChange: (diffIndex) => {
       selectedDiffIndex.value = diffIndex
@@ -1293,7 +1303,7 @@ const jumpTo = (i: number) => {
       // 跳转后更新中间图标和连接线
       if (middleCanvasInteraction) {
         middleCanvasInteraction.updateProps({
-          selectedDiffIndex: selectedDiffIndex.value,
+          selectedDiffIndex: selectedFilteredIndex.value,
           filteredResults: filteredResults.value
         })
         middleCanvasInteraction.render()
@@ -1519,7 +1529,7 @@ const toggleIgnore = (diffIndex: number) => {
     if (middleCanvasInteraction) {
       middleCanvasInteraction.updateProps({
         filteredResults: filteredResults.value,
-        selectedDiffIndex: selectedDiffIndex.value
+        selectedDiffIndex: selectedFilteredIndex.value
       })
       middleCanvasInteraction.render()
     }
