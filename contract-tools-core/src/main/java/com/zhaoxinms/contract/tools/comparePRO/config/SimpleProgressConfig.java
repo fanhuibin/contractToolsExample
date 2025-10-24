@@ -162,12 +162,6 @@ public class SimpleProgressConfig {
         long baseTime = pages * ocrFirstDocPerPage;
         long estimatedTime = (long) (Math.max(baseTime, ocrMinTime) * ocrBufferFactor);
         
-        // 调试日志
-        System.out.println(String.format(
-            "📊 第一个文档OCR时间预估: 页数=%d, 每页=%dms, 基础时间=%dms, 最小时间=%dms, 缓冲系数=%.2f, 最终预估=%dms (%.1f秒)",
-            pages, ocrFirstDocPerPage, baseTime, ocrMinTime, ocrBufferFactor, estimatedTime, estimatedTime / 1000.0
-        ));
-        
         return estimatedTime;
     }
     
@@ -180,12 +174,6 @@ public class SimpleProgressConfig {
     public long calculateSecondDocOcrTime(int pages) {
         long baseTime = pages * ocrSecondDocPerPage;
         long estimatedTime = (long) (Math.max(baseTime, ocrMinTime) * ocrBufferFactor);
-        
-        // 调试日志
-        System.out.println(String.format(
-            "📊 第二个文档OCR时间预估: 页数=%d, 每页=%dms, 基础时间=%dms, 最小时间=%dms, 缓冲系数=%.2f, 最终预估=%dms (%.1f秒)",
-            pages, ocrSecondDocPerPage, baseTime, ocrMinTime, ocrBufferFactor, estimatedTime, estimatedTime / 1000.0
-        ));
         
         return estimatedTime;
     }

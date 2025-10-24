@@ -86,29 +86,22 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermarkSmart(String imagePath) {
-        System.out.println("WatermarkRemover: 开始智能去水印处理: " + imagePath);
         
         // 先尝试默认范围
         if (removeWatermark(imagePath, DEFAULT_LOWER_BGR, DEFAULT_UPPER_BGR)) {
-            System.out.println("WatermarkRemover: 默认范围去水印成功");
             return true;
         }
         
         // 如果默认范围效果不好，尝试扩展范围
-        System.out.println("WatermarkRemover: 尝试扩展颜色范围...");
         if (removeWatermark(imagePath, EXTENDED_LOWER_BGR, EXTENDED_UPPER_BGR)) {
-            System.out.println("WatermarkRemover: 扩展范围去水印成功");
             return true;
         }
         
         // 最后尝试宽松范围
-        System.out.println("WatermarkRemover: 尝试宽松颜色范围...");
         if (removeWatermark(imagePath, LOOSE_LOWER_BGR, LOOSE_UPPER_BGR)) {
-            System.out.println("WatermarkRemover: 宽松范围去水印成功");
             return true;
         }
         
-        System.out.println("WatermarkRemover: 所有颜色范围都尝试完毕，水印可能去除不完全");
         return false;
     }
 
@@ -129,18 +122,14 @@ public class WatermarkRemover {
             }
 
             logger.debug("开始处理图片去水印: {}", imagePath);
-            System.out.println("WatermarkRemover: 开始处理图片去水印: " + imagePath);
 
             // 读取图片
             Mat img = Imgcodecs.imread(imagePath);
             if (img.empty()) {
                 logger.error("无法读取图片: {}", imagePath);
-                System.out.println("WatermarkRemover: 无法读取图片: " + imagePath);
                 return false;
             }
             
-            System.out.println("WatermarkRemover: 成功读取图片，尺寸: " + img.width() + "x" + img.height());
-
             // 创建掩码
             Mat mask = new Mat();
             Core.inRange(img, lowerBgr, upperBgr, mask);
@@ -162,10 +151,8 @@ public class WatermarkRemover {
 
             if (success) {
                 logger.debug("图片去水印完成: {}", imagePath);
-                System.out.println("WatermarkRemover: 图片去水印完成: " + imagePath);
             } else {
                 logger.error("保存去水印图片失败: {}", imagePath);
-                System.out.println("WatermarkRemover: 保存去水印图片失败: " + imagePath);
             }
 
             return success;

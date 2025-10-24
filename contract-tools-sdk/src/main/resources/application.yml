@@ -76,8 +76,7 @@ zhaoxin:
 # 日志配置
 logging:
   level:
-    com.zhaoxinms.contract.template.sdk: DEBUG
-    com.zhaoxinms.contract.tools: DEBUG
+    com.zhaoxinms.contract: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" 
 

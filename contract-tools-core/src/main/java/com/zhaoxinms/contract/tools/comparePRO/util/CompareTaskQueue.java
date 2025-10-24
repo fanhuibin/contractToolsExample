@@ -82,7 +82,6 @@ public class CompareTaskQueue {
             // 尝试在调用线程中执行（降级策略）
             if (!executor.isShutdown()) {
                 try {
-                    System.out.println("尝试在调用线程中执行被拒绝的任务...");
                     r.run();
                 } catch (Exception e) {
                     System.err.println("在调用线程中执行任务失败: " + e.getMessage());
@@ -108,15 +107,6 @@ public class CompareTaskQueue {
         
         // 初始化线程池
         initializeThreadPool();
-        
-        System.out.println("GPU OCR任务队列初始化完成:");
-        System.out.println("  - 核心线程数: " + corePoolSize);
-        System.out.println("  - 最大线程数: " + maxPoolSize);
-        System.out.println("  - 队列容量: " + queueCapacity);
-        System.out.println("  - 线程空闲时间: " + keepAliveTime + "秒");
-        System.out.println("  - 线程名称前缀: " + threadNamePrefix);
-        System.out.println("  - 详细日志: " + (enableDetailedLogging ? "启用" : "禁用"));
-        System.out.println("  - 最大处理能力: " + (maxPoolSize + queueCapacity) + "个并发任务");
     }
     
     /**
@@ -145,8 +135,6 @@ public class CompareTaskQueue {
         if (keepAliveTime < 0) {
             throw new IllegalArgumentException("线程空闲时间不能为负数，当前配置: " + keepAliveTime);
         }
-        
-        System.out.println("GPU OCR线程池配置加载完成: " + config.toString());
     }
     
     /**
@@ -303,14 +291,11 @@ public class CompareTaskQueue {
      * 优雅关闭线程池
      */
     public void shutdown() {
-        System.out.println("开始关闭GPU OCR任务队列...");
-        
         executor.shutdown();
         
         try {
             // 等待60秒让任务完成
             if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                System.out.println("强制关闭GPU OCR任务队列...");
                 executor.shutdownNow();
                 
                 // 再等待30秒
@@ -325,7 +310,6 @@ public class CompareTaskQueue {
         
         // 输出最终统计
         TaskQueueStats finalStats = getStats();
-        System.out.println("GPU OCR任务队列关闭完成，最终统计:");
         System.out.println(finalStats);
     }
     

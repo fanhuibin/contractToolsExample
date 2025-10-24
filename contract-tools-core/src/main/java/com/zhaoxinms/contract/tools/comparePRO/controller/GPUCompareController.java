@@ -76,9 +76,6 @@ public class GPUCompareController {
             @RequestParam(value = "ocrServiceType", defaultValue = "dotsocr") String ocrServiceType) {
 
         try {
-            // 调试日志：记录接收到的去水印参数
-            System.out.println("Controller接收到的去水印参数: " + removeWatermark + ", 强度: " + watermarkRemovalStrength);
-            
             // 创建比对选项
             CompareOptions options = new CompareOptions();
             options.setIgnoreHeaderFooter(ignoreHeaderFooter);
