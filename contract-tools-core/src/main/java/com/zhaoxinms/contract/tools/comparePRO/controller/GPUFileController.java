@@ -53,7 +53,6 @@ public class GPUFileController {
     @GetMapping("/{path:.+}")
     public ResponseEntity<Resource> serveCompareProFile(@PathVariable String path) {
         try {
-            System.out.println("🌐 接收到文件请求: " + path);
             
             // 处理任务相关文件（图片、PDF等）
             // 路径格式：tasks/taskId/images/old/page-1.png

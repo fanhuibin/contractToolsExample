@@ -118,23 +118,16 @@ public class CompareService {
     public void init() {
 		// 调整任务队列的最大线程数
 		taskQueue.adjustMaxPoolSize(gpuOcrConfig.getParallelThreads());
-		System.out.println("GPU OCR比对服务初始化完成，最大并发线程数: " + gpuOcrConfig.getParallelThreads());
         
         // 检查ZXOCR服务
         if (mineruOcrService != null) {
             System.out.println("✅ ZXOCR服务已注入并可用");
-            System.out.println("   API地址: " + gpuOcrConfig.getApiUrl());
-            System.out.println("   Backend: " + gpuOcrConfig.getBackend());
         } else {
             System.out.println("⚠️  ZXOCR服务未注入");
         }
         
         // 启动时加载已完成的任务到内存中
         loadCompletedTasks();
-
-		// 输出当前队列状态
-		System.out.println("当前任务队列状态:");
-		System.out.println(taskQueue.getStats());
     }
     
     /**
@@ -175,7 +168,6 @@ public class CompareService {
                                 CompareTask task = loadTaskFromFile(taskId);
                                 if (task != null) {
                                     tasks.put(taskId, task);
-                                    System.out.println("启动时加载任务(前端结果): " + taskId);
                                 }
                             }
                         } catch (Exception e) {
@@ -183,8 +175,6 @@ public class CompareService {
                         }
                     });
             }
-            
-            System.out.println("启动时共加载了 " + tasks.size() + " 个已完成的任务");
             
         } catch (Exception e) {
             System.err.println("启动时加载任务失败: " + e.getMessage());
@@ -368,7 +358,6 @@ public class CompareService {
                 task.setStatus(CompareTask.Status.COMPLETED);
                 // 不再需要设置PDF URL，全部使用画布显示
                 
-                System.out.println("从文件加载任务状态: " + taskId + " (前端结果)");
                 return task;
             }
             
@@ -442,7 +431,6 @@ public class CompareService {
                 Map<String, Object> fromFile = M.readValue(bytes, Map.class);
                 // 放入缓存以便后续快速读取
                 frontendResults.put(taskId, fromFile);
-                System.out.println("前端结果已从文件读取: " + p.toAbsolutePath());
                 return fromFile;
             }
         } catch (Exception e) {
@@ -511,10 +499,6 @@ public class CompareService {
 			canvasResult.put("oldImageBaseUrl", baseUploadPath + "/tasks/" + taskId + "/images/old");
 			canvasResult.put("newImageBaseUrl", baseUploadPath + "/tasks/" + taskId + "/images/new");
 
-			// 不再需要PDF URL，全部使用画布显示
-
-			//System.out.println("Canvas前端结果创建成功，包含图片信息");
-
 		} catch (Exception e) {
 			System.err.println("获取Canvas前端结果失败: " + e.getMessage());
 			// 出错时返回原始结果
@@ -528,10 +512,6 @@ public class CompareService {
 	 * 保存用户修改（直接修改后端存储的数据）
 	 */
 	public void saveUserModifications(String taskId, com.zhaoxinms.contract.tools.comparePRO.controller.GPUCompareController.UserModificationsRequest modifications) {
-		System.out.println("💾 直接修改后端数据 - 任务 " + taskId + ": 忽略" + 
-			(modifications.getIgnoredDifferences() != null ? modifications.getIgnoredDifferences().size() : 0) + 
-			"项, 备注" + 
-			(modifications.getRemarks() != null ? modifications.getRemarks().size() : 0) + "项");
 		
 		// 1. 从 frontendResults 获取原始数据
 		Map<String, Object> frontendResult = frontendResults.get(taskId);
@@ -547,7 +527,6 @@ public class CompareService {
 		@SuppressWarnings("unchecked")
 		List<Map<String, Object>> differences = (List<Map<String, Object>>) frontendResult.get("differences");
 		if (differences == null || differences.isEmpty()) {
-			System.out.println("⚠️ 任务 " + taskId + " 没有差异项，无需修改");
 			return;
 		}
 		
@@ -562,7 +541,6 @@ public class CompareService {
 			// 检查是否被忽略 - 标记而不是删除
 			if (ignoredIndices != null && ignoredIndices.contains(i)) {
 				diff.put("ignored", true);
-				System.out.println("  ⊗ 标记差异项 " + i + " 为已忽略");
 			} else {
 				// 移除忽略标记（如果之前被忽略，现在取消忽略）
 				diff.remove("ignored");
@@ -572,7 +550,6 @@ public class CompareService {
 			if (remarks != null && remarks.containsKey(i)) {
 				String remark = remarks.get(i);
 				diff.put("remark", remark);
-				System.out.println("  📝 为差异项 " + i + " 添加备注: " + remark);
 			} else {
 				// 移除备注（如果之前有备注，现在删除）
 				diff.remove("remark");
@@ -606,8 +583,6 @@ public class CompareService {
 		frontendResult.put("insertCount", insertCount);
 		frontendResult.put("ignoredCount", ignoredCount);
 		
-		System.out.println("✅ 修改已保存: 总" + originalCount + "项, 有效" + totalCount + "项, 已忽略" + ignoredCount + "项");
-		
 		// 6. 保存修改后的数据回 frontendResults 缓存
 		frontendResults.put(taskId, frontendResult);
 		
@@ -617,7 +592,6 @@ public class CompareService {
 			Files.createDirectories(jsonPath.getParent());
 			byte[] json = M.writerWithDefaultPrettyPrinter().writeValueAsBytes(frontendResult);
 			Files.write(jsonPath, json);
-			System.out.println("💾 数据已持久化到文件: " + jsonPath.toAbsolutePath());
 		} catch (Exception e) {
 			System.err.println("❌ 持久化失败: " + e.getMessage());
 			throw new RuntimeException("保存用户修改到文件失败: " + e.getMessage(), e);
@@ -690,9 +664,6 @@ public class CompareService {
 	private void executeCompareTaskWithPaths(CompareTask task, String oldFilePath, String newFilePath,
 			CompareOptions options) { 
         
-        // 调试日志：记录去水印设置
-        System.out.println("Service收到的去水印设置: " + (options != null ? options.isRemoveWatermark() : "options为null"));
-        
         // 创建进度管理器（正常模式，非调试模式）
         CompareTaskProgressManager progressManager = new CompareTaskProgressManager(task, false);
         
@@ -722,14 +693,12 @@ public class CompareService {
             // 使用 ZXOCR (MinerU) 服务
             options.setOcrServiceType("mineru");
             
-            System.out.println("🔍 使用 ZXOCR 服务");
             progressManager.logStepDetail("使用 ZXOCR 服务");
             
             // 检查 MinerU 服务
             if (mineruOcrService == null) {
                 throw new RuntimeException("ZXOCR 服务未启用，请检查配置");
             }
-            System.out.println("✅ ZXOCR 服务已就绪");
             progressManager.logStepDetail("✅ ZXOCR 服务已就绪");
             
             progressManager.completeStep(TaskStep.INIT);
@@ -1199,7 +1168,6 @@ public class CompareService {
 				for (int index : connectedGroup) {
 					groupBlocks.add(blocks.get(index));
 				}
-				//System.out.println("[传递性合并] 找到连通组，包含块: " + connectedGroup);
 				result.add(mergeSameBboxGroup(groupBlocks));
 			}
 
@@ -1246,7 +1214,6 @@ public class CompareService {
 					getBboxCount(otherBlock) > 0 && 
 					hasMatchingBboxWithPage(currentBlock, otherBlock)) {
 					
-					//System.out.println("[传递性合并] 发现连通: 块#" + current + " 与 块#" + i);
 					queue.offer(i);
 					visited[i] = true;
 				}
@@ -1281,12 +1248,6 @@ public class CompareService {
 			}
 		}
 		
-//		System.out.println("[全局DiffRanges合并] " + (isOldText ? "diffRangesA" : "diffRangesB") + 
-//			" 合并前总数=" + group.stream().mapToInt(b -> {
-//				List<DiffBlock.TextRange> r = isOldText ? b.diffRangesA : b.diffRangesB;
-//				return r != null ? r.size() : 0;
-//			}).sum() + ", 合并后数量=" + mergedRanges.size());
-		
 		return mergedRanges;
 	}
 	
@@ -1307,9 +1268,6 @@ public class CompareService {
 				}
 			}
 		}
-		
-//		System.out.println("[TextStartIndex合并] " + (isOldText ? "textStartIndexA" : "textStartIndexB") + 
-//			" 最小值=" + minIndex + " (全局文本位置)");
 		
 		return minIndex;
 	}
@@ -1469,17 +1427,6 @@ public class CompareService {
 				merged.nestedBlocks.addAll(block.nestedBlocks);
 			}
 		}
-
-//		System.out.println("=== 传递性合并策略：基于连通图的智能合并 ===");
-//		System.out.println("合并 " + merged.type + " 类型块: " + group.size() + "个块 -> 1个块");
-//		System.out.println("合并后oldBboxes: " + (merged.oldBboxes != null ? merged.oldBboxes.size() : 0) + "个");
-//		System.out.println("合并后newBboxes: " + (merged.newBboxes != null ? merged.newBboxes.size() : 0) + "个");
-//		System.out.println("合并后allTextA: " + (merged.allTextA != null ? merged.allTextA.size() : 0) + "条");
-//		System.out.println("合并后allTextB: " + (merged.allTextB != null ? merged.allTextB.size() : 0) + "条");
-//		System.out.println("合并后oldText: " + merged.oldText);
-//		System.out.println("合并后newText: " + merged.newText);
-//		System.out.println("合并后nestedBlocks: " + (merged.nestedBlocks != null ? merged.nestedBlocks.size() : 0) + "个");
-//		System.out.println("=== 传递性合并完成 ===");
 
         return merged;
     }
@@ -2027,8 +1974,6 @@ public class CompareService {
 			Files.write(Path.of(txtOut), extractedWithPages.getBytes(StandardCharsets.UTF_8));
 			Files.write(Path.of(txtOutCompare), extractedNoPages.getBytes(StandardCharsets.UTF_8));
 			
-			System.out.println("Extracted text saved: " + txtOut);
-			System.out.println("Extracted text (no page markers) saved: " + txtOutCompare);
 		} catch (Exception e) {
 			System.err.println("Failed to write extracted text: " + e.getMessage());
 		}
@@ -2075,7 +2020,6 @@ public class CompareService {
 				mapper.writerWithDefaultPrettyPrinter().writeValue(jsonFile, pageJson);
 			}
 			
-			System.out.println("📄 MinerU每页JSON已保存到: " + jsonDir.getAbsolutePath() + " (共" + layouts.length + "页)");
 		} catch (Exception e) {
 			System.err.println("保存每页JSON失败: " + e.getMessage());
 		}

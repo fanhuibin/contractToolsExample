@@ -1,6 +1,5 @@
 package com.zhaoxinms.contract.tools.comparePRO.util;
 
-import com.zhaoxinms.contract.tools.common.exception.ServiceException;
 import com.zhaoxinms.contract.tools.compare.DiffUtil;
 import com.zhaoxinms.contract.tools.comparePRO.model.CharBox;
 import com.zhaoxinms.contract.tools.comparePRO.model.DiffBlock;
@@ -178,7 +177,6 @@ public class DiffProcessingUtil {
 					
 					if (globalEnd > globalStart) {
 						rangesA.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
-						//System.out.println("[DELETE全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
 					
 					computedRangesA = rangesA;
@@ -228,7 +226,6 @@ public class DiffProcessingUtil {
 					
 					if (globalEnd > globalStart) {
 						rangesB.add(new DiffBlock.TextRange(globalStart, globalEnd, "DIFF"));
-						//System.out.println("[INSERT全局DiffRange] 全局范围: [" + globalStart + "," + globalEnd + "], 长度=" + (globalEnd - globalStart));
 					}
 					
 					computedRangesB = rangesB;
@@ -501,31 +498,6 @@ public class DiffProcessingUtil {
 				}
 			}
 
-			// 页码已经在创建blk对象时设置，这里不需要再次同步
-			
-			// 调试输出：验证页码和prevBboxes的设置
-			//System.out.println("DEBUG DiffBlock创建 - 操作: " + d.operation + ", pageA: " + pageAList + ", pageB: " + pageBList);
-			//System.out.println("DEBUG 页码设置逻辑 - 当前块页码基于实际bbox设置，prevBboxes用于跳转参考");
-//			if (prevBlock != null) {
-//				System.out.println("DEBUG 前一个块 - pageA: " + prevBlock.pageA + ", pageB: " + prevBlock.pageB + 
-//					", oldBboxes: " + (prevBlock.oldBboxes != null ? prevBlock.oldBboxes.size() : 0) + 
-//					", newBboxes: " + (prevBlock.newBboxes != null ? prevBlock.newBboxes.size() : 0));
-//			}
-//			if (blk.prevOldBboxes != null && !blk.prevOldBboxes.isEmpty()) {
-//				System.out.println("DEBUG prevOldBboxes: " + blk.prevOldBboxes.size() + "个, 第一个: [" + 
-//					blk.prevOldBboxes.get(0)[0] + "," + blk.prevOldBboxes.get(0)[1] + "," + 
-//					blk.prevOldBboxes.get(0)[2] + "," + blk.prevOldBboxes.get(0)[3] + "]");
-//			} else {
-//				System.out.println("DEBUG prevOldBboxes: 空");
-//			}
-//			if (blk.prevNewBboxes != null && !blk.prevNewBboxes.isEmpty()) {
-//				System.out.println("DEBUG prevNewBboxes: " + blk.prevNewBboxes.size() + "个, 第一个: [" + 
-//					blk.prevNewBboxes.get(0)[0] + "," + blk.prevNewBboxes.get(0)[1] + "," + 
-//					blk.prevNewBboxes.get(0)[2] + "," + blk.prevNewBboxes.get(0)[3] + "]");
-//			} else {
-//				System.out.println("DEBUG prevNewBboxes: 空");
-//			}
-
 			result.add(blk);
 
 			// 更新前一个块引用用于下一次迭代
@@ -554,10 +526,6 @@ public class DiffProcessingUtil {
 
 		int ignoredCount = 0;
 		int retainedCount = 0;
-
-		// 输出过滤开始信息
-//		System.out.println("=== Difference Filtering Statistics ===");
-//		System.out.println("Total blocks to process: " + blocks.size());
 
 		// 根据originalDiff.text内容标记应该被忽略的块
 		for (DiffBlock block : blocks) {
@@ -651,35 +619,14 @@ public class DiffProcessingUtil {
 			if (globalChar.bbox != null) {
 				String globalBboxKey = key(globalChar.page, globalChar.bbox);
 				if (firstBboxKey.equals(globalBboxKey)) {
-//					System.out.println("[TextStartIndex] 找到第一个bbox在全局序列中的位置: 索引=" + i + 
-//						", bboxKey=" + firstBboxKey + ", 字符='" + globalChar.ch + "'");
 					return i;
 				}
 			}
 		}
 		
-		// 如果没找到，返回null
-		//System.out.println("[TextStartIndex] 未找到bbox在全局序列中的位置: bboxKey=" + firstBboxKey);
 		return null;
 	}
 
-	/**
-	 * 在序列中找到指定 bbox 的第一次出现位置（文本段起点）
-	 * @param sequence 完整的CharBox序列 
-	 * @param bboxKey bbox的key (page + bbox坐标)
-	 * @return 该bbox在序列中第一次出现的位置，找不到返回-1
-	 */
-	private static int findBboxStartInSequence(List<CharBox> sequence, String bboxKey) {
-		if (sequence == null || bboxKey == null) return -1;
-		
-		for (int i = 0; i < sequence.size(); i++) {
-			CharBox c = sequence.get(i);
-			if (c.bbox != null && bboxKey.equals(key(c.page, c.bbox))) {
-				return i;  // 找到第一次出现的位置
-			}
-		}
-		return -1;  // 没找到
-	}
 
 	private static String join(List<CharBox> chars) {
 		StringBuilder sb = new StringBuilder();
@@ -1042,83 +989,4 @@ public class DiffProcessingUtil {
 	public static void resetDebugCounter() {
 		debugConsistencyCheckCount = 0;
 	}
-
-	/**
-	 * 验证diff文本与字符序列的一致性（调试模式专用）
-	 * 
-	 * @param diff 差异对象
-	 * @param charSegment 对应的字符片段
-	 * @param seqName 序列名称（seqA或seqB）
-	 * @param startIndex 起始索引
-	 */
-	private static void validateDiffTextConsistency(DiffUtil.Diff diff, List<CharBox> charSegment, String seqName, int startIndex) {
-		// 如果已经输出30条，则不再输出
-		if (debugConsistencyCheckCount >= MAX_DEBUG_OUTPUT) {
-			return;
-		}
-		
-		String diffText = diff.text;
-		
-		// 从字符片段构建实际文本
-		StringBuilder actualText = new StringBuilder();
-		for (CharBox cb : charSegment) {
-			actualText.append(cb.ch);
-		}
-		String actualStr = actualText.toString();
-		
-		// 比较diff文本与实际字符序列
-		if (!diffText.equals(actualStr)) {
-			debugConsistencyCheckCount++;
-			
-//			System.out.println("=== [调试] 文本一致性检查失败 #" + debugConsistencyCheckCount + " ===");
-//			System.out.println("操作类型: " + diff.operation);
-//			System.out.println("序列: " + seqName);
-//			System.out.println("起始索引: " + startIndex);
-//			System.out.println("长度: " + diffText.length() + " vs " + actualStr.length());
-//			System.out.println("Diff文本: '" + escapeString(diffText) + "'");
-//			System.out.println("实际文本: '" + escapeString(actualStr) + "'");
-			
-			// 逐字符比较，找出不一致的位置
-			int minLen = Math.min(diffText.length(), actualStr.length());
-			for (int i = 0; i < minLen; i++) {
-				char diffChar = diffText.charAt(i);
-				char actualChar = actualStr.charAt(i);
-				if (diffChar != actualChar) {
-					//System.out.println("第" + i + "个字符不一致: '" + escapeChar(diffChar) + "' vs '" + escapeChar(actualChar) + "'");
-					break;
-				}
-			}
-			
-			if (diffText.length() != actualStr.length()) {
-				//System.out.println("长度不一致: diff=" + diffText.length() + ", actual=" + actualStr.length());
-			}
-			//System.out.println("=====================================");
-			
-			// 如果达到最大输出数量，提示用户
-			if (debugConsistencyCheckCount >= MAX_DEBUG_OUTPUT) {
-				//System.out.println("=== [调试] 已达到最大输出限制(" + MAX_DEBUG_OUTPUT + "条)，后续不一致情况将不再显示 ===");
-			}
-		}
-	}
-	
-	/**
-	 * 转义字符串中的特殊字符，便于调试输出
-	 */
-	private static String escapeString(String str) {
-		return str.replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t");
-	}
-	
-	/**
-	 * 转义单个字符，便于调试输出
-	 */
-	private static String escapeChar(char c) {
-		switch (c) {
-			case '\n': return "\\n";
-			case '\r': return "\\r";
-			case '\t': return "\\t";
-			case ' ': return "SPACE";
-			default: return String.valueOf(c);
-		}
-	}
-
 }
