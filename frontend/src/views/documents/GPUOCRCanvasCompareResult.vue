@@ -44,18 +44,7 @@
         
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
-       
-         <el-button 
-           size="small" 
-           type="primary" 
-           @click="saveUserModificationsToBackend" 
-           :loading="savingModifications"
-           :disabled="!hasUnsavedModifications"
-         >
-           <el-icon><DocumentChecked /></el-icon>
-           保存修改
-         </el-button>
-         <el-button size="small" text @click="goBack">返回上传</el-button>
+        <el-button size="small" text @click="goBack">返回上传</el-button>
       </div>
     </div>
     <div class="compare-body" v-loading="loading">
@@ -342,7 +331,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed, nextTick, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
@@ -513,27 +502,8 @@ const currentRemarkText = ref('')
 // 移除 showIgnoredView，现在使用 filterMode 来控制
 const remarkExpandedSet = ref<Set<number>>(new Set()) // 控制备注展开状态
 
-// 保存修改状态管理
-const savingModifications = ref(false) // 是否正在保存
-const lastSavedIgnoredSet = ref<Set<number>>(new Set()) // 上次保存的忽略集合
-const lastSavedRemarksMap = ref<Map<number, string>>(new Map()) // 上次保存的备注映射
-
-// 计算是否有未保存的修改
-const hasUnsavedModifications = computed(() => {
-  // 检查忽略集合是否有变化
-  if (ignoredSet.value.size !== lastSavedIgnoredSet.value.size) return true
-  for (const item of ignoredSet.value) {
-    if (!lastSavedIgnoredSet.value.has(item)) return true
-  }
-  
-  // 检查备注映射是否有变化
-  if (remarksMap.value.size !== lastSavedRemarksMap.value.size) return true
-  for (const [key, value] of remarksMap.value) {
-    if (lastSavedRemarksMap.value.get(key) !== value) return true
-  }
-  
-  return false
-})
+// 自动保存状态
+const isSaving = ref(false) // 是否正在保存
 
 
 
@@ -1510,33 +1480,79 @@ const escapeHtml = (text: string) => {
 // 忽略和备注功能函数
 const isIgnored = (diffIndex: number) => ignoredSet.value.has(diffIndex)
 
-const toggleIgnore = (diffIndex: number) => {
-  if (ignoredSet.value.has(diffIndex)) {
-    ignoredSet.value.delete(diffIndex)
-  } else {
-    ignoredSet.value.add(diffIndex)
-  }
-  ignoredSet.value = new Set(ignoredSet.value)
+const toggleIgnore = async (diffIndex: number) => {
+  const isCurrentlyIgnored = ignoredSet.value.has(diffIndex)
+  const action = isCurrentlyIgnored ? '取消忽略' : '忽略'
+  const message = isCurrentlyIgnored 
+    ? '确定要取消忽略此差异项吗？' 
+    : '确定要忽略此差异项吗？忽略后将自动保存。'
   
-  // 如果当前选中的项目被忽略了，重置选中状态
-  if (activeIndex.value === diffIndex && ignoredSet.value.has(diffIndex)) {
-    activeIndex.value = -1
-    selectedDiffIndex.value = null
-  }
-  
-  // 更新中间Canvas的差异图标和连接线
-  nextTick(() => {
-    if (middleCanvasInteraction) {
-      middleCanvasInteraction.updateProps({
-        filteredResults: filteredResults.value,
-        selectedDiffIndex: selectedFilteredIndex.value
-      })
-      middleCanvasInteraction.render()
+  try {
+    // 弹出确认对话框
+    await ElMessageBox.confirm(
+      message,
+      `${action}确认`,
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    // 用户确认后，切换忽略状态
+    if (isCurrentlyIgnored) {
+      ignoredSet.value.delete(diffIndex)
+    } else {
+      ignoredSet.value.add(diffIndex)
     }
-  })
-  
-  // 可以在这里添加保存到后端的逻辑
-  console.log(`差异项 ${diffIndex + 1} ${isIgnored(diffIndex) ? '已忽略' : '已取消忽略'}`)
+    ignoredSet.value = new Set(ignoredSet.value)
+    
+    // 如果当前选中的项目被忽略了，重置选中状态
+    if (activeIndex.value === diffIndex && ignoredSet.value.has(diffIndex)) {
+      activeIndex.value = -1
+      selectedDiffIndex.value = null
+    }
+    
+    // 更新中间Canvas的差异图标和连接线
+    nextTick(() => {
+      if (middleCanvasInteraction) {
+        middleCanvasInteraction.updateProps({
+          filteredResults: filteredResults.value,
+          selectedDiffIndex: selectedFilteredIndex.value
+        })
+        middleCanvasInteraction.render()
+      }
+    })
+    
+    console.log(`差异项 ${diffIndex + 1} ${isIgnored(diffIndex) ? '已忽略' : '已取消忽略'}`)
+    
+    // 自动保存到后端
+    const saved = await saveUserModificationsToBackend()
+    
+    // 如果保存失败，回滚状态
+    if (!saved) {
+      if (isCurrentlyIgnored) {
+        ignoredSet.value.add(diffIndex)
+      } else {
+        ignoredSet.value.delete(diffIndex)
+      }
+      ignoredSet.value = new Set(ignoredSet.value)
+      
+      // 恢复 Canvas 渲染
+      nextTick(() => {
+        if (middleCanvasInteraction) {
+          middleCanvasInteraction.updateProps({
+            filteredResults: filteredResults.value,
+            selectedDiffIndex: selectedFilteredIndex.value
+          })
+          middleCanvasInteraction.render()
+        }
+      })
+    }
+  } catch (error) {
+    // 用户取消操作或其他错误，不做任何改变
+    console.log('用户取消了操作')
+  }
 }
 
 const hasRemark = (diffIndex: number) => remarksMap.value.has(diffIndex) && remarksMap.value.get(diffIndex)
@@ -1560,25 +1576,36 @@ const showRemarkDialog = (diffIndex: number) => {
   showRemarkDialogVisible.value = true
 }
 
-const saveRemark = () => {
+const saveRemark = async () => {
   if (currentRemarkIndex.value >= 0) {
-    if (currentRemarkText.value.trim()) {
-      remarksMap.value.set(currentRemarkIndex.value, currentRemarkText.value.trim())
+    const remarkIndex = currentRemarkIndex.value
+    const remarkText = currentRemarkText.value.trim()
+    
+    if (remarkText) {
+      remarksMap.value.set(remarkIndex, remarkText)
       // 保存备注后自动展开显示
-      remarkExpandedSet.value.add(currentRemarkIndex.value)
+      remarkExpandedSet.value.add(remarkIndex)
       remarkExpandedSet.value = new Set(remarkExpandedSet.value)
     } else {
-      remarksMap.value.delete(currentRemarkIndex.value)
+      remarksMap.value.delete(remarkIndex)
       // 删除备注时也删除展开状态
-      remarkExpandedSet.value.delete(currentRemarkIndex.value)
+      remarkExpandedSet.value.delete(remarkIndex)
       remarkExpandedSet.value = new Set(remarkExpandedSet.value)
     }
     remarksMap.value = new Map(remarksMap.value)
     
-    // 可以在这里添加保存到后端的逻辑
-    console.log(`差异项 ${currentRemarkIndex.value + 1} 备注已保存:`, currentRemarkText.value)
+    console.log(`差异项 ${remarkIndex + 1} 备注已保存:`, remarkText)
+    
+    // 关闭对话框
+    showRemarkDialogVisible.value = false
+    currentRemarkText.value = ''
+    currentRemarkIndex.value = -1
+    
+    // 自动保存到后端
+    await saveUserModificationsToBackend()
+  } else {
+    showRemarkDialogVisible.value = false
   }
-  showRemarkDialogVisible.value = false
 }
 
 const cancelRemark = () => {
@@ -1588,18 +1615,14 @@ const cancelRemark = () => {
 }
 
 // 保存用户修改到后端
+// 自动保存用户修改到后端
 const saveUserModificationsToBackend = async () => {
   if (!taskId.value) {
     ElMessage.error('任务ID不存在')
-    return
+    return false
   }
   
-  if (!hasUnsavedModifications.value) {
-    ElMessage.info('没有需要保存的修改')
-    return
-  }
-  
-  savingModifications.value = true
+  isSaving.value = true
   
   try {
     const modifications = {
@@ -1611,30 +1634,26 @@ const saveUserModificationsToBackend = async () => {
     
     const response = await saveUserModificationsAPI(taskId.value, modifications)
     
-    if ((response as any)?.code === 200) {
-      // 更新上次保存的状态
-      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
-      lastSavedRemarksMap.value = new Map(remarksMap.value)
-      
-      ElMessage.success({
-        message: '修改已保存！被忽略的差异项已从数据中移除，备注已添加到差异项中。',
-        duration: 3000
-      })
-      
-      console.log('✅ 用户修改保存成功')
-      
-      // 保存成功后，重新加载数据以显示最新结果
-      setTimeout(() => {
-        fetchResult(taskId.value)
-      }, 500)
-    } else {
-      throw new Error((response as any)?.message || '保存失败')
-    }
+    // 响应拦截器已经处理了非200的情况，能执行到这里说明保存成功
+    console.log('✅ 用户修改保存成功', response)
+    
+    ElMessage.success({
+      message: '修改已保存成功！',
+      duration: 2000
+    })
+    
+    // 保存成功后，重新加载数据以显示最新结果
+    setTimeout(() => {
+      fetchResult(taskId.value)
+    }, 500)
+    
+    return true
   } catch (error: any) {
     console.error('❌ 保存用户修改失败:', error)
     ElMessage.error(error?.message || '保存修改失败，请稍后重试')
+    return false
   } finally {
-    savingModifications.value = false
+    isSaving.value = false
   }
 }
 
@@ -1804,10 +1823,6 @@ const fetchResult = async (id: string) => {
           ignoredSet.value.add(index)
         }
       })
-      
-      // 更新上次保存的状态（因为是从后端加载的，视为已保存状态）
-      lastSavedIgnoredSet.value = new Set(ignoredSet.value)
-      lastSavedRemarksMap.value = new Map(remarksMap.value)
       
       console.log('✅ 从后端恢复备注:', remarksMap.value.size, '条')
       
