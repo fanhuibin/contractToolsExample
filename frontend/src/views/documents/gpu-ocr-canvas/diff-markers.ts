@@ -152,7 +152,7 @@ export const renderMiddleCanvasDiffIcons = (
   
   // 绘制所有可见的差异图标
   let renderedCount = 0
-  filteredResults.forEach((diff, index) => {
+  filteredResults.forEach((diff, filteredIndex) => {
     const position = calculateDiffIconYPosition(diff, leftWrapper, oldImageInfo, newImageInfo)
     if (position && position.visible) {
       drawDiffIcon(ctx, centerX, position.relativeY, diff.operation)
@@ -160,13 +160,13 @@ export const renderMiddleCanvasDiffIcons = (
       // 记录点击区域
       const iconSize = 20
       const halfSize = iconSize / 2
-      const clickableId = `middle-${index}`
+      const clickableId = `middle-${filteredIndex}`
       clickableAreas.set(clickableId, {
         x: centerX - halfSize,
         y: position.relativeY - halfSize,
         width: iconSize,
         height: iconSize,
-        diffIndex: index,
+        diffIndex: filteredIndex, // 存储过滤后的索引
         operation: diff.operation,
         bbox: diff.operation === 'DELETE' ? diff.oldBbox || [] : diff.newBbox || [],
         originalDiff: diff
