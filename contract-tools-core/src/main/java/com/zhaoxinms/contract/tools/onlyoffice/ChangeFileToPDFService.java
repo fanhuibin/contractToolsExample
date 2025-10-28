@@ -93,9 +93,12 @@ public class ChangeFileToPDFService {
      */
     public String covertToPdf(FileInfo fileInfo) {
         // 构建文件下载URL，添加时间戳解决缓存问题
-        String fileUrl = zxcmConfig.getApplication().getBaseUrl() + "/download/" + fileInfo.getId() 
+        // 使用 OnlyOffice 回调的下载接口路径
+        String fileUrl = zxcmConfig.getApplication().getBaseUrl() + "/api/onlyoffice/callback/download/" + fileInfo.getId() 
             + "?fileId=" + fileInfo.getId() 
             + "&t=" + System.currentTimeMillis();
+        
+        log.info("PDF转换文件URL: {}", fileUrl);
         
         // 生成目标文件路径
         String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));

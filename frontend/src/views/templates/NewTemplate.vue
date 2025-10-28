@@ -8,26 +8,26 @@
 
     <el-card>
       <div class="body">
-        <el-form label-width="100px" :inline="false" @submit.prevent>
-          <el-form-item label="上传docx">
+        <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" :inline="false" @submit.prevent>
+          <el-form-item label="模板名称" prop="name">
+            <el-input v-model="form.name" placeholder="请输入模板名称" maxlength="50" show-word-limit style="width: 400px;" />
+          </el-form-item>
+          <el-form-item label="模板编码" prop="templateCode">
+            <el-input v-model="form.templateCode" placeholder="请输入模板编码，如：ht-sale-001" maxlength="50" style="width: 400px;" />
+            <div class="form-tip">模板编码用于标识同一合同的不同版本，支持字母、数字、中划线、下划线，至少3个字符</div>
+          </el-form-item>
+          <el-form-item label="版本描述">
+            <el-input v-model="form.description" type="textarea" :rows="3" placeholder="请输入版本描述或更新说明（可选）" maxlength="200" show-word-limit style="width: 400px;" />
+          </el-form-item>
+          <el-form-item label="上传docx" prop="file">
             <el-upload class="uploader" drag :auto-upload="false" :show-file-list="false" accept=".docx" :on-change="onFileChange">
-              <i class="el-icon-upload"></i>
+              <el-icon class="el-icon--upload"><upload-filled /></el-icon>
               <div class="el-upload__text">拖拽文件到此处，或 <em>点击上传</em></div>
+              <template #tip>
+                <div class="el-upload__tip">仅支持.docx格式文件</div>
+              </template>
             </el-upload>
-            <div v-if="file" class="file-tip">{{ file.name }}</div>
-          </el-form-item>
-          <el-form-item>
-            <el-input v-model="form.name" placeholder="请输入模板名称" />
-          </el-form-item>
-          <el-form-item>
-            <el-select v-model="form.category" placeholder="请选择分类" style="width: 240px;">
-              <el-option label="销售合同" value="sale" />
-              <el-option label="服务合同" value="service" />
-              <el-option label="租赁合同" value="lease" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="模板ID">
-            <el-input v-model="form.templateId" placeholder="上传成功后生成，也可手动调整" />
+            <div v-if="file" class="file-tip">已选择：{{ file.name }}</div>
           </el-form-item>
           <el-form-item>
             <el-button type="primary" :disabled="!canUpload" :loading="loading" @click="doUpload">上传并开始设计</el-button>
@@ -43,16 +43,30 @@
 import { ref, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { DocumentAdd } from '@element-plus/icons-vue'
-import { uploadTemplateDocx } from '@/api/templateDesign'
+import { DocumentAdd, UploadFilled } from '@element-plus/icons-vue'
+import { uploadTemplateDocx, saveTemplateDesign } from '@/api/templateDesign'
 import { PageHeader } from '@/components/common'
 
 const router = useRouter()
 const loading = ref(false)
 const file = ref<File | null>(null)
-const form = reactive({ name: '', category: '', templateId: '' })
+const formRef = ref()
+const form = reactive({ 
+  name: '', 
+  templateCode: '', 
+  description: ''
+})
 
-const canUpload = computed(() => !!file.value && !!form.templateId)
+const rules = {
+  name: [{ required: true, message: '请输入模板名称', trigger: 'blur' }],
+  templateCode: [
+    { required: true, message: '请输入模板编码', trigger: 'blur' },
+    { min: 3, message: '模板编码至少3个字符', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9\-_]+$/, message: '模板编码只能包含字母、数字、中划线和下划线，不能使用中文', trigger: 'blur' }
+  ]
+}
+
+const canUpload = computed(() => !!file.value && !!form.name && !!form.templateCode)
 
 function onFileChange(f: any) {
   const raw = f?.raw as File
@@ -65,16 +79,61 @@ function onFileChange(f: any) {
 }
 
 async function doUpload() {
+  if (!formRef.value) return
+  
+  // 先检查文件是否上传
+  if (!file.value) {
+    ElMessage.warning('请先上传文件')
+    return
+  }
+  
+  try {
+    // 表单验证
+    await formRef.value.validate()
+  } catch {
+    return
+  }
+
   if (!canUpload.value) return
+  
   try {
     loading.value = true
-    const res = await uploadTemplateDocx({ templateId: form.templateId, file: file.value as File }) as any
-    if (res?.code !== 200) throw new Error(res?.message || '上传失败')
-    const fileId = res?.data?.fileId || ''
-    ElMessage.success('上传成功，进入模板设计')
-    router.push({ path: '/template-design', query: { id: form.templateId, fileId } })
+    
+    // 上传文件（使用临时ID）
+    const tempId = `TEMP_${Date.now()}`
+    const uploadRes = await uploadTemplateDocx({ templateId: tempId, file: file.value as File }) as any
+    
+    if (uploadRes?.data?.code !== 200) {
+      throw new Error(uploadRes?.data?.message || '上传失败')
+    }
+    
+    const uploadedData = uploadRes?.data?.data || {}
+    const fileId = uploadedData?.fileId || ''
+    const recordId = uploadedData?.id || ''
+    
+    // 更新模板信息
+    const saveRes = await saveTemplateDesign({
+      id: recordId,
+      templateCode: form.templateCode,
+      templateName: form.name,
+      description: form.description,
+      fileId: fileId,
+      version: '1.0',
+      status: 'DRAFT',
+      elementsJson: JSON.stringify({ elements: [] })
+    }) as any
+    
+    if (saveRes?.data?.code !== 200) {
+      throw new Error(saveRes?.data?.message || '保存失败')
+    }
+    
+    const savedData = saveRes?.data?.data || {}
+    const finalId = savedData?.id || recordId
+    
+    ElMessage.success('模板创建成功，进入设计页面')
+    router.push({ path: '/template-design', query: { id: finalId, fileId, returnUrl: '/templates' } })
   } catch (e: any) {
-    ElMessage.error(e?.message || '上传失败')
+    ElMessage.error(e?.message || '操作失败')
   } finally {
     loading.value = false
   }
@@ -83,8 +142,9 @@ async function doUpload() {
 function reset() {
   file.value = null
   form.name = ''
-  form.category = ''
-  form.templateId = ''
+  form.templateCode = ''
+  form.description = ''
+  formRef.value?.clearValidate()
 }
 </script>
 
@@ -92,7 +152,18 @@ function reset() {
 .new-template { padding: 16px; }
 .card-header { font-weight: 600; }
 .uploader { width: 420px; }
-.file-tip { margin-top: 8px; color:#606266; }
+.file-tip { margin-top: 8px; color: #67c23a; font-weight: 500; }
+.form-tip { 
+  margin-top: 4px; 
+  font-size: 12px; 
+  color: #909399; 
+  line-height: 1.5;
+}
+.el-upload__tip {
+  font-size: 12px;
+  color: #909399;
+  margin-top: 7px;
+}
 </style>
 
 

@@ -43,7 +43,7 @@ import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { watch } from 'vue'
 import { ElLoading, ElButton, ElSpace, ElTag, ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentAdd, View, Refresh } from '@element-plus/icons-vue'
-import { getEditorConfig, getServerInfo } from '@/api/onlyoffice'
+import { getEditorConfig, getServerInfo, forceSaveFile } from '@/api/onlyoffice'
 
 // Props定义
 const props = defineProps({
@@ -118,13 +118,11 @@ const containerStyle = computed(() => ({
 
 // 生命周期
 onMounted(() => {
-  console.log('[onlyoffice] onMounted')
   initEditor()
   window.addEventListener('message', handleMessage)
 })
 
 onUnmounted(() => {
-  console.log('[onlyoffice] onUnmounted')
   window.removeEventListener('message', handleMessage)
   if (docEditor.value) {
     docEditor.value.destroyEditor()
@@ -143,7 +141,6 @@ watch(() => props.fileId, async (nv, ov) => {
     loading.value = true
     await nextTick()
     await initEditor()
-    console.log('[onlyoffice] reloaded editor due to fileId change', nv)
   } catch (e) {
     console.error('[onlyoffice] reload on fileId change failed', e)
   }
@@ -160,7 +157,6 @@ watch(() => props.canEdit, async (nv, ov) => {
     loading.value = true
     await nextTick()
     await initEditor()
-    console.log('[onlyoffice] reloaded editor due to canEdit change', nv)
   } catch (e) {
     console.error('[onlyoffice] reload on canEdit change failed', e)
   }
@@ -173,9 +169,6 @@ const initEditor = async () => {
     loading.value = true
     editorReady.value = false
     loadingText.value = '获取服务器信息...'
-    console.log('[onlyoffice] initEditor get server & config', { fileId: props.fileId, canEdit: props.canEdit, canReview: props.canReview })
-    
-
     
     // 并行获取服务器信息和文档配置，提高加载速度
     const [serverResponse, configResponse] = await Promise.all([
@@ -188,10 +181,13 @@ const initEditor = async () => {
       })
     ])
     
-    serverInfo.value = serverResponse.data
-    const editorConfig = configResponse.data
-    console.log('[onlyoffice] serverInfo', serverInfo.value)
-    console.log('[onlyoffice] editorConfig', editorConfig)
+    serverInfo.value = serverResponse.data.data
+    const editorConfig = configResponse.data.data
+
+    // 检查editorConfig是否有效
+    if (!editorConfig || !editorConfig.document) {
+      throw new Error('无效的编辑器配置：缺少document对象')
+    }
 
     // 保存文件信息
     Object.assign(fileInfo, {
@@ -203,12 +199,10 @@ const initEditor = async () => {
     loadingText.value = '加载OnlyOffice脚本...'
     // 加载OnlyOffice API脚本
     await loadOnlyOfficeScript()
-    console.log('[onlyoffice] api.js loaded')
 
     loadingText.value = '初始化编辑器...'
     // 初始化编辑器
     await initOnlyOfficeEditor(editorConfig)
-    console.log('[onlyoffice] initOnlyOfficeEditor done')
 
   } catch (error) {
     console.error('初始化编辑器失败:', error)
@@ -225,7 +219,6 @@ const loadOnlyOfficeScript = () => {
     // 检查是否已经加载
     if (window.DocsAPI) {
       onlyofficeLoaded.value = true
-      console.log('[onlyoffice] api.js already present')
       resolve()
       return
     }
@@ -252,7 +245,6 @@ const loadOnlyOfficeScript = () => {
 
     script.onload = () => {
       onlyofficeLoaded.value = true
-      console.log('[onlyoffice] api.js onload')
       resolve()
     }
 
@@ -270,12 +262,10 @@ const initOnlyOfficeEditor = (config) => {
       // 清空容器并立即创建编辑器容器
       const container = document.getElementById('onlyoffice-editor-container')
       container.innerHTML = '<div id="onlyoffice-editor" style="height: 100%; width: 100%;"></div>'
-      console.log('[onlyoffice] container prepared')
 
       // 设置超时机制，防止编辑器加载时间过长
       const timeout = setTimeout(() => {
         if (!editorReady.value) {
-          console.warn('编辑器加载超时，强制结束加载状态')
           loading.value = false
           editorReady.value = true
           emit('ready')
@@ -288,7 +278,6 @@ const initOnlyOfficeEditor = (config) => {
         ...config,
         events: {
           onAppReady: () => {
-            console.log('OnlyOffice应用已准备就绪')
             clearTimeout(timeout) // 清除超时
             if (!editorReady.value) {  // 只在首次ready时触发
               loading.value = false
@@ -298,7 +287,6 @@ const initOnlyOfficeEditor = (config) => {
             }
           },
           onDocumentReady: () => {
-            console.log('OnlyOffice文档已准备就绪')
             clearTimeout(timeout) // 清除超时
             if (!editorReady.value) {
               loading.value = false
@@ -308,12 +296,10 @@ const initOnlyOfficeEditor = (config) => {
             }
           },
           onPluginsReady: () => {
-            console.log('OnlyOffice插件已准备就绪')
             pluginLoaded.value = true
             emit('pluginLoaded')
           },
           onDocumentStateChange: (event) => {
-            console.log('文档状态改变:', event)
             emit('documentStateChange', event)
           },
           onError: (event) => {
@@ -324,12 +310,10 @@ const initOnlyOfficeEditor = (config) => {
             reject(new Error(event.data))
           },
           onWarning: (event) => {
-            console.warn('OnlyOffice警告:', event)
             ElMessage.warning('编辑器警告: ' + event.data)
             emit('warning', event)
           },
           onRequestSaveAs: (event) => {
-            console.log('保存文档:', event)
             emit('save', event)
           }
         }
@@ -346,7 +330,6 @@ const initOnlyOfficeEditor = (config) => {
           const exists = editorConfig.plugins.pluginsData.some((it) => (typeof it === 'string' ? it === u : it && it.url === u))
           if (!exists) {
             editorConfig.plugins.pluginsData.push({ url: u, enabled: true })
-            console.log('[onlyoffice] inject plugin url', u)
           }
         }
         add(dsPluginUrl)
@@ -355,7 +338,6 @@ const initOnlyOfficeEditor = (config) => {
 
       // 立即创建编辑器实例，不等待
       docEditor.value = new window.DocsAPI.DocEditor('onlyoffice-editor', editorConfig)
-      console.log('[onlyoffice] DocEditor created')
 
     } catch (error) {
       reject(error)
@@ -377,10 +359,8 @@ const handleMessage = (event) => {
       return
     }
     if (data && data.action === 'ready') {
-      console.log('编辑器已就绪')
       return
     }
-    console.log('收到编辑器消息:', data)
   } catch (error) {
     // 非JSON数据忽略
   }
@@ -434,7 +414,6 @@ const postToPlugin = async (payload) => {
     } catch (_) {}
   }
   send(root)
-  console.log('[onlyoffice] postToPlugin via postMessage', payload)
 }
 
 // 便捷封装给上层调用
@@ -445,14 +424,36 @@ const createBlockContentControl = async (Id, Tag, Alias, Rich = true, ReadOnly =
   await postToPlugin({ action: 'createBlockContentControl', Id, Tag, Alias, Rich, ReadOnly })
 }
 
-// 工具方法：通过插件触发强制保存（与旧预览实现一致）
+// 工具方法：模拟 Ctrl+S 按键，触发编辑器内部保存（最可靠的方法）
 const forceSave = async () => {
   try {
-    await postToPlugin({ action: 'forceSave' })
-    ElMessage.success('已触发强制保存')
+    if (!docEditor.value) {
+      ElMessage.warning('保存失败: 编辑器未准备就绪')
+      throw new Error('编辑器未准备就绪')
+    }
+    
+    if (!props.fileId) {
+      ElMessage.warning('保存失败: 文件ID缺失')
+      throw new Error('文件ID缺失')
+    }
+    
+    // 使用后端的 Command Service 进行强制保存
+    const response = await forceSaveFile(props.fileId)
+    
+    if (response.data && response.data.code === 200) {
+      const result = response.data.data
+      if (result.success) {
+        ElMessage.success('文档保存成功')
+      } else {
+        ElMessage.warning(`保存失败: ${result.errorMessage}`)
+      }
+    } else {
+      ElMessage.error('保存失败')
+    }
   } catch (error) {
-    console.error('强制保存失败:', error)
+    console.error('[onlyoffice] 强制保存异常:', error)
     ElMessage.error('保存失败: ' + (error?.message || '未知错误'))
+    throw error
   }
 }
 

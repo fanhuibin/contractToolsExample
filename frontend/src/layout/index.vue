@@ -3,7 +3,7 @@
     <!-- 侧边栏（使用 Element Plus 菜单） -->
     <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
       <div class="logo">
-        <h2>合同工具集</h2>
+        <h2>肇新合同工具集</h2>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -22,7 +22,7 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>智能文档比对</span>
         </el-menu-item>
-        <el-menu-item index="/compose/start">
+        <el-menu-item index="/templates">
           <el-icon><Edit /></el-icon>
           <span>智能合同合成</span>
         </el-menu-item>
@@ -55,7 +55,7 @@
           <el-button 
             type="primary" 
             link 
-            @click="openUrl('http://zhaoxinms.com')"
+            @click="openDocCenter"
           >
             <el-icon><Reading /></el-icon>
             文档中心
@@ -113,6 +113,11 @@ function handleMenuSelect(index: string) {
 // 打开外部链接
 function openUrl(url: string) {
   window.open(url, '_blank')
+}
+
+// 打开文档中心（新标签页）
+function openDocCenter() {
+  window.open('/doc-center', '_blank')
 }
 </script>
 

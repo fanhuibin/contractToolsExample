@@ -157,6 +157,14 @@
             </div>
           </template>
           
+          <el-alert
+            title="仅显示最近 20 条任务记录"
+            type="info"
+            :closable="false"
+            show-icon
+            class="task-tip"
+          />
+          
           <div v-if="recentTasks.length > 0" class="task-list">
             <div 
               v-for="task in recentTasks.slice(0, 5)" 
@@ -590,7 +598,7 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .extract-main-page {
-  padding: 0;
+  padding: 16px;
 
   /* 三列式主操作区 */
   .main-operation-area {
@@ -740,6 +748,14 @@ onUnmounted(() => {
 
     /* 历史任务卡片 */
       .history-card {
+        .task-tip {
+          margin-bottom: var(--zx-spacing-md);
+          
+          :deep(.el-alert__title) {
+            font-size: var(--zx-font-sm);
+          }
+        }
+        
         .task-list {
         max-height: 330px;
         overflow-y: auto;

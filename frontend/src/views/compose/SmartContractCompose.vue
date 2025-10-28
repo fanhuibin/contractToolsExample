@@ -1,16 +1,14 @@
 <template>
   <div class="smart-compose">
-    <el-card class="page-header-card">
-      <div class="page-header">
-        <div class="header-content">
-          <h2><i class="el-icon header-icon"></i>智能合同合成</h2>
-          <p>按步骤完成：模板管理 → 模板设计 → 合同合成。</p>
-        </div>
-        <div class="header-decoration"></div>
-      </div>
-    </el-card>
+    <PageHeader 
+      title="智能合同合成" 
+      description="按步骤完成：模板管理 → 模板设计 → 合同合成。"
+      :icon="Document"
+      tag="模板引擎"
+      tag-type="warning"
+    />
 
-    <div class="steps-wrapper">
+    <div class="steps-wrapper mb12">
       <el-steps :active="currentStep" @change="onStepChange">
         <el-step v-for="(step, index) in steps" :key="index" :title="step.title" :description="step.description" />
       </el-steps>
@@ -32,6 +30,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { Document } from '@element-plus/icons-vue'
+import { PageHeader } from '@/components/common'
 
 const router = useRouter()
 const route = useRoute()
@@ -58,7 +58,7 @@ function goCurrent() {
       router.push('/templates')
       break
     case 1:
-      router.push('/template-design')
+      router.push({ path: '/template-design', query: { returnUrl: '/templates' } })
       break
     case 2:
       router.push('/contract-compose')
@@ -68,56 +68,28 @@ function goCurrent() {
 </script>
 
 <style scoped>
-.smart-compose { padding: 16px; }
-.steps-wrapper { background:#fff; padding: 12px 16px; border-radius: 8px; margin-top: 12px; border: 1px solid #ebeef5; }
-.steps-content { margin-top: 12px; }
-.step-actions { margin-top: 12px; }
+.smart-compose { 
+  padding: 16px; 
+}
 
-/* 统一头部样式 */
-.page-header-card { 
+.mb12 {
+  margin-bottom: 12px;
+}
+
+.steps-wrapper { 
+  background:#fff; 
+  padding: 12px 16px; 
   border-radius: 8px; 
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); 
-  overflow: hidden;
-  transition: all 0.3s ease;
-}
-.page-header-card:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1); }
-.page-header { 
-  padding: 16px 20px; 
-  position: relative; 
-  background: linear-gradient(135deg, var(--el-color-primary-light-7), var(--el-color-primary-light-9));
-}
-.header-content { position: relative; z-index: 2; }
-.header-decoration { 
-  position: absolute; 
-  top: 0; 
-  right: 0; 
-  width: 150px; 
-  height: 100%; 
-  background: linear-gradient(135deg, transparent, var(--el-color-primary-light-5)); 
-  opacity: 0.5;
-  clip-path: polygon(100% 0, 0% 100%, 100% 100%);
-}
-.page-header h2 { 
-  margin: 0; 
-  font-size: 26px; 
-  color: var(--el-color-primary-dark-2); 
-  display: flex; 
-  align-items: center;
-  font-weight: 600;
-}
-.header-icon { 
-  margin-right: 10px; 
-  font-size: 24px; 
-  color: var(--el-color-primary);
-}
-.page-header p { 
-  margin: 10px 0 0; 
-  color: #606266; 
-  font-size: 15px; 
-  max-width: 80%;
+  border: 1px solid #ebeef5; 
 }
 
-/* 使用 AntD 默认 progress-dot 风格，无需自定义点样式 */
+.steps-content { 
+  margin-top: 12px; 
+}
+
+.step-actions { 
+  margin-top: 12px; 
+}
 </style>
 
 

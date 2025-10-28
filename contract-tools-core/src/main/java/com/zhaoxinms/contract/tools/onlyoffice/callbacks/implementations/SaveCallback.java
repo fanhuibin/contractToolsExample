@@ -40,6 +40,10 @@ public class SaveCallback implements Callback {
 
     @Override
     public int handle(Track body, String fileId) { // handle the callback when the saving request is performed
+        log.info("========== OnlyOffice 保存回调开始 ==========");
+        log.info("文件ID: {}", fileId);
+        log.info("回调状态: {}", body != null ? body.getStatus() : "null");
+        
         int result = 0;
         try {
             // 参数校验
@@ -56,6 +60,9 @@ public class SaveCallback implements Callback {
             String downloadUri = body.getUrl();
             String changesUri = body.getChangesurl();
             String key = body.getKey();
+            
+            log.info("下载URL: {}", downloadUri);
+            log.info("OnlyOffice Key: {}", key);
             
             if (downloadUri == null || downloadUri.trim().isEmpty()) {
                 log.error("下载URL为空，文件ID: {}", fileId);
@@ -76,6 +83,7 @@ public class SaveCallback implements Callback {
             }
 
             // 下载文件并更新内容
+            log.info("开始从 Document Server 下载文件...");
             URL uri = new URL(downloadUri);
             java.net.HttpURLConnection connection = (java.net.HttpURLConnection)uri.openConnection();
             connection.setConnectTimeout(30000); // 30秒连接超时
@@ -83,27 +91,37 @@ public class SaveCallback implements Callback {
             
             // 检查HTTP响应状态
             int responseCode = connection.getResponseCode();
+            log.info("HTTP响应状态码: {}", responseCode);
+            
             if (responseCode != 200) {
                 log.error("下载文件失败，HTTP状态码: {}, URL: {}, 文件ID: {}", responseCode, downloadUri, fileId);
                 return 1;
             }
             
             InputStream stream = connection.getInputStream();
+            long contentLength = connection.getContentLengthLong();
+            log.info("文件大小: {} bytes", contentLength);
             
             try {
+                log.info("开始保存文件到磁盘...");
                 // 使用FileInfoService更新文件内容
                 boolean success = fileInfoService.saveFile(fileId, stream);
                 
                 if (success) {
-                    log.info("文件保存成功，文件ID: {}, 下载URL: {}", fileId, downloadUri);
+                    log.info("========== 文件保存成功 ==========");
+                    log.info("文件ID: {}", fileId);
+                    log.info("下载URL: {}", downloadUri);
+                    log.info("文件大小: {} bytes", contentLength);
                 } else {
-                    log.error("文件保存失败，文件ID: {}", fileId);
+                    log.error("========== 文件保存失败 ==========");
+                    log.error("文件ID: {}", fileId);
                     result = 1;
                 }
                 
             } finally {
                 stream.close();
                 connection.disconnect();
+                log.info("连接已关闭");
             }
 
         } catch (IllegalArgumentException e) {

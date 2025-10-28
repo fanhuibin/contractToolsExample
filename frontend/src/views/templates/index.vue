@@ -36,7 +36,8 @@
               <template #default="{ row }">
                 <el-button size="small" @click="openDesigner(row)">设计模板</el-button>
                 <el-button size="small" @click="viewElements(row)">查看元素</el-button>
-                <el-button size="small" @click="frontendCompose(row)">前端合成</el-button>
+                <!-- 前端合成功能已禁用 -->
+                <!-- <el-button size="small" @click="frontendCompose(row)">前端合成</el-button> -->
                 <el-button size="small" @click="backendCompose(row)">后端合成</el-button>
                 <el-button size="small" type="danger" @click="remove(row)">删除</el-button>
               </template>
@@ -133,7 +134,7 @@ async function fetchList() {
 }
 
 function openDesigner(row: any) {
-  router.push({ path: '/template-design', query: { id: row.templateId, fileId: row.fileId } })
+  router.push({ path: '/template-design', query: { id: row.templateId, fileId: row.fileId, returnUrl: '/templates-old' } })
 }
 
 function viewElements(row: any) {
@@ -144,11 +145,11 @@ function viewElements(row: any) {
 }
 
 function frontendCompose(row: any) {
-  router.push({ path: '/contract-compose-frontend', query: { templateId: row.templateId, fileId: row.fileId } })
+  router.push({ path: '/contract-compose-frontend', query: { id: row.id, templateId: row.templateId, fileId: row.fileId } })
 }
 
 function backendCompose(row: any) {
-  router.push({ path: '/contract-compose', query: { templateId: row.templateId, fileId: row.fileId } })
+  router.push({ path: '/contract-compose', query: { id: row.id, templateId: row.templateId, fileId: row.fileId } })
 }
 
 async function remove(row: any) {

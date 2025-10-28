@@ -90,3 +90,14 @@ export const validateHardware = () => {
   })
 }
 
+/**
+ * 获取系统版本信息（静默模式）
+ */
+export const getSystemVersion = () => {
+  return request({
+    url: '/system/version',
+    method: 'get',
+    skipErrorNotification: true
+  })
+}
+

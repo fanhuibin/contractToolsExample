@@ -38,11 +38,8 @@
         >
           <template v-if="result.success">
             <div class="result-value">{{ result.value }}</div>
-            <div class="result-meta">
-              置信度：{{ result.confidence }}%
-              <span v-if="result.startPosition !== undefined">
-                 | 位置：{{ result.startPosition }}-{{ result.endPosition }}
-              </span>
+            <div class="result-meta" v-if="result.startPosition !== undefined">
+              位置：{{ result.startPosition }}-{{ result.endPosition }}
             </div>
             
             <div v-if="result.allMatches && result.allMatches.length > 0" class="all-matches">

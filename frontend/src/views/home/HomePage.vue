@@ -63,7 +63,7 @@ const services = ref([
     description: '基于模板的SDT占位符自动填充，快速生成标准合同。',
     image: '/images/contract-compose.webp',
     button_text: '进入功能',
-    link: '/contract-compose'
+    link: '/templates'
   },
   {
     title: '智能文档解析',
@@ -74,7 +74,7 @@ const services = ref([
   },
   {
     title: '文档在线编辑',
-    description: '基于OnlyOffice的在线文档编辑器，支持Word、Excel、PPT等多种格式的在线编辑与协作。',
+    description: '上传、管理和在线编辑文档文件，基于OnlyOffice支持Word、Excel、PPT等多种格式的在线编辑与协作。',
     image: '/images/contract-compose.webp',
     button_text: '进入功能',
     link: '/onlyoffice'

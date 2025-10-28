@@ -90,26 +90,37 @@ const typeTag = (type: string) => {
 
 const resolveClauseHtml = (raw: string) => {
   const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' } as any)[c])
-  if (!raw) return ''
+  if (!raw) return '<span style="color:#999;">（无内容）</span>'
+  
+  // 构建字段名称字典
   const dict: Record<string, string> = {}
   ;(props.fields.baseFields || []).forEach((f: any) => { dict[f.code] = f.name })
   ;(props.fields.counterpartyFields || []).forEach((f: any) => { dict[f.code] = f.name })
+  
   const safe = esc(raw)
-  return safe.replace(/\$\{([^}]+)\}/g, (_: any, rawKey: string) => {
-    let label = ''
-    let partyIndex = ''
-    if (rawKey.includes('#')) {
-      const [a, b] = rawKey.split('#')
-      if (/^\d+$/.test(a)) { partyIndex = a; label = dict[b] || b }
-      else if (/^\d+$/.test(b)) { partyIndex = b; label = dict[a] || a }
-      else { label = dict[rawKey] || rawKey }
-    } else {
-      label = dict[rawKey] || rawKey
-      if (rawKey.startsWith('subject_')) partyIndex = '1'
-    }
-    const partyTag = partyIndex ? `<span class=\"var-tag\">签约方${partyIndex}</span>` : ''
-    return `${partyTag}<span class=\"var-tag\">${label}</span>`
-  })
+  
+  // 支持两种格式：${varName} 和 {{varName}}
+  return safe
+    .replace(/\$\{([^}]+)\}/g, (_: any, rawKey: string) => {
+      let label = ''
+      let partyIndex = ''
+      if (rawKey.includes('#')) {
+        const [a, b] = rawKey.split('#')
+        if (/^\d+$/.test(a)) { partyIndex = a; label = dict[b] || b }
+        else if (/^\d+$/.test(b)) { partyIndex = b; label = dict[a] || a }
+        else { label = dict[rawKey] || rawKey }
+      } else {
+        label = dict[rawKey] || rawKey
+        if (rawKey.startsWith('subject_')) partyIndex = '1'
+      }
+      const partyTag = partyIndex ? `<span class=\"var-tag\">签约方${partyIndex}</span>` : ''
+      return `${partyTag}<span class=\"var-tag\">${label}</span>`
+    })
+    .replace(/\{\{([^}]+)\}\}/g, (_: any, varName: string) => {
+      const trimmed = varName.trim()
+      const label = dict[trimmed] || trimmed
+      return `<span class=\"var-tag\">${label}</span>`
+    })
 }
 </script>
 
@@ -121,9 +132,25 @@ const resolveClauseHtml = (raw: string) => {
 /* 让滚动容器充满可用空间，恢复滚动条 */
 .list { flex:1; min-height:0; overflow:auto; }
 
-.element-item { display:flex; align-items:center; justify-content:space-between; padding:12px 10px; border:1px solid #ebeef5; border-radius:8px; margin-bottom:10px; background:#fff; transition: box-shadow .2s ease, border-color .2s ease; }
+.element-item { 
+  display: flex; 
+  align-items: flex-start; 
+  justify-content: space-between; 
+  padding: 12px 10px; 
+  border: 1px solid #ebeef5; 
+  border-radius: 8px; 
+  margin-bottom: 10px; 
+  background: #fff; 
+  transition: box-shadow .2s ease, border-color .2s ease; 
+  gap: 8px;
+}
 .element-item:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color:#e4e7ed; }
-.element-main { flex:1; cursor:pointer; width:100%; }
+.element-main { 
+  flex: 1; 
+  cursor: pointer; 
+  min-width: 0; /* 允许内容收缩 */
+  overflow: hidden; /* 防止内容溢出 */
+}
 .line { display:flex; align-items:center; width:100%; }
 .display-line { margin-bottom:6px; gap:6px; }
 .display-name { font-weight:700; color:#303133; display:inline-block; max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:15px; line-height:20px; }
@@ -131,10 +158,27 @@ const resolveClauseHtml = (raw: string) => {
 .meta-left { min-width:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#606266; font-size:12px; }
 .meta-code { color:#909399; margin-left:4px; }
 .clause-line { margin-top:6px; }
-.elem-clause-preview { color:#606266; font-size:12px; line-height:18px; display:-webkit-box; -webkit-line-clamp:2; line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.elem-clause-preview { 
+  color: #606266; 
+  font-size: 12px; 
+  line-height: 18px; 
+  display: -webkit-box; 
+  -webkit-line-clamp: 2;
+  line-clamp: 2; /* 标准属性 */
+  -webkit-box-orient: vertical; 
+  overflow: hidden;
+  word-break: break-word;
+}
 .display-line :deep(.el-tag) { margin-left:6px; }
-.element-item .actions { display:flex; gap:2px; padding:2px 0 0; justify-content:flex-end; width:100%; }
-.element-item .actions :deep(.el-button) { font-size:12px; height:20px; padding:0 4px; min-width:0; }
+.element-item .actions { 
+  display: flex; 
+  flex-direction: column;
+  gap: 4px; 
+  flex-shrink: 0; /* 不允许按钮区域收缩 */
+  width: auto; /* 自适应宽度 */
+  align-items: flex-end;
+}
+.element-item .actions :deep(.el-button) { font-size:12px; height:24px; padding:0 8px; min-width:44px; }
 
 :deep(.var-tag){ display:inline-block; padding:0 6px; height:18px; line-height:18px; background:#e8f3ff; border:1px solid #bfe1ff; color:#1677ff; border-radius:3px; font-size:12px; margin:0 2px; }
 </style>

@@ -326,7 +326,6 @@ onMounted(async () => {
 })
 
 function handleFileChange(file: File) {
-  console.log('[review] handleFileChange', { name: file?.name, size: file?.size })
   const isLt100M = file.size / 1024 / 1024 < 100
   if (!isLt100M) { ElMessage.error('文件大小不能超过100MB'); return }
   selectedFile.value = file
@@ -334,7 +333,6 @@ function handleFileChange(file: File) {
   traceId.value = ''
   results.value = []
   hasAudited.value = false
-  console.log('[review] file selected, reset states')
 }
 
 function formatFileSize(size: number) {
@@ -360,7 +358,6 @@ function copyJson() {
 }
 
 const startReview = async () => {
-  console.log('[review] startReview invoked', { inEditor: showEditor.value, editorReady: editorReady.value, uploadedFileId: uploadedFileId.value })
   if (!selectedFile.value) {
     ElMessage.error('请先上传合同文件');
     return;
@@ -588,12 +585,10 @@ const startReview = async () => {
   try {
     // 直接使用模拟数据
     results.value = mockData.results;
-    console.log('[review] mock results ready', { count: results.value?.length })
     ElMessage.success('审核完成（模拟数据）');
 
-    // 若当前不在编辑器视图、且已完成文件上传，则切换到编辑器以显示“风险审核”面板
+    // 若当前不在编辑器视图、且已完成文件上传，则切换到编辑器以显示"风险审核"面板
     if (!showEditor.value && uploadedFileId.value) {
-      console.log('[review] switch to editor view to show Risk panel')
       showEditor.value = true;
     }
 
@@ -609,15 +604,11 @@ const startReview = async () => {
           endOffset: ev.endOffset,
         }))
       );
-      console.log('[review] prepared anchors', { count: anchors.length })
       await onlyofficeEditorRef.value.setAnchors(anchors);
-      console.log('[review] setAnchors posted to plugin')
     }
   } catch (error) {
-    console.error("审核失败:", error);
-    ElMessage.error('审核失败，请查看控制台');
+    ElMessage.error('审核失败');
   } finally {
-    console.log('[review] startReview finished')
     reviewing.value = false;
   }
 
@@ -656,7 +647,6 @@ const startReview = async () => {
 };
 
 function handleGoToAnchor(anchorId: string) {
-  console.log('[review] handleGoToAnchor', { anchorId, hasEditor: !!onlyofficeEditorRef.value })
   if (onlyofficeEditorRef.value) {
     onlyofficeEditorRef.value.gotoAnchor(anchorId);
     ElMessage.success(`正在定位到锚点: ${anchorId}`);
@@ -707,7 +697,6 @@ async function saveSelectionAsProfile() {
 
 // OnlyOffice编辑器相关方法
 async function openInEditor() {
-  console.log('[editor] openInEditor clicked', { hasFile: !!selectedFile.value, uploadedFileId: uploadedFileId.value })
   if (!selectedFile.value) {
     ElMessage.warning('请先上传文件')
     return
@@ -719,7 +708,6 @@ async function openInEditor() {
 
   // 如果已经上传过，直接显示编辑器
   if (uploadedFileId.value) {
-    console.log('[editor] file already uploaded, show editor')
     showEditor.value = true
     reviewing.value = false
     return
@@ -727,7 +715,6 @@ async function openInEditor() {
 
   try {
     const res: any = await riskApi.uploadFileForReview(selectedFile.value as File)
-    console.log('[editor] upload response', res)
     if (res.data && res.data.fileId) {
       uploadedFileId.value = res.data.fileId
       showEditor.value = true
@@ -742,13 +729,11 @@ async function openInEditor() {
     ElMessage.error(e?.message || '文件上传失败')
     error.value = e?.message || '文件上传失败'
   } finally {
-    console.log('[editor] openInEditor done')
     reviewing.value = false
   }
 }
 
 function backToUpload() {
-  console.log('[editor] backToUpload')
   showEditor.value = false
   editorReady.value = false
   // 保留hasAudited状态，这样返回后还能看到审核结果
@@ -756,22 +741,19 @@ function backToUpload() {
 
 function onEditorReady() {
   editorReady.value = true
-  console.log('[editor] onEditorReady')
   ElMessage.success('编辑器已就绪')
 }
 
 function onEditorError(error: any) {
-  console.error('[editor] onEditorError', error)
   ElMessage.error('编辑器加载失败: ' + error.message)
   backToUpload()
 }
 
 function onDocumentStateChange(event: any) {
-  console.log('文档状态变更:', event)
+  // 文档状态变更处理
 }
 
 async function startAuditInEditor() {
-  console.log('[editor] startAuditInEditor', { editorReady: editorReady.value, profileId: selectedProfileId.value, selectedPoints: selectionPointIds.value })
   if (!editorReady.value) {
     ElMessage.warning('编辑器未就绪')
     return
@@ -796,16 +778,13 @@ async function startAuditInEditor() {
         endOffset: e.endOffset,
       })) || []
     ).filter(Boolean);
-    console.log('[editor] startAuditInEditor prepared anchors', { count: anchors.length })
     // 持久化：后端克隆文件并写入书签，返回新 fileId
     // 所见即所得：先在 OnlyOffice 中创建书签，再触发强制保存
     await onlyofficeEditorRef.value.setAnchors(anchors);
     await onlyofficeEditorRef.value.forceSave();
-    console.log('[editor] anchors created in editor and forceSave triggered')
   }
 
   hasAudited.value = true
-  console.log('[editor] startAuditInEditor finished')
 }
 
 function getRiskLevel(statusType: string) {

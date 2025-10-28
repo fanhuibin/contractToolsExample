@@ -29,14 +29,6 @@ zhaoxin:
       expiration: 86400  # 24小时
       refresh-expiration: 604800  # 7天
 
-# 日志配置
-logging:
-  level:
-    com.zhaoxinms: DEBUG
-    root: INFO
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
-
 # 监控端点配置
 management:
   endpoints:

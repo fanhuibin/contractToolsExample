@@ -171,12 +171,6 @@ public class CompareTaskQueue {
             executor.execute(wrappedTask);
             totalSubmitted.incrementAndGet();
             
-            if (enableDetailedLogging) {
-                String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
-                System.out.printf("[%s] 任务 %s 已提交到队列，队列大小: %d, 活跃线程: %d/%d%n",
-                    timestamp, taskId, getQueueSize(), getActiveCount(), getMaximumPoolSize());
-            }
-            
             return true;
             
         } catch (Exception e) {
@@ -190,27 +184,13 @@ public class CompareTaskQueue {
      */
     private Runnable wrapTask(Runnable originalTask, String taskId) {
         return () -> {
-            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             String threadName = Thread.currentThread().getName();
             
             try {
-                if (enableDetailedLogging) {
-                    System.out.printf("[%s] 线程 %s 开始执行任务 %s%n", timestamp, threadName, taskId);
-                }
-                long startTime = System.currentTimeMillis();
-                
                 // 执行原始任务
                 originalTask.run();
                 
-                long endTime = System.currentTimeMillis();
                 totalCompleted.incrementAndGet();
-                
-                if (enableDetailedLogging) {
-                    System.out.printf("[%s] 线程 %s 完成任务 %s，耗时: %d毫秒%n", 
-                        LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 
-                        threadName, taskId, (endTime - startTime));
-                }
-                
             } catch (Exception e) {
                 System.err.printf("[%s] 线程 %s 执行任务 %s 失败: %s%n", 
                     LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")), 

@@ -20,7 +20,37 @@
         </div>
       </template>
       <div class="header-content">
-        <p>查看系统授权状态、服务器硬件信息及授权模块详情</p>
+        <div class="copyright-section">
+          <h3 class="copyright-title">
+            <el-icon><InfoFilled /></el-icon>
+            版权申明
+          </h3>
+          <p class="copyright-text">
+            本系统由 <strong>山西肇新科技有限公司</strong> 自主研发，拥有完全自主知识产权。
+            未经授权，任何单位和个人不得擅自复制、使用、传播本软件及相关文档。
+          </p>
+        </div>
+
+        <div class="purchase-section">
+          <h3 class="purchase-title">
+            <el-icon><ShoppingCart /></el-icon>
+            购买授权
+          </h3>
+          <p class="purchase-text">
+            如需购买正式授权，请访问我们的官方网站了解产品详情和价格方案：
+          </p>
+          <div class="purchase-actions">
+            <el-button type="primary" size="large" @click="openPricePage">
+              <el-icon><Link /></el-icon>
+              查看产品价格与购买
+            </el-button>
+          </div>
+          <div class="contact-info">
+            <p>📧 官方网站：<a href="https://zhaoxinms.com" target="_blank">https://zhaoxinms.com</a></p>
+            <p>📦 产品价格：<a href="https://zhaoxinms.com/price" target="_blank">https://zhaoxinms.com/price</a></p>
+          </div>
+        </div>
+        
         <el-alert 
           v-if="apiError" 
           type="warning" 
@@ -31,7 +61,7 @@
           <template #title>
             后端连接异常
           </template>
-          <p>无法连接到授权服务器，显示的是默认数据。请检查：</p>
+          <p>无法连接到授权服务器，显示的是默认数据。请检查后端服务是否正常运行。</p>
         </el-alert>
       </div>
     </el-card>
@@ -101,6 +131,13 @@
             <el-skeleton :rows="6" animated />
           </div>
           <div v-else-if="licenseInfo" class="info-content">
+            <div class="info-item">
+              <span class="info-label">系统版本：</span>
+              <span class="info-value">
+                <el-tag type="primary" size="small">v{{ systemInfo.version }}</el-tag>
+                <span class="ml-2 build-date">构建日期：{{ systemInfo.buildDate }}</span>
+              </span>
+            </div>
             <div class="info-item">
               <span class="info-label">授权码：</span>
               <span class="info-value">{{ licenseInfo?.licenseCode || '未获取' }}</span>
@@ -265,9 +302,13 @@ import {
   Monitor,
   DocumentCopy,
   Refresh,
-  Download
+  Download,
+  InfoFilled,
+  ShoppingCart,
+  Link,
+  Phone
 } from '@element-plus/icons-vue'
-import { getLicenseInfo, getHardwareInfo, validateLicense, checkModules } from '@/api/license'
+import { getLicenseInfo, getHardwareInfo, validateLicense, checkModules, getSystemVersion } from '@/api/license'
 
 interface LicenseInfo {
   licenseCode: string
@@ -294,12 +335,19 @@ interface ModuleInfo {
   authorized: boolean
 }
 
+interface SystemInfo {
+  version: string
+  name: string
+  buildDate: string
+}
+
 const loading = ref(true)
 const licenseInfo = ref<LicenseInfo | null>(null)
 const hardwareInfo = ref<HardwareInfo | null>(null)
 const hardwareMatched = ref(false)
 const licenseStatus = ref({ valid: false })
 const apiError = ref(false)
+const systemInfo = ref<SystemInfo>({ version: '未知', name: '肇新合同工具集', buildDate: '未知' })
 
 // 所有模块定义
 const MODULE_DEFINITIONS = [
@@ -368,6 +416,19 @@ const copyToClipboard = async (text: string) => {
   }
 }
 
+// 获取系统版本信息
+const fetchSystemInfo = async () => {
+  try {
+    const response = await getSystemVersion()
+    
+    if (response.data && response.data.code === 200) {
+      systemInfo.value = response.data.data
+    }
+  } catch (error) {
+    // 静默失败，使用默认值
+  }
+}
+
 // 刷新授权信息
 const refreshLicenseInfo = async () => {
   loading.value = true
@@ -377,21 +438,17 @@ const refreshLicenseInfo = async () => {
     await Promise.all([
       fetchLicenseInfo(),
       fetchHardwareInfo(),
-      fetchModulePermissions()
+      fetchModulePermissions(),
+      fetchSystemInfo()
     ])
     
     // 如果所有数据都是默认值，说明API调用可能失败
     if (licenseInfo.value?.licenseCode === '未获取' || 
         licenseInfo.value?.licenseCode === '演示版本') {
       apiError.value = true
-      console.warn('⚠️ 检测到使用默认数据，可能是后端服务未启动或授权未配置')
-    } else {
-      // 只在手动刷新时显示成功提示，首次加载不提示
-      console.log('✅ 授权信息加载成功')
     }
   } catch (error: any) {
     apiError.value = true
-    console.warn('⚠️ 授权信息加载失败，显示默认数据:', error.message || '未知错误')
   } finally {
     loading.value = false
   }
@@ -401,12 +458,10 @@ const refreshLicenseInfo = async () => {
 const fetchLicenseInfo = async () => {
   try {
     const response = await getLicenseInfo()
-    console.log('授权信息响应:', response)
     
     // 统一使用标准响应格式：{code: 200, message: "...", data: {...}}
     if (response.data && response.data.code === 200) {
       licenseInfo.value = response.data.data
-      console.log('✅ 授权信息获取成功')
     } else {
       // 使用默认数据（不设置日期）
       licenseInfo.value = {
@@ -429,11 +484,9 @@ const fetchLicenseInfo = async () => {
         licenseStatus.value.valid = true
       }
     } catch (validateError) {
-      console.warn('验证授权失败:', validateError)
       licenseStatus.value.valid = false
     }
   } catch (error) {
-    console.warn('⚠️ 授权API未响应，使用默认数据:', error)
     // 使用默认数据，避免空白页面（不设置日期，显示为"未设置"）
     licenseInfo.value = {
       licenseCode: '未获取',
@@ -454,12 +507,10 @@ const fetchLicenseInfo = async () => {
 const fetchHardwareInfo = async () => {
   try {
     const response = await getHardwareInfo()
-    console.log('硬件信息响应:', response)
     
     // 统一使用标准响应格式：{code: 200, message: "...", data: {...}}
     if (response.data && response.data.code === 200) {
       hardwareInfo.value = response.data.data
-      console.log('✅ 硬件信息获取成功:', response.data.data)
     } else {
       // 使用默认数据
       hardwareInfo.value = {
@@ -470,7 +521,6 @@ const fetchHardwareInfo = async () => {
       }
     }
   } catch (error) {
-    console.warn('⚠️ 硬件信息API未响应，使用默认数据:', error)
     // 使用默认数据，避免空白
     hardwareInfo.value = {
       osName: '无法获取',
@@ -486,7 +536,6 @@ const fetchModulePermissions = async () => {
   try {
     const moduleCodes = MODULE_DEFINITIONS.map(m => m.code)
     const response = await checkModules(moduleCodes)
-    console.log('模块权限响应:', response)
     
     // 统一使用标准响应格式：{code: 200, message: "...", data: {...}}
     if (response.data && response.data.code === 200) {
@@ -495,7 +544,6 @@ const fetchModulePermissions = async () => {
         ...def,
         authorized: permissions[def.code] || false
       }))
-      console.log('✅ 模块权限获取成功')
     } else {
       // 默认所有模块未授权
       allModules.value = MODULE_DEFINITIONS.map(def => ({
@@ -504,7 +552,6 @@ const fetchModulePermissions = async () => {
       }))
     }
   } catch (error) {
-    console.warn('⚠️ 模块权限API未响应，默认所有模块未授权:', error)
     // 默认所有模块未授权，但仍然显示列表
     allModules.value = MODULE_DEFINITIONS.map(def => ({
       ...def,
@@ -512,6 +559,13 @@ const fetchModulePermissions = async () => {
     }))
   }
 }
+
+// 打开价格页面
+const openPricePage = () => {
+  window.open('https://zhaoxinms.com/price', '_blank')
+  ElMessage.success('已打开产品价格页面，了解更多授权方案')
+}
+
 
 // 下载机器信息
 const downloadMachineInfo = async () => {
@@ -595,6 +649,113 @@ onMounted(async () => {
   .header-content {
     color: #606266;
     font-size: 14px;
+
+    .copyright-section {
+      margin-bottom: 24px;
+      padding: 20px;
+      background: #e3f2fd;
+      border-radius: 8px;
+      border-left: 4px solid #409eff;
+
+      .copyright-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #303133;
+        margin: 0 0 12px 0;
+
+        .el-icon {
+          color: #409eff;
+          font-size: 20px;
+        }
+      }
+
+      .copyright-text {
+        margin: 0;
+        line-height: 1.8;
+        color: #606266;
+
+        strong {
+          color: #409eff;
+          font-weight: 600;
+        }
+      }
+    }
+
+    .purchase-section {
+      margin-bottom: 24px;
+      padding: 24px;
+      background: #fff5e6;
+      border-radius: 8px;
+      border-left: 4px solid #67c23a;
+
+      .purchase-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #303133;
+        margin: 0 0 12px 0;
+
+        .el-icon {
+          color: #67c23a;
+          font-size: 20px;
+        }
+      }
+
+      .purchase-text {
+        margin: 0 0 16px 0;
+        line-height: 1.8;
+        color: #606266;
+      }
+
+      .purchase-actions {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+
+        .el-button {
+          flex: 0 1 auto;
+        }
+      }
+
+      .contact-info {
+        padding: 16px;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 6px;
+        border: 1px dashed #dcdfe6;
+
+        p {
+          margin: 8px 0;
+          font-size: 14px;
+          color: #606266;
+
+          &:first-child {
+            margin-top: 0;
+          }
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+
+          a {
+            color: #409eff;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s;
+
+            &:hover {
+              color: #66b1ff;
+              text-decoration: underline;
+            }
+          }
+        }
+      }
+    }
 
     .api-error-alert {
       margin-top: 16px;
@@ -826,6 +987,11 @@ onMounted(async () => {
 
 .ml-2 {
   margin-left: 8px;
+}
+
+.build-date {
+  font-size: 12px;
+  color: #909399;
 }
 </style>
 

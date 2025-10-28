@@ -17,13 +17,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/smart-compose',
         name: 'SmartContractCompose',
-        redirect: '/compose/start',
-        meta: { title: '智能合同合成' }
-      },
-      {
-        path: '/compose/start',
-        name: 'ComposeStart',
-        component: () => import('@/views/compose/ComposeStart.vue'),
+        redirect: '/templates',
         meta: { title: '智能合同合成' }
       },
       {
@@ -77,7 +71,19 @@ const routes: RouteRecordRaw[] = [
         path: '/onlyoffice',
         name: 'OnlyOffice',
         component: () => import('@/views/onlyoffice/OnlyOfficeDemo.vue'),
-        meta: { title: '文档在线编辑' }
+        meta: { title: '文档在线编辑（演示）' }
+      },
+      {
+        path: '/file-manager',
+        name: 'FileManager',
+        component: () => import('@/views/onlyoffice/FileManager.vue'),
+        meta: { title: '文档文件管理' }
+      },
+      {
+        path: '/document-editor/:fileId',
+        name: 'DocumentEditor',
+        component: () => import('@/views/onlyoffice/DocumentEditor.vue'),
+        meta: { title: '文档编辑器' }
       },
       {
         path: '/contract-extract',
@@ -177,6 +183,19 @@ const routes: RouteRecordRaw[] = [
         name: 'LicenseView',
         component: () => import('@/views/license/LicenseView.vue'),
         meta: { title: '授权信息' }
+      }
+    ]
+  },
+  // 文档中心 - 独立布局
+  {
+    path: '/doc-center',
+    component: () => import('@/layout/DocCenterLayout.vue'),
+    children: [
+      {
+        path: '',
+        name: 'DocCenter',
+        component: () => import('@/views/docs/DocCenter.vue'),
+        meta: { title: '文档中心' }
       }
     ]
   }

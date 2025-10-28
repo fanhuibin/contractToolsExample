@@ -1,9 +1,19 @@
 <template>
   <div class="template-design-page">
     <div class="design-actions">
-      <el-button size="small" @click="$router.push('/compose/start')">结束并返回主页</el-button>
-      <el-button size="small" type="success" @click="goFrontendCompose">前端合成</el-button>
-      <el-button size="small" type="primary" @click="goBackendCompose">后端合成</el-button>
+      <el-button size="small" @click="goBack">
+        <el-icon style="margin-right: 4px;"><ArrowLeft /></el-icon>
+        返回
+      </el-button>
+      <el-button 
+        type="primary" 
+        size="small" 
+        @click="handleSave"
+        :loading="saving"
+      >
+        <el-icon style="margin-right: 4px;"><DocumentChecked /></el-icon>
+        保存模板
+      </el-button>
     </div>
     <div class="design-body" :style="{ gridTemplateColumns: gridColumns }">
       <div class="left-panel">
@@ -77,16 +87,19 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Tickets, User, Stamp, Search, Edit, Delete, CaretLeft, CaretRight } from '@element-plus/icons-vue'
+import { Document, Tickets, User, Stamp, Search, Edit, Delete, CaretLeft, CaretRight, ArrowLeft, DocumentChecked } from '@element-plus/icons-vue'
 import InsertableElementsPanel from '@/components/template-design/InsertableElementsPanel.vue'
 import InsertedElementsPanel from '@/components/template-design/InsertedElementsPanel.vue'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
-import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignDetail, getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { forceSaveFile } from '@/api/file'
 
 const route = useRoute()
 const router = useRouter()
-const templateId = computed(() => (route.query.id as string) || '')
+const recordId = computed(() => (route.query.id as string) || '')
+const templateId = computed(() => (route.query.templateId as string) || '')
 const fileId = computed(() => (route.query.fileId as string) || '')
+const returnUrl = computed(() => (route.query.returnUrl as string) || '/templates')
 const designId = ref<string>('')
 
 const fields = reactive<any>({ baseFields: [], clauseFields: [], counterpartyFields: [], sealFields: [] })
@@ -104,19 +117,63 @@ const insertForm = reactive<{ customName: string; partyIndex: string }>({ custom
 const elementsKeyword = ref('')
 const elements = ref<Array<{ key: string; tag: string; type: string; name: string; customName?: string; meta?: any }>>([])
 const editorRef = ref<any>(null)
-function goFrontendCompose() {
-  const tid = templateId.value
-  const fid = fileId.value
-  if (tid && fid) {
-    router.push({ path: '/contract-compose-frontend', query: { templateId: tid, fileId: fid } })
-  }
+const saving = ref(false)
+
+function goBack() {
+  router.push(returnUrl.value)
 }
 
-function goBackendCompose() {
-  const tid = templateId.value
-  const fid = fileId.value
-  if (tid && fid) {
-    router.push({ path: '/contract-compose', query: { templateId: tid, fileId: fid } })
+// 保存模板（调用强制保存API）
+async function handleSave() {
+  if (!fileId.value) {
+    ElMessage.warning('缺少文件ID，无法保存')
+    return
+  }
+  
+  try {
+    saving.value = true
+    
+    // 显示保存提示
+    const loadingMsg = ElMessage.info({
+      message: '保存中...',
+      duration: 0
+    })
+    
+    // 调用强制保存API
+    const result = await forceSaveFile(fileId.value)
+    
+    loadingMsg.close()
+    
+    // 检查响应
+    if (result.data && result.data.code === 200) {
+      const responseData = result.data.data
+      
+      if (responseData && responseData.commandServiceResponse) {
+        const errorCode = responseData.commandServiceResponse.error
+        
+        if (errorCode === 0) {
+          ElMessage.success('保存完成')
+        } else if (errorCode === 4) {
+          ElMessage.success('文档未修改，无需保存')
+        } else if (errorCode === 6) {
+          console.error('error=6: 令牌无效')
+          ElMessage.error('保存失败：令牌无效，请检查配置')
+        } else {
+          ElMessage.warning(`保存失败，错误码: ${errorCode}`)
+        }
+      } else {
+        ElMessage.success('保存完成')
+      }
+    } else {
+      console.error('保存失败，响应码不是200:', result)
+      ElMessage.error('保存失败：' + (result.data?.message || '未知错误'))
+    }
+    
+  } catch (error: any) {
+    console.error('保存失败', error)
+    ElMessage.error('保存失败：' + (error?.message || '未知错误'))
+  } finally {
+    saving.value = false
   }
 }
 
@@ -143,8 +200,12 @@ const gridColumns = computed(() => {
 })
 
 onMounted(async () => {
-  if (!templateId.value || !fileId.value) {
-    ElMessage.error('缺少模板ID或文件ID')
+  if (!fileId.value) {
+    ElMessage.error('缺少文件ID')
+    return
+  }
+  if (!recordId.value && !templateId.value) {
+    ElMessage.error('缺少模板ID或记录ID')
     return
   }
   await loadFields()
@@ -152,11 +213,15 @@ onMounted(async () => {
 })
 
 const loadFields = async () => {
-  const res = await fetchTemplateFields()
-  fields.baseFields = res.data.baseFields || []
-  fields.clauseFields = res.data.clauseFields || []
-  fields.counterpartyFields = res.data.counterpartyFields || []
-  fields.sealFields = res.data.sealFields || []
+  const res = await fetchTemplateFields() as any
+  // 根据API响应解析问题文档，响应被axios拦截器包装了一层
+  const fieldsData = res?.data?.data || res?.data || {}
+  
+  fields.baseFields = fieldsData.baseFields || []
+  fields.clauseFields = fieldsData.clauseFields || []
+  fields.counterpartyFields = fieldsData.counterpartyFields || []
+  fields.sealFields = fieldsData.sealFields || []
+  
   // 并列新增：二维码公章（仅前端增强展示，不改动后端接口）
   try {
     const exists = (fields.sealFields || []).some((s: any) => String(s.code).toLowerCase() === 'seal_qrcode')
@@ -170,8 +235,17 @@ const loadFields = async () => {
 
 const loadDesignByTemplateId = async () => {
   try {
-    const res = await getTemplateDesignByTemplateId(templateId.value)
-    const raw = res?.data || {}
+    let res: any
+    
+    // 优先使用 recordId（新版），如果没有则使用 templateId（旧版兼容）
+    if (recordId.value) {
+      res = await getTemplateDesignDetail(recordId.value)
+    } else if (templateId.value) {
+      res = await getTemplateDesignByTemplateId(templateId.value)
+    }
+    
+    const raw = res?.data?.data || res?.data || {}
+    
     // 兼容不同返回结构
     const elementsJson = (raw.elementsJson) || ''
     const parsed = elementsJson ? JSON.parse(elementsJson) : (typeof raw === 'string' ? JSON.parse(raw) : raw)
@@ -250,12 +324,13 @@ const confirmInsert = async () => {
   try {
     // 1) 先保存后台
     const res = await saveTemplateDesign({
-      id: designId.value || undefined,
-      templateId: templateId.value,
+      id: designId.value || recordId.value || undefined,
+      templateId: templateId.value || undefined,
       fileId: fileId.value,
       elements: newElements
     })
-    if (res?.data?.id) savedId = String(res.data.id)
+    const responseData = res?.data?.data || res?.data || {}
+    if (responseData?.id) savedId = String(responseData.id)
     // 2) 再插入到OnlyOffice
     if (isRich) {
       await (editorRef.value?.createBlockContentControl?.(key, tag, item.name, true, true) || Promise.resolve())
@@ -271,7 +346,12 @@ const confirmInsert = async () => {
   } catch (err) {
     // 回滚后端保存
     try {
-      await saveTemplateDesign({ id: savedId || designId.value || undefined, templateId: templateId.value, fileId: fileId.value, elements: prevElements })
+      await saveTemplateDesign({ 
+        id: savedId || designId.value || recordId.value || undefined, 
+        templateId: templateId.value || undefined, 
+        fileId: fileId.value, 
+        elements: prevElements 
+      })
     } catch {}
     ElMessage.error('保存或插入失败，请重试')
   } finally {
@@ -364,21 +444,24 @@ const resolveClauseHtml = (raw: string) => {
 }
 .design-actions {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 20;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
   display: flex;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  background: rgba(255,255,255,.9);
-  border: 1px solid #ebeef5;
-  border-radius: 8px;
-  padding: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  background: #ffffff;
+  border-bottom: 1px solid #ebeef5;
+  padding: 12px 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.05);
 }
 .design-body {
   display: grid;
   grid-template-columns: 320px 1fr 360px;
-  height: 100vh;
+  height: calc(100vh - 56px); /* 减去顶部操作栏高度 */
+  margin-top: 56px; /* 给顶部操作栏留出空间 */
   grid-template-rows: 1fr;
   overflow: hidden; /* 固定整体布局，避免因滚动条影响左右抖动 */
   column-gap: 12px; /* 统一左右与中间的间距，更加呼吸 */

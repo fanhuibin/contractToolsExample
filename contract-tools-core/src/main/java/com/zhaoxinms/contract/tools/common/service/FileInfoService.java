@@ -82,4 +82,11 @@ public interface FileInfoService {
      * @throws IOException 文件操作异常
      */
     FileInfo registerClonedFile(Path filePath, String originalName) throws IOException;
+
+    /**
+     * 根据ID删除文件
+     * @param id 文件ID
+     * @return 是否删除成功
+     */
+    boolean deleteById(String id);
 } 

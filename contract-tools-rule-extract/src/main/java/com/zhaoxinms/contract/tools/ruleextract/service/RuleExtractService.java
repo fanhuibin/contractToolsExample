@@ -1079,7 +1079,7 @@ public class RuleExtractService {
             .filter(t -> templateId == null || templateId.equals(t.getTemplateId()))
             .filter(t -> status == null || status.equals(t.getStatus()))
             .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-            .limit(100) // 限制返回数量
+            .limit(20) // 只返回最近20条任务，避免数据过多影响性能
             .collect(Collectors.toList());
     }
 

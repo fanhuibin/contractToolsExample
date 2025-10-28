@@ -31,9 +31,6 @@ import com.zhaoxinms.contract.tools.merge.model.DocContent;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 import com.zhaoxinms.contract.tools.stamp.PdfStampUtil;
 import com.zhaoxinms.contract.tools.stamp.RidingStampUtil;
-import com.zhaoxinms.contract.tools.stamp.config.StampRule;
-import com.zhaoxinms.contract.tools.stamp.config.StampRulesConfig;
-import com.zhaoxinms.contract.tools.stamp.config.StampRulesLoader;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -63,18 +60,25 @@ public class ComposeController {
     @PostMapping(value = "/sdt", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<ComposeResponse> composeBySdt(@RequestBody ComposeRequest req) {
         try {
+            logger.info("开始合成合同，templateFileId: {}", req != null ? req.getTemplateFileId() : "null");
+            
             if (req == null || req.getTemplateFileId() == null || req.getTemplateFileId().trim().isEmpty()) {
+                logger.error("templateFileId 为空");
                 return ApiResponse.paramError("templateFileId 不能为空");
             }
             if (req.getValues() == null || req.getValues().isEmpty()) {
+                logger.error("values 为空");
                 return ApiResponse.paramError("values 不能为空");
             }
 
             // 解析模板本地路径（统一通过文件服务获取，不做硬编码）
+            logger.info("查询模板文件路径，templateFileId: {}", req.getTemplateFileId());
             String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(req.getTemplateFileId()) : null;
+            logger.info("获取到的模板路径: {}", templatePath);
             
             if (templatePath == null || templatePath.trim().isEmpty()) {
-                return ApiResponse.paramError("无法获取模板文件路径");
+                logger.error("无法获取模板文件路径，templateFileId: {}", req.getTemplateFileId());
+                return ApiResponse.paramError("文件不存在：无法获取模板文件路径，文件ID: " + req.getTemplateFileId());
             }
 
             // 生成工作目录与输出文件
@@ -88,19 +92,6 @@ public class ComposeController {
             if (req.getValues() != null) mergeValues.putAll(req.getValues());
             java.util.LinkedHashSet<String> sealKeywordPrefixesSet = new java.util.LinkedHashSet<>();
             java.util.Map<String, String> tagToMarker = new java.util.HashMap<>();
-
-            // 加载规则
-            StampRulesConfig rulesCfg = StampRulesLoader.load();
-            java.util.Map<String,String> codeToMarkerPrefix = new java.util.HashMap<>();
-            java.util.Map<String,String> codeToInsertValue = new java.util.HashMap<>();
-            if (rulesCfg.getRules() != null) {
-                for (StampRule r : rulesCfg.getRules()) {
-                    if (r.getCode() != null && !r.getCode().trim().isEmpty()) {
-                        codeToMarkerPrefix.put(r.getCode().toLowerCase(), ("SEAL_" + r.getCode().toUpperCase() + "_"));
-                        if (r.getInsertValue() != null) codeToInsertValue.put(r.getCode().toLowerCase(), r.getInsertValue());
-                    }
-                }
-            }
 
             if (req.getValues() != null) {
                 for (Map.Entry<String, String> e : req.getValues().entrySet()) {
@@ -119,21 +110,15 @@ public class ComposeController {
                             String codePrefix = codePrefixBuilder.toString();
                             String codeKey = codePrefix.toLowerCase();
                             if (codeKey.contains("seal")) {
-                                // 标识前缀
-                                String markerPrefix = codeToMarkerPrefix.getOrDefault(codeKey, ("SEAL_" + codePrefix.toUpperCase() + "_"));
+                                // 生成印章标识前缀（格式：SEAL_CODE_）
+                                String markerPrefix = "SEAL_" + codePrefix.toUpperCase() + "_";
                                 String marker = markerPrefix + ts;
                                 sealKeywordPrefixesSet.add(marker);
                                 tagToMarker.put(tag, marker);
                                 String markerHtml = "<font style=\"color: white;\">" + marker + "</font>";
-                                // 若该印章字段为空且规则给了 insertValue，则写入 insertValue；同时追加隐藏标识
-                                String newVal = val;
-                                boolean usedInsertValue = false;
-                                if ((newVal == null || newVal.trim().isEmpty()) && codeToInsertValue.containsKey(codeKey)) {
-                                    newVal = codeToInsertValue.get(codeKey);
-                                    usedInsertValue = true;
-                                }
-                                String visiblePart = (newVal == null ? "" : newVal);
-                                if (usedInsertValue && !visiblePart.isEmpty()) {
+                                // 使用用户传入的值（印章内容由调用方决定）
+                                String visiblePart = (val == null ? "" : val);
+                                if (!visiblePart.isEmpty()) {
                                     visiblePart = "<font style=\"color: white;\">" + visiblePart + "</font>";
                                 }
                                 mergeValues.put(tag, visiblePart + markerHtml);
@@ -143,8 +128,63 @@ public class ComposeController {
                 }
             }
 
-            List<DocContent> contents = new ArrayList<>();
+            // 打印所有接收到的变量值（调试用）
+            logger.info("===== 接收到的所有变量值 =====");
             for (Map.Entry<String, String> e : mergeValues.entrySet()) {
+                logger.info("变量: {} = {}", e.getKey(), e.getValue());
+            }
+            logger.info("===== 变量值列表结束 =====");
+            
+            // 条款变量替换预处理
+            // 对于包含 ${variable} 或 {{variable}} 格式的字段，先替换变量
+            java.util.Map<String, String> processedValues = new java.util.HashMap<>();
+            for (Map.Entry<String, String> e : mergeValues.entrySet()) {
+                String tag = e.getKey();
+                String value = e.getValue();
+                
+                // 检查是否包含变量（${...} 或 {{...}}）
+                if (value != null && (value.contains("${") || value.contains("{{"))) {
+                    logger.info("检测到条款字段包含变量，tag: {}, 原始值: {}", tag, value);
+                    
+                    // 替换 ${variable} 格式的变量
+                    String processed = value;
+                    java.util.regex.Pattern pattern1 = java.util.regex.Pattern.compile("\\$\\{([\\w]+)\\}");
+                    java.util.regex.Matcher matcher1 = pattern1.matcher(value);
+                    StringBuffer sb1 = new StringBuffer();
+                    while (matcher1.find()) {
+                        String varName = matcher1.group(1);
+                        String varValue = mergeValues.getOrDefault(varName, "");
+                        // 如果变量值本身也包含 $，需要转义
+                        String replacement = varValue.replace("$", "\\$").replace("\\", "\\\\");
+                        matcher1.appendReplacement(sb1, replacement);
+                        logger.info("替换变量 ${{{}}}: {} -> {}", varName, varName, varValue);
+                    }
+                    matcher1.appendTail(sb1);
+                    processed = sb1.toString();
+                    
+                    // 替换 {{variable}} 格式的变量
+                    java.util.regex.Pattern pattern2 = java.util.regex.Pattern.compile("\\{\\{([\\w]+)\\}\\}");
+                    java.util.regex.Matcher matcher2 = pattern2.matcher(processed);
+                    StringBuffer sb2 = new StringBuffer();
+                    while (matcher2.find()) {
+                        String varName = matcher2.group(1);
+                        String varValue = mergeValues.getOrDefault(varName, "");
+                        String replacement = varValue.replace("$", "\\$").replace("\\", "\\\\");
+                        matcher2.appendReplacement(sb2, replacement);
+                        logger.info("替换变量 {{{{{}}}}}: {} -> {}", varName, varName, varValue);
+                    }
+                    matcher2.appendTail(sb2);
+                    processed = sb2.toString();
+                    
+                    logger.info("条款变量替换完成，tag: {}, 替换后: {}", tag, processed);
+                    processedValues.put(tag, processed);
+                } else {
+                    processedValues.put(tag, value);
+                }
+            }
+
+            List<DocContent> contents = new ArrayList<>();
+            for (Map.Entry<String, String> e : processedValues.entrySet()) {
                 contents.add(new DocContent(e.getKey(), e.getValue()));
             }
 
@@ -206,37 +246,6 @@ public class ComposeController {
                                 ridingRelPath = getRelativePath(new File(out));
                             }
                         }
-                    } else {
-                        // 2) 若未提供URL，保留原有规则/默认逻辑
-                        String defaultImage = java.nio.file.Paths.get(uploadRootPath, "stamp.png").toString();
-                        int ridingIdx = 0;
-                        StampRulesConfig rulesCfg2 = rulesCfg;
-                        if (rulesCfg2.getRules() != null && !rulesCfg2.getRules().isEmpty()) {
-                            for (StampRule r : rulesCfg2.getRules()) {
-                                String type = r.getType() == null ? "" : r.getType().toLowerCase();
-                                if ("normal".equals(type)) {
-                                    String imagePath = resolveImagePath(r.getImage(), defaultImage);
-                                    java.util.List<String> kws;
-                                    if (r.getKeywords() != null && !r.getKeywords().isEmpty()) {
-                                        kws = r.getKeywords();
-                                    } else {
-                                        // 优先使用注入的 SEAL_ 前缀
-                                        kws = sealKeywordPrefixesSet.isEmpty() ? java.util.Arrays.asList("（公章）","（签章）","公章","签章") : new java.util.ArrayList<>(sealKeywordPrefixesSet);
-                                    }
-                                    String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
-                                    PdfStampUtil.addAutoStamp(currentPdf, out, imagePath, kws);
-                                    currentPdf = out;
-                                    stampedRelPath = getRelativePath(new File(out));
-                                } else if ("riding".equals(type)) {
-                                    String imagePath = resolveImagePath(r.getImage(), defaultImage);
-                                    try { logger.info("使用骑缝章图片: {}", new java.io.File(imagePath).getName()); } catch (Exception ignore) {}
-                                    String out = new File(workDir2, "compose_" + ts + "_riding_" + (++ridingIdx) + ".pdf").getAbsolutePath();
-                                    RidingStampUtil.addRidingStamp(currentPdf, out, imagePath);
-                                    currentPdf = out;
-                                    ridingRelPath = getRelativePath(new File(out));
-                                }
-                            }
-                        }
                     }
                 }
             } catch (Exception ignore) { }
@@ -249,6 +258,14 @@ public class ComposeController {
             resp.setRidingStampPdfPath(ridingRelPath);
             return ApiResponse.success(resp);
         } catch (Exception e) {
+            logger.error("===== 合成失败，详细错误信息 =====", e);
+            logger.error("错误消息: {}", e.getMessage());
+            logger.error("错误类型: {}", e.getClass().getName());
+            if (e.getCause() != null) {
+                logger.error("根本原因: {}", e.getCause().getMessage());
+            }
+            logger.error("===== 错误堆栈跟踪 =====");
+            e.printStackTrace();
             return ApiResponse.<ComposeResponse>serverError().errorDetail("合成失败: " + e.getMessage());
         }
     }
