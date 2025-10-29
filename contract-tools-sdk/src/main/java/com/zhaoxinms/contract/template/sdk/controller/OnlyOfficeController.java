@@ -12,12 +12,15 @@ import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
@@ -38,6 +41,9 @@ public class OnlyOfficeController {
 
     @Autowired
     private ZxcmConfig zxcmConfig;
+    
+    @Value("${zxcm.file-upload.root-path:./uploads}")
+    private String uploadRootPath;
 
     /**
      * 获取文档编辑器配置
@@ -62,33 +68,9 @@ public class OnlyOfficeController {
             @RequestParam(value = "sessionId", required = false) String sessionId,
             @RequestParam(value = "callbackUrl", required = false) String callbackUrl) throws IOException {
         
-        // 获取文件信息（支持内存自动注册的 templateDesign）
+        // 获取文件信息
         FileInfo fileInfo = fileInfoService.getById(fileId);
         if (fileInfo == null) {
-            if ("templateDesign".equals(fileId)) {
-                // 构造一个临时配置，下载接口中会做兜底
-                String key = "demo_key_" + System.currentTimeMillis();
-                User user = new User();
-                user.setName("Anonymous");
-                user.setId("0");
-                OnlyofficeFileModel tempModel = fileConfigurer.getFileModel(
-                    DefaultFileWrapper.builder()
-                        .fileId(fileId)
-                        .fileName("templateDesign.docx")
-                        .key(key)
-                        .canEdit(canEdit)
-                        .canReview(canReview && canEdit)
-                        .callbackUrl(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/save?fileId=" + fileId)
-                        .url(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/download/" + fileId)
-                        .type(Type.desktop)
-                        .lang("zh-CN")
-                        .action(canEdit ? Action.edit : Action.view)
-                        .user(user)
-                        .pluginsData(java.util.Arrays.asList(zxcmConfig.getOnlyOffice().getPlugins()))
-                        .build()
-                );
-                return ApiResponse.success(tempModel);
-            }
             return ApiResponse.notFound("文件不存在");
         }
 
@@ -156,6 +138,42 @@ public class OnlyOfficeController {
     }
 
     /**
+     * 上传文件
+     * 
+     * @param file 文件
+     * @return 上传结果，包含文件ID
+     */
+    @PostMapping("/upload")
+    @ResponseBody
+    public ApiResponse<UploadResult> uploadFile(@RequestParam("file") MultipartFile file) {
+        try {
+            if (file.isEmpty()) {
+                return ApiResponse.<UploadResult>paramError("文件不能为空");
+            }
+            
+            // 获取原始文件名
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename == null || originalFilename.isEmpty()) {
+                return ApiResponse.<UploadResult>paramError("文件名不能为空");
+            }
+            
+            // 使用 FileInfoService 保存文件
+            FileInfo fileInfo = fileInfoService.saveNewFile(file);
+            
+            // 返回结果
+            UploadResult result = new UploadResult();
+            result.setFileId(String.valueOf(fileInfo.getId()));
+            result.setFileName(fileInfo.getFileName());
+            result.setOriginalName(fileInfo.getOriginalName());
+            result.setFileSize(fileInfo.getFileSize());
+            
+            return ApiResponse.success(result, "文件上传成功");
+        } catch (Exception e) {
+            return ApiResponse.<UploadResult>serverError().errorDetail("文件上传失败：" + e.getMessage());
+        }
+    }
+
+    /**
      * 服务器信息DTO
      */
     public static class ServerInfo {
@@ -186,6 +204,49 @@ public class OnlyOfficeController {
 
         public void setFullUrl(String fullUrl) {
             this.fullUrl = fullUrl;
+        }
+    }
+    
+    /**
+     * 上传结果DTO
+     */
+    public static class UploadResult {
+        private String fileId;
+        private String fileName;
+        private String originalName;
+        private Long fileSize;
+        
+        // getters and setters
+        public String getFileId() {
+            return fileId;
+        }
+        
+        public void setFileId(String fileId) {
+            this.fileId = fileId;
+        }
+        
+        public String getFileName() {
+            return fileName;
+        }
+        
+        public void setFileName(String fileName) {
+            this.fileName = fileName;
+        }
+        
+        public String getOriginalName() {
+            return originalName;
+        }
+        
+        public void setOriginalName(String originalName) {
+            this.originalName = originalName;
+        }
+        
+        public Long getFileSize() {
+            return fileSize;
+        }
+        
+        public void setFileSize(Long fileSize) {
+            this.fileSize = fileSize;
         }
     }
 } 

@@ -40,7 +40,12 @@ public class ContractReviewController {
 
             String fileId = UUID.randomUUID().toString().replace("-", "") + fileExtension;
             String uploadDir = fileInfoService.getFileDiskPath("").substring(0, fileInfoService.getFileDiskPath("").lastIndexOf(File.separator));
-            File dest = new File(uploadDir, fileId);
+            // 使用review子目录存储合同审查上传的文件
+            File reviewDir = new File(uploadDir, "review");
+            if (!reviewDir.exists()) {
+                reviewDir.mkdirs();
+            }
+            File dest = new File(reviewDir, fileId);
 
             if (!dest.getParentFile().exists()) {
                 dest.getParentFile().mkdirs();

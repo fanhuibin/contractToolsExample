@@ -12,7 +12,6 @@ import java.util.UUID;
 import javax.servlet.http.HttpServletResponse;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.util.StreamUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,6 +28,8 @@ import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
+import com.zhaoxinms.contract.tools.common.entity.FileInfo;
+import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -55,6 +56,9 @@ public class DocumentConvertController {
     
     @Autowired
     private ZxcmConfig zxcmConfig;
+    
+    @Autowired
+    private FileInfoService fileInfoService;
 
     /**
      * 上传并转换文档为PDF
@@ -140,15 +144,28 @@ public class DocumentConvertController {
                 log.info("已删除临时文件: {}", tempFilePath);
             }
             
-            // 返回下载链接
-            String downloadUrl = "/api/convert/download/" + pdfFileName;
+            // 注册PDF文件到数据库
+            File convertedFile = new File(convertedPath);
+            String pdfOriginalName = originalFilename.replaceFirst("\\.[^.]+$", ".pdf");
+            FileInfo fileInfo = fileInfoService.registerFile(
+                pdfOriginalName, 
+                "pdf", 
+                convertedFile.getAbsolutePath(), 
+                convertedFile.length()
+            );
+            
+            log.info("PDF文件已注册，文件ID: {}, 原始名称: {}", fileInfo.getId(), pdfOriginalName);
+            
+            // 返回下载链接（使用文件ID）
+            String downloadUrl = "/api/convert/download/" + fileInfo.getId();
             
             // 构建响应数据
             Map<String, Object> data = new HashMap<>();
             data.put("success", true);
+            data.put("fileId", fileInfo.getId());
             data.put("downloadUrl", downloadUrl);
             data.put("fileName", pdfFileName);
-            data.put("originalName", originalFilename.replaceFirst("\\.[^.]+$", ".pdf"));
+            data.put("originalName", pdfOriginalName);
             
             return ApiResponse.success("转换成功", data);
             
@@ -161,35 +178,48 @@ public class DocumentConvertController {
     }
     
     /**
-     * 下载转换后的PDF文件
+     * 下载转换后的PDF文件（通过文件ID）
      */
-    @GetMapping("/download/{fileName}")
-    @ApiOperation(value = "下载转换后的PDF", notes = "根据文件名下载已转换的PDF文件")
+    @GetMapping("/download/{fileId}")
+    @ApiOperation(value = "下载转换后的PDF", notes = "根据文件ID下载已转换的PDF文件")
     public void downloadPdf(
-            @ApiParam(value = "PDF文件名", required = true) @PathVariable("fileName") String fileName,
+            @ApiParam(value = "文件ID", required = true) @PathVariable("fileId") String fileId,
             HttpServletResponse response) {
         
         try {
-            // 安全检查：防止路径遍历攻击
-            if (fileName.contains("..") || fileName.contains("/") || fileName.contains("\\")) {
-                response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                return;
-            }
+            // 通过文件ID获取文件信息
+            FileInfo fileInfo = fileInfoService.getById(fileId);
             
-            // 查找文件（在最近3天的目录中查找）
-            File pdfFile = findConvertedFile(fileName);
-            
-            if (pdfFile == null || !pdfFile.exists()) {
-                log.warn("PDF文件不存在: {}", fileName);
+            if (fileInfo == null) {
+                log.warn("文件不存在，文件ID: {}", fileId);
                 response.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 return;
             }
             
-            log.info("下载PDF文件: {}", pdfFile.getAbsolutePath());
+            // 获取文件磁盘路径
+            String filePath = fileInfo.getStorePath();
+            if (filePath == null || filePath.isEmpty()) {
+                log.error("文件路径为空，文件ID: {}", fileId);
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                return;
+            }
+            
+            File pdfFile = new File(filePath);
+            if (!pdfFile.exists()) {
+                log.error("PDF文件不存在: {}", filePath);
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return;
+            }
+            
+            log.info("下载PDF文件，文件ID: {}, 原始名称: {}, 路径: {}", 
+                fileId, fileInfo.getOriginalName(), pdfFile.getAbsolutePath());
             
             // 设置响应头
             response.setContentType("application/pdf");
-            response.setHeader("Content-Disposition", "attachment; filename=\"" + fileName + "\"");
+            // 使用原始文件名，正确处理中文文件名编码
+            String originalName = fileInfo.getOriginalName() != null ? fileInfo.getOriginalName() : "document.pdf";
+            String encodedFileName = java.net.URLEncoder.encode(originalName, "UTF-8").replace("+", "%20");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
             response.setContentLengthLong(pdfFile.length());
             
             // 输出文件内容
@@ -198,10 +228,10 @@ public class DocumentConvertController {
                 response.flushBuffer();
             }
             
-            log.info("PDF文件下载完成: {}", fileName);
+            log.info("PDF文件下载完成，文件ID: {}, 文件名: {}", fileId, originalName);
             
         } catch (Exception e) {
-            log.error("下载PDF文件失败: {}", fileName, e);
+            log.error("下载PDF文件失败，文件ID: {}", fileId, e);
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
@@ -249,17 +279,6 @@ public class DocumentConvertController {
             log.error("提供临时文件失败: {}", fileName, e);
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
-    }
-    
-    /**
-     * 在最近几天的目录中查找转换后的文件
-     */
-    private File findConvertedFile(String fileName) {
-        String rootPath = zxcmConfig.getFileUpload().getRootPath();
-        File rootFile = new File(rootPath);
-        String absoluteRootPath = rootFile.getAbsolutePath();
-        String baseDir = absoluteRootPath + File.separator + "converted";
-        return findFileInRecentDays(baseDir, fileName, 3);
     }
     
     /**

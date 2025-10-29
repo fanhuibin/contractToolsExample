@@ -5,6 +5,7 @@
       description='请选择"新建模板"或"模板库"，完成设计后进入合同合成。'
       :icon="Document"
     />
+
     <div class="cards">
       <el-card class="card">
         <template #header>
@@ -43,7 +44,11 @@ function goTemplates() { router.push('/templates') }
 
 <style scoped>
 .compose-start { 
-  padding: var(--zx-spacing-lg); 
+  padding: 16px; 
+}
+
+.mb12 {
+  margin-bottom: 12px;
 }
 
 .cards { 

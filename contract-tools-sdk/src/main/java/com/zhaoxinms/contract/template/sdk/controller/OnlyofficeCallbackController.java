@@ -78,46 +78,38 @@ public class OnlyofficeCallbackController {
     @GetMapping("/download/{fileId}")
     public ResponseEntity<Resource> download(@PathVariable String fileId) {
 		try {
-            // 获取文件信息；若拿不到且是模板设计固定文件，走兜底
+            // 获取文件信息
             FileInfo fileInfo = fileInfoService.getById(fileId);
-            java.io.File file = null;
-            String downloadName = null;
             if (fileInfo == null) {
-                if ("templateDesign".equals(fileId) || "templateDesign.docx".equalsIgnoreCase(fileId)) {
-                    file = resolveTemplateDesignFile();
-                    downloadName = "templateDesign.docx";
-                    if (file == null || !file.exists()) {
-                        throw new RuntimeException("模板设计示例文件不存在，请在uploads或sdk/uploads放置templateDesign.docx或test_document.docx");
-                    }
-                } else {
-                    throw new RuntimeException("文件不存在，文件ID: " + fileId);
-                }
-            } else {
-                // 优先使用storePath，其次使用默认uploads目录
-                String storePath = fileInfo.getStorePath();
-                if (storePath != null) {
-                    file = new java.io.File(storePath);
-                }
-                if (file == null || !file.exists()) {
-                    java.nio.file.Path filePath = java.nio.file.Paths.get(uploadRootPath, fileInfo.getFileName());
-                    file = filePath.toFile();
-                }
-                if (!file.exists()) {
-                    throw new RuntimeException("文件不存在于磁盘，文件路径: " + (storePath != null ? storePath : (uploadRootPath + "/" + fileInfo.getFileName())));
-                }
-                downloadName = fileInfo.getOriginalName();
+                throw new RuntimeException("文件不存在，文件ID: " + fileId);
             }
+            
+            // 优先使用storePath，其次使用默认uploads目录
+            java.io.File file = null;
+            String storePath = fileInfo.getStorePath();
+            if (storePath != null) {
+                file = new java.io.File(storePath);
+            }
+            if (file == null || !file.exists()) {
+                java.nio.file.Path filePath = java.nio.file.Paths.get(uploadRootPath, fileInfo.getFileName());
+                file = filePath.toFile();
+            }
+            if (!file.exists()) {
+                throw new RuntimeException("文件不存在于磁盘，文件路径: " + (storePath != null ? storePath : (uploadRootPath + "/" + fileInfo.getFileName())));
+            }
+            
 			// 创建文件资源
 			Resource resource = new FileSystemResource(file);
 			
 			// 设置响应头
 			HttpHeaders headers = new HttpHeaders();
-            String originalName = downloadName != null ? downloadName : file.getName();
+            String originalName = fileInfo.getOriginalName();
             String encodedFileName = java.net.URLEncoder.encode(originalName, "UTF-8").replace("+", "%20");
-            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + originalName + "\"; filename*=UTF-8''" + encodedFileName);
+            // 只使用RFC 5987标准的filename*，避免中文在filename部分导致编码错误
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName);
 			
 			// 根据文件扩展名设置Content-Type
-            String contentType = getContentType("docx");
+            String contentType = getContentType(fileInfo.getFileExtension());
 			headers.setContentType(MediaType.parseMediaType(contentType));
 			
 			return ResponseEntity.ok()
@@ -127,27 +119,6 @@ public class OnlyofficeCallbackController {
 			throw new RuntimeException("文件下载失败：" + e.getMessage());
 		}
 	}
-
-    private java.io.File resolveTemplateDesignFile() {
-        try {
-            String absUploadPath = java.nio.file.Paths.get(uploadRootPath).toAbsolutePath().toString();
-            String[] candidates = new String[] {
-                absUploadPath + "/templateDesign.docx",
-                absUploadPath + "/test_document.docx",
-                java.nio.file.Paths.get("sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                java.nio.file.Paths.get("sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                java.nio.file.Paths.get("..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                java.nio.file.Paths.get("..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString(),
-                java.nio.file.Paths.get("..", "..", "sdk", "uploads", "templateDesign.docx").toAbsolutePath().toString(),
-                java.nio.file.Paths.get("..", "..", "sdk", "uploads", "test_document.docx").toAbsolutePath().toString()
-            };
-            for (String p : candidates) {
-                java.io.File f = new java.io.File(p);
-                if (f.exists() && f.isFile()) return f;
-            }
-        } catch (Exception ignore) {}
-        return null;
-    }
 
 	/**
 	 * 根据文件扩展名获取Content-Type

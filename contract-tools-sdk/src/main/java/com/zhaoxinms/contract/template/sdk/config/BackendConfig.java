@@ -4,6 +4,7 @@ import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
 
 /**
  * Backend配置类
@@ -19,5 +20,13 @@ public class BackendConfig {
     @ConfigurationProperties(prefix = "zxcm")
     public ZxcmConfig zxcmConfig() {
         return new ZxcmConfig();
+    }
+    
+    /**
+     * 创建RestTemplate实例，用于HTTP请求
+     */
+    @Bean
+    public RestTemplate restTemplate() {
+        return new RestTemplate();
     }
 } 

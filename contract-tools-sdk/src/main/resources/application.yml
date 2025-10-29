@@ -27,17 +27,28 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       initial-size: 5
-      min-idle: 10
-      max-active: 200
+      min-idle: 5
+      max-active: 50
       max-wait: 60000
-      time-between-eviction-runs-millis: 60000
-      min-evictable-idle-time-millis: 300000
-      max-evictable-idle-time-millis: 900000
-      validation-query: SELECT 1 FROM DUAL
-      test-while-idle: true
-      test-on-borrow: true
-      test-on-return: false
+      # 连接回收和验证配置
+      time-between-eviction-runs-millis: 60000  # 每60秒运行一次回收器
+      min-evictable-idle-time-millis: 300000    # 连接空闲5分钟后可被回收
+      max-evictable-idle-time-millis: 600000    # 连接空闲10分钟后强制回收（减少到10分钟）
+      # 连接验证配置
+      validation-query: SELECT 1
+      test-while-idle: true      # 空闲时测试连接是否有效
+      test-on-borrow: false      # 获取连接时不测试（提高性能）
+      test-on-return: false      # 归还连接时不测试
+      # 保持连接活跃
+      keep-alive: true
+      keep-alive-between-time-millis: 120000  # 每2分钟发送保活信号
+      # 物理连接超时设置（避免长时间未使用的连接）
+      phy-timeout-millis: 600000              # 物理连接10分钟超时
+      # 移除废弃连接的日志记录（减少日志噪音）
+      remove-abandoned: false
+      # 过滤器配置
       filters: stat
+      # 监控页面配置
       web-stat-filter:
         enabled: true
       stat-view-servlet:
@@ -76,9 +87,24 @@ zhaoxin:
 # 日志配置
 logging:
   level:
-    com.zhaoxinms.contract: ERROR
+    # 授权模块日志（启动时必须显示授权信息）
+    com.zhaoxinms.contract.tools.auth.listener: INFO
+    com.zhaoxinms.contract.tools.auth: ERROR
+    # 合同工具核心模块日志 - 改为 INFO 以显示保存回调等重要日志
+    com.zhaoxinms.contract: INFO
+    # OnlyOffice 回调日志 - 显示保存相关的详细日志
+    com.zhaoxinms.contract.tools.onlyoffice.callbacks: INFO
+    # 关闭 Druid 连接池的警告日志（discard long time none received connection）
+    com.alibaba.druid.pool.DruidAbstractDataSource: ERROR
+    com.alibaba.druid: WARN
+    # 根日志级别
+    root: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n" 
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/contract-tools-sdk.log
+    max-size: 100MB
+    max-history: 30 
 
 # 肇新合同工具集配置
 zxcm:
@@ -116,7 +142,7 @@ zxcm:
   
   # 文件上传配置
   file-upload:
-    root-path: ./uploads
+    root-path: ./newuploads
   
   
   # 比对功能配置
@@ -158,4 +184,4 @@ zxcm:
       title: 肇新合同工具集API文档  # API文档标题
       description: 提供合同比对、模板设计、规则提取等功能的RESTful API接口  # API描述
       version: 1.0.0  # API版本号
-      base-package: com.zhaoxinms.contract  # 扫描的基础包路径
+      base-package: com.zhaoxinms.contract  # 扫描的基础

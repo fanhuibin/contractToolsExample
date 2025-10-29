@@ -56,21 +56,39 @@ public class FileInfoServiceImpl implements FileInfoService {
 
     @Override
     public FileInfo getById(String id) {
-        if (fileInfoRecordMapper == null) return null;
-        FileInfoRecord rec = fileInfoRecordMapper.selectById(id);
-        if (rec == null) return null;
-        FileInfo info = new FileInfo();
-        info.setId(rec.getId());
-        info.setOriginalName(rec.getOriginalName());
-        info.setFileName(rec.getFileName());
-        info.setFileExtension(rec.getFileExtension());
-        info.setFileSize(rec.getFileSize());
-        info.setStorePath(rec.getStorePath() != null ? rec.getStorePath() : rec.getFilePath());
-        info.setStatus(rec.getStatus());
-        info.setCreateTime(rec.getCreateTime());
-        info.setUpdateTime(rec.getUpdateTime());
-        info.setOnlyofficeKey(rec.getOnlyofficeKey());
-        return info;
+        if (fileInfoRecordMapper == null) {
+            log.warn("fileInfoRecordMapper is null");
+            return null;
+        }
+        if (id == null || id.trim().isEmpty()) {
+            log.warn("文件ID为空");
+            return null;
+        }
+        
+        try {
+            // 尝试将String类型的id转换为Long类型
+            Long longId = Long.parseLong(id.trim());
+            FileInfoRecord rec = fileInfoRecordMapper.selectById(longId);
+            if (rec == null) {
+                log.warn("未找到文件记录，文件ID: {}", id);
+                return null;
+            }
+            FileInfo info = new FileInfo();
+            info.setId(rec.getId());
+            info.setOriginalName(rec.getOriginalName());
+            info.setFileName(rec.getFileName());
+            info.setFileExtension(rec.getFileExtension());
+            info.setFileSize(rec.getFileSize());
+            info.setStorePath(rec.getStorePath() != null ? rec.getStorePath() : rec.getFilePath());
+            info.setStatus(rec.getStatus());
+            info.setCreateTime(rec.getCreateTime());
+            info.setUpdateTime(rec.getUpdateTime());
+            info.setOnlyofficeKey(rec.getOnlyofficeKey());
+            return info;
+        } catch (NumberFormatException e) {
+            log.error("文件ID格式错误: {}", id, e);
+            return null;
+        }
     }
 
     // no-op helper removed
@@ -83,11 +101,26 @@ public class FileInfoServiceImpl implements FileInfoService {
 
     @Override
     public String getFileDiskPath(String fileId) {
+        log.info("获取文件磁盘路径，文件ID: {}", fileId);
         FileInfo fileInfo = getById(fileId);
         if (fileInfo == null) {
+            log.warn("文件不存在，文件ID: {}", fileId);
             return null;
         }
-        return fileInfo.getStorePath();
+        String storePath = fileInfo.getStorePath();
+        log.info("文件路径: {}", storePath);
+        
+        // 检查文件是否实际存在
+        if (storePath != null && !storePath.isEmpty()) {
+            java.io.File file = new java.io.File(storePath);
+            if (!file.exists()) {
+                log.error("文件路径存在于数据库但磁盘上不存在: {}", storePath);
+            } else {
+                log.info("文件存在，文件大小: {} bytes", file.length());
+            }
+        }
+        
+        return storePath;
     }
 
     @Override
@@ -267,8 +300,14 @@ public class FileInfoServiceImpl implements FileInfoService {
             rec.setStatus(0);
             rec.setCreateTime(LocalDateTime.now());
             rec.setUpdateTime(LocalDateTime.now());
-            rec.setOnlyofficeKey("reg_" + System.currentTimeMillis());
+            // 先插入记录以获取ID
             fileInfoRecordMapper.insert(rec);
+            // 使用ID生成唯一的onlyofficeKey，避免缓存冲突
+            String onlyofficeKey = generateOnlyOfficeKeyForFile(String.valueOf(rec.getId()));
+            rec.setOnlyofficeKey(onlyofficeKey);
+            // 更新onlyofficeKey
+            fileInfoRecordMapper.updateById(rec);
+            
             FileInfo out = new FileInfo();
             out.setId(rec.getId());
             out.setOriginalName(rec.getOriginalName());
@@ -280,6 +319,8 @@ public class FileInfoServiceImpl implements FileInfoService {
             out.setCreateTime(rec.getCreateTime());
             out.setUpdateTime(rec.getUpdateTime());
             out.setOnlyofficeKey(rec.getOnlyofficeKey());
+            
+            log.info("注册新文件，文件ID: {}, onlyofficeKey: {}, 原始名称: {}", rec.getId(), onlyofficeKey, originalName);
             return out;
         } catch (Exception e) {
             throw new RuntimeException("注册文件失败: " + e.getMessage(), e);
@@ -290,9 +331,9 @@ public class FileInfoServiceImpl implements FileInfoService {
      * 为指定文件ID生成OnlyOffice key，格式为：文件id + 分隔符 + 雪花id
      */
     private String generateOnlyOfficeKeyForFile(String fileId) {
-        // 使用当前时间戳作为雪花ID的简化版本
-        long snowflakeId = System.currentTimeMillis();
-        return fileId + "_" + snowflakeId;
+        // 使用UUID确保key的唯一性，避免OnlyOffice缓存问题
+        String uuid = UUID.randomUUID().toString().replace("-", "");
+        return fileId + "_" + uuid;
     }
 
     /**
@@ -386,5 +427,32 @@ public class FileInfoServiceImpl implements FileInfoService {
                 fileInfo.getId(), originalName, targetPath);
         
         return fileInfo;
+    }
+
+    /**
+     * 根据ID删除文件
+     */
+    @Override
+    public boolean deleteById(String id) {
+        if (id == null || id.trim().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            if (fileInfoRecordMapper != null) {
+                // 将String类型的id转换为Long类型
+                Long longId = Long.parseLong(id);
+                int result = fileInfoRecordMapper.deleteById(longId);
+                log.info("删除文件记录，文件ID: {}, 结果: {}", id, result > 0 ? "成功" : "失败");
+                return result > 0;
+            }
+            return false;
+        } catch (NumberFormatException e) {
+            log.error("文件ID格式错误: {}", id, e);
+            return false;
+        } catch (Exception e) {
+            log.error("删除文件记录失败，文件ID: {}", id, e);
+            return false;
+        }
     }
 } 

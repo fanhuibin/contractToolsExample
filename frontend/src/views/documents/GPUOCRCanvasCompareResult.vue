@@ -1096,37 +1096,15 @@ const jumpToDifferenceFromCanvas = (diffIndex: number, operation: string) => {
 
 // 滚动差异列表到指定项
 const scrollDifferenceListToItem = (filteredIndex: number) => {
-  console.log('🔵🔵🔵 scrollDifferenceListToItem 被调用 🔵🔵🔵', {
-    filteredIndex,
-    timestamp: new Date().toISOString()
-  })
-  
   // 使用 setTimeout 确保 DOM 完全更新
   setTimeout(() => {
     nextTick(() => {
-      console.log('🟢 nextTick 内部，开始查找 DOM 元素')
-      
       const diffListContent = document.querySelector('.diff-list-content') as HTMLElement
       const diffItems = document.querySelectorAll('.diff-item')
       const targetItem = diffItems[filteredIndex] as HTMLElement
       
-      console.log('🔍 DOM 查找结果:', {
-        diffListContent: !!diffListContent,
-        diffListContentTag: diffListContent?.tagName,
-        targetItem: !!targetItem,
-        targetItemTag: targetItem?.tagName,
-        filteredIndex,
-        totalDiffItems: diffItems.length
-      })
-      
       if (!diffListContent || !targetItem) {
-        console.error('❌❌❌ 无法找到差异列表容器或目标项 ❌❌❌', {
-          diffListContent: !!diffListContent,
-          targetItem: !!targetItem,
-          filteredIndex,
-          totalItems: diffItems.length,
-          allDiffListContents: document.querySelectorAll('.diff-list-content').length
-        })
+        console.error('无法找到差异列表容器或目标项', { filteredIndex, totalItems: diffItems.length })
         return
       }
       
@@ -1141,34 +1119,11 @@ const scrollDifferenceListToItem = (filteredIndex: number) => {
       // 计算使目标项居中的滚动位置
       const targetScrollTop = itemOffsetTop - (containerHeight / 2) + (itemHeight / 2)
       
-      console.log('📊 滚动计算详情:', {
-        containerTop,
-        containerHeight,
-        itemOffsetTop,
-        itemHeight,
-        targetScrollTop: Math.max(0, targetScrollTop),
-        willScroll: Math.max(0, targetScrollTop) !== containerTop
-      })
-      
       // 平滑滚动到目标位置
       diffListContent.scrollTo({
         top: Math.max(0, targetScrollTop),
         behavior: 'smooth'
       })
-      
-      console.log('✅✅✅ 差异列表滚动命令已发出 ✅✅✅', {
-        filteredIndex,
-        scrolledTo: Math.max(0, targetScrollTop)
-      })
-      
-      // 验证滚动是否成功
-      setTimeout(() => {
-        console.log('🔎 滚动验证:', {
-          currentScrollTop: diffListContent.scrollTop,
-          expectedScrollTop: Math.max(0, targetScrollTop),
-          差值: Math.abs(diffListContent.scrollTop - Math.max(0, targetScrollTop))
-        })
-      }, 600) // 等待动画完成后验证
     })
   }, 100) // 增加到100ms确保DOM完全更新
 }
@@ -1187,13 +1142,6 @@ const onSyncScrollToggle = () => {
 
 // 跳转到指定差异 - 连续滚动版本
 const jumpTo = (i: number) => {
-  console.log('🎯🎯🎯 jumpTo 被调用 🎯🎯🎯', {
-    diffIndex: i,
-    totalDiffs: results.value.length,
-    filterMode: filterMode.value,
-    timestamp: new Date().toISOString()
-  })
-  
   activeIndex.value = i
   
   // 设置选中的差异项索引，用于显示连接线
@@ -1201,36 +1149,22 @@ const jumpTo = (i: number) => {
   
   const r = results.value[i]
   if (!r) {
-    console.error('❌ 未找到差异项:', i)
+    console.error('未找到差异项:', i)
     return
   }
-
-  console.log('📋 差异项详情:', {
-    diffIndex: i,
-    operation: r.operation,
-    pageA: r.pageA,
-    pageB: r.pageB
-  })
 
   // 滚动差异列表到对应项
   const targetDiff = results.value[i]
   if (targetDiff) {
     const filteredIndex = filteredResults.value.findIndex(r => r === targetDiff)
-    console.log('🔍 查找过滤后的索引:', {
-      diffIndex: i,
-      filteredIndex,
-      filteredTotal: filteredResults.value.length,
-      找到: filteredIndex >= 0
-    })
     
     if (filteredIndex >= 0) {
-      console.log('✅ 准备调用 scrollDifferenceListToItem，filteredIndex =', filteredIndex)
       scrollDifferenceListToItem(filteredIndex)
     } else {
-      console.error('❌❌❌ 在过滤结果中未找到差异项，可能被过滤或忽略 ❌❌❌')
+      console.error('在过滤结果中未找到差异项')
     }
   } else {
-    console.error('❌ targetDiff 为空')
+    console.error('targetDiff 为空')
   }
 
   // 计算跳转位置（本地函数）
@@ -1629,8 +1563,6 @@ const saveUserModificationsToBackend = async () => {
       ignoredDifferences: Array.from(ignoredSet.value),
       remarks: Object.fromEntries(remarksMap.value)
     }
-    
-    console.log('🔄 正在保存用户修改...', modifications)
     
     const response = await saveUserModificationsAPI(taskId.value, modifications)
     

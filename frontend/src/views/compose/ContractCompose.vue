@@ -45,12 +45,16 @@
                     <el-color-picker v-model="richOptions[el.tag].headerBg" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <span>边框颜色</span>
-                    <el-color-picker v-model="richOptions[el.tag].borderColor" />
+                    <span>表头文字</span>
+                    <el-color-picker v-model="richOptions[el.tag].headerTextColor" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <span>文字颜色</span>
-                    <el-color-picker v-model="richOptions[el.tag].textColor" />
+                    <span>内容文字</span>
+                    <el-color-picker v-model="richOptions[el.tag].bodyTextColor" />
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span>边框颜色</span>
+                    <el-color-picker v-model="richOptions[el.tag].borderColor" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
                     <span>字体大小</span>
@@ -66,6 +70,7 @@
                 </div>
               </template>
               <template v-else>
+                <!-- 印章类型 -->
                 <div v-if="isSeal(el)" class="field-box" style="flex-direction: column; gap:8px;">
                   <el-input
                     v-model="sealUrl.normal[el.tag]"
@@ -78,6 +83,15 @@
                     clearable
                   />
                 </div>
+                <!-- 条款类型（使用条款编辑器） -->
+                <div v-else-if="isClause(el)" class="field-box clause-field">
+                  <ClauseEditor
+                    v-model="formValues[el.tag]"
+                    :existing-fields="formValues"
+                    @update:variables="onClauseVariablesUpdate(el.tag, $event)"
+                  />
+                </div>
+                <!-- 普通字段 -->
                 <div v-else class="field-box">
                   <el-input
                     v-model="formValues[el.tag]"
@@ -102,14 +116,16 @@ import { EditPen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { composeContract, type ComposeRequest } from '@/api/contract-compose'
-import { getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { getTemplateDesignByTemplateId, getTemplateDesignDetail } from '@/api/templateDesign'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
+import ClauseEditor from '@/components/ClauseEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
 const submitting = ref(false)
+const recordId = ref<string>('')
 const templateId = ref<string>('')
 const templateFileId = ref<string>('')
 
@@ -120,14 +136,23 @@ const formValues = ref<Record<string, string>>({})
 const sealUrl = ref<{ normal: Record<string, string>; riding: Record<string, string> }>({ normal: {}, riding: {} })
 
 // 富文本选项：按字段tag存储
-const richOptions = ref<Record<string, { align: 'left' | 'center' | 'right'; headerBg: string; borderColor: string; textColor: string; fontSize: number; fontUnit: 'px' | 'pt' | 'em' | 'rem' }>>({})
+const richOptions = ref<Record<string, { 
+  align: 'left' | 'center' | 'right'; 
+  headerBg: string; 
+  headerTextColor: string; 
+  bodyTextColor: string; 
+  borderColor: string; 
+  fontSize: number; 
+  fontUnit: 'px' | 'pt' | 'em' | 'rem' 
+}>>({})
 
 const isDefaultTemplate = computed(() => 
   templateId.value === 'demo' && templateFileId.value === '9999'
 )
 
 onMounted(async () => {
-  // 从路由读取模板信息（无则默认demo）
+  // 从路由读取模板信息（优先使用新的 id 参数）
+  recordId.value = String(route.query.id || '')
   templateId.value = String(route.query.templateId || 'demo')
   templateFileId.value = String(route.query.fileId || '')
   await loadTemplateDesign()
@@ -137,23 +162,38 @@ async function loadTemplateDesign() {
   try {
     loading.value = true
     
-    // 动态从后端读取模板设计记录
-    const resp = await getTemplateDesignByTemplateId(templateId.value) as any
-    console.log('完整响应对象:', resp) // 调试信息
-    console.log('响应类型:', typeof resp) // 调试信息
-    console.log('响应数据结构:', Object.keys(resp || {})) // 调试信息
+    let resp: any
+    let record: any
     
-    // 检查响应结构：resp 本身就是后端返回的数据
-    if (resp?.code !== 200) {
-      console.error('响应状态码不正确:', resp?.code) // 调试信息
-      throw new Error(resp?.message || '获取模板设计失败')
+    // 优先使用新的 id 参数（记录ID）
+    if (recordId.value) {
+      resp = await getTemplateDesignDetail(recordId.value) as any
+      if (resp?.data?.code !== undefined) {
+        if (resp.data.code !== 200) {
+          throw new Error(resp.data.message || '获取模板设计失败')
+        }
+        record = resp.data.data
+      } else {
+        record = resp.data
+      }
+    } else if (templateId.value && templateId.value !== 'demo') {
+      // 降级使用旧的 templateId 参数（向后兼容）
+      resp = await getTemplateDesignByTemplateId(templateId.value) as any
+      if (resp?.code !== 200) {
+        throw new Error(resp?.message || '获取模板设计失败')
+      }
+      record = resp.data
+    } else {
+      throw new Error('未提供模板ID参数')
     }
-    
-    const record = resp.data
-    console.log('模板设计记录:', record) // 调试信息
     
     if (!record) {
       throw new Error('未找到模板设计记录')
+    }
+    
+    // 更新 fileId
+    if (record.fileId) {
+      templateFileId.value = record.fileId
     }
     
     // record.elementsJson 结构假设为 { elements: [...] } 或 直接数组，做兼容
@@ -161,33 +201,52 @@ async function loadTemplateDesign() {
       const parsed = JSON.parse(record.elementsJson || '{}')
       const elements = Array.isArray(parsed) ? parsed : (parsed.elements || [])
       formElements.value = elements
-      // 初始化富文本选项
+      
+      // 初始化各类字段
       elements.forEach((el: any) => {
-        if (isRich(el)) ensureRichOptions(el.tag)
-        if (isSeal(el)) { if (!sealUrl.value.normal[el.tag]) sealUrl.value.normal[el.tag] = ''; if (!sealUrl.value.riding[el.tag]) sealUrl.value.riding[el.tag] = '' }
-        // 确保印章元素在values中占位，以便后端注入隐藏标识
-        if (isSeal(el) && formValues.value[el.tag] === undefined) {
-          formValues.value[el.tag] = ''
+        // 1. 富文本字段
+        if (isRich(el)) {
+          ensureRichOptions(el.tag)
+        }
+        
+        // 2. 印章字段
+        if (isSeal(el)) {
+          if (!sealUrl.value.normal[el.tag]) sealUrl.value.normal[el.tag] = ''
+          if (!sealUrl.value.riding[el.tag]) sealUrl.value.riding[el.tag] = ''
+          // 确保印章元素在values中占位，以便后端注入隐藏标识
+          if (formValues.value[el.tag] === undefined) {
+            formValues.value[el.tag] = ''
+          }
+        }
+        
+        // 3. 条款字段 - 初始化条款模板文本
+        if (isClause(el)) {
+          // 从 meta.content 中读取条款模板文本（包含变量的原始文本）
+          const clauseTemplate = el.meta?.content || el.content || ''
+          if (clauseTemplate) {
+            formValues.value[el.tag] = clauseTemplate
+          } else {
+            // 如果没有模板文本，给一个默认提示
+            formValues.value[el.tag] = ''
+          }
         }
       })
-      console.log('解析后的元素:', elements) // 调试信息
+      
     } catch (e) {
-      console.error('解析elementsJson失败:', e) // 调试信息
+      console.error('解析elementsJson失败:', e)
       formElements.value = []
     }
     
     // 设置模板文件ID（优先使用记录中的fileId）
     if (record.fileId) {
       templateFileId.value = record.fileId
-      console.log('设置模板文件ID:', templateFileId.value) // 调试信息
     } else if (templateFileId.value) {
-      console.log('使用路由传入的文件ID:', templateFileId.value) // 调试信息
+      // 使用路由传入的文件ID
     } else {
       throw new Error('模板记录中未找到文件ID')
     }
     
   } catch (e: any) {
-    console.error('加载模板设计失败:', e) // 调试信息
     ElMessage.error(e?.message || '加载模板失败')
   } finally {
     loading.value = false
@@ -208,13 +267,30 @@ function isSeal(el: any): boolean {
   return tag.toLowerCase().includes('seal') || name.includes('公章') || name.includes('骑缝章')
 }
 
+// 判断是否是条款类型
+function isClause(el: any): boolean {
+  // 方法1: 通过 type 字段判断
+  if (el?.type === 'clause' || el?.type === 'CLAUSE') {
+    return true
+  }
+  // 方法2: 通过 meta 字段判断
+  if (el?.meta?.type === 'clause' || el?.meta?.isClause === true) {
+    return true
+  }
+  // 方法3: 通过标签名或显示名判断（包含"条款"关键字）
+  const tag: string = el?.tag || ''
+  const name: string = (el?.customName || el?.name || '').toLowerCase()
+  return tag.toLowerCase().includes('clause') || name.includes('条款')
+}
+
 function ensureRichOptions(tag: string) {
   if (!richOptions.value[tag]) {
     richOptions.value[tag] = {
       align: 'center',
       headerBg: '#f5f7fa',
+      headerTextColor: '#333333',
+      bodyTextColor: '#606266',
       borderColor: '#dddddd',
-      textColor: '#333333',
       fontSize: 14,
       fontUnit: 'px'
     }
@@ -236,14 +312,15 @@ function insertDefaultTable(tag: string) {
   const opts = ensureRichOptions(tag)
   const align = opts.align
   const headerBg = opts.headerBg
+  const headerTextColor = opts.headerTextColor
+  const bodyTextColor = opts.bodyTextColor
   const borderColor = opts.borderColor
-  const textColor = opts.textColor
   const fontSize = opts.fontSize
   const fontUnit = opts.fontUnit
   const html = `
-  <table style="width:100%; border-collapse: collapse; text-align:${align}; color:${textColor}; font-size:${fontSize}${fontUnit};">
+  <table style="width:100%; border-collapse: collapse; text-align:${align}; font-size:${fontSize}${fontUnit};">
     <thead>
-      <tr style="background:${headerBg};">
+      <tr style="background:${headerBg}; color:${headerTextColor};">
         <th style="border:1px solid ${borderColor}; padding:6px;">序号</th>
         <th style="border:1px solid ${borderColor}; padding:6px;">产品名称</th>
         <th style="border:1px solid ${borderColor}; padding:6px;">规格型号</th>
@@ -252,7 +329,7 @@ function insertDefaultTable(tag: string) {
         <th style="border:1px solid ${borderColor}; padding:6px;">金额(元)</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody style="color:${bodyTextColor};">
       <tr>
         <td style="border:1px solid ${borderColor}; padding:6px;">1</td>
         <td style="border:1px solid ${borderColor}; padding:6px;">示例产品A</td>
@@ -274,6 +351,22 @@ function insertDefaultTable(tag: string) {
   formValues.value[tag] = html
 }
 
+// 处理条款变量更新
+function onClauseVariablesUpdate(clauseTag: string, variables: Record<string, string>) {
+  // 同步变量值到 formValues
+  // ⚠️ 重要：无论变量是否关联表单字段，都要添加到 formValues 中
+  // 因为后端需要用这些变量值来替换条款中的占位符
+  Object.keys(variables).forEach(varName => {
+    const varValue = variables[varName]
+    
+    // 检查该变量是否对应某个表单字段
+    const existingField = formElements.value.find(el => el.tag === varName)
+    
+    // 无论是否关联字段，都添加到 formValues 中
+    formValues.value[varName] = varValue
+  })
+}
+
 async function doCompose() {
   if (!templateFileId.value) {
     ElMessage.warning('缺少模板文件ID')
@@ -293,17 +386,24 @@ async function doCompose() {
     }
     
     const res = await composeContract(payload)
-    const fileId = res.data.fileId
+    const composeData = res.data.data || res.data
+    const composedFileId = composeData.fileId
+    
+    if (!composedFileId) {
+      throw new Error('合成成功但未返回文件ID')
+    }
+    
     ElMessage.success('合成成功')
     router.push({
-      path: `/contract-compose/result/${encodeURIComponent(fileId)}`,
+      path: `/contract-compose/result/${encodeURIComponent(composedFileId)}`,
       query: {
         templateId: templateId.value,
-        fileId: templateFileId.value,
-        docxPath: res.data.docxPath || '',
-        pdfPath: res.data.pdfPath || '',
-        stampedPdfPath: res.data.stampedPdfPath || '',
-        ridingStampPdfPath: res.data.ridingStampPdfPath || ''
+        templateFileId: templateFileId.value, // 模板文件ID
+        composedFileId: composedFileId, // 合成后的文件ID
+        docxPath: composeData.docxPath || '',
+        pdfPath: composeData.pdfPath || '',
+        stampedPdfPath: composeData.stampedPdfPath || '',
+        ridingStampPdfPath: composeData.ridingStampPdfPath || ''
       }
     })
   } catch (e: any) {
@@ -350,6 +450,21 @@ function buildStampImageUrls(): Record<string, { normal?: string; riding?: strin
 .field-box :deep(.el-input__wrapper.is-focus) { box-shadow: 0 0 0 3px rgba(51,112,255,.12), inset 0 0 0 1px #3370ff; }
 .field-box :deep(.el-textarea__inner) { border-radius: 8px; box-shadow: inset 0 0 0 1px #dcdfe6; }
 .field-box.is-rich :deep(.el-textarea__inner:focus) { box-shadow: 0 0 0 3px rgba(51,112,255,.12), inset 0 0 0 1px #3370ff; }
+
+/* 条款字段样式 */
+.field-box.clause-field {
+  width: 100%;
+  flex-direction: column;
+  margin-top: 32px; /* 为上方的提示预留空间 */
+}
+.field-box.clause-field :deep(.clause-editor) {
+  width: 100%;
+}
+
+/* 条款字段的卡片样式调整 */
+.field-card:has(.clause-field) {
+  padding-bottom: 16px;
+}
 
 /* 调整颜色选择与数值输入组件间距 */
 .form :deep(.el-color-picker) { vertical-align: middle; }

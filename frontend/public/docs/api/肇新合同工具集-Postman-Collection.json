@@ -1,0 +1,745 @@
+{
+  "info": {
+    "name": "肇新合同工具集 API",
+    "_postman_id": "zxcm-contract-tools-2025",
+    "description": "肇新合同管理系统完整API集合\n\n## 使用说明\n\n1. 导入此Collection到Postman\n2. 配置环境变量（见下方）\n3. 开始测试\n\n## 环境变量\n\n- `base_url`: API基础URL（如：https://your-domain.com）\n\n## 联系方式\n\n- 官网：https://zhaoxinms.com\n- 电话：18306806281",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://your-domain.com",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. 文档格式转换",
+      "item": [
+        {
+          "name": "上传并转换为PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Office文档文件（支持.doc, .docx, .xls, .xlsx, .ppt, .pptx）"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/convert/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "convert", "upload"]
+            },
+            "description": "上传Office文档并转换为PDF格式"
+          },
+          "response": []
+        },
+        {
+          "name": "下载转换后的PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/convert/download/:fileId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "convert", "download", ":fileId"],
+              "variable": [
+                {
+                  "key": "fileId",
+                  "value": "123",
+                  "description": "文件ID（从转换接口返回的fileId）"
+                }
+              ]
+            },
+            "description": "通过文件ID下载已转换的PDF文件"
+          },
+          "response": []
+        }
+      ],
+      "description": "Office文档（Word/Excel/PPT）转PDF功能"
+    },
+    {
+      "name": "2. 智能文档比对",
+      "item": [
+        {
+          "name": "提交比对任务（URL方式）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldFileUrl\": \"https://example.com/old.pdf\",\n  \"newFileUrl\": \"https://example.com/new.pdf\",\n  \"removeWatermark\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/submit-url",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "submit-url"]
+            },
+            "description": "通过URL提交两个PDF文档进行智能比对"
+          },
+          "response": []
+        },
+        {
+          "name": "提交比对任务（文件上传）",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "oldFile",
+                  "type": "file",
+                  "src": [],
+                  "description": "原始PDF文件"
+                },
+                {
+                  "key": "newFile",
+                  "type": "file",
+                  "src": [],
+                  "description": "新版本PDF文件"
+                },
+                {
+                  "key": "removeWatermark",
+                  "value": "false",
+                  "type": "text",
+                  "description": "是否去除水印"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/submit",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "submit"]
+            },
+            "description": "通过文件上传方式提交比对任务"
+          },
+          "response": []
+        },
+        {
+          "name": "获取任务状态",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/task/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "task", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here",
+                  "description": "任务ID"
+                }
+              ]
+            },
+            "description": "查询比对任务的状态和进度"
+          },
+          "response": []
+        },
+        {
+          "name": "获取比对结果",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/canvas-result/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "canvas-result", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here",
+                  "description": "任务ID"
+                }
+              ]
+            },
+            "description": "获取比对完成后的结果数据"
+          },
+          "response": []
+        },
+        {
+          "name": "获取文档图片（旧版本）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/images/:taskId/old",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "images", ":taskId", "old"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "获取旧版本文档的图片信息"
+          },
+          "response": []
+        },
+        {
+          "name": "获取文档图片（新版本）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/images/:taskId/new",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "images", ":taskId", "new"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "获取新版本文档的图片信息"
+          },
+          "response": []
+        },
+        {
+          "name": "获取任务列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "tasks"]
+            },
+            "description": "获取所有比对任务列表（最近20条）"
+          },
+          "response": []
+        },
+        {
+          "name": "删除任务",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/task/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "task", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "删除指定的比对任务"
+          },
+          "response": []
+        },
+        {
+          "name": "导出比对报告",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"taskId\": \"task-id-here\",\n  \"formats\": [\"doc\"],\n  \"includeIgnored\": false,\n  \"includeRemarks\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/export-report",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "export-report"]
+            },
+            "description": "导出比对结果为Word或HTML格式"
+          },
+          "response": []
+        },
+        {
+          "name": "保存用户修改",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ignoredDifferences\": [2, 5, 8],\n  \"remarks\": {\n    \"0\": \"此差异已确认，需要保留\",\n    \"3\": \"与客户沟通后确认为正常修改\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/save-user-modifications/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "save-user-modifications", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "保存用户对比对结果的修改（忽略差异、备注）"
+          },
+          "response": []
+        },
+        {
+          "name": "获取用户修改",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/compare-pro/get-user-modifications/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compare-pro", "get-user-modifications", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "获取用户的修改信息"
+          },
+          "response": []
+        }
+      ],
+      "description": "GPU OCR智能文档比对功能"
+    },
+    {
+      "name": "3. 智能文档抽取（规则引擎）",
+      "item": [
+        {
+          "name": "上传文件并开始抽取",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "PDF文档"
+                },
+                {
+                  "key": "templateId",
+                  "value": "template-001",
+                  "type": "text",
+                  "description": "抽取模板ID"
+                },
+                {
+                  "key": "ocrProvider",
+                  "value": "gpu",
+                  "type": "text",
+                  "description": "OCR提供商（可选）"
+                },
+                {
+                  "key": "ignoreHeaderFooter",
+                  "value": "true",
+                  "type": "text",
+                  "description": "是否忽略页眉页脚"
+                },
+                {
+                  "key": "headerHeightPercent",
+                  "value": "12.0",
+                  "type": "text",
+                  "description": "页眉高度百分比"
+                },
+                {
+                  "key": "footerHeightPercent",
+                  "value": "12.0",
+                  "type": "text",
+                  "description": "页脚高度百分比"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "upload"]
+            },
+            "description": "上传PDF文件并使用规则模板进行信息抽取"
+          },
+          "response": []
+        },
+        {
+          "name": "查询抽取任务状态",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/status/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "status", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "查询抽取任务的状态和进度"
+          },
+          "response": []
+        },
+        {
+          "name": "查询抽取结果",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/result/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "result", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "获取抽取完成后的结果数据"
+          },
+          "response": []
+        },
+        {
+          "name": "取消抽取任务",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/cancel/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "cancel", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "取消正在进行的抽取任务"
+          },
+          "response": []
+        },
+        {
+          "name": "查询任务列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/tasks?templateId=&status=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "tasks"],
+              "query": [
+                {
+                  "key": "templateId",
+                  "value": "",
+                  "description": "按模板ID筛选（可选）"
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "按状态筛选（可选）"
+                }
+              ]
+            },
+            "description": "获取抽取任务列表（最近20条）"
+          },
+          "response": []
+        },
+        {
+          "name": "获取页面图片",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rule-extract/extract/page-image/:taskId/:pageNumber",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rule-extract", "extract", "page-image", ":taskId", ":pageNumber"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                },
+                {
+                  "key": "pageNumber",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "获取指定页面的渲染图片"
+          },
+          "response": []
+        }
+      ],
+      "description": "基于规则引擎的智能信息抽取"
+    },
+    {
+      "name": "4. 智能文档解析（OCR）",
+      "item": [
+        {
+          "name": "上传文件进行解析",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "PDF文档"
+                },
+                {
+                  "key": "ignoreHeaderFooter",
+                  "value": "true",
+                  "type": "text",
+                  "description": "是否忽略页眉页脚"
+                },
+                {
+                  "key": "headerHeightPercent",
+                  "value": "12.0",
+                  "type": "text",
+                  "description": "页眉高度百分比"
+                },
+                {
+                  "key": "footerHeightPercent",
+                  "value": "12.0",
+                  "type": "text",
+                  "description": "页脚高度百分比"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/ocr/extract/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ocr", "extract", "upload"]
+            },
+            "description": "上传PDF文件进行OCR文本解析"
+          },
+          "response": []
+        },
+        {
+          "name": "查询解析任务状态",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ocr/extract/status/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ocr", "extract", "status", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "查询解析任务的状态和进度"
+          },
+          "response": []
+        },
+        {
+          "name": "获取解析结果",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ocr/extract/result/:taskId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ocr", "extract", "result", ":taskId"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                }
+              ]
+            },
+            "description": "获取解析完成后的文本结果"
+          },
+          "response": []
+        },
+        {
+          "name": "获取页面图片",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/ocr/extract/page-image/:taskId/:pageNum",
+              "host": ["{{base_url}}"],
+              "path": ["api", "ocr", "extract", "page-image", ":taskId", ":pageNum"],
+              "variable": [
+                {
+                  "key": "taskId",
+                  "value": "task-id-here"
+                },
+                {
+                  "key": "pageNum",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "获取指定页面的渲染图片"
+          },
+          "response": []
+        }
+      ],
+      "description": "基于GPU OCR的文档智能解析"
+    },
+    {
+      "name": "5. 智能合同合成",
+      "item": [
+        {
+          "name": "合成合同（SDT方式）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"templateFileId\": \"file-123\",\n  \"values\": {\n    \"party_a_name\": \"北京某某科技有限公司\",\n    \"party_b_name\": \"上海某某商贸有限公司\",\n    \"contract_no\": \"HT20250118001\",\n    \"contract_amount\": \"100万元\",\n    \"sign_date\": \"2025年1月18日\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/compose/sdt",
+              "host": ["{{base_url}}"],
+              "path": ["api", "compose", "sdt"]
+            },
+            "description": "使用模板和变量数据合成合同文档"
+          },
+          "response": []
+        },
+        {
+          "name": "获取模板字段信息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/template/fields",
+              "host": ["{{base_url}}"],
+              "path": ["api", "template", "fields"]
+            },
+            "description": "获取可用的模板字段列表"
+          },
+          "response": []
+        },
+        {
+          "name": "保存模板设计",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"design-123\",\n  \"templateId\": \"template-001\",\n  \"templateName\": \"买卖合同模板\",\n  \"templateCode\": \"TRADE_CONTRACT\",\n  \"version\": \"1.0\",\n  \"fileId\": \"file-123\",\n  \"elementsJson\": \"[...]\",\n  \"description\": \"标准买卖合同模板\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/template/design/save",
+              "host": ["{{base_url}}"],
+              "path": ["api", "template", "design", "save"]
+            },
+            "description": "保存模板设计的元素配置"
+          },
+          "response": []
+        },
+        {
+          "name": "获取模板设计详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/template/design/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "template", "design", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "design-123"
+                }
+              ]
+            },
+            "description": "根据记录ID获取模板设计详情"
+          },
+          "response": []
+        },
+        {
+          "name": "根据模板ID获取设计",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/template/design/byTemplate/:templateId",
+              "host": ["{{base_url}}"],
+              "path": ["api", "template", "design", "byTemplate", ":templateId"],
+              "variable": [
+                {
+                  "key": "templateId",
+                  "value": "template-001"
+                }
+              ]
+            },
+            "description": "根据模板ID获取设计记录"
+          },
+          "response": []
+        },
+        {
+          "name": "上传模板文档",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": [],
+                  "description": "Word模板文件（.docx）"
+                },
+                {
+                  "key": "templateId",
+                  "value": "template-001",
+                  "type": "text",
+                  "description": "模板ID"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/template/design/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "template", "design", "upload"]
+            },
+            "description": "上传Word模板文件"
+          },
+          "response": []
+        }
+      ],
+      "description": "基于模板的智能合同合成"
+    }
+  ]
+}
+

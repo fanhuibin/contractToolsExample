@@ -86,3 +86,15 @@ export function uploadFileForOnlyOffice(file: File) {
     }
   })
 }
+
+/**
+ * 触发OnlyOffice强制保存
+ * 通过后端的Command Service向OnlyOffice Document Server发送强制保存命令
+ * @param fileId 文件ID
+ */
+export function forceSaveFile(fileId: string | number) {
+  return request({
+    url: `/files/forcesave/${fileId}`,
+    method: 'post'
+  })
+}

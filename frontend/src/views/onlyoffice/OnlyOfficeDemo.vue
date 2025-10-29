@@ -5,6 +5,13 @@
         <div class="card-header">
           <span>OnlyOffice 文档编辑器演示</span>
           <el-space>
+            <el-button 
+              type="primary" 
+              :icon="Folder"
+              @click="goToFileManager"
+            >
+              文件管理
+            </el-button>
             <el-tooltip content="健康检查">
               <el-button 
                 circle 
@@ -214,12 +221,15 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Refresh, UploadFilled, QuestionFilled } from '@element-plus/icons-vue'
+import { Connection, Refresh, UploadFilled, QuestionFilled, Folder } from '@element-plus/icons-vue'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import { healthCheck } from '@/api/onlyoffice'
 import { getToken } from '@/utils/auth'
 import axios from 'axios'
+
+const router = useRouter()
 
 // 响应式数据
 const selectedFileId = ref('')
@@ -335,6 +345,10 @@ const checkHealth = async () => {
 
 const refreshPage = () => {
   location.reload()
+}
+
+const goToFileManager = () => {
+  router.push('/file-manager')
 }
 
 // 编辑器事件处理

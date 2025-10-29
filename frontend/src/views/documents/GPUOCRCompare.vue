@@ -112,6 +112,14 @@
         </div>
       </template>
 
+      <el-alert
+        title="仅显示最近 20 条任务记录，历史任务可通过任务ID直接访问"
+        type="info"
+        :closable="false"
+        show-icon
+        class="mb12"
+      />
+
       <el-table 
         :data="taskHistory" 
         style="width: 100%" 

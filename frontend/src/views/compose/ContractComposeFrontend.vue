@@ -1,24 +1,32 @@
 <template>
   <div class="compose-page">
     <div class="toolbar">
-      <div class="left">前端合成</div>
+      <div class="left">前端合成 - 编辑合同</div>
       <div class="right">
-        <el-button type="primary" :loading="submitting" @click="doCompose">合成</el-button>
+        <el-button type="success" @click="saveAndDownload" :disabled="!contractFileId">
+          <el-icon style="margin-right: 4px;"><Check /></el-icon>
+          完成编辑
+        </el-button>
       </div>
     </div>
     <div class="body" v-loading="loading">
       <div class="preview">
         <OnlyOfficeEditor
-          v-if="templateFileId"
+          v-if="workingFileId"
+          :key="editorKey"
           ref="editorRef"
-          :file-id="templateFileId"
+          :file-id="workingFileId"
           :can-edit="true"
           :can-review="false"
           :height="'100%'"
           :show-toolbar="false"
           :show-status="false"
+          :update-onlyoffice-key="true"
         />
-        <div v-else class="empty">请选择模板或传入 templateId 以加载预览</div>
+        <div v-else class="empty">
+          <el-icon class="is-loading" style="font-size: 32px; margin-bottom: 16px;"><Loading /></el-icon>
+          <p>正在创建合同文档，请稍候...</p>
+        </div>
       </div>
       <div class="form">
         <el-form label-width="120px" class="compose-form" :inline="false">
@@ -48,12 +56,16 @@
                     <el-color-picker v-model="richOptions[el.tag].headerBg" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <span>边框颜色</span>
-                    <el-color-picker v-model="richOptions[el.tag].borderColor" />
+                    <span>表头文字</span>
+                    <el-color-picker v-model="richOptions[el.tag].headerTextColor" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <span>文字颜色</span>
-                    <el-color-picker v-model="richOptions[el.tag].textColor" />
+                    <span>内容文字</span>
+                    <el-color-picker v-model="richOptions[el.tag].bodyTextColor" />
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <span>边框颜色</span>
+                    <el-color-picker v-model="richOptions[el.tag].borderColor" />
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
                     <span>字体大小</span>
@@ -91,21 +103,25 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { EditPen } from '@element-plus/icons-vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
+import { EditPen, DocumentAdd, Check, Loading } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { composeContract } from '@/api/contract-compose'
-import { getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { composeContract, createContractFromTemplate } from '@/api/contract-compose'
+import { getTemplateDesignByTemplateId, getTemplateDesignDetail } from '@/api/templateDesign'
+import { forceSaveFile } from '@/api/file'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const submitting = ref(false)
+const recordId = ref<string>('')
 const templateId = ref<string>('')
-const templateFileId = ref<string>('')
+const templateFileId = ref<string>('')  // 模板文件ID
+const contractFileId = ref<string>('')  // 创建的合同文件ID（合成后）
+const workingFileId = computed(() => contractFileId.value || templateFileId.value)  // 显示在编辑器中的文件ID
+const editorKey = ref(0)  // 用于强制刷新编辑器
 
 // elements: [{ key, tag, type, name, customName, richText, meta }]
 const formElements = ref<Array<any>>([])
@@ -113,14 +129,31 @@ const formValues = ref<Record<string, string>>({})
 const editorRef = ref<any>(null)
 
 // 富文本选项：按字段tag存储
-const richOptions = ref<Record<string, { align: 'left' | 'center' | 'right'; headerBg: string; borderColor: string; textColor: string; fontSize: number; fontUnit: 'px' | 'pt' | 'em' | 'rem' }>>({})
+const richOptions = ref<Record<string, { 
+  align: 'left' | 'center' | 'right'; 
+  headerBg: string; 
+  headerTextColor: string; 
+  bodyTextColor: string; 
+  borderColor: string; 
+  fontSize: number; 
+  fontUnit: 'px' | 'pt' | 'em' | 'rem' 
+}>>({})
 
 const isDefaultTemplate = computed(() => 
   templateId.value === 'demo' && templateFileId.value === '9999'
 )
 
+// 监听合同创建，刷新编辑器
+watch(contractFileId, async (newVal) => {
+  if (newVal) {
+    editorKey.value++
+    await nextTick()
+  }
+})
+
 onMounted(async () => {
-  // 从路由读取模板信息（无则默认demo）
+  // 从路由读取模板信息（优先使用新的 id 参数）
+  recordId.value = String(route.query.id || '')
   templateId.value = String(route.query.templateId || 'demo')
   templateFileId.value = String(route.query.fileId || '')
   await loadTemplateDesign()
@@ -130,15 +163,42 @@ async function loadTemplateDesign() {
   try {
     loading.value = true
     
-    // 动态从后端读取模板设计记录
-    const resp = await getTemplateDesignByTemplateId(templateId.value) as any
-    if (resp?.code !== 200) {
-      throw new Error(resp?.message || '获取模板设计失败')
+    let resp: any
+    let record: any
+    
+    // 优先使用新的 id 参数（记录ID）
+    if (recordId.value) {
+      resp = await getTemplateDesignDetail(recordId.value) as any
+      if (resp?.data?.code !== undefined) {
+        if (resp.data.code !== 200) {
+          throw new Error(resp.data.message || '获取模板设计失败')
+        }
+        record = resp.data.data
+      } else {
+        record = resp.data
+      }
+    } else if (templateId.value && templateId.value !== 'demo') {
+      // 降级使用旧的 templateId 参数（向后兼容）
+      resp = await getTemplateDesignByTemplateId(templateId.value) as any
+      if (resp?.code !== 200) {
+        throw new Error(resp?.message || '获取模板设计失败')
+      }
+      record = resp.data
+    } else {
+      throw new Error('未提供模板ID参数')
     }
-    const record = resp.data
+    
     if (!record) {
       throw new Error('未找到模板设计记录')
     }
+    
+    // 更新 fileId
+    if (record.fileId) {
+      templateFileId.value = record.fileId
+    } else if (!templateFileId.value) {
+      throw new Error('模板记录中未找到文件ID')
+    }
+    
     // record.elementsJson 结构假设为 { elements: [...] } 或 直接数组，做兼容
     try {
       const parsed = JSON.parse(record.elementsJson || '{}')
@@ -151,12 +211,10 @@ async function loadTemplateDesign() {
     } catch (e) {
       formElements.value = []
     }
-    // 设置模板文件ID（优先使用记录中的fileId）
-    if (record.fileId) {
-      templateFileId.value = record.fileId
-    } else if (!templateFileId.value) {
-      throw new Error('模板记录中未找到文件ID')
-    }
+    
+    // 自动创建合同（前端合成需要立即进入编辑模式）
+    await autoCreateContract()
+    
   } catch (e: any) {
     ElMessage.error(e?.message || '加载模板失败')
   } finally {
@@ -177,8 +235,9 @@ function ensureRichOptions(tag: string) {
     richOptions.value[tag] = {
       align: 'center',
       headerBg: '#f5f7fa',
+      headerTextColor: '#333333',
+      bodyTextColor: '#606266',
       borderColor: '#dddddd',
-      textColor: '#333333',
       fontSize: 14,
       fontUnit: 'px'
     }
@@ -190,14 +249,15 @@ function insertDefaultTable(tag: string) {
   const opts = ensureRichOptions(tag)
   const align = opts.align
   const headerBg = opts.headerBg
+  const headerTextColor = opts.headerTextColor
+  const bodyTextColor = opts.bodyTextColor
   const borderColor = opts.borderColor
-  const textColor = opts.textColor
   const fontSize = opts.fontSize
   const fontUnit = opts.fontUnit
   const html = `
-  <table style="width:100%; border-collapse: collapse; text-align:${align}; color:${textColor}; font-size:${fontSize}${fontUnit};">
+  <table style="width:100%; border-collapse: collapse; text-align:${align}; font-size:${fontSize}${fontUnit};">
     <thead>
-      <tr style="background:${headerBg};">
+      <tr style="background:${headerBg}; color:${headerTextColor};">
         <th style="border:1px solid ${borderColor}; padding:6px;">序号</th>
         <th style="border:1px solid ${borderColor}; padding:6px;">产品名称</th>
         <th style="border:1px solid ${borderColor}; padding:6px;">规格型号</th>
@@ -206,7 +266,7 @@ function insertDefaultTable(tag: string) {
         <th style="border:1px solid ${borderColor}; padding:6px;">金额(元)</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody style="color:${bodyTextColor};">
       <tr>
         <td style="border:1px solid ${borderColor}; padding:6px;">1</td>
         <td style="border:1px solid ${borderColor}; padding:6px;">示例产品A</td>
@@ -228,29 +288,82 @@ function insertDefaultTable(tag: string) {
   formValues.value[tag] = html
 }
 
-async function doCompose() {
+// 自动创建合同（加载模板后自动调用）
+async function autoCreateContract() {
   if (!templateFileId.value) {
-    ElMessage.warning('缺少模板文件ID')
     return
   }
   try {
-    submitting.value = true
-    const actualFileId = isDefaultTemplate.value ? '9999' : templateFileId.value
-    const payload = {
-      templateFileId: actualFileId,
-      values: { ...formValues.value }
+    // 调用后端接口复制模板文件，创建合同
+    const res = await createContractFromTemplate(templateFileId.value) as any
+    
+    if (res?.data?.code !== 200) {
+      throw new Error(res?.data?.message || '创建合同失败')
     }
-    const res = await composeContract(payload)
-    const fileId = res.data.fileId
-    ElMessage.success('合成成功')
-    router.push({
-      path: `/contract-compose-frontend/result/${encodeURIComponent(fileId)}`,
-      query: { templateId: templateId.value, fileId: templateFileId.value }
-    })
+    
+    const contractFile = res.data.data || res.data
+    const fileId = String(contractFile.id)
+    
+    if (!fileId) {
+      throw new Error('合同创建成功但未返回文件ID')
+    }
+    
+    // 设置合同文件ID，编辑器会自动切换到合同文档
+    contractFileId.value = fileId
   } catch (e: any) {
-    ElMessage.error(e?.message || '合成失败')
-  } finally {
-    submitting.value = false
+    ElMessage.error('创建合同失败：' + (e?.message || '未知错误'))
+    throw e
+  }
+}
+
+// 保存并查看结果
+async function saveAndDownload() {
+  if (!contractFileId.value) {
+    ElMessage.warning('请先创建合同')
+    return
+  }
+  
+  try {
+    // 调用 Command Service 强制保存
+    const commandResult = await forceSaveFile(contractFileId.value)
+    
+    // 检查响应并显示结果
+    if (commandResult.data && commandResult.data.code === 200) {
+      const responseData = commandResult.data.data
+      
+      if (responseData && responseData.commandServiceResponse) {
+        const errorCode = responseData.commandServiceResponse.error
+        
+        if (errorCode === 0) {
+          ElMessage.success('保存完成')
+        } else if (errorCode === 4) {
+          ElMessage.success('文档未修改，无需保存')
+        } else if (errorCode === 6) {
+          console.error('error=6: 令牌无效')
+          ElMessage.error('保存失败：令牌无效，请检查配置')
+        } else {
+          ElMessage.warning(`保存失败，错误码: ${errorCode}`)
+        }
+      } else {
+        ElMessage.success('保存完成')
+      }
+    } else {
+      console.error('保存失败，响应码不是200:', commandResult)
+      ElMessage.error('保存失败：' + (commandResult.data?.message || '未知错误'))
+    }
+    
+    // 跳转到结果页面
+    router.push({
+      path: `/contract-compose-frontend/result/${encodeURIComponent(contractFileId.value)}`,
+      query: { 
+        id: recordId.value,
+        templateId: templateId.value, 
+        fileId: templateFileId.value 
+      }
+    })
+  } catch (error: any) {
+    console.error('保存失败', error)
+    ElMessage.error('保存失败：' + (error?.message || '未知错误'))
   }
 }
 
@@ -259,7 +372,7 @@ async function onFieldFocus(el: { tag: string }) {
   try {
     await (editorRef.value?.postToPlugin?.({ action: 'getContentControl', Tag: el.tag }) || Promise.resolve())
   } catch (e) {
-    console.warn('定位到文档位置失败:', e)
+    // 静默处理定位失败
   }
 }
 
@@ -272,7 +385,7 @@ async function onFieldInput(el: { tag: string }) {
       Text: (formValues.value as any)[el.tag] || ''
     }) || Promise.resolve())
   } catch (e) {
-    console.warn('更新文档内容失败:', e)
+    // 静默处理更新失败
   }
 }
 
@@ -285,7 +398,7 @@ async function onRichFieldInput(el: { tag: string }) {
       Text: (formValues.value as any)[el.tag] || ''
     }) || Promise.resolve())
   } catch (e) {
-    console.warn('更新富文本内容失败:', e)
+    // 静默处理更新失败
   }
 }
 
@@ -326,7 +439,16 @@ async function rebuildContentControl(el: { key: string; tag: string; name: strin
 .preview :deep(.onlyoffice-editor),
 .preview :deep(#onlyoffice-editor-container) { width: 100%; height: 100%; }
 .form { border: 1px solid #ebeef5; padding: 14px; overflow: auto; background: #fff; border-radius: 10px; box-shadow: 0 1px 6px rgba(0,0,0,.06); }
-.empty { padding: 24px; color: #999; }
+.empty { 
+  display: flex; 
+  flex-direction: column; 
+  align-items: center; 
+  justify-content: center; 
+  height: 100%; 
+  padding: 24px; 
+  color: #999; 
+  font-size: 14px;
+}
 .mt8 { margin-top: 8px; }
 
 /* 表单整体视觉 */

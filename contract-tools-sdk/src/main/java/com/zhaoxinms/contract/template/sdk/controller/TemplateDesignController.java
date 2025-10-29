@@ -74,12 +74,8 @@ public class TemplateDesignController {
             throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
         }
         
-        TemplateDesignRecord saved = designRecordService.save(
-            body.getId(), 
-            body.getTemplateId(), 
-            body.getFileId(), 
-            body.getElementsJson()
-        );
+        // 使用新版saveTemplate方法，支持完整字段保存
+        TemplateDesignRecord saved = designRecordService.saveTemplate(body);
         
         return ApiResponse.success("保存成功", saved);
     }
@@ -219,7 +215,7 @@ public class TemplateDesignController {
     }
 
     /**
-     * 删除模板设计记录
+     * 删除模板设计记录（软删除）
      */
     @DeleteMapping("/design/{id}")
     @ApiOperation(value = "删除设计记录", notes = "删除指定的模板设计记录")
@@ -236,5 +232,125 @@ public class TemplateDesignController {
         }
         
         return ApiResponse.success();
+    }
+
+    /**
+     * 创建新版本（基于现有版本复制）
+     */
+    @PostMapping("/design/version/create")
+    @ApiOperation(value = "创建新版本", notes = "基于现有版本创建新版本，复制文件和设计元素")
+    public ApiResponse<TemplateDesignRecord> createNewVersion(
+            @ApiParam(value = "源版本ID", required = true) @RequestParam("sourceId") String sourceId,
+            @ApiParam(value = "新版本号", required = true) @RequestParam("newVersion") String newVersion) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        try {
+            TemplateDesignRecord newVersionRecord = designRecordService.createNewVersion(sourceId, newVersion);
+            return ApiResponse.success("新版本创建成功", newVersionRecord);
+        } catch (IllegalArgumentException e) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, e.getMessage());
+        } catch (RuntimeException e) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * 发布版本
+     */
+    @PostMapping("/design/version/publish/{id}")
+    @ApiOperation(value = "发布版本", notes = "发布指定版本，同时将同编码的其他已发布版本设为草稿")
+    public ApiResponse<TemplateDesignRecord> publishVersion(
+            @ApiParam(value = "记录ID", required = true) @PathVariable("id") String id) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        try {
+            TemplateDesignRecord published = designRecordService.publishVersion(id);
+            return ApiResponse.success("版本发布成功", published);
+        } catch (IllegalArgumentException e) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * 更新状态
+     */
+    @PostMapping("/design/status/update")
+    @ApiOperation(value = "更新状态", notes = "更新模板状态：DRAFT-草稿, PUBLISHED-已发布, DISABLED-已禁用, DELETED-已删除")
+    public ApiResponse<TemplateDesignRecord> updateStatus(
+            @ApiParam(value = "记录ID", required = true) @RequestParam("id") String id,
+            @ApiParam(value = "状态", required = true) @RequestParam("status") String status) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        try {
+            TemplateDesignRecord updated = designRecordService.updateStatus(id, status);
+            return ApiResponse.success("状态更新成功", updated);
+        } catch (IllegalArgumentException e) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, e.getMessage());
+        }
+    }
+
+    /**
+     * 获取模板所有版本
+     */
+    @GetMapping("/design/versions/{templateCode}")
+    @ApiOperation(value = "获取所有版本", notes = "获取指定模板编码的所有版本")
+    public ApiResponse<List<TemplateDesignRecord>> getVersions(
+            @ApiParam(value = "模板编码", required = true) @PathVariable("templateCode") String templateCode) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        List<TemplateDesignRecord> versions = designRecordService.getVersionsByCode(templateCode);
+        return ApiResponse.success(versions);
+    }
+
+    /**
+     * 获取最新版本
+     */
+    @GetMapping("/design/version/latest/{templateCode}")
+    @ApiOperation(value = "获取最新版本", notes = "获取指定模板编码的最新版本")
+    public ApiResponse<TemplateDesignRecord> getLatestVersion(
+            @ApiParam(value = "模板编码", required = true) @PathVariable("templateCode") String templateCode) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        TemplateDesignRecord latest = designRecordService.getLatestByCode(templateCode);
+        if (latest == null) {
+            throw BusinessException.of(ApiCode.NOT_FOUND, "未找到模板: " + templateCode);
+        }
+        
+        return ApiResponse.success(latest);
+    }
+
+    /**
+     * 获取已发布版本
+     */
+    @GetMapping("/design/version/published/{templateCode}")
+    @ApiOperation(value = "获取已发布版本", notes = "获取指定模板编码的已发布版本")
+    public ApiResponse<TemplateDesignRecord> getPublishedVersion(
+            @ApiParam(value = "模板编码", required = true) @PathVariable("templateCode") String templateCode) {
+        
+        if (designRecordService == null) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
+        }
+        
+        TemplateDesignRecord published = designRecordService.getPublishedByCode(templateCode);
+        if (published == null) {
+            throw BusinessException.of(ApiCode.NOT_FOUND, "未找到已发布的模板: " + templateCode);
+        }
+        
+        return ApiResponse.success(published);
     }
 }

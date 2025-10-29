@@ -15,9 +15,11 @@ export interface ComposeResponseData {
 }
 
 export function composeContract(data: ComposeRequest): Promise<{
-  code: number
-  message: string
-  data: ComposeResponseData
+  data: {
+    code: number
+    message: string
+    data: ComposeResponseData
+  }
 }> {
   return request({
     url: '/compose/sdt',
@@ -32,4 +34,13 @@ export function downloadTempFile(path: string) {
   window.open(url, '_blank')
 }
 
+/**
+ * 基于模板创建合同（复制模板文件）
+ */
+export function createContractFromTemplate(templateFileId: string) {
+  return request({
+    url: `/file/copy/${templateFileId}`,
+    method: 'post'
+  })
+}
 

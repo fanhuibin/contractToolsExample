@@ -37,12 +37,6 @@
           </template>
         </el-table-column>
         <el-table-column prop="value" label="提取结果" min-width="250" show-overflow-tooltip />
-        <el-table-column prop="confidence" label="置信度" width="90" align="center">
-          <template #default="{ row }">
-            <span v-if="row.success">{{ row.confidence }}%</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
         <el-table-column label="操作" width="100" align="center">
           <template #default="{ row }">
             <el-button size="small" text @click="showDetail(row)">
@@ -73,10 +67,7 @@
           <el-descriptions-item label="提取结果" :span="2">
             <div class="result-value">{{ currentDetail.value || currentDetail.errorMessage }}</div>
           </el-descriptions-item>
-          <el-descriptions-item label="置信度">
-            {{ currentDetail.confidence || '-' }}%
-          </el-descriptions-item>
-          <el-descriptions-item label="位置">
+          <el-descriptions-item label="位置" :span="2">
             {{ currentDetail.startPosition || '-' }} - {{ currentDetail.endPosition || '-' }}
           </el-descriptions-item>
         </el-descriptions>

@@ -138,43 +138,58 @@ public class CompareService {
             String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
             Path resultsDir = Paths.get(uploadRootPath, "compare-pro", "results");
             
+            // 收集所有任务文件及其最后修改时间
+            List<Path> allTaskFiles = new ArrayList<>();
+            
             if (Files.exists(resultsDir)) {
-				Files.list(resultsDir).filter(path -> path.toString().endsWith(".json")).forEach(jsonFile -> {
-                        try {
-                            String fileName = jsonFile.getFileName().toString();
-                            String taskId = fileName.substring(0, fileName.lastIndexOf(".json"));
-                            
-                            // 加载任务状态到内存
-                            CompareTask task = loadTaskFromFile(taskId);
-                            if (task != null) {
-                                tasks.put(taskId, task);
-                            }
-                        } catch (Exception e) {
-                            System.err.println("加载任务失败: " + jsonFile + ", error=" + e.getMessage());
+                Files.list(resultsDir)
+                    .filter(path -> path.toString().endsWith(".json"))
+                    .forEach(allTaskFiles::add);
+            }
+            
+            // 也收集前端结果目录的文件
+            Path frontendResultsDir = Paths.get(uploadRootPath, "compare-pro", "frontend-results");
+            if (Files.exists(frontendResultsDir)) {
+                Files.list(frontendResultsDir)
+                    .filter(path -> path.toString().endsWith(".json"))
+                    .forEach(jsonFile -> {
+                        // 只添加在 results 目录中不存在的任务
+                        String fileName = jsonFile.getFileName().toString();
+                        Path resultFile = Paths.get(uploadRootPath, "compare-pro", "results", fileName);
+                        if (!Files.exists(resultFile)) {
+                            allTaskFiles.add(jsonFile);
                         }
                     });
             }
             
-            // 也检查前端结果目录
-            Path frontendResultsDir = Paths.get(uploadRootPath, "compare-pro", "frontend-results");
-            if (Files.exists(frontendResultsDir)) {
-				Files.list(frontendResultsDir).filter(path -> path.toString().endsWith(".json")).forEach(jsonFile -> {
-                        try {
-                            String fileName = jsonFile.getFileName().toString();
-                            String taskId = fileName.substring(0, fileName.lastIndexOf(".json"));
-                            
-                            // 如果内存中还没有这个任务，加载它
-                            if (!tasks.containsKey(taskId)) {
-                                CompareTask task = loadTaskFromFile(taskId);
-                                if (task != null) {
-                                    tasks.put(taskId, task);
-                                }
-                            }
-                        } catch (Exception e) {
-                            System.err.println("加载任务失败: " + jsonFile + ", error=" + e.getMessage());
-                        }
-                    });
+            // 按最后修改时间倒序排序，只加载最近20条
+            List<Path> recentTasks = allTaskFiles.stream()
+                .sorted((p1, p2) -> {
+                    try {
+                        return Files.getLastModifiedTime(p2).compareTo(Files.getLastModifiedTime(p1));
+                    } catch (Exception e) {
+                        return 0;
+                    }
+                })
+                .limit(20)
+                .collect(java.util.stream.Collectors.toList());
+            
+            // 加载最近20条任务到内存
+            for (Path jsonFile : recentTasks) {
+                try {
+                    String fileName = jsonFile.getFileName().toString();
+                    String taskId = fileName.substring(0, fileName.lastIndexOf(".json"));
+                    
+                    CompareTask task = loadTaskFromFile(taskId);
+                    if (task != null) {
+                        tasks.put(taskId, task);
+                    }
+                } catch (Exception e) {
+                    System.err.println("加载任务失败: " + jsonFile + ", error=" + e.getMessage());
+                }
             }
+            
+            System.out.println("✅ 已加载最近 " + tasks.size() + " 条比对任务到内存");
             
         } catch (Exception e) {
             System.err.println("启动时加载任务失败: " + e.getMessage());
@@ -336,7 +351,7 @@ public class CompareService {
                         }
                     }
                     
-                    logger.info("✅ 从result.json恢复任务时间信息: {}", taskId);
+                    logger.debug("✅ 从result.json恢复任务时间信息: {}", taskId);
                     
                 } catch (Exception e) {
                     logger.warn("恢复任务时间信息时出错，使用默认值: {}", e.getMessage());
@@ -391,9 +406,9 @@ public class CompareService {
         try {
             Map<String, Object> rawData = getRawFrontendResult(taskId);
             if (rawData != null) {
-                logger.info("🔍 从文件加载原始比对结果，转换为CompareResult对象");
+                logger.debug("🔍 从文件加载原始比对结果，转换为CompareResult对象");
                 result = convertRawDataToCompareResult(rawData, taskId);
-                logger.info("✅ 成功转换，差异数量: {}", 
+                logger.debug("✅ 成功转换，差异数量: {}", 
                     result.getDifferences() != null ? result.getDifferences().size() : 0);
                 
                 // 将结果放入缓存以便后续使用
@@ -624,8 +639,22 @@ public class CompareService {
     /**
      * 获取所有任务
      */
+    /**
+     * 获取所有任务列表（只返回最近20条）
+     * 注意：通过 taskId 直接访问任务时不受此限制
+     */
     public List<CompareTask> getAllTasks() {
-        return new ArrayList<>(tasks.values());
+        // 返回内存中的所有任务（启动时已限制为最近20条）
+        // 如果运行中新增了任务，按时间倒序返回最近20条
+        return tasks.values().stream()
+            .sorted((t1, t2) -> {
+                if (t1.getStartTime() == null && t2.getStartTime() == null) return 0;
+                if (t1.getStartTime() == null) return 1;
+                if (t2.getStartTime() == null) return -1;
+                return t2.getStartTime().compareTo(t1.getStartTime());
+            })
+            .limit(20)
+            .collect(java.util.stream.Collectors.toList());
     }
 
 	/**
@@ -2064,30 +2093,30 @@ public class CompareService {
 				List<DiffBlock> differences = convertRawDifferencesToDiffBlocks(rawDifferences);
 				result.setDifferences(differences);
 				
-				// 同时保留原始格式的差异数据（用于前端显示）
-				result.setFormattedDifferences(rawDifferences);
-				logger.info("🔄 转换了 {} 个差异项，保留原始格式供前端使用", differences.size());
-			}
-			
-			// 计算统计信息
-			if (result.getDifferences() != null) {
-				int deleteCount = 0, insertCount = 0;
-				for (DiffBlock diff : result.getDifferences()) {
-					if (diff.type == DiffBlock.DiffType.DELETED) {
-						deleteCount++;
-					} else if (diff.type == DiffBlock.DiffType.ADDED) {
-						insertCount++;
-					}
+			// 同时保留原始格式的差异数据（用于前端显示）
+			result.setFormattedDifferences(rawDifferences);
+			logger.debug("🔄 转换了 {} 个差异项，保留原始格式供前端使用", differences.size());
+		}
+		
+		// 计算统计信息
+		if (result.getDifferences() != null) {
+			int deleteCount = 0, insertCount = 0;
+			for (DiffBlock diff : result.getDifferences()) {
+				if (diff.type == DiffBlock.DiffType.DELETED) {
+					deleteCount++;
+				} else if (diff.type == DiffBlock.DiffType.ADDED) {
+					insertCount++;
 				}
-				result.setDeleteCount(deleteCount);
-				result.setInsertCount(insertCount);
 			}
-			
-			// 生成摘要
-			result.generateSummary();
-			
-			logger.info("✅ CompareResult转换完成: 差异{}个, 删除{}个, 新增{}个", 
-				result.getTotalDiffCount(), result.getDeleteCount(), result.getInsertCount());
+			result.setDeleteCount(deleteCount);
+			result.setInsertCount(insertCount);
+		}
+		
+		// 生成摘要
+		result.generateSummary();
+		
+		logger.debug("✅ CompareResult转换完成: 差异{}个, 删除{}个, 新增{}个", 
+			result.getTotalDiffCount(), result.getDeleteCount(), result.getInsertCount());
 				
 		} catch (Exception e) {
 			logger.error("转换原始数据为CompareResult时出错: {}", e.getMessage());

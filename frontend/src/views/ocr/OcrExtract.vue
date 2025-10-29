@@ -1,12 +1,18 @@
 <template>
   <div class="ocr-extract-container">
-    <el-card shadow="never">
+    <PageHeader 
+      title="智能文档解析" 
+      description="高精度OCR识别，提取文档文字与版面信息，支持可视化标注与智能检索。"
+      :icon="Document"
+      tag="OCR引擎"
+      tag-type="success"
+    />
+
+    <el-card class="mb12">
       <template #header>
         <div class="card-header">
-          <div class="card-title">
-            <el-icon><Document /></el-icon>
-            智能文档解析
-          </div>
+          <span>文档解析</span>
+          <el-tag type="success" size="small">OCR引擎</el-tag>
         </div>
       </template>
 
@@ -201,6 +207,7 @@ import {
 } from '@/api/ocr-extract'
 import CanvasViewer from '@/views/extract/components/CanvasViewer.vue'
 import MarkdownViewer from './components/MarkdownViewer.vue'
+import { PageHeader } from '@/components/common'
 
 // 响应式数据
 const taskId = ref<string>('')
@@ -495,22 +502,21 @@ onUnmounted(() => {
 
 <style scoped>
 .ocr-extract-container {
-  background: #f5f7fa;
+  padding: 16px;
+}
+
+.mb12 {
+  margin-bottom: 12px;
+}
+
+.mt12 {
+  margin-top: 12px;
 }
 
 .card-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-
-.card-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 18px;
-  font-weight: 600;
-  color: #303133;
 }
 
 .upload-section {

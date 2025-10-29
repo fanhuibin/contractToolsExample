@@ -1,11 +1,20 @@
 <template>
   <div class="document-convert">
-    <div class="page-header">
-      <h1>文档格式转换</h1>
-      <p class="description">将Word、Excel、PPT等文档转换为PDF格式</p>
-    </div>
+    <PageHeader 
+      title="文档格式转换" 
+      description="将Word、Excel、PPT等文档快速转换为PDF格式，保留原文档格式与样式。"
+      :icon="DocumentCopy"
+      tag="格式转换"
+      tag-type="info"
+    />
 
-    <el-card class="convert-card">
+    <el-card class="convert-card mb12">
+      <template #header>
+        <div class="card-header">
+          <span>文档转换</span>
+          <el-tag type="info" size="small">格式转换</el-tag>
+        </div>
+      </template>
       <div class="upload-section">
         <el-upload
           ref="uploadRef"
@@ -133,9 +142,10 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { UploadFilled, Document, Delete, VideoPlay, Download, InfoFilled } from '@element-plus/icons-vue'
+import { UploadFilled, Document, Delete, VideoPlay, Download, InfoFilled, DocumentCopy } from '@element-plus/icons-vue'
 import type { UploadInstance, UploadProps } from 'element-plus'
 import convertApi from '@/api/convert'
+import { PageHeader } from '@/components/common'
 
 // 组件引用
 const uploadRef = ref<UploadInstance>()
@@ -309,26 +319,23 @@ const formatFileSize = (bytes: number): string => {
 
 <style scoped lang="scss">
 .document-convert {
-  padding: 20px;
+  padding: 16px;
   max-width: 1200px;
   margin: 0 auto;
 }
 
-.page-header {
-  margin-bottom: 24px;
-  
-  h1 {
-    font-size: 28px;
-    font-weight: 600;
-    color: #303133;
-    margin: 0 0 8px 0;
-  }
-  
-  .description {
-    font-size: 14px;
-    color: #909399;
-    margin: 0;
-  }
+.mb12 {
+  margin-bottom: 12px;
+}
+
+.mt12 {
+  margin-top: 12px;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .convert-card {
