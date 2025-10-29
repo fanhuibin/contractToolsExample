@@ -1,7 +1,7 @@
 <template>
   <el-container class="layout-container">
     <!-- 侧边栏（使用 Element Plus 菜单） -->
-    <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
+    <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside && !isEmbedMode">
       <div class="logo">
         <h2>肇新合同组件库</h2>
       </div>
@@ -52,9 +52,9 @@
     </el-aside>
 
     <!-- 主内容区 -->
-    <el-container :class="{ 'no-padding': route.meta?.fullscreen }">
+    <el-container :class="{ 'no-padding': route.meta?.fullscreen || isEmbedMode }">
       <!-- 头部 -->
-      <el-header class="header" v-if="!route.meta?.fullscreen">
+      <el-header class="header" v-if="!route.meta?.fullscreen && !isEmbedMode">
         <div class="header-left">
           <el-breadcrumb separator="/">
             <el-breadcrumb-item>首页</el-breadcrumb-item>
@@ -90,7 +90,7 @@
       </el-header>
 
       <!-- 内容区 -->
-      <el-main class="main" :class="{ fullscreen: route.meta?.fullscreen }">
+      <el-main class="main" :class="{ fullscreen: route.meta?.fullscreen || isEmbedMode }">
         <router-view />
       </el-main>
     </el-container>
@@ -117,6 +117,9 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+
+// 检测是否为嵌入模式（iframe）
+const isEmbedMode = computed(() => route.query.embed === 'true')
 
 // 当前激活的菜单
 const activeMenu = computed(() => route.path)
