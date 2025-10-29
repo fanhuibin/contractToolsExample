@@ -11,6 +11,7 @@ import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.onlyoffice.util.service.DefaultServiceConverter;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.onlyoffice.exception.OnlyOfficeServiceUnavailableException;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -100,10 +101,24 @@ public class ChangeFileToPDFService {
         
         log.info("PDF转换文件URL: {}", fileUrl);
         
-        // 生成目标文件路径
-        String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-        String destPdfPath = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
-            + UUID.randomUUID().toString().replace("-", "") + ".pdf";
+        // 根据文件的 module 字段生成对应模块目录下的路径
+        String module = fileInfo.getModule();
+        String destPdfPath;
+        
+        if (module != null && !module.trim().isEmpty()) {
+            // 有模块信息，使用模块专有目录: {module}/{年}/{月}/{文件名}.pdf
+            String rootPath = zxcmConfig.getFileUpload().getRootPath();
+            String yearMonthPath = FileStorageUtils.getYearMonthPath();
+            String fileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
+            destPdfPath = rootPath + File.separator + module + File.separator + yearMonthPath + File.separator + fileName;
+            log.info("使用模块目录生成PDF路径，模块: {}, 路径: {}", module, destPdfPath);
+        } else {
+            // 无模块信息，使用旧的目录结构（向后兼容）
+            String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+            destPdfPath = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
+                + UUID.randomUUID().toString().replace("-", "") + ".pdf";
+            log.warn("文件无模块信息，使用默认路径: {}", destPdfPath);
+        }
         
         return covertToPdf(fileUrl, destPdfPath);
     }
@@ -143,10 +158,23 @@ public class ChangeFileToPDFService {
             );
             
             if (convertedUrl != null && !convertedUrl.isEmpty()) {
-                // 生成目标文件路径
-                String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-                String destFile = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
-                    + UUID.randomUUID().toString().replace("-", "") + ".docx";
+                // 根据文件的 module 字段生成对应模块目录下的路径
+                String module = fileInfo.getModule();
+                String destFile;
+                
+                if (module != null && !module.trim().isEmpty()) {
+                    // 有模块信息，使用模块专有目录
+                    String rootPath = zxcmConfig.getFileUpload().getRootPath();
+                    String yearMonthPath = FileStorageUtils.getYearMonthPath();
+                    String fileName = UUID.randomUUID().toString().replace("-", "") + ".docx";
+                    destFile = rootPath + File.separator + module + File.separator + yearMonthPath + File.separator + fileName;
+                    log.info("使用模块目录生成DOCX路径，模块: {}, 路径: {}", module, destFile);
+                } else {
+                    // 无模块信息，使用旧的目录结构（向后兼容）
+                    String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
+                    destFile = zxcmConfig.getFileUpload().getRootPath() + "/" + datePath + "/" 
+                        + UUID.randomUUID().toString().replace("-", "") + ".docx";
+                }
                 
                 // 下载转换后的文件
                 downloadFile(convertedUrl, destFile);

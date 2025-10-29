@@ -10,9 +10,14 @@ import java.time.LocalDateTime;
 public class FileInfo {
     
     /**
-     * 文件ID
+     * 文件ID（数据库ID）
      */
     private Long id;
+    
+    /**
+     * 完整文件ID（带年月前缀，如：202410_123456）
+     */
+    private String fileId;
     
     /**
      * 原始文件名
@@ -78,6 +83,12 @@ public class FileInfo {
      * OnlyOffice文档key
      */
     private String onlyofficeKey;
+    
+    /**
+     * 所属模块（用于区分文件来源）
+     * 例如：onlyoffice-demo, file-manager, template-design 等
+     */
+    private String module;
     
     /**
      * 获取文件存储路径

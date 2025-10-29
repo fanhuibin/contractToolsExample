@@ -20,7 +20,7 @@
           <span>任务ID: {{ taskId }}</span>
           <span>模板: {{ taskInfo.templateName || '-' }}</span>
           <span>文档: {{ taskInfo.fileName || '-' }}</span>
-          <span>耗时: {{ taskInfo.durationSeconds || 0 }}秒</span>
+          <span v-if="taskInfo.durationSeconds > 0">耗时: {{ taskInfo.durationSeconds }}秒</span>
         </div>
       </template>
 

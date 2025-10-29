@@ -3,7 +3,7 @@
     <!-- 侧边栏（使用 Element Plus 菜单） -->
     <el-aside width="220px" class="aside" v-if="!route.meta?.fullscreen && !route.meta?.hideAside">
       <div class="logo">
-        <h2>肇新合同工具集</h2>
+        <h2>肇新合同组件库</h2>
       </div>
       <el-menu
         :default-active="activeMenu"
@@ -22,7 +22,7 @@
           <el-icon><DataAnalysis /></el-icon>
           <span>智能文档比对</span>
         </el-menu-item>
-        <el-menu-item index="/templates">
+        <el-menu-item index="/smart-compose">
           <el-icon><Edit /></el-icon>
           <span>智能合同合成</span>
         </el-menu-item>
@@ -38,6 +38,16 @@
           <el-icon><Refresh /></el-icon>
           <span>文档格式转换</span>
         </el-menu-item>
+        <el-sub-menu index="system">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>系统管理</span>
+          </template>
+          <el-menu-item index="/system/cleanup">
+            <el-icon><Delete /></el-icon>
+            <span>系统文件清理</span>
+          </el-menu-item>
+        </el-sub-menu>
       </el-menu>
     </el-aside>
 
@@ -60,14 +70,22 @@
             <el-icon><Reading /></el-icon>
             文档中心
           </el-button>
-        <el-button
-          type="primary"
-          link
-          @click="router.push('/license')"
-        >
-          <el-icon><Key /></el-icon>
-          授权信息
-        </el-button>
+          <el-button 
+            type="primary" 
+            link 
+            @click="openOfficialWebsite"
+          >
+            <el-icon><Link /></el-icon>
+            官网
+          </el-button>
+          <el-button
+            type="primary"
+            link
+            @click="router.push('/license')"
+          >
+            <el-icon><Key /></el-icon>
+            授权信息
+          </el-button>
         </div>
       </el-header>
 
@@ -91,7 +109,10 @@ import {
   Grid,
   Reading,
   Refresh,
-  Key
+  Key,
+  Link,
+  Setting,
+  Delete
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -118,6 +139,11 @@ function openUrl(url: string) {
 // 打开文档中心（新标签页）
 function openDocCenter() {
   window.open('/doc-center', '_blank')
+}
+
+// 打开官网（新标签页）
+function openOfficialWebsite() {
+  window.open('https://zhaoxinms.com', '_blank')
 }
 </script>
 

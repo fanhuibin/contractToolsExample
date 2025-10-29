@@ -83,7 +83,7 @@ public class TemplateDesignController {
     /**
      * 获取模板设计明细
      */
-    @GetMapping("/design/{id}")
+    @GetMapping("/design/detail/{id}")
     @ApiOperation(value = "获取设计详情", notes = "根据记录ID获取模板设计详情")
     public ApiResponse<TemplateDesignRecord> getDesignDetail(
             @ApiParam(value = "记录ID", required = true) @PathVariable("id") String id) {
@@ -163,20 +163,14 @@ public class TemplateDesignController {
         }
 
         try {
-            // 保存到uploads目录
-            Path root = Paths.get(uploadRootPath).toAbsolutePath().normalize();
-            Files.createDirectories(root);
-            String ts = String.valueOf(System.currentTimeMillis());
-            java.io.File dest = root.resolve("templates/" + ts + ".docx").toFile();
-            if (!dest.getParentFile().exists()) dest.getParentFile().mkdirs();
-            file.transferTo(dest);
-
-            // 注册文件
+            // 使用标准三阶段上传流程：临时目录 -> files/{年}/{月}/ -> 清理临时文件
             if (fileInfoService == null) {
                 throw BusinessException.of(ApiCode.SERVER_ERROR, "文件服务不可用，无法注册上传文件");
             }
+            
+            // saveNewFile 会自动处理：1.保存到temp-uploads 2.复制到files/{年}/{月}/ 3.注册数据库 4.删除临时文件
             com.zhaoxinms.contract.tools.common.entity.FileInfo info = 
-                fileInfoService.registerFile(filename, "docx", dest.getAbsolutePath(), dest.length());
+                fileInfoService.saveNewFile(file, "template-design");
 
             // 保存设计记录（elementsJson 初始为空结构）
             if (designRecordService == null) {
@@ -217,7 +211,7 @@ public class TemplateDesignController {
     /**
      * 删除模板设计记录（软删除）
      */
-    @DeleteMapping("/design/{id}")
+    @DeleteMapping("/design/detail/{id}")
     @ApiOperation(value = "删除设计记录", notes = "删除指定的模板设计记录")
     public ApiResponse<Void> deleteDesign(
             @ApiParam(value = "记录ID", required = true) @PathVariable("id") String id) {

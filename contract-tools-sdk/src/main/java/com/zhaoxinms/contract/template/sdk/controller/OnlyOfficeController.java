@@ -157,8 +157,8 @@ public class OnlyOfficeController {
                 return ApiResponse.<UploadResult>paramError("文件名不能为空");
             }
             
-            // 使用 FileInfoService 保存文件
-            FileInfo fileInfo = fileInfoService.saveNewFile(file);
+            // 使用 FileInfoService 保存文件，指定模块为 onlyoffice-demo
+            FileInfo fileInfo = fileInfoService.saveNewFile(file, "onlyoffice-demo");
             
             // 返回结果
             UploadResult result = new UploadResult();

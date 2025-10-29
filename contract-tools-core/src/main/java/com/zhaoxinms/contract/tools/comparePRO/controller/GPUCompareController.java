@@ -612,4 +612,56 @@ public class GPUCompareController {
         
         return serviceRequest;
     }
+    
+    /**
+     * 访问比对任务的文件（图片、OCR结果等）
+     * 路径格式：/api/compare-pro/files/{年}/{月}/{任务id}/ocr-intermediate/images/{mode}/page-X.png
+     */
+    @GetMapping("/files/**")
+    public ResponseEntity<org.springframework.core.io.Resource> getTaskFile(
+            javax.servlet.http.HttpServletRequest request) {
+        try {
+            // 获取完整的请求路径
+            String fullPath = request.getRequestURI();
+            // 移除 /api/compare-pro/files/ 前缀
+            String relativePath = fullPath.substring("/api/compare-pro/files/".length());
+            
+            log.debug("访问文件: {}", relativePath);
+            
+            // 构建完整的文件路径
+            String uploadRootPath = compareService.getUploadRootPath();
+            java.nio.file.Path filePath = java.nio.file.Paths.get(uploadRootPath, "compare-pro", relativePath);
+            
+            java.io.File file = filePath.toFile();
+            if (!file.exists() || !file.isFile()) {
+                log.warn("文件不存在: {}", filePath);
+                return ResponseEntity.notFound().build();
+            }
+            
+            // 创建资源
+            org.springframework.core.io.Resource resource = new org.springframework.core.io.UrlResource(filePath.toUri());
+            
+            // 确定内容类型
+            String contentType = "application/octet-stream";
+            String fileName = file.getName().toLowerCase();
+            if (fileName.endsWith(".png")) {
+                contentType = "image/png";
+            } else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) {
+                contentType = "image/jpeg";
+            } else if (fileName.endsWith(".json")) {
+                contentType = "application/json";
+            } else if (fileName.endsWith(".txt")) {
+                contentType = "text/plain";
+            }
+            
+            return ResponseEntity.ok()
+                    .contentType(org.springframework.http.MediaType.parseMediaType(contentType))
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + file.getName() + "\"")
+                    .body(resource);
+                    
+        } catch (Exception e) {
+            log.error("访问文件失败", e);
+            return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
 }

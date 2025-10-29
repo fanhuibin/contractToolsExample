@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +29,7 @@ import com.zhaoxinms.contract.tools.config.ZxcmConfig;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -94,9 +94,8 @@ public class DocumentConvertController {
             File rootFile = new File(rootPath);
             String absoluteRootPath = rootFile.getAbsolutePath();
             
-            // 保存上传的文件到临时目录
-            String datePath = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy/MM/dd"));
-            String uploadDir = absoluteRootPath + File.separator + "temp" + File.separator + datePath;
+            // 保存上传的文件到临时目录（使用统一的临时上传目录）
+            String uploadDir = FileStorageUtils.getTempUploadPath(absoluteRootPath);
             File uploadDirFile = new File(uploadDir);
             if (!uploadDirFile.exists()) {
                 uploadDirFile.mkdirs();
@@ -114,9 +113,9 @@ public class DocumentConvertController {
                 + "/api/convert/temp-file/" + tempFileName 
                 + "?name=" + java.net.URLEncoder.encode(originalFilename, "UTF-8");
             
-            // 生成目标PDF文件路径
+            // 生成目标PDF文件路径（使用模块专有目录：doc-convert/{年}/{月}/）
             String pdfFileName = UUID.randomUUID().toString().replace("-", "") + ".pdf";
-            String pdfDir = absoluteRootPath + File.separator + "converted" + File.separator + datePath;
+            String pdfDir = FileStorageUtils.buildModulePath(absoluteRootPath, "doc-convert");
             File pdfDirFile = new File(pdfDir);
             if (!pdfDirFile.exists()) {
                 pdfDirFile.mkdirs();
@@ -144,14 +143,15 @@ public class DocumentConvertController {
                 log.info("已删除临时文件: {}", tempFilePath);
             }
             
-            // 注册PDF文件到数据库
+            // 注册PDF文件到数据库（指定模块为 doc-convert，使用相对路径）
             File convertedFile = new File(convertedPath);
             String pdfOriginalName = originalFilename.replaceFirst("\\.[^.]+$", ".pdf");
             FileInfo fileInfo = fileInfoService.registerFile(
                 pdfOriginalName, 
                 "pdf", 
-                convertedFile.getAbsolutePath(), 
-                convertedFile.length()
+                convertedFile.getAbsolutePath(),  // 会自动转换为相对路径
+                convertedFile.length(),
+                "doc-convert"  // 指定模块
             );
             
             log.info("PDF文件已注册，文件ID: {}, 原始名称: {}", fileInfo.getId(), pdfOriginalName);
@@ -196,8 +196,8 @@ public class DocumentConvertController {
                 return;
             }
             
-            // 获取文件磁盘路径
-            String filePath = fileInfo.getStorePath();
+            // 获取文件磁盘绝对路径（自动将相对路径转换为绝对路径）
+            String filePath = fileInfoService.getFileDiskPath(fileId);
             if (filePath == null || filePath.isEmpty()) {
                 log.error("文件路径为空，文件ID: {}", fileId);
                 response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -288,7 +288,8 @@ public class DocumentConvertController {
         String rootPath = zxcmConfig.getFileUpload().getRootPath();
         File rootFile = new File(rootPath);
         String absoluteRootPath = rootFile.getAbsolutePath();
-        String baseDir = absoluteRootPath + File.separator + "temp";
+        // 使用新的临时上传目录结构：temp-uploads
+        String baseDir = FileStorageUtils.getTempUploadRoot(absoluteRootPath);
         return findFileInRecentDays(baseDir, fileName, 3);
     }
     
@@ -297,17 +298,23 @@ public class DocumentConvertController {
      */
     private File findFileInRecentDays(String baseDir, String fileName, int days) {
         LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd");
         
         for (int i = 0; i < days; i++) {
-            String datePath = now.minusDays(i).format(formatter);
-            String filePath = baseDir + File.separator + datePath + File.separator + fileName;
+            LocalDateTime date = now.minusDays(i);
+            String year = String.valueOf(date.getYear());
+            String month = String.format("%02d", date.getMonthValue());
+            String day = String.format("%02d", date.getDayOfMonth());
+            
+            // 临时上传目录结构：temp-uploads/{年}/{月}/{日}
+            String filePath = baseDir + File.separator + year + File.separator + month + File.separator + day + File.separator + fileName;
             File file = new File(filePath);
             if (file.exists()) {
+                log.info("找到临时文件: {}", filePath);
                 return file;
             }
         }
         
+        log.warn("未找到临时文件: {}, 已搜索最近{}天", fileName, days);
         return null;
     }
     

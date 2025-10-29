@@ -31,6 +31,7 @@ import com.zhaoxinms.contract.tools.merge.model.DocContent;
 import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 import com.zhaoxinms.contract.tools.stamp.PdfStampUtil;
 import com.zhaoxinms.contract.tools.stamp.RidingStampUtil;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -335,11 +336,13 @@ public class ComposeController {
         try {
             java.nio.file.Path root = java.nio.file.Paths.get(uploadRootPath).toAbsolutePath().normalize();
             java.nio.file.Files.createDirectories(root);
-            java.nio.file.Path work = root.resolve("compose");
+            String yearMonthPath = FileStorageUtils.getYearMonthPath();
+            java.nio.file.Path work = root.resolve("compose").resolve(yearMonthPath);
             java.nio.file.Files.createDirectories(work);
             return work.toFile();
         } catch (Exception e) {
-            File fallback = new File(System.getProperty("java.io.tmpdir"), "uploads/compose");
+            String yearMonthPath = FileStorageUtils.getYearMonthPath();
+            File fallback = new File(System.getProperty("java.io.tmpdir"), "uploads/compose/" + yearMonthPath);
             fallback.mkdirs();
             return fallback;
         }
@@ -350,7 +353,8 @@ public class ComposeController {
         String originalName = outDocx.getName();
         String ext = "docx";
         long size = outDocx.length();
-        return fileInfoService.registerFile(originalName, ext, outDocx.getAbsolutePath(), size);
+        // 指定模块为 "compose"，使用相对路径存储
+        return fileInfoService.registerFile(originalName, ext, outDocx.getAbsolutePath(), size, "compose");
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

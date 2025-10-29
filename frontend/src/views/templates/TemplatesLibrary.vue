@@ -1,20 +1,41 @@
 <template>
   <div class="templates-lib">
-    <PageHeader 
-      title="模板库"
-      description="管理合同模板，设计模板元素并用于合同合成"
-      :icon="FolderOpened"
-    >
-      <template #actions>
-        <div class="header-tools">
-          <el-input v-model="keyword" placeholder="搜索名称/分类" clearable style="width: 220px;" @keyup.enter="fetchList" />
-          <el-button @click="fetchList">搜索</el-button>
-          <el-button type="primary" @click="goNew">新建模板</el-button>
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-header-content">
+          <div class="card-title">
+            <el-button 
+              text 
+              @click="goBack"
+              style="margin-right: 12px;"
+            >
+              <el-icon><ArrowLeft /></el-icon>
+              返回
+            </el-button>
+            模板管理
+          </div>
+          <div class="header-actions">
+            <el-input 
+              v-model="keyword" 
+              placeholder="搜索名称/分类" 
+              clearable 
+              style="width: 220px; margin-right: 8px;" 
+              @keyup.enter="fetchList"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+            <el-button @click="fetchList">搜索</el-button>
+            <el-button type="primary" @click="goNew" style="margin-left: 8px;">
+              <el-icon><Plus /></el-icon>
+              新建模板
+            </el-button>
+          </div>
         </div>
       </template>
-    </PageHeader>
 
-    <el-card>
+    <div class="table-container">
       <el-table :data="filtered" v-loading="loading" style="width:100%" row-key="id">
         <el-table-column prop="templateCode" label="模板编码" width="140" />
         <el-table-column prop="templateName" label="模板名称" width="180" />
@@ -61,6 +82,7 @@
         title="暂无模板"
         description="还没有创建任何模板，点击上方【新建模板】按钮开始创建"
       />
+    </div>
     </el-card>
 
     <el-dialog v-model="viewVisible" title="查看元素" width="860px" append-to-body :lock-scroll="false">
@@ -149,7 +171,7 @@
 import { ref, computed, onMounted, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { FolderOpened, ArrowDown, UploadFilled } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowDown, UploadFilled, Search, Plus } from '@element-plus/icons-vue'
 import { 
   listTemplateDesigns, 
   getTemplateDesignByTemplateId, 
@@ -159,7 +181,7 @@ import {
   uploadTemplateDocx,
   createNewVersion
 } from '@/api/templateDesign'
-import { PageHeader, EmptyState } from '@/components/common'
+import { EmptyState } from '@/components/common'
 
 const router = useRouter()
 const loading = ref(false)
@@ -251,6 +273,8 @@ const filtered = computed(() => {
 })
 
 function goNew() { router.push('/templates/new') }
+
+function goBack() { router.push('/smart-compose') }
 
 function openDesigner(row: any) { 
   router.push({ 
@@ -374,7 +398,10 @@ async function publishVersionAction(row: any) {
     }
     
     ElMessage.success('发布成功')
-    await loadVersions(currentTemplateCode.value)
+    // 如果当前在版本管理对话框中，则刷新版本列表
+    if (currentTemplateCode.value && versionsVisible.value) {
+      await loadVersions(currentTemplateCode.value)
+    }
     await fetchList()
   } catch (e: any) {
     if (e !== 'cancel') {
@@ -462,9 +489,27 @@ function copyText(text: string) {
 </script>
 
 <style scoped>
-.templates-lib { padding: 16px; }
-.header { display:flex; justify-content: space-between; align-items:center; }
-.title { font-weight: 600; }
+.templates-lib { padding: 20px; }
+
+.card-header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+}
+
 .versions-header { 
   display: flex; 
   justify-content: flex-end; 

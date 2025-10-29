@@ -347,7 +347,7 @@ const hardwareInfo = ref<HardwareInfo | null>(null)
 const hardwareMatched = ref(false)
 const licenseStatus = ref({ valid: false })
 const apiError = ref(false)
-const systemInfo = ref<SystemInfo>({ version: '未知', name: '肇新合同工具集', buildDate: '未知' })
+const systemInfo = ref<SystemInfo>({ version: '未知', name: '肇新合同组件库', buildDate: '未知' })
 
 // 所有模块定义
 const MODULE_DEFINITIONS = [

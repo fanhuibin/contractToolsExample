@@ -84,18 +84,15 @@ public class OnlyofficeCallbackController {
                 throw new RuntimeException("文件不存在，文件ID: " + fileId);
             }
             
-            // 优先使用storePath，其次使用默认uploads目录
-            java.io.File file = null;
-            String storePath = fileInfo.getStorePath();
-            if (storePath != null) {
-                file = new java.io.File(storePath);
+            // 使用 fileInfoService.getFileDiskPath 方法，自动处理相对路径转绝对路径
+            String filePath = fileInfoService.getFileDiskPath(fileId);
+            if (filePath == null || filePath.isEmpty()) {
+                throw new RuntimeException("无法获取文件路径，文件ID: " + fileId);
             }
-            if (file == null || !file.exists()) {
-                java.nio.file.Path filePath = java.nio.file.Paths.get(uploadRootPath, fileInfo.getFileName());
-                file = filePath.toFile();
-            }
+            
+            java.io.File file = new java.io.File(filePath);
             if (!file.exists()) {
-                throw new RuntimeException("文件不存在于磁盘，文件路径: " + (storePath != null ? storePath : (uploadRootPath + "/" + fileInfo.getFileName())));
+                throw new RuntimeException("文件不存在于磁盘，文件路径: " + filePath);
             }
             
 			// 创建文件资源

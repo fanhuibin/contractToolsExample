@@ -25,7 +25,7 @@ Postman Collection 是一个包含所有 API 接口的测试集合文件，可�
 点击下方按钮下载 Postman Collection 文件：
 
 <div style="text-align: center; margin: 30px 0;">
-  <a href="/docs/api/肇新合同工具集-Postman-Collection.json" download="肇新合同工具集-Postman-Collection.json" style="display: inline-block; padding: 12px 24px; background: #409eff; color: white; text-decoration: none; border-radius: 4px; font-weight: 600;">
+  <a href="/docs/api/肇新合同组件库-Postman-Collection.json" download="肇新合同组件库-Postman-Collection.json" style="display: inline-block; padding: 12px 24px; background: #409eff; color: white; text-decoration: none; border-radius: 4px; font-weight: 600;">
     ⬇️ 下载 Postman Collection
   </a>
 </div>

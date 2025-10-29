@@ -1,7 +1,7 @@
 {
   "name": "contract-tools-frontend",
   "version": "1.0.0",
-  "description": "肇新合同工具集前端",
+  "description": "肇新合同组件库前端",
   "type": "module",
   "scripts": {
     "dev": "vite",

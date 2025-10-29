@@ -253,15 +253,20 @@ const editorHeight = computed(() => 'calc(100vh - 300px)')
 // 生命周期
 onMounted(async () => {
   addLog('info', '页面已加载，请选择文件开始演示')
-  // 动态获取文件列表
+  // 动态获取文件列表（只获取onlyoffice-demo模块的文件）
   try {
-    const response = await axios.get('/api/file/list')
+    const response = await axios.get('/api/file/list', {
+      params: {
+        module: 'onlyoffice-demo'
+      }
+    })
     if (response.data.code === 200) {
       demoFiles.value = response.data.data.map(file => ({
         id: file.id,
         name: file.originalName,
         type: getFileTypeText('.' + file.fileExtension)
       }))
+      addLog('info', `已加载 ${demoFiles.value.length} 个演示文件`)
     }
   } catch (error) {
     ElMessage.error('获取文件列表失败')

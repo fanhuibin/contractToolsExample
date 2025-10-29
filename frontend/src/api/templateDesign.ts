@@ -67,7 +67,7 @@ export function saveTemplateDesign(data: {
 // 查询模板设计明细
 export function getTemplateDesignDetail(id: string) {
   return request({
-    url: `/template/design/${id}`,
+    url: `/template/design/detail/${id}`,
     method: 'get'
   })
 }
@@ -104,7 +104,7 @@ export function listTemplateDesigns() {
 // 删除模板设计记录（软删除）
 export function deleteTemplateDesign(id: string) {
   return request({
-    url: `/template/design/${id}`,
+    url: `/template/design/detail/${id}`,
     method: 'delete'
   })
 }

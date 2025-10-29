@@ -1,0 +1,29 @@
+{
+	"createdAt":"2025-10-29 13:44:56.314949100",
+	"description":"",
+	"fields":[
+		{
+			"fieldCode":"field_1",
+			"fieldName":"新字段",
+			"fieldType":"string",
+			"id":"field_1761717077203_0.1704061721330905",
+			"isRequired":false,
+			"rules":[
+				{
+					"id":"rule_1761717077203_0.3606697645926209",
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchor\":\"甲方\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5a-zA-Z]+\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
+					"ruleName":"新字段的提取规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			]
+		}
+	],
+	"id":"202510_2094a6c365c04607ace3f2dc9bfd6d5e",
+	"status":"active",
+	"templateCode":"123",
+	"templateName":"测试模板",
+	"updatedAt":"2025-10-29 13:53:35.396989400",
+	"version":3
+}

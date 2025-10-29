@@ -118,7 +118,10 @@ public class CompareImageService {
         
         // 使用 zxcmConfig 的 uploadPath，与生成图片时保持一致
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-        Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+        String yearMonth = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractYearMonth(taskId);
+        String originalTaskId = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractOriginalId(taskId);
+        String yearMonthPath = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.getYearMonthPath(yearMonth);
+        Path imagesDir = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId, "ocr-intermediate", "images", mode);
         
         logger.debug("获取文档图片信息: taskId={}, mode={}, imagesDir={}", taskId, mode, imagesDir);
         
@@ -126,6 +129,11 @@ public class CompareImageService {
             logger.warn("图片目录不存在: {}", imagesDir);
             return info;
         }
+        
+        // 构建图片URL的基础路径（在Lambda外部计算，避免重复声明）
+        // 使用专门的URL路径方法，确保使用正斜杠
+        String yearMonthUrlPath = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.getYearMonthUrlPath(yearMonth);
+        final String imageUrlBase = "/api/compare-pro/files/" + yearMonthUrlPath + "/" + originalTaskId + "/ocr-intermediate/images/" + mode + "/";
         
         // 使用 Files.list 并支持多种图片格式
         List<PageImageInfo> pages = new ArrayList<>();
@@ -152,8 +160,8 @@ public class CompareImageService {
                     int width = img != null ? img.getWidth() : 0;
                     int height = img != null ? img.getHeight() : 0;
                     
-                    // 构建图片 URL（相对路径）
-                    String imageUrl = "/api/compare-pro/files/tasks/" + taskId + "/images/" + mode + "/" + fileName;
+                    // 构建图片 URL（使用外部计算好的基础路径）
+                    String imageUrl = imageUrlBase + fileName;
                     
                     pages.add(new PageImageInfo(pageNumber, imageUrl, width, height));
                     
@@ -185,7 +193,10 @@ public class CompareImageService {
         
         // 使用 zxcmConfig 的 uploadPath，与生成图片时保持一致
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-        Path imagesDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+        String yearMonth = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractYearMonth(taskId);
+        String originalTaskId = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractOriginalId(taskId);
+        String yearMonthPath = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.getYearMonthPath(yearMonth);
+        Path imagesDir = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId, "ocr-intermediate", "images", mode);
         
         logger.debug("生成实际图片信息: taskId={}, mode={}, imagesDir={}", taskId, mode, imagesDir);
         
@@ -316,7 +327,10 @@ public class CompareImageService {
      */
     public Path getImageDirectory(String taskId, String mode) {
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-        return Paths.get(uploadRootPath, "compare-pro", "tasks", taskId, "images", mode);
+        String yearMonth = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractYearMonth(taskId);
+        String originalTaskId = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractOriginalId(taskId);
+        String yearMonthPath = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.getYearMonthPath(yearMonth);
+        return Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId, "ocr-intermediate", "images", mode);
     }
     
     /**

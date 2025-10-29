@@ -9,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
-
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 
 import java.io.File;
 import java.io.IOException;
@@ -40,8 +40,9 @@ public class ContractReviewController {
 
             String fileId = UUID.randomUUID().toString().replace("-", "") + fileExtension;
             String uploadDir = fileInfoService.getFileDiskPath("").substring(0, fileInfoService.getFileDiskPath("").lastIndexOf(File.separator));
-            // 使用review子目录存储合同审查上传的文件
-            File reviewDir = new File(uploadDir, "review");
+            // 使用review子目录存储合同审查上传的文件，添加年月路径
+            String yearMonthPath = FileStorageUtils.getYearMonthPath();
+            File reviewDir = new File(uploadDir + File.separator + "review" + File.separator + yearMonthPath);
             if (!reviewDir.exists()) {
                 reviewDir.mkdirs();
             }

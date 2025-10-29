@@ -292,7 +292,7 @@
           <el-result
             icon="success"
             title="信息提取完成"
-            :sub-title="`耗时 ${currentTask.durationSeconds || 0} 秒`"
+            :sub-title="currentTask.durationSeconds > 0 ? `耗时 ${currentTask.durationSeconds} 秒` : ''"
           >
             <template #extra>
               <el-button type="primary" @click="viewDetailedResult">

@@ -17,7 +17,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/smart-compose',
         name: 'SmartContractCompose',
-        redirect: '/templates',
+        component: () => import('@/views/compose/ComposeHome.vue'),
         meta: { title: '智能合同合成' }
       },
       {
@@ -183,6 +183,13 @@ const routes: RouteRecordRaw[] = [
         name: 'LicenseView',
         component: () => import('@/views/license/LicenseView.vue'),
         meta: { title: '授权信息' }
+      },
+      // 系统管理
+      {
+        path: '/system/cleanup',
+        name: 'SystemCleanup',
+        component: () => import('@/views/system/SystemCleanup.vue'),
+        meta: { title: '系统文件清理' }
       }
     ]
   },

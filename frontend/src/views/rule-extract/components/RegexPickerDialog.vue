@@ -349,6 +349,14 @@ const regexPatterns: RegexPattern[] = [
     examples: ['Hello', 'Contract', 'ABC']
   },
   {
+    key: 'chineseEnglish',
+    name: '中英文字符混合',
+    category: '文本匹配',
+    pattern: '[\\u4e00-\\u9fa5a-zA-Z]+',
+    description: '匹配中文和英文字符的混合（不包括数字和标点）',
+    examples: ['Hello中国', '合同Contract', 'ABC公司', '中文English混合']
+  },
+  {
     key: 'uppercase',
     name: '大写英文',
     category: '文本匹配',

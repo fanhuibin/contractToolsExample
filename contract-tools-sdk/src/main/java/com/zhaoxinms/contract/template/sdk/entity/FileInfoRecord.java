@@ -25,6 +25,7 @@ public class FileInfoRecord {
     private LocalDateTime uploadTime;
     private LocalDateTime updateTime;
     private String onlyofficeKey;
+    private String module; // 所属模块（用于区分文件来源）
 }
 
 

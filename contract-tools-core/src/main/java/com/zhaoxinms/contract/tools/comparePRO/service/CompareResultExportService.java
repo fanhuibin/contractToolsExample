@@ -332,7 +332,10 @@ public class CompareResultExportService {
      */
     private int copyAndReplaceTaskImages(String taskId, Path tempDir) throws Exception {
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-        Path taskPath = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId);
+        String yearMonth = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractYearMonth(taskId);
+        String originalTaskId = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.extractOriginalId(taskId);
+        String yearMonthPath = com.zhaoxinms.contract.tools.common.util.FileStorageUtils.getYearMonthPath(yearMonth);
+        Path taskPath = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId, "ocr-intermediate");
         
         if (!Files.exists(taskPath)) {
             logger.warn("任务目录不存在: {}", taskPath);

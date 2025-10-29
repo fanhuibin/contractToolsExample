@@ -166,7 +166,10 @@ public class ReviewController {
     private FileInfo persistOnClonedFile(String fileId, java.util.List<Anchor> anchors) throws Exception {
         FileInfo src = fileInfoService.getById(fileId);
         if (src == null) throw new IllegalArgumentException("fileId 不存在");
-        java.nio.file.Path srcPath = java.nio.file.Paths.get(src.getStorePath());
+        // 使用 getFileDiskPath 获取绝对路径（自动处理相对路径转换）
+        String srcFilePath = fileInfoService.getFileDiskPath(fileId);
+        if (srcFilePath == null) throw new IllegalArgumentException("无法获取文件路径");
+        java.nio.file.Path srcPath = java.nio.file.Paths.get(srcFilePath);
         java.nio.file.Path temp = java.nio.file.Files.createTempFile("review_clone_", ".docx");
         java.nio.file.Files.copy(srcPath, temp, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 

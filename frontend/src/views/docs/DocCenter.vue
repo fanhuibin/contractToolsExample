@@ -4,7 +4,7 @@
     <div class="doc-header">
       <div class="header-left">
         <el-icon class="logo-icon"><Document /></el-icon>
-        <h1>肇新合同工具集 - 文档中心</h1>
+        <h1>肇新合同组件库 - 文档中心</h1>
       </div>
       <div class="header-right">
         <el-button type="primary" link @click="goToHome">

@@ -20,12 +20,12 @@
 
       <el-card class="card">
         <template #header>
-          <div class="card-title">使用已有模板</div>
+          <div class="card-title">使用已发布模板</div>
         </template>
-        <div class="cover cover-existing">从模板库选择 → 设计或直接合成</div>
-        <div class="desc">在模板库选择已有模板，可进入“设计模板”编辑已插入元素，或直接发起合同合成。</div>
+        <div class="cover cover-existing">选择模板 → 填写数据 → 生成合同</div>
+        <div class="desc">从已发布的模板中选择，填写合同数据，快速生成合同文档。</div>
         <div class="actions">
-          <el-button type="primary" size="large" @click="goTemplates">进入模板库</el-button>
+          <el-button type="primary" size="large" @click="goTemplates">开始合成</el-button>
         </div>
       </el-card>
     </div>
@@ -39,7 +39,7 @@ import { PageHeader } from '@/components/common'
 
 const router = useRouter()
 function goNewTemplate() { router.push('/templates/new') }
-function goTemplates() { router.push('/templates') }
+function goTemplates() { router.push('/smart-compose') }  // 跳转到合成首页
 </script>
 
 <style scoped>

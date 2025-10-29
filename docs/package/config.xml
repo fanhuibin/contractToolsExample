@@ -1,0 +1,158 @@
+<config>
+    <!-- 
+    ===========================================
+    肇新合同工具集 - Allatori 代码混淆配置
+    ===========================================
+    项目：zhaoxin-contract-tool-set
+    版本：1.0.0
+    主模块：contract-tools-sdk
+    
+    使用说明：
+    1. 先执行 Maven 打包：mvn clean package -DskipTests
+    2. 运行混淆脚本：package.bat
+    3. 混淆后的文件在 docs/package/output 目录
+    -->
+    
+    <input>
+        <!-- 主启动模块 - SDK -->
+        <jar in="../../contract-tools-sdk/target/contract-tools-sdk-1.0.0.jar" 
+             out="output/contract-tools-sdk-obfuscated.jar"/>
+        
+        <!-- 业务模块 - 打包到 BOOT-INF/lib 目录 -->
+        <jar in="../../contract-tools-api/target/contract-tools-api-1.0.0.jar" 
+             out="output/BOOT-INF/lib/contract-tools-api-1.0.0.jar"/>
+        
+        <jar in="../../contract-tools-core/target/contract-tools-core-1.0.0.jar" 
+             out="output/BOOT-INF/lib/contract-tools-core-1.0.0.jar"/>
+        
+        <jar in="../../contract-tools-auth/target/contract-tools-auth-1.0.0.jar" 
+             out="output/BOOT-INF/lib/contract-tools-auth-1.0.0.jar"/>
+        
+        <jar in="../../contract-tools-extract/target/contract-tools-extract-1.0.0.jar" 
+             out="output/BOOT-INF/lib/contract-tools-extract-1.0.0.jar"/>
+        
+        <jar in="../../contract-tools-rule-extract/target/contract-tools-rule-extract-1.0.0.jar" 
+             out="output/BOOT-INF/lib/contract-tools-rule-extract-1.0.0.jar"/>
+        
+        <!-- 
+        注意：contract-tools-backend 和 contract-tools-auth-generator 
+        不参与混淆，因为它们是独立的应用模块
+        -->
+    </input>
+
+    <!-- 保持类、方法、字段名称的规则 -->
+    <keep-names>
+        <!-- 保持 protected 及以上访问级别的类成员 -->
+        <class access="protected+">
+            <field access="protected+"/>
+            <method access="protected+"/>
+        </class>
+    </keep-names>
+
+    <!-- 混淆配置选项 -->
+    
+    <!-- 启用字符串加密（类型和版本） -->
+    <property name="string-encryption" value="enable"/>
+    <property name="string-encryption-type" value="fast"/>
+    <property name="string-encryption-version" value="v4"/>
+    
+    <!-- 包名保持不变（推荐，避免反射调用失败） -->
+    <property name="packages-naming" value="keep"/>
+    
+    <!-- 接口形参名保持不变（保持可读性） -->
+    <property name="local-variables-naming" value="keep-parameters"/>
+    
+    <!-- 方法名混淆策略（可选：abc, compact, keywords, iii, 123, real, unique） -->
+    <property name="methods-naming" value="abc"/>
+    
+    <!-- 字段名混淆策略 -->
+    <property name="fields-naming" value="abc"/>
+
+    <!-- 排除不需要混淆的类 -->
+    <ignore-classes>
+        <!-- ============== Spring Boot 相关类 ============== -->
+        <!-- 排除所有 Spring Boot 核心类 -->
+        <class template="class org.springframework.**"/>
+        
+        <!-- 排除主启动类（必须排除，否则无法启动） -->
+        <class template="class com.zhaoxinms.contract.template.sdk.SdkApplication"/>
+        <class template="class com.zhaoxinms.contract.tools.backend.BackendApplication"/>
+        
+        <!-- ============== 配置类和组件类 ============== -->
+        <!-- 排除所有配置类 -->
+        <class template="class com.zhaoxinms.**.config.**"/>
+        
+        <!-- 排除切面类（AOP） -->
+        <class template="class com.zhaoxinms.**.aspect.**"/>
+        
+        <!-- 排除拦截器和过滤器 -->
+        <class template="class com.zhaoxinms.**.interceptor.**"/>
+        <class template="class com.zhaoxinms.**.filter.**"/>
+        
+        <!-- ============== 数据模型类 ============== -->
+        <!-- 排除所有实体类（JPA/MyBatis） -->
+        <class template="class com.zhaoxinms.**.entity.**"/>
+        <class template="class com.zhaoxinms.**.domain.**"/>
+        <class template="class com.zhaoxinms.**.model.**"/>
+        
+        <!-- 排除 DTO 和 VO 类 -->
+        <class template="class com.zhaoxinms.**.dto.**"/>
+        <class template="class com.zhaoxinms.**.vo.**"/>
+        
+        <!-- 排除请求和响应类 -->
+        <class template="class com.zhaoxinms.**.request.**"/>
+        <class template="class com.zhaoxinms.**.response.**"/>
+        
+        <!-- ============== 枚举类 ============== -->
+        <!-- 排除所有枚举类 -->
+        <class template="class com.zhaoxinms.**.enums.**"/>
+        
+        <!-- ============== 异常类 ============== -->
+        <!-- 排除自定义异常类 -->
+        <class template="class com.zhaoxinms.**.exception.**"/>
+        
+        <!-- ============== Mapper 和 Repository ============== -->
+        <!-- 排除 MyBatis Mapper 接口 -->
+        <class template="class com.zhaoxinms.**.mapper.**"/>
+        
+        <!-- 排除 Repository 接口 -->
+        <class template="class com.zhaoxinms.**.repository.**"/>
+        
+        <!-- ============== 监听器和事件类 ============== -->
+        <!-- 排除事件监听器 -->
+        <class template="class com.zhaoxinms.**.listener.**"/>
+        <class template="class com.zhaoxinms.**.event.**"/>
+        
+        <!-- ============== 工具类和常量类 ============== -->
+        <!-- 排除常量类 -->
+        <class template="class com.zhaoxinms.**.constant.**"/>
+        <class template="class com.zhaoxinms.**.constants.**"/>
+        
+        <!-- ============== 授权模块特殊类 ============== -->
+        <!-- 排除授权模块的关键类（避免授权验证失败） -->
+        <class template="class com.zhaoxinms.contract.tools.auth.license.**"/>
+        <class template="class com.zhaoxinms.contract.tools.auth.signature.**"/>
+        
+        <!-- ============== OnlyOffice 相关类 ============== -->
+        <!-- 排除 OnlyOffice 集成相关类 -->
+        <class template="class com.zhaoxinms.contract.tools.onlyoffice.**"/>
+        
+        <!-- ============== AI 组件相关类 ============== -->
+        <!-- 排除 AI 组件相关类（避免反射调用失败） -->
+        <class template="class com.zhaoxinms.contract.tools.aicomponent.config.**"/>
+        
+        <!-- ============== 第三方库类 ============== -->
+        <!-- 排除 Lombok 生成的类 -->
+        <class template="class lombok.**"/>
+        
+        <!-- 排除 MyBatis Plus -->
+        <class template="class com.baomidou.**"/>
+        
+        <!-- 排除 Swagger -->
+        <class template="class io.swagger.**"/>
+        <class template="class springfox.**"/>
+    </ignore-classes>
+
+    <!-- 日志文件配置 -->
+    <property name="log-file" value="output/allatori-obfuscation-log.xml"/>
+</config>

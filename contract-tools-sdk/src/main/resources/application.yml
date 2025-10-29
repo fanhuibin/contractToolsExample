@@ -142,7 +142,7 @@ zxcm:
   
   # 文件上传配置
   file-upload:
-    root-path: ./newuploads
+    root-path: ./testuploads
   
   
   # 比对功能配置

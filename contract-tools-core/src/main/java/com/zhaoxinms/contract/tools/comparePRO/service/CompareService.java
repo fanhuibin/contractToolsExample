@@ -30,6 +30,7 @@ import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.compare.DiffUtil;
 import com.zhaoxinms.contract.tools.compare.util.TextNormalizer;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import com.zhaoxinms.contract.tools.comparePRO.config.SimpleProgressConfig;
 import com.zhaoxinms.contract.tools.comparePRO.config.ZxOcrConfig;
 import com.zhaoxinms.contract.tools.comparePRO.model.CharBox;
@@ -132,32 +133,49 @@ public class CompareService {
     
     /**
      * 加载已完成的任务到内存中
+     * 遍历所有年月目录
      */
     private void loadCompletedTasks() {
         try {
             String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-            Path resultsDir = Paths.get(uploadRootPath, "compare-pro", "results");
+            Path compareProRoot = Paths.get(uploadRootPath, "compare-pro");
             
             // 收集所有任务文件及其最后修改时间
             List<Path> allTaskFiles = new ArrayList<>();
             
-            if (Files.exists(resultsDir)) {
-                Files.list(resultsDir)
-                    .filter(path -> path.toString().endsWith(".json"))
-                    .forEach(allTaskFiles::add);
-            }
-            
-            // 也收集前端结果目录的文件
-            Path frontendResultsDir = Paths.get(uploadRootPath, "compare-pro", "frontend-results");
-            if (Files.exists(frontendResultsDir)) {
-                Files.list(frontendResultsDir)
-                    .filter(path -> path.toString().endsWith(".json"))
-                    .forEach(jsonFile -> {
-                        // 只添加在 results 目录中不存在的任务
-                        String fileName = jsonFile.getFileName().toString();
-                        Path resultFile = Paths.get(uploadRootPath, "compare-pro", "results", fileName);
-                        if (!Files.exists(resultFile)) {
-                            allTaskFiles.add(jsonFile);
+            if (Files.exists(compareProRoot)) {
+                // 遍历年目录
+                Files.list(compareProRoot)
+                    .filter(Files::isDirectory)
+                    .filter(path -> path.getFileName().toString().matches("\\d{4}")) // 年份目录
+                    .forEach(yearDir -> {
+                        try {
+                            // 遍历月目录
+                            Files.list(yearDir)
+                                .filter(Files::isDirectory)
+                                .filter(path -> path.getFileName().toString().matches("\\d{2}")) // 月份目录
+                                .forEach(monthDir -> {
+                                    try {
+                                        // 遍历任务目录
+                                        Files.list(monthDir)
+                                            .filter(Files::isDirectory)
+                                            .forEach(taskDir -> {
+                                                try {
+                                                    // 查找result/data.json
+                                                    Path resultFile = taskDir.resolve("result").resolve("data.json");
+                                                    if (Files.exists(resultFile)) {
+                                                        allTaskFiles.add(resultFile);
+                                                    }
+                                                } catch (Exception e) {
+                                                    // 忽略单个任务的错误
+                                                }
+                                            });
+                                    } catch (Exception e) {
+                                        // 忽略单个月份的错误
+                                    }
+                                });
+                        } catch (Exception e) {
+                            // 忽略单个年份的错误
                         }
                     });
             }
@@ -175,17 +193,18 @@ public class CompareService {
                 .collect(java.util.stream.Collectors.toList());
             
             // 加载最近20条任务到内存
-            for (Path jsonFile : recentTasks) {
+            for (Path resultFile : recentTasks) {
                 try {
-                    String fileName = jsonFile.getFileName().toString();
-                    String taskId = fileName.substring(0, fileName.lastIndexOf(".json"));
+                    // 从路径中提取任务ID：.../年/月/任务id/result/data.json
+                    Path taskDir = resultFile.getParent().getParent(); // 任务id目录
+                    String taskId = taskDir.getFileName().toString();
                     
                     CompareTask task = loadTaskFromFile(taskId);
                     if (task != null) {
                         tasks.put(taskId, task);
                     }
                 } catch (Exception e) {
-                    System.err.println("加载任务失败: " + jsonFile + ", error=" + e.getMessage());
+                    System.err.println("加载任务失败: " + resultFile + ", error=" + e.getMessage());
                 }
             }
             
@@ -198,9 +217,12 @@ public class CompareService {
 
     /**
      * 提交比对任务（文件上传）
+     * 目录结构：compare-pro/{年月}/{任务id}/task/
      */
     public String submitCompareTask(MultipartFile oldFile, MultipartFile newFile, CompareOptions options) {
-        String taskId = UUID.randomUUID().toString();
+        // 生成带年月前缀的任务ID
+        String originalTaskId = UUID.randomUUID().toString();
+        String taskId = FileStorageUtils.generateFileId(originalTaskId);
 
         CompareTask task = new CompareTask(taskId);
         task.setOldFileName(oldFile.getOriginalFilename());
@@ -212,7 +234,10 @@ public class CompareService {
         try {
             // 同步保存文件到系统上传目录，避免异步处理时文件流被关闭
             String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-            Path uploadDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId);
+            String yearMonthPath = FileStorageUtils.getYearMonthPathFromFileId(taskId);
+            
+            // 构建目录结构：compare-pro/{年月}/{原始任务id}/task/
+            Path uploadDir = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId, "task");
             Files.createDirectories(uploadDir);
 
             Path oldFilePath = uploadDir.resolve("old_" + oldFile.getOriginalFilename());
@@ -253,7 +278,9 @@ public class CompareService {
      * 提交比对任务（文件路径）
      */
     public String submitCompareTaskWithPaths(String oldFilePath, String newFilePath, CompareOptions options) {
-        String taskId = UUID.randomUUID().toString();
+        // 生成带年月前缀的任务ID
+        String originalTaskId = UUID.randomUUID().toString();
+        String taskId = FileStorageUtils.generateFileId(originalTaskId);
 
         CompareTask task = new CompareTask(taskId);
         task.setOldFileName(Paths.get(oldFilePath).getFileName().toString());
@@ -299,20 +326,27 @@ public class CompareService {
 
     /**
      * 从文件加载任务状态
+     * 目录结构：compare-pro/{年月}/{任务id}/task/ 和 compare-pro/{年月}/{任务id}/result/data.json
      */
     private CompareTask loadTaskFromFile(String taskId) {
         try {
-            // 检查任务目录是否存在
             String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-            Path taskDir = Paths.get(uploadRootPath, "compare-pro", "tasks", taskId);
+            
+            // 从taskId中提取年月信息和原始ID
+            String yearMonth = FileStorageUtils.extractYearMonth(taskId);
+            String originalTaskId = FileStorageUtils.extractOriginalId(taskId);
+            String yearMonthPath = FileStorageUtils.getYearMonthPath(yearMonth);
+            
+            // 检查任务目录是否存在
+            Path taskDir = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId);
             if (!Files.exists(taskDir)) {
                 return null;
             }
             
-            // 检查是否有result.json文件（表示任务已完成）
-            Path resultJsonPath = Paths.get(uploadRootPath, "compare-pro", "results", taskId + ".json");
+            // 检查是否有result/data.json文件（表示任务已完成）
+            Path resultJsonPath = taskDir.resolve("result").resolve("data.json");
             if (Files.exists(resultJsonPath)) {
-                // 从result.json中提取任务信息
+                // 从result/data.json中提取任务信息
                 byte[] bytes = Files.readAllBytes(resultJsonPath);
                 @SuppressWarnings("unchecked")
                 Map<String, Object> resultData = M.readValue(bytes, Map.class);
@@ -1683,11 +1717,22 @@ public class CompareService {
 
     // 移除getPdfPageWidth方法，不再需要PDF页面宽度
 
+    /**
+     * 获取前端结果JSON文件路径
+     * 目录结构：compare-pro/{年月}/{任务id}/result/data.json
+     */
     private Path getFrontendResultJsonPath(String taskId) {
         // 基于系统配置的上传根目录保存结果文件
         String uploadRootPath = zxcmConfig.getFileUpload().getRootPath();
-        Path base = Paths.get(uploadRootPath, "compare-pro", "results");
-        return base.resolve(taskId + ".json");
+        
+        // 从taskId中提取年月信息和原始ID
+        String yearMonth = FileStorageUtils.extractYearMonth(taskId);
+        String originalTaskId = FileStorageUtils.extractOriginalId(taskId);
+        String yearMonthPath = FileStorageUtils.getYearMonthPath(yearMonth);
+        
+        // 构建路径：compare-pro/{年月}/{原始任务id}/result/data.json
+        Path taskDir = Paths.get(uploadRootPath, "compare-pro", yearMonthPath, originalTaskId);
+        return taskDir.resolve("result").resolve("data.json");
 	}
 
 	/**
@@ -1771,8 +1816,11 @@ public class CompareService {
 				throw new RuntimeException("MinerU服务未初始化");
 			}
 			
-			// 准备输出目录
-			Path taskDir = Paths.get(zxcmConfig.getFileUpload().getRootPath(), "compare-pro", "tasks", taskId);
+			// 准备输出目录：compare-pro/{年}/{月}/{任务id}/ocr-intermediate/
+			String yearMonth = FileStorageUtils.extractYearMonth(taskId);
+			String originalTaskId = FileStorageUtils.extractOriginalId(taskId);
+			String yearMonthPath = FileStorageUtils.getYearMonthPath(yearMonth);
+			Path taskDir = Paths.get(zxcmConfig.getFileUpload().getRootPath(), "compare-pro", yearMonthPath, originalTaskId, "ocr-intermediate");
 			java.io.File outputDir = taskDir.toFile();
 			if (!outputDir.exists()) {
 				outputDir.mkdirs();
@@ -2361,6 +2409,14 @@ public class CompareService {
 		}
 		
 		return differences;
+	}
+	
+	/**
+	 * 获取上传根路径
+	 * 用于文件访问控制器
+	 */
+	public String getUploadRootPath() {
+		return zxcmConfig.getFileUpload().getRootPath();
 	}
 
 }

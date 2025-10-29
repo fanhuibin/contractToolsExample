@@ -10,6 +10,7 @@ import com.zhaoxinms.contract.tools.extract.core.data.CharInterval;
 import com.zhaoxinms.contract.tools.ocr.service.OcrExtractService;
 import com.zhaoxinms.contract.tools.ocr.service.UnifiedOCRService;
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -80,8 +81,8 @@ public class OcrExtractServiceImpl implements OcrExtractService {
         String taskId = UUID.randomUUID().toString();
         log.info("开始OCR提取任务，任务ID: {}, 文件: {}", taskId, file.getOriginalFilename());
 
-        // 创建任务目录
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        // 创建任务目录（使用年月路径）
+        File taskDir = getTaskDir(taskId);
         log.info("任务目录路径: {}", taskDir.getAbsolutePath());
         
         if (!taskDir.exists()) {
@@ -129,7 +130,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
     private void performOcrExtraction(String taskId, File pdfFile, Boolean ignoreHeaderFooter,
                                      Double headerHeightPercent, Double footerHeightPercent) throws Exception {
         
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File taskDir = getTaskDir(taskId);
 
         // 更新状态：OCR识别中
         updateTaskStatus(taskId, "processing", 30, "正在进行OCR识别...");
@@ -528,7 +529,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
 
     @Override
     public Map<String, Object> getTaskResult(String taskId) throws Exception {
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File taskDir = getTaskDir(taskId);
         if (!taskDir.exists()) {
             throw new RuntimeException("任务不存在");
         }
@@ -576,7 +577,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
 
     @Override
     public File getPageImage(String taskId, int pageNum) {
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File taskDir = getTaskDir(taskId);
         File imagesDir = new File(taskDir, "images");
         
         if (!imagesDir.exists()) {
@@ -605,7 +606,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
 
     @Override
     public Object getTextBoxes(String taskId) throws Exception {
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File taskDir = getTaskDir(taskId);
         File textBoxFile = new File(taskDir, "text_boxes.json");
         
         if (!textBoxFile.exists()) {
@@ -623,7 +624,7 @@ public class OcrExtractServiceImpl implements OcrExtractService {
         taskStatusCache.remove(taskId);
 
         // 删除任务目录
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        File taskDir = getTaskDir(taskId);
         if (taskDir.exists()) {
             try {
                 deleteDirectory(taskDir);
@@ -634,6 +635,14 @@ public class OcrExtractServiceImpl implements OcrExtractService {
         }
     }
 
+    /**
+     * 获取任务目录（使用年月路径）
+     */
+    private File getTaskDir(String taskId) {
+        String yearMonthPath = FileStorageUtils.getYearMonthPathFromFileId(taskId);
+        return new File(uploadRootPath, "ocr-extract-tasks/" + yearMonthPath + "/" + taskId);
+    }
+    
     /**
      * 递归删除目录
      */

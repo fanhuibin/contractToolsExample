@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
@@ -56,16 +57,21 @@ public class UnifiedOCRService implements OCRProvider {
     
     /**
      * 识别PDF（支持页眉页脚设置）
+     * 目录结构：rule-extract-data/ocr-output/{年月}/{任务id}/
      */
     public OCRProvider.OCRResult recognizePdf(File pdfFile, boolean ignoreHeaderFooter, 
                                              double headerHeightPercent, double footerHeightPercent) {
-        // 使用自动生成的taskId和默认输出目录
-        String taskId = UUID.randomUUID().toString();
-        File ocrOutputDir = new File(uploadRootPath, "rule-extract-data/ocr-output");
+        // 使用自动生成的taskId（带年月前缀）
+        String originalTaskId = UUID.randomUUID().toString();
+        String taskId = FileStorageUtils.generateFileId(originalTaskId);
+        String yearMonthPath = FileStorageUtils.getYearMonthPathFromFileId(taskId);
+        
+        // 构建输出目录：rule-extract-data/ocr-output/{年月}/{原始任务id}/
+        File ocrOutputDir = new File(uploadRootPath, "rule-extract-data/ocr-output/" + yearMonthPath);
         if (!ocrOutputDir.exists()) {
             ocrOutputDir.mkdirs();
         }
-        File taskOutputDir = new File(ocrOutputDir, taskId);
+        File taskOutputDir = new File(ocrOutputDir, originalTaskId);
         taskOutputDir.mkdirs();
         
         return recognizePdf(pdfFile, taskId, taskOutputDir, ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);
@@ -300,9 +306,10 @@ public class UnifiedOCRService implements OCRProvider {
     /**
      * 增强OCR识别 - 返回详细位置信息（支持页眉页脚设置）
      * 支持智能信息提取的位置映射功能
+     * 目录结构：rule-extract-data/ocr-output/{年月}/{任务id}/
      * 
      * @param pdfFile PDF文件
-     * @param taskId 任务ID
+     * @param taskId 任务ID（带年月前缀）
      * @param ignoreHeaderFooter 是否忽略页眉页脚
      * @param headerHeightPercent 页眉高度百分比（默认12%）
      * @param footerHeightPercent 页脚高度百分比（默认12%）
@@ -317,8 +324,13 @@ public class UnifiedOCRService implements OCRProvider {
         }
         
         try {
-            // 创建输出目录（规则抽取功能使用 extract-tasks）
-            File outputDir = new File(uploadRootPath, "extract-tasks/" + taskId);
+            // 创建输出目录（使用年月路径）
+            // 提取原始任务ID和年月路径
+            String originalTaskId = FileStorageUtils.extractOriginalId(taskId);
+            String yearMonthPath = FileStorageUtils.getYearMonthPathFromFileId(taskId);
+            
+            // 构建输出目录：rule-extract-data/ocr-output/{年月}/{原始任务id}/
+            File outputDir = new File(uploadRootPath, "rule-extract-data/ocr-output/" + yearMonthPath + "/" + originalTaskId);
             if (!outputDir.exists()) {
                 outputDir.mkdirs();
             }

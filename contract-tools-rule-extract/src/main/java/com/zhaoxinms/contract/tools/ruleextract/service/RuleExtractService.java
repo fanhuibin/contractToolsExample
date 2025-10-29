@@ -141,14 +141,16 @@ public class RuleExtractService {
             // 保存OCR文本和结果路径
             task = storage.load("task", taskId, RuleExtractTaskModel.class);
             
-            // 保存OCR文本到文件
+            // 保存OCR文本到任务的ocr-output目录
             try {
-                String ocrTextDir = storage.getDataRoot() + File.separator + "ocr-texts";
-                FileUtil.mkdir(ocrTextDir);
-                String ocrTextPath = ocrTextDir + File.separator + taskId + ".txt";
+                File ocrOutputDir = storage.getOcrOutputDir(taskId);
+                if (!ocrOutputDir.exists()) {
+                    ocrOutputDir.mkdirs();
+                }
+                String ocrTextPath = ocrOutputDir.getAbsolutePath() + File.separator + "ocr_text.txt";
                 FileUtil.writeUtf8String(ocrText, ocrTextPath);
                 task.setOcrResultPath(ocrTextPath);
-                log.info("保存OCR文本: {}", ocrTextPath);
+                log.info("保存OCR文本到任务目录: {}", ocrTextPath);
             } catch (Exception e) {
                 log.warn("保存OCR文本失败: {}", e.getMessage());
             }

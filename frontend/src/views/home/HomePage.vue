@@ -3,9 +3,12 @@
     <!-- 英雄区域 -->
     <div class="hero-section">
       <div class="hero-content">
-        <h1 class="hero-title">肇新科技合同组件</h1>
-                 <p class="hero-subtitle">智能合同处理引擎，助力企业数字化转型，提升合同管理效率</p>
-                 
+        <h1 class="hero-title">肇新合同组件库</h1>
+        <p class="hero-subtitle">
+          集成深度学习版面分析、自然语言处理与规则引擎等核心技术，
+          提供文档抽取、智能比对、合同合成、结构化解析等全栈文档处理能力，
+          助力企业实现文档自动化与智能化管理
+        </p>
       </div>
              <div class="hero-image">
          <img src="/images/imgi_3_theme-index-blue.c38b733.png" alt="合同工具集" />
@@ -28,7 +31,17 @@
       </div>
     </div>
 
-    
+    <!-- 页脚版权区域 -->
+    <div class="footer-section">
+      <div class="footer-content">
+        <p class="copyright">© 2025 肇新科技. 保留所有权利.</p>
+        <div class="footer-links">
+          <a href="https://zhaoxinms.com" target="_blank" class="footer-link">官方网站</a>
+          <span class="divider">|</span>
+          <a @click="openDocCenter" class="footer-link">文档中心</a>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -46,35 +59,35 @@ const router = useRouter()
 const services = ref([
   {
     title: '智能文档抽取',
-    description: '采用版面分析、文档检索与规则引擎技术，精准定位关键信息，支持自定义模板快速抽取。',
+    description: '融合深度学习版面分析、语义理解与规则引擎，实现关键信息精准定位与结构化抽取，支持自定义抽取模板与多格式文档解析。',
     image: '/images/contract-extract.webp',
     button_text: '进入功能',
     link: '/rule-extract'
   },
   {
     title: '智能文档比对',
-    description: '智能比对两份文档差异，精准定位修改位置，支持可视化标注与一键导出比对报告。',
+    description: '基于文本语义分析与差异检测算法，实现文档逐字逐句智能比对，支持可视化差异标注、版本追溯与比对报告导出。',
     image: '/images/ocr-compare.webp',
     button_text: '进入功能',
     link: '/gpu-ocr-compare'
   },
   {
     title: '智能合同合成',
-    description: '基于模板的SDT占位符自动填充，快速生成标准合同。',
+    description: '采用模板引擎与变量映射技术，通过SDT占位符自动填充实现合同快速生成，支持多模板管理与批量合成。',
     image: '/images/contract-compose.webp',
     button_text: '进入功能',
     link: '/templates'
   },
   {
     title: '智能文档解析',
-    description: 'GPU加速OCR识别技术，精准提取文档内容，支持页眉页脚过滤与图文对照显示。',
+    description: '运用GPU并行计算加速OCR识别，结合版面分析与文本后处理，实现高精度文档内容提取，支持图文混排与结构化输出。',
     image: '/images/auto-fulfillment.webp',
     button_text: '进入功能',
     link: '/ocr-extract'
   },
   {
     title: '文档在线编辑',
-    description: '上传、管理和在线编辑文档文件，基于OnlyOffice支持Word、Excel、PPT等多种格式的在线编辑与协作。',
+    description: '提供在线文档协作编辑能力，支持Word、Excel、PPT等多种格式的实时编辑、版本管理与多人协同。',
     image: '/images/contract-compose.webp',
     button_text: '进入功能',
     link: '/onlyoffice'
@@ -91,7 +104,10 @@ const handleServiceAction = (service: any) => {
   router.push(service.link)
 }
 
-
+// 打开文档中心
+const openDocCenter = () => {
+  window.open('/doc-center', '_blank')
+}
 </script>
 
 <style scoped>
@@ -170,6 +186,49 @@ const handleServiceAction = (service: any) => {
 }
 
 /* 特色功能区域已移除 */
+
+/* 页脚版权区域 */
+.footer-section {
+  margin-top: var(--zx-spacing-5xl);
+  padding: var(--zx-spacing-4xl) 0;
+  border-top: 1px solid var(--zx-border-lighter);
+}
+
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--zx-spacing-lg);
+}
+
+.copyright {
+  margin: 0;
+  font-size: var(--zx-font-sm);
+  color: var(--zx-text-secondary);
+}
+
+.footer-links {
+  display: flex;
+  align-items: center;
+  gap: var(--zx-spacing-md);
+}
+
+.footer-link {
+  font-size: var(--zx-font-sm);
+  color: var(--zx-text-regular);
+  text-decoration: none;
+  cursor: pointer;
+  transition: color var(--zx-transition-base);
+}
+
+.footer-link:hover {
+  color: var(--zx-primary);
+}
+
+.divider {
+  color: var(--zx-text-placeholder);
+  font-size: var(--zx-font-sm);
+}
 
 /* 响应式设计 */
 @media (max-width: 768px) {

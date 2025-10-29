@@ -50,13 +50,6 @@
         <!-- <el-button type="warning" @click="debugDialogVisible = true">调试模式</el-button> -->
       </el-form>
 
-      <el-alert
-        title="肇新智能文档比对，智能比对文档差异，精准定位每一处修改。支持可视化标注、差异导航与导出比对报告，广泛应用于合同审查、文档版本管理、招投标文档核对等场景。"
-        type="success"
-        show-icon
-        :closable="false"
-        class="mt12"
-      />
     </el-card>
 
     <!-- 进度显示卡片 -->

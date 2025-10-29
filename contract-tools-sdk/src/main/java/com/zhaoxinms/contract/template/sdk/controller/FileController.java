@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import com.zhaoxinms.contract.tools.api.common.ApiResponse;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
@@ -160,10 +161,19 @@ public class FileController {
     }
 
     @GetMapping("/list")
-    @ApiOperation("获取所有文件列表")
-    public ApiResponse<List<FileInfo>> getFileList() {
+    @ApiOperation("获取文件列表")
+    public ApiResponse<List<FileInfo>> getFileList(
+            @ApiParam(value = "模块名称（可选）", required = false) 
+            @RequestParam(required = false) String module) {
         try {
-            List<FileInfo> files = fileInfoService.getAllFiles();
+            List<FileInfo> files;
+            if (module != null && !module.isEmpty()) {
+                // 按模块过滤
+                files = fileInfoService.getFilesByModule(module);
+            } else {
+                // 返回所有文件
+                files = fileInfoService.getAllFiles();
+            }
             return ApiResponse.success(files);
         } catch (Exception e) {
             return ApiResponse.<List<FileInfo>>serverError().errorDetail("获取文件列表失败：" + e.getMessage());
@@ -230,9 +240,10 @@ public class FileController {
                 return ApiResponse.<FileInfo>serverError().errorDetail("源文件不存在于磁盘");
             }
             
-            // 创建副本文件（保存到files子目录）
+            // 创建副本文件（保存到files子目录，使用年月路径）
+            String yearMonthPath = FileStorageUtils.getYearMonthPath();
             Path uploadRoot = Paths.get(uploadRootPath).toAbsolutePath().normalize();
-            Path uploadDir = uploadRoot.resolve("files");
+            Path uploadDir = uploadRoot.resolve("files").resolve(yearMonthPath);
             Files.createDirectories(uploadDir);
             
             String originalName = sourceFileInfo.getOriginalName();

@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "肇新合同工具集 API",
+    "name": "肇新合同组件库 API",
     "_postman_id": "zxcm-contract-tools-2025",
     "description": "肇新合同管理系统完整API集合\n\n## 使用说明\n\n1. 导入此Collection到Postman\n2. 配置环境变量（见下方）\n3. 开始测试\n\n## 环境变量\n\n- `base_url`: API基础URL（如：https://your-domain.com）\n\n## 联系方式\n\n- 官网：https://zhaoxinms.com\n- 电话：18306806281",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"

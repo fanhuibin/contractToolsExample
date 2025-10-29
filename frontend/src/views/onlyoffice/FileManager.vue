@@ -5,6 +5,10 @@
         <div class="card-header">
           <span>文档文件管理</span>
           <el-space>
+            <el-button @click="goBack">
+              <el-icon><Back /></el-icon>
+              返回编辑页面
+            </el-button>
             <el-tooltip content="刷新列表">
               <el-button 
                 circle 
@@ -190,6 +194,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { 
   Refresh, 
@@ -200,12 +205,15 @@ import {
   Download, 
   Delete,
   Document,
-  DocumentCopy
+  DocumentCopy,
+  Back
 } from '@element-plus/icons-vue'
 import { getFileList, deleteFile, type FileInfo } from '@/api/file'
 import { downloadFile } from '@/api/onlyoffice'
 import { getToken } from '@/utils/auth'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
+
+const router = useRouter()
 
 // 响应式数据
 const loading = ref(false)
@@ -249,7 +257,8 @@ onMounted(() => {
 const loadFileList = async () => {
   loading.value = true
   try {
-    const response = await getFileList()
+    // 只获取 onlyoffice-demo 模块的文件
+    const response = await getFileList({ module: 'onlyoffice-demo' })
     if (response.data.code === 200) {
       fileList.value = response.data.data || []
     } else {
@@ -265,6 +274,10 @@ const loadFileList = async () => {
 const refreshFileList = () => {
   searchKeyword.value = ''
   loadFileList()
+}
+
+const goBack = () => {
+  router.push('/onlyoffice')
 }
 
 const beforeUpload = (file: File) => {

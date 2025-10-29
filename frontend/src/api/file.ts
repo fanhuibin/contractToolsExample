@@ -19,11 +19,13 @@ export interface FileInfo {
 
 /**
  * 获取文件列表
+ * @param params 查询参数，可选 module 字段用于过滤模块
  */
-export function getFileList() {
+export function getFileList(params?: { module?: string }) {
   return request({
     url: '/file/list',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
