@@ -7,7 +7,6 @@ import com.zhaoxinms.contract.tools.auth.model.LicenseValidationResult;
 import com.zhaoxinms.contract.tools.auth.service.LicenseService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.ApplicationListener;
 import org.springframework.core.io.Resource;
@@ -31,14 +30,10 @@ import java.util.Set;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "zhaoxin.auth", name = "enabled", havingValue = "true", matchIfMissing = false)
 public class LicenseStartupListener implements ApplicationListener<ApplicationReadyEvent> {
 
     @Autowired
     private LicenseService licenseService;
-    
-    @Autowired
-    private AuthProperties authProperties;
     
     @Autowired
     private ResourceLoader resourceLoader;
@@ -54,20 +49,9 @@ public class LicenseStartupListener implements ApplicationListener<ApplicationRe
         log.info("========================================");
         
         try {
-            String publicKeyPath = authProperties.getSignature().getPublicKeyPath();
-            
-            // 验证公钥路径配置
-            if (publicKeyPath == null || publicKeyPath.trim().isEmpty()) {
-                String errorMsg = "【致命错误】公钥路径未配置（zhaoxin.auth.signature.public-key-path），系统无法启动";
-                log.error(errorMsg);
-                throw new IllegalStateException(errorMsg);
-            }
-            
-            if (!publicKeyPath.startsWith("classpath:")) {
-                String errorMsg = "【致命错误】出于安全考虑，公钥只能从classpath加载（当前配置: " + publicKeyPath + "），系统无法启动";
-                log.error(errorMsg);
-                throw new IllegalStateException(errorMsg);
-            }
+            // 使用硬编码的公钥路径
+            String publicKeyPath = "classpath:" + AuthProperties.PUBLIC_KEY_PATH;
+            log.info("公钥文件路径（已硬编码）: {}", publicKeyPath);
             
             // 验证公钥文件存在
             Resource publicKeyResource = resourceLoader.getResource(publicKeyPath);

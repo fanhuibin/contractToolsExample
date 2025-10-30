@@ -2,15 +2,11 @@ package com.zhaoxinms.contract.tools.auth.service;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.security.PublicKey;
-import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
@@ -31,15 +27,12 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * License服务类 - 提供完整的License验证和管理功能
+ * <p>授权模块强制启用，不可禁用</p>
  */
 @Slf4j
 @Service
-@ConditionalOnProperty(prefix = "zhaoxin.auth", name = "enabled", havingValue = "true", matchIfMissing = false)
 public class LicenseService {
 
-    @Autowired
-    private AuthProperties authProperties;
-    
     @Autowired
     private ResourceLoader resourceLoader;
     
@@ -55,11 +48,10 @@ public class LicenseService {
      */
     public LicenseValidationResult validateLicense() {
         try {
-            // 读取License文件
-            String licenseFilePath = authProperties.getLicense().getFilePath();
-            Resource resource = loadResource(licenseFilePath);
+            // 读取License文件（路径已硬编码）
+            Resource resource = loadResource(AuthProperties.LICENSE_FILE_PATH);
             if (resource == null || !resource.exists()) {
-                return LicenseValidationResult.failure("License文件不存在: " + licenseFilePath);
+                return LicenseValidationResult.failure("License文件不存在: " + AuthProperties.LICENSE_FILE_PATH);
             }
             
             String licenseContent;
@@ -111,10 +103,6 @@ public class LicenseService {
      * 检查模块权限
      */
     public boolean hasModulePermission(ModuleType moduleType) {
-        if (!authProperties.isEnabled()) {
-            return true; // 授权模块未启用时，允许所有功能
-        }
-        
         LicenseValidationResult result = validateLicense();
         if (!result.isValid()) {
             LoggerHelper.warn("License验证失败: " + result.getErrorMessage());
@@ -147,15 +135,6 @@ public class LicenseService {
      * 获取License信息
      */
     public LicenseInfo getLicenseInfo() {
-        if (!authProperties.isEnabled()) {
-            // 返回无限制的License信息
-            LicenseInfo unlimited = new LicenseInfo();
-            unlimited.setLicenseCode("UNLIMITED");
-            unlimited.setStartDate(LocalDateTime.now().minusYears(1));
-            unlimited.setExpireDate(LocalDateTime.now().plusYears(100));
-            return unlimited;
-        }
-        
         LicenseValidationResult result = validateLicense();
         return result.isValid() ? result.getLicenseInfo() : null;
     }
@@ -164,10 +143,6 @@ public class LicenseService {
      * 验证License是否有效
      */
     public boolean isLicenseValid() {
-        if (!authProperties.isEnabled()) {
-            return true;
-        }
-        
         return validateLicense().isValid();
     }
 
@@ -222,54 +197,47 @@ public class LicenseService {
      */
     private boolean verifySignature(String data, String signature) {
         try {
-            String publicKeyStr = authProperties.getSignature().getPublicKey();
-            if (CommonUtils.isEmpty(publicKeyStr)) {
-                // 尝试从文件读取公钥（仅支持 classpath 加载以提高安全性）
-                String publicKeyPath = authProperties.getSignature().getPublicKeyPath();
-                
-                // 安全检查：只允许从 classpath 加载公钥
-                if (publicKeyPath == null || !publicKeyPath.startsWith("classpath:")) {
-                    String errorMsg = "【致命错误】出于安全考虑，公钥只能从classpath加载（需要以classpath:开头）: " + publicKeyPath;
-                    LoggerHelper.error(errorMsg);
-                    throw new RuntimeException(errorMsg);
-                }
-                
-                Resource publicKeyResource = loadPublicKeyFromClasspath(publicKeyPath);
-                if (publicKeyResource == null || !publicKeyResource.exists()) {
-                    String errorMsg = "【致命错误】公钥文件不存在: " + publicKeyPath + "，系统无法启动";
-                    LoggerHelper.error(errorMsg);
-                    throw new RuntimeException(errorMsg);
-                }
-                
-                try (InputStream inputStream = publicKeyResource.getInputStream()) {
-                    publicKeyStr = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
-                    log.info("从classpath加载公钥: {}", publicKeyPath);
-                    
-                    // 验证公钥指纹（从classpath加载）- 强制验证
-                    String expectedFingerprint = loadPublicKeyFingerprint(publicKeyPath);
-                    if (CommonUtils.isEmpty(expectedFingerprint)) {
-                        String errorMsg = "【致命错误】公钥指纹文件不存在: " + publicKeyPath + ".fingerprint，系统无法启动";
-                        LoggerHelper.error(errorMsg);
-                        LoggerHelper.error("请确保以下文件存在：");
-                        LoggerHelper.error("  1. " + publicKeyPath);
-                        LoggerHelper.error("  2. " + publicKeyPath + ".fingerprint");
-                        throw new RuntimeException(errorMsg);
-                    }
-                    
-                    String currentFingerprint = calculateFingerprint(publicKeyStr);
-                    if (!expectedFingerprint.equals(currentFingerprint)) {
-                        String errorMsg = "【致命错误】公钥指纹验证失败！公钥文件已被篡改，系统拒绝启动";
-                        LoggerHelper.error(errorMsg);
-                        LoggerHelper.error("期望指纹: " + expectedFingerprint);
-                        LoggerHelper.error("实际指纹: " + currentFingerprint);
-                        LoggerHelper.error("公钥文件可能被非法修改，请立即检查系统安全性！");
-                        throw new RuntimeException(errorMsg);
-                    }
-                    
-                    log.info("✓ 公钥指纹验证通过");
-                }
+            // 从文件读取公钥（路径已硬编码，仅支持 classpath 加载以提高安全性）
+            String publicKeyPath = "classpath:" + AuthProperties.PUBLIC_KEY_PATH;
+            
+            Resource publicKeyResource = loadPublicKeyFromClasspath(publicKeyPath);
+            if (publicKeyResource == null || !publicKeyResource.exists()) {
+                String errorMsg = "【致命错误】公钥文件不存在: " + publicKeyPath + "，系统无法启动";
+                LoggerHelper.error(errorMsg);
+                throw new RuntimeException(errorMsg);
             }
             
+            // 读取公钥内容
+            String publicKeyStr;
+            try (InputStream inputStream = publicKeyResource.getInputStream()) {
+                publicKeyStr = StreamUtils.copyToString(inputStream, StandardCharsets.UTF_8);
+            }
+            log.info("从classpath加载公钥: {}", publicKeyPath);
+            
+            // 验证公钥指纹（从classpath加载）- 强制验证
+            String expectedFingerprint = loadPublicKeyFingerprint(publicKeyPath);
+            if (CommonUtils.isEmpty(expectedFingerprint)) {
+                String errorMsg = "【致命错误】公钥指纹文件不存在: " + publicKeyPath + ".fingerprint，系统无法启动";
+                LoggerHelper.error(errorMsg);
+                LoggerHelper.error("请确保以下文件存在：");
+                LoggerHelper.error("  1. " + publicKeyPath);
+                LoggerHelper.error("  2. " + publicKeyPath + ".fingerprint");
+                throw new RuntimeException(errorMsg);
+            }
+            
+            String currentFingerprint = calculateFingerprint(publicKeyStr);
+            if (!expectedFingerprint.equals(currentFingerprint)) {
+                String errorMsg = "【致命错误】公钥指纹验证失败！公钥文件已被篡改，系统拒绝启动";
+                LoggerHelper.error(errorMsg);
+                LoggerHelper.error("期望指纹: " + expectedFingerprint);
+                LoggerHelper.error("实际指纹: " + currentFingerprint);
+                LoggerHelper.error("公钥文件可能被非法修改，请立即检查系统安全性！");
+                throw new RuntimeException(errorMsg);
+            }
+            
+            log.info("✓ 公钥指纹验证通过");
+            
+            // 验证签名
             PublicKey publicKey = SignatureUtils.stringToPublicKey(publicKeyStr);
             return SignatureUtils.verify(data, signature, publicKey);
             

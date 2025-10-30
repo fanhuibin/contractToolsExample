@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,14 +36,10 @@ import io.swagger.annotations.ApiParam;
 @Api(tags = "授权管理")
 @RestController
 @RequestMapping("/api/auth")
-@ConditionalOnProperty(prefix = "zhaoxin.auth", name = "enabled", havingValue = "true", matchIfMissing = false)
 public class LicenseController {
 
     @Autowired
     private LicenseService licenseService;
-    
-    @Autowired
-    private AuthProperties authProperties;
 
     /**
      * 获取授权信息
@@ -195,8 +190,9 @@ public class LicenseController {
     public ApiResponse<Map<String, Object>> getLicenseDetails() {
         try {
             LicenseReader reader = new LicenseReader();
-            String licenseFilePath = authProperties.getLicense().getFilePath();
-            String publicKeyPath = authProperties.getSignature().getPublicKeyPath();
+            // 使用硬编码的路径
+            String licenseFilePath = AuthProperties.LICENSE_FILE_PATH;
+            String publicKeyPath = AuthProperties.PUBLIC_KEY_PATH;
             
             LicenseReadResult result = reader.readLicense(licenseFilePath, publicKeyPath);
             
