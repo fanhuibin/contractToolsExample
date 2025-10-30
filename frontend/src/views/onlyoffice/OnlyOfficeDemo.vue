@@ -3,7 +3,7 @@
     <el-card class="demo-header">
       <template #header>
         <div class="card-header">
-          <span>OnlyOffice 文档编辑器演示</span>
+          <span>文档在线编辑器演示</span>
           <el-space>
             <el-button 
               type="primary" 
@@ -83,7 +83,7 @@
            <el-col :span="6">
              <el-form-item label="更新文档密钥:">
                <el-tooltip 
-                 content="OnlyOffice有缓存机制，有时需要使用新的密钥来防止缓存问题。开启后会重新生成文档的唯一标识符。"
+                 content="文档编辑器有缓存机制，有时需要使用新的密钥来防止缓存问题。开启后会重新生成文档的唯一标识符。"
                  placement="top"
                >
                  <el-switch
@@ -122,10 +122,10 @@
           >
             <template #content>
               <div style="max-width: 300px; line-height: 1.6;">
-                <div style="font-weight: bold; margin-bottom: 8px;">OnlyOffice 文档密钥（onlyofficeKey）的作用：</div>
+                <div style="font-weight: bold; margin-bottom: 8px;">文档密钥（onlyofficeKey）的作用：</div>
                 <ul style="margin: 8px 0; padding-left: 16px;">
                   <li>作为文档的唯一标识符，用于区分不同的文档版本</li>
-                  <li>OnlyOffice 服务器会根据这个密钥进行缓存管理</li>
+                  <li>文档服务器会根据这个密钥进行缓存管理</li>
                   <li>当文档内容更新但密钥相同时，可能会遇到缓存问题</li>
                   <li>开启"更新文档密钥"后，每次加载都会生成新的密钥，确保获取最新内容</li>
                 </ul>
@@ -338,10 +338,10 @@ const checkHealth = async () => {
   healthChecking.value = true
   try {
     await healthCheck()
-    ElMessage.success('OnlyOffice 服务正常')
+    ElMessage.success('文档服务正常')
     addLog('success', '服务健康检查通过')
   } catch (error) {
-    ElMessage.error('OnlyOffice 服务异常: ' + error.message)
+    ElMessage.error('文档服务异常: ' + error.message)
     addLog('error', `服务健康检查失败: ${error.message}`)
   } finally {
     healthChecking.value = false

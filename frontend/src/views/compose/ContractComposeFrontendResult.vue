@@ -16,7 +16,7 @@
           <span style="font-size: 13px;">文档处理说明</span>
         </template>
         <div style="font-size: 12px; line-height: 1.6;">
-          OnlyOffice 文档保存需要服务器处理时间（约5-10秒）。如果下载的文档内容不是最新的，请稍等片刻后重新下载。
+          文档保存需要服务器处理时间（约5-10秒）。如果下载的文档内容不是最新的，请稍等片刻后重新下载。
         </div>
       </el-alert>
       

@@ -53,7 +53,7 @@
           <el-col :span="6">
             <el-form-item label="更新文档密钥:">
               <el-tooltip 
-                content="OnlyOffice有缓存机制，开启后会重新生成文档的唯一标识符，确保获取最新内容。"
+                content="文档编辑器有缓存机制，开启后会重新生成文档的唯一标识符，确保获取最新内容。"
                 placement="top"
               >
                 <el-switch

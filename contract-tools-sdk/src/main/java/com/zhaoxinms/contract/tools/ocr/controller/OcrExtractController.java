@@ -54,8 +54,8 @@ public class OcrExtractController {
     public ApiResponse<Map<String, Object>> uploadFile(
             @ApiParam(value = "PDF文件", required = true) @RequestParam("file") MultipartFile file,
             @ApiParam(value = "是否忽略页眉页脚", example = "true") @RequestParam(value = "ignoreHeaderFooter", defaultValue = "true") Boolean ignoreHeaderFooter,
-            @ApiParam(value = "页眉高度百分比", example = "12.0") @RequestParam(value = "headerHeightPercent", defaultValue = "12.0") Double headerHeightPercent,
-            @ApiParam(value = "页脚高度百分比", example = "12.0") @RequestParam(value = "footerHeightPercent", defaultValue = "12.0") Double footerHeightPercent) throws Exception {
+            @ApiParam(value = "页眉高度百分比", example = "6.0") @RequestParam(value = "headerHeightPercent", defaultValue = "6.0") Double headerHeightPercent,
+            @ApiParam(value = "页脚高度百分比", example = "6.0") @RequestParam(value = "footerHeightPercent", defaultValue = "6.0") Double footerHeightPercent) throws Exception {
 
         log.info("接收到智能解析请求，文件: {}, 忽略页眉页脚: {}, 页眉高度: {}%, 页脚高度: {}%",
                 file.getOriginalFilename(), ignoreHeaderFooter, headerHeightPercent, footerHeightPercent);

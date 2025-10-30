@@ -356,10 +356,12 @@ public class LicenseService {
             String currentCpuSerial = serverInfos.getCPUSerial();
             String currentMainBoardSerial = serverInfos.getMainBoardSerial();
             
+            List<String> boundInfo = licenseInfo.getBoundHardwareInfo();
+            
             // 检查MAC地址
             if (currentMacAddresses != null) {
                 for (String mac : currentMacAddresses) {
-                    if (licenseInfo.getBoundHardwareInfo().contains(mac)) {
+                    if (containsHardwareInfo(boundInfo, "macAddress", mac)) {
                         return true;
                     }
                 }
@@ -367,13 +369,13 @@ public class LicenseService {
             
             // 检查CPU序列号
             if (CommonUtils.isNotEmpty(currentCpuSerial) && 
-                licenseInfo.getBoundHardwareInfo().contains(currentCpuSerial)) {
+                containsHardwareInfo(boundInfo, "cpuSerial", currentCpuSerial)) {
                 return true;
             }
             
             // 检查主板序列号
             if (CommonUtils.isNotEmpty(currentMainBoardSerial) && 
-                licenseInfo.getBoundHardwareInfo().contains(currentMainBoardSerial)) {
+                containsHardwareInfo(boundInfo, "mainBoardSerial", currentMainBoardSerial)) {
                 return true;
             }
             
@@ -383,5 +385,28 @@ public class LicenseService {
             LoggerHelper.error("验证硬件绑定时发生错误", e);
             return false;
         }
+    }
+    
+    /**
+     * 检查硬件信息列表中是否包含指定的硬件信息
+     * 支持两种格式：
+     * 1. 直接值：value
+     * 2. 带前缀：prefix:value
+     * 
+     * @param boundInfo 授权文件中的硬件信息列表
+     * @param prefix 硬件信息前缀（如 macAddress, cpuSerial, mainBoardSerial）
+     * @param value 要匹配的硬件信息值
+     * @return 是否匹配
+     */
+    private boolean containsHardwareInfo(List<String> boundInfo, String prefix, String value) {
+        if (boundInfo == null || value == null) {
+            return false;
+        }
+        
+        // 构建带前缀的格式
+        String withPrefix = prefix + ":" + value;
+        
+        // 检查是否包含（支持带前缀和不带前缀两种格式）
+        return boundInfo.contains(value) || boundInfo.contains(withPrefix);
     }
 }

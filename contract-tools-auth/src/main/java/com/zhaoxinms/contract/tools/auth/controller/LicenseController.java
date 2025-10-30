@@ -51,16 +51,37 @@ public class LicenseController {
      */
     @GetMapping("/license-info")
     @ApiOperation(value = "获取授权信息", notes = "获取当前系统的授权许可信息")
-    public ApiResponse<LicenseInfo> getLicenseInfo() {
+    public ApiResponse<Map<String, Object>> getLicenseInfo() {
         try {
             LicenseInfo info = licenseService.getLicenseInfo();
             if (info != null) {
-                return ApiResponse.success(info);
+                Map<String, Object> result = new HashMap<>();
+                result.put("licenseCode", info.getLicenseCode());
+                result.put("companyName", info.getCompanyName());
+                result.put("contactPerson", info.getContactPerson());
+                result.put("contactPhone", info.getContactPhone());
+                result.put("startDate", info.getStartDate());
+                result.put("expireDate", info.getExpireDate());
+                result.put("maxUsers", info.getMaxUsers());
+                result.put("hardwareBound", info.getHardwareBound());
+                result.put("authorizedModules", info.getAuthorizedModules());
+                
+                // 计算硬件匹配状态
+                boolean hardwareMatched = false;
+                if (info.getHardwareBound() != null && info.getHardwareBound()) {
+                    hardwareMatched = validateHardwareMatch(info);
+                } else {
+                    // 未绑定硬件时视为匹配
+                    hardwareMatched = true;
+                }
+                result.put("hardwareMatched", hardwareMatched);
+                
+                return ApiResponse.success(result);
             } else {
-                return ApiResponse.<LicenseInfo>businessError("未找到有效的授权信息");
+                return ApiResponse.<Map<String, Object>>businessError("未找到有效的授权信息");
             }
         } catch (Exception e) {
-            return ApiResponse.<LicenseInfo>serverError().errorDetail(e.getMessage());
+            return ApiResponse.<Map<String, Object>>serverError().errorDetail(e.getMessage());
         }
     }
 
@@ -268,10 +289,27 @@ public class LicenseController {
             boolean matched = false;
             List<String> boundHardware = licenseInfo.getBoundHardwareInfo();
             if (boundHardware != null && !boundHardware.isEmpty()) {
-                for (String hardware : currentHardware) {
-                    if (boundHardware.contains(hardware)) {
+                // 检查MAC地址
+                if (macAddresses != null) {
+                    for (String mac : macAddresses) {
+                        if (containsHardwareInfo(boundHardware, "macAddress", mac)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // 检查CPU序列号
+                if (!matched && cpuSerial != null && !cpuSerial.trim().isEmpty()) {
+                    if (containsHardwareInfo(boundHardware, "cpuSerial", cpuSerial)) {
                         matched = true;
-                        break;
+                    }
+                }
+                
+                // 检查主板序列号
+                if (!matched && mainBoardSerial != null && !mainBoardSerial.trim().isEmpty()) {
+                    if (containsHardwareInfo(boundHardware, "mainBoardSerial", mainBoardSerial)) {
+                        matched = true;
                     }
                 }
             }
@@ -287,5 +325,78 @@ public class LicenseController {
         } catch (Exception e) {
             return ApiResponse.<Map<String, Object>>serverError().errorDetail(e.getMessage());
         }
+    }
+    
+    /**
+     * 验证硬件是否匹配
+     * 
+     * @param licenseInfo 授权信息
+     * @return 是否匹配
+     */
+    private boolean validateHardwareMatch(LicenseInfo licenseInfo) {
+        try {
+            if (licenseInfo.getBoundHardwareInfo() == null || licenseInfo.getBoundHardwareInfo().isEmpty()) {
+                return true; // 没有绑定硬件信息时通过验证
+            }
+            
+            // 获取当前硬件信息
+            com.zhaoxinms.contract.tools.auth.core.service.AServerInfos serverInfos = 
+                com.zhaoxinms.contract.tools.auth.core.service.AServerInfos.getServer(null);
+            
+            List<String> macAddresses = serverInfos.getMacAddress();
+            String cpuSerial = serverInfos.getCPUSerial();
+            String mainBoardSerial = serverInfos.getMainBoardSerial();
+            List<String> boundHardware = licenseInfo.getBoundHardwareInfo();
+            
+            // 检查MAC地址
+            if (macAddresses != null) {
+                for (String mac : macAddresses) {
+                    if (containsHardwareInfo(boundHardware, "macAddress", mac)) {
+                        return true;
+                    }
+                }
+            }
+            
+            // 检查CPU序列号
+            if (cpuSerial != null && !cpuSerial.trim().isEmpty()) {
+                if (containsHardwareInfo(boundHardware, "cpuSerial", cpuSerial)) {
+                    return true;
+                }
+            }
+            
+            // 检查主板序列号
+            if (mainBoardSerial != null && !mainBoardSerial.trim().isEmpty()) {
+                if (containsHardwareInfo(boundHardware, "mainBoardSerial", mainBoardSerial)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * 检查硬件信息列表中是否包含指定的硬件信息
+     * 支持两种格式：
+     * 1. 直接值：value
+     * 2. 带前缀：prefix:value
+     * 
+     * @param boundInfo 授权文件中的硬件信息列表
+     * @param prefix 硬件信息前缀（如 macAddress, cpuSerial, mainBoardSerial）
+     * @param value 要匹配的硬件信息值
+     * @return 是否匹配
+     */
+    private boolean containsHardwareInfo(List<String> boundInfo, String prefix, String value) {
+        if (boundInfo == null || value == null) {
+            return false;
+        }
+        
+        // 构建带前缀的格式
+        String withPrefix = prefix + ":" + value;
+        
+        // 检查是否包含（支持带前缀和不带前缀两种格式）
+        return boundInfo.contains(value) || boundInfo.contains(withPrefix);
     }
 }

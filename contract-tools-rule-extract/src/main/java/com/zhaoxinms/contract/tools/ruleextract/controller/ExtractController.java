@@ -1,6 +1,8 @@
 package com.zhaoxinms.contract.tools.ruleextract.controller;
 
 import com.alibaba.fastjson2.JSONObject;
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleExtractTaskModel;
 import com.zhaoxinms.contract.tools.ruleextract.service.RuleExtractService;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/rule-extract/extract")
 @RequiredArgsConstructor
+@RequireFeature(module = ModuleType.SMART_DOCUMENT_EXTRACTION, message = "智能文档抽取功能需要授权")
 public class ExtractController {
 
     private final RuleExtractService extractService;
@@ -43,8 +46,8 @@ public class ExtractController {
             @RequestParam("templateId") String templateId,
             @RequestParam(value = "ocrProvider", required = false) String ocrProvider,
             @RequestParam(value = "ignoreHeaderFooter", required = false, defaultValue = "true") boolean ignoreHeaderFooter,
-            @RequestParam(value = "headerHeightPercent", required = false, defaultValue = "12.0") double headerHeightPercent,
-            @RequestParam(value = "footerHeightPercent", required = false, defaultValue = "12.0") double footerHeightPercent) {
+            @RequestParam(value = "headerHeightPercent", required = false, defaultValue = "6.0") double headerHeightPercent,
+            @RequestParam(value = "footerHeightPercent", required = false, defaultValue = "6.0") double footerHeightPercent) {
         try {
             log.info("收到规则提取请求: file={}, templateId={}, ignoreHeaderFooter={}", 
                 file.getOriginalFilename(), templateId, ignoreHeaderFooter);

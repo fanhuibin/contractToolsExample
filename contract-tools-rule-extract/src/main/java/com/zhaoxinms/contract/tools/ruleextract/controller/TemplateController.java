@@ -1,5 +1,7 @@
 package com.zhaoxinms.contract.tools.ruleextract.controller;
 
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.ruleextract.model.FieldDefinitionModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleTemplateModel;
 import com.zhaoxinms.contract.tools.ruleextract.service.TemplateService;
@@ -21,6 +23,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/rule-extract/templates")
 @RequiredArgsConstructor
+@RequireFeature(module = ModuleType.SMART_DOCUMENT_EXTRACTION, message = "智能文档抽取功能需要授权")
 public class TemplateController {
 
     private final TemplateService templateService;

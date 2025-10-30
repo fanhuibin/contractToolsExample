@@ -207,15 +207,15 @@
           <div class="setting-hint">忽略页眉页脚位置</div>
         </el-form-item>
 
-        <!-- 页眉页脚高度设置已隐藏，固定使用默认值12% -->
-        <!-- <el-form-item v-if="settings.ignoreHeaderFooter" label="页眉高度(%)">
+        <!-- 页眉页脚高度设置 -->
+        <el-form-item v-if="settings.ignoreHeaderFooter" label="页眉高度(%)">
           <el-input-number v-model="settings.headerHeightPercent" :min="0" :max="50" :step="0.5" />
-          <div class="setting-hint">文档顶部多少百分比的区域视为页眉，默认12%</div>
+          <div class="setting-hint">文档顶部多少百分比的区域视为页眉，默认6%</div>
         </el-form-item>
         <el-form-item v-if="settings.ignoreHeaderFooter" label="页脚高度(%)">
           <el-input-number v-model="settings.footerHeightPercent" :min="0" :max="50" :step="0.5" />
-          <div class="setting-hint">文档底部多少百分比的区域视为页脚，默认12%</div>
-        </el-form-item> -->
+          <div class="setting-hint">文档底部多少百分比的区域视为页脚，默认6%</div>
+        </el-form-item>
 
         <!-- 以下选项暂未实现，待后端开发完成后恢复 -->
         <!-- <el-form-item label="忽略大小写">
@@ -382,8 +382,8 @@ const watermarkStrengthOptions: WatermarkStrengthOption[] = [
 const settingsOpen = ref(false)
 const settings = reactive({
   ignoreHeaderFooter: true,
-  headerHeightPercent: 12,
-  footerHeightPercent: 12,
+  headerHeightPercent: 6,
+  footerHeightPercent: 6,
   ignoreCase: true,
   ignoredSymbols: '_＿',
   ignoreSpaces: false,

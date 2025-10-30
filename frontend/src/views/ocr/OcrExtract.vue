@@ -221,8 +221,8 @@ const error = ref<string>('')
 // OCR选项
 const ocrOptions = reactive({
   ignoreHeaderFooter: true,
-  headerHeightPercent: 12,
-  footerHeightPercent: 12
+  headerHeightPercent: 6,
+  footerHeightPercent: 6
 })
 
 // 结果数据

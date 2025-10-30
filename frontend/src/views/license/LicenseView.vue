@@ -85,7 +85,7 @@
       <el-col :span="6">
         <el-card shadow="hover">
           <div class="status-item">
-            <el-icon class="status-icon info"><Calendar /></el-icon>
+            <el-icon :class="remainingDays === -1 ? 'status-icon success' : 'status-icon info'"><Calendar /></el-icon>
             <div class="status-text">
               <div class="status-label">授权到期</div>
               <div class="status-value">{{ formatDate(licenseInfo?.expireDate) }}</div>
@@ -96,10 +96,10 @@
       <el-col :span="6">
         <el-card shadow="hover">
           <div class="status-item">
-            <el-icon class="status-icon warning"><Timer /></el-icon>
+            <el-icon :class="remainingDays === -1 ? 'status-icon success' : 'status-icon warning'"><Timer /></el-icon>
             <div class="status-text">
               <div class="status-label">剩余天数</div>
-              <div class="status-value">{{ remainingDays }} 天</div>
+              <div class="status-value">{{ remainingDays === -1 ? '永久' : `${remainingDays} 天` }}</div>
             </div>
           </div>
         </el-card>
@@ -320,6 +320,7 @@ interface LicenseInfo {
   hardwareBound: boolean
   authorizedModules: string[]
   maxUsers: number
+  hardwareMatched?: boolean  // 硬件匹配状态（由后端计算）
 }
 
 interface HardwareInfo {
@@ -368,13 +369,16 @@ const remainingDays = computed(() => {
     const now = new Date()
     const expire = new Date(licenseInfo.value.expireDate)
     const diff = expire.getTime() - now.getTime()
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+    const days = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+    // 如果剩余天数超过90年（约32850天），视为永久授权
+    return days > 32850 ? -1 : days
   } catch {
     return 0
   }
 })
 
 const isExpiringSoon = computed(() => {
+  // 永久授权（remainingDays === -1）不显示即将到期
   return remainingDays.value > 0 && remainingDays.value <= 30
 })
 
@@ -394,6 +398,14 @@ const formatDate = (dateStr: string | undefined | null) => {
   try {
     const date = new Date(dateStr)
     if (isNaN(date.getTime())) return '无效日期'
+    
+    // 检查是否为永久授权（99年或更久）
+    const now = new Date()
+    const yearsDiff = (date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24 * 365)
+    if (yearsDiff > 90) {
+      return '永久'
+    }
+    
     return date.toLocaleString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
@@ -436,7 +448,7 @@ const refreshLicenseInfo = async () => {
   
   try {
     await Promise.all([
-      fetchLicenseInfo(),
+      fetchLicenseInfo(),  // 此接口已包含硬件匹配状态
       fetchHardwareInfo(),
       fetchModulePermissions(),
       fetchSystemInfo()
@@ -462,6 +474,8 @@ const fetchLicenseInfo = async () => {
     // 统一使用标准响应格式：{code: 200, message: "...", data: {...}}
     if (response.data && response.data.code === 200) {
       licenseInfo.value = response.data.data
+      // 从后端返回的数据中读取硬件匹配状态
+      hardwareMatched.value = response.data.data.hardwareMatched ?? false
     } else {
       // 使用默认数据（不设置日期）
       licenseInfo.value = {
@@ -475,6 +489,7 @@ const fetchLicenseInfo = async () => {
         authorizedModules: [],
         maxUsers: 10
       }
+      hardwareMatched.value = false
     }
     
     // 验证授权状态
@@ -500,6 +515,7 @@ const fetchLicenseInfo = async () => {
       maxUsers: 1
     }
     licenseStatus.value.valid = false
+    hardwareMatched.value = false
   }
 }
 
