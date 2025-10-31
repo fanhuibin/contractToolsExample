@@ -4,6 +4,7 @@
       <template #header>
         <div class="card-title">
           <el-button 
+            v-if="!shouldHideBack"
             text 
             @click="handleBack"
             style="margin-right: 12px;"
@@ -335,9 +336,13 @@ import { extractObjectData } from '@/utils/response-helper'
 import CanvasViewer from '@/views/extract/components/CanvasViewer.vue'
 import TextViewer from '@/views/extract/components/TextViewer.vue'
 import request from '@/utils/request'
+import { useEmbedMode } from '@/composables/useEmbedMode'
 
 const route = useRoute()
 const router = useRouter()
+
+// 使用统一的嵌入模式管理
+const { shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
 
 const taskId = computed(() => route.params.taskId as string)
 const loading = ref(true)
@@ -469,7 +474,10 @@ const onImageError = () => {
 }
 
 const handleBack = () => {
-  router.push('/rule-extract')
+  embedHandleBack(() => {
+    // 默认的返回逻辑
+    router.push('/rule-extract')
+  })
 }
 
 const exportResult = () => {

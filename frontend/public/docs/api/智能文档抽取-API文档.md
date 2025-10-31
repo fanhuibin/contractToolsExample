@@ -4,6 +4,7 @@
 
 | 功能 | 方法 | 接口地址 | 描述 |
 |------|------|----------|------|
+| **获取模板列表** | GET | `/api/rule-extract/templates` | 获取抽取模板列表 |
 | **上传并抽取** | POST | `/api/rule-extract/extract/upload` | 上传文档并开始抽取 |
 | **查询任务状态** | GET | `/api/rule-extract/extract/status/{taskId}` | 查询任务执行状态 |
 | **查询抽取结果** | GET | `/api/rule-extract/extract/result/{taskId}` | 获取抽取结果数据 |
@@ -45,6 +46,186 @@
 - 📋 **发票数据录入**：发票号、金额、税额、购销方信息
 - 🆔 **证件信息识别**：身份证、营业执照等关键信息
 - 📊 **报表数据提取**：财务报表、统计表格等结构化数据
+
+---
+
+## 🎯 接口0: 获取模板列表
+
+### `GET /api/rule-extract/templates`
+
+**功能描述**: 获取所有可用的抽取模板列表
+
+**请求地址**
+```
+GET https://your-domain.com/api/rule-extract/templates
+```
+
+### 请求参数
+
+#### Query 参数
+
+| 参数名 | 类型 | 必需 | 默认值 | 描述 |
+|--------|------|------|--------|------|
+| `templateType` | string | ❌ | - | 模板类型过滤（如：contract, invoice, idcard） |
+| `status` | string | ❌ | - | 模板状态过滤（active/enabled/draft/disabled） |
+
+### 请求示例
+
+**Java 示例（使用 Spring RestTemplate）**
+```java
+import org.springframework.web.client.RestTemplate;
+import java.util.HashMap;
+import java.util.Map;
+
+RestTemplate restTemplate = new RestTemplate();
+String url = "https://your-domain.com/api/rule-extract/templates?status=active";
+
+Map<String, Object> response = restTemplate.getForObject(url, Map.class);
+System.out.println("模板列表: " + response.get("data"));
+```
+
+**cURL 示例**
+```bash
+curl -X GET "https://your-domain.com/api/rule-extract/templates?status=active" \
+  -H "X-API-Key: your-api-key"
+```
+
+**JavaScript 示例（使用 Axios）**
+```javascript
+const axios = require('axios');
+
+axios.get('https://your-domain.com/api/rule-extract/templates', {
+  params: {
+    status: 'active'
+  },
+  headers: {
+    'X-API-Key': 'your-api-key'
+  }
+}).then(response => {
+  console.log('模板列表:', response.data.data);
+});
+```
+
+### 响应格式
+
+**成功响应 (200)**
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": [
+    {
+      "id": "7086e0bb1d5046c88d94aaa004a65b83",
+      "templateName": "标准合同模板",
+      "templateCode": "CONTRACT_STANDARD_001",
+      "description": "适用于标准合同信息提取",
+      "status": "active",
+      "createdAt": "2025-10-22T17:21:29",
+      "updatedAt": "2025-10-23T10:15:00",
+      "fields": [
+        {
+          "fieldCode": "field_1",
+          "fieldName": "甲方主体名称",
+          "fieldType": "string",
+          "isRequired": false
+        },
+        {
+          "fieldCode": "field_2",
+          "fieldName": "合同金额",
+          "fieldType": "number",
+          "isRequired": true
+        }
+      ]
+    },
+    {
+      "id": "2094a6c365c04607ace3f2dc9bfd6d5e",
+      "templateName": "发票信息模板",
+      "templateCode": "INVOICE_001",
+      "description": "用于增值税发票信息提取",
+      "status": "active",
+      "createdAt": "2025-10-20T14:30:00",
+      "updatedAt": "2025-10-21T09:00:00",
+      "fields": [
+        {
+          "fieldCode": "invoice_no",
+          "fieldName": "发票号码",
+          "fieldType": "string",
+          "isRequired": true
+        },
+        {
+          "fieldCode": "invoice_amount",
+          "fieldName": "开票金额",
+          "fieldType": "number",
+          "isRequired": true
+        }
+      ]
+    }
+  ],
+  "timestamp": "2025-10-30T10:00:00Z"
+}
+```
+
+**失败响应 (500)**
+```json
+{
+  "code": 500,
+  "message": "查询模板列表失败: 数据库连接超时",
+  "timestamp": "2025-10-30T10:00:00Z"
+}
+```
+
+### 响应字段说明
+
+#### 模板对象 (Template)
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `id` | string | 模板唯一标识符 |
+| `templateName` | string | 模板名称 |
+| `templateCode` | string | 模板编码（业务标识） |
+| `description` | string | 模板描述 |
+| `status` | string | 模板状态（active=启用, draft=草稿, disabled=禁用） |
+| `createdAt` | string | 创建时间（ISO 8601格式） |
+| `updatedAt` | string | 更新时间（ISO 8601格式） |
+| `fields` | array | 字段定义列表 |
+
+#### 字段对象 (Field)
+
+| 字段 | 类型 | 描述 |
+|------|------|------|
+| `fieldCode` | string | 字段编码 |
+| `fieldName` | string | 字段名称（中文） |
+| `fieldType` | string | 字段类型（string/number/date/boolean） |
+| `isRequired` | boolean | 是否必填字段 |
+
+### 状态码说明
+
+| 状态码 | 描述 |
+|--------|------|
+| 200 | 成功获取模板列表 |
+| 500 | 服务器内部错误 |
+
+### 使用说明
+
+1. **推荐使用场景**：
+   - 在上传文档前，先获取可用模板列表供用户选择
+   - 定期同步模板列表以获取最新模板配置
+   - 根据业务类型过滤特定模板
+
+2. **模板状态说明**：
+   - `active`/`enabled`: 已启用的模板，可正常使用
+   - `draft`: 草稿状态，尚未发布
+   - `disabled`: 已禁用，不建议使用
+
+3. **性能建议**：
+   - 建议缓存模板列表，避免频繁请求
+   - 模板列表通常变化不频繁，可缓存15-30分钟
+   - 使用 `status=active` 过滤可减少返回数据量
+
+4. **集成建议**：
+   - 前端展示时，使用 `templateName` 显示给用户
+   - 提交任务时，使用 `id` 作为 `templateId` 参数
+   - 可通过 `templateCode` 实现业务逻辑判断
 
 ---
 

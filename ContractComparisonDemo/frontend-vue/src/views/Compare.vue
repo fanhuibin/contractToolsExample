@@ -53,7 +53,7 @@
                     <i class="fas fa-cloud-upload-alt"></i>
                   </div>
                   <p class="upload-text">点击或拖拽文件到此处</p>
-                  <p class="upload-hint">支持 PDF格式，最大 50MB</p>
+                  <p class="upload-hint">仅支持 PDF 格式，最大 50MB</p>
                 </div>
                 <div v-else class="upload-filled">
                   <div class="file-icon">
@@ -71,7 +71,7 @@
               <input 
                 ref="oldFileInput" 
                 type="file" 
-                accept=".pdf,.doc,.docx" 
+                accept=".pdf" 
                 @change="handleOldFileChange"
                 style="display: none"
               />
@@ -101,7 +101,7 @@
                     <i class="fas fa-cloud-upload-alt"></i>
                   </div>
                   <p class="upload-text">点击或拖拽文件到此处</p>
-                  <p class="upload-hint">支持 PDF格式，最大 50MB</p>
+                  <p class="upload-hint">仅支持 PDF 格式，最大 50MB</p>
                 </div>
                 <div v-else class="upload-filled">
                   <div class="file-icon">
@@ -119,7 +119,7 @@
               <input 
                 ref="newFileInput" 
                 type="file" 
-                accept=".pdf,.doc,.docx" 
+                accept=".pdf" 
                 @change="handleNewFileChange"
                 style="display: none"
               />
@@ -300,8 +300,6 @@ const router = useRouter()
 // 文件状态
 const oldFile = ref(null)
 const newFile = ref(null)
-const oldFileName = ref('') // 保存原始文件名
-const newFileName = ref('') // 保存原始文件名
 const dragOverOld = ref(false)
 const dragOverNew = ref(false)
 
@@ -370,10 +368,14 @@ const validateAndSetFile = (file, type) => {
     return
   }
   
-  // 验证文件类型
-  const validTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document']
-  if (!validTypes.includes(file.type)) {
-    alert('只支持 PDF 格式')
+  // 验证文件类型 - 仅支持 PDF
+  const validTypes = ['application/pdf']
+  const validExtensions = ['.pdf']
+  const fileName = file.name.toLowerCase()
+  const hasValidExtension = validExtensions.some(ext => fileName.endsWith(ext))
+  
+  if (!validTypes.includes(file.type) && !hasValidExtension) {
+    alert('仅支持 PDF 格式')
     return
   }
   
@@ -387,12 +389,10 @@ const validateAndSetFile = (file, type) => {
 // 移除文件
 const removeOldFile = () => {
   oldFile.value = null
-  oldFileName.value = ''
 }
 
 const removeNewFile = () => {
   newFile.value = null
-  newFileName.value = ''
 }
 
 // 格式化文件大小
@@ -419,35 +419,38 @@ const handleSubmit = async () => {
     
     console.log('📤 开始上传文件...')
     
+    // 保存原始文件名（从File对象直接获取）
+    const originalOldFileName = oldFile.value.name
+    const originalNewFileName = newFile.value.name
+    
     // 1. 上传旧文件
     progress.value = 5
     const oldFileResult = await api.uploadFile(oldFile.value)
     const oldFileUrl = oldFileResult.data.data.fileUrl
-    oldFileName.value = oldFileResult.data.data.originalName // 保存原始文件名
-    console.log('✅ 旧文件上传成功:', oldFileUrl, '原始文件名:', oldFileName.value)
+    console.log('✅ 旧文件上传成功:', oldFileUrl, '原始文件名:', originalOldFileName)
     
     // 2. 上传新文件
     progress.value = 15
     statusText.value = '正在上传新文件...'
     const newFileResult = await api.uploadFile(newFile.value)
     const newFileUrl = newFileResult.data.data.fileUrl
-    newFileName.value = newFileResult.data.data.originalName // 保存原始文件名
-    console.log('✅ 新文件上传成功:', newFileUrl, '原始文件名:', newFileName.value)
+    console.log('✅ 新文件上传成功:', newFileUrl, '原始文件名:', originalNewFileName)
     
-    // 3. 提交比对任务（传递文件URL和原始文件名）
+    // 3. 提交比对任务（传递文件URL和原始文件名到Demo后端）
     progress.value = 20
     statusText.value = '正在提交比对任务...'
     const result = await api.submitCompare(
       oldFileUrl, 
       newFileUrl, 
       removeWatermark.value,
-      oldFileName.value,
-      newFileName.value
+      originalOldFileName,
+      originalNewFileName
     )
     const taskId = result.data
     currentTaskId.value = taskId
     
     console.log('✅ 任务提交成功，taskId:', taskId)
+    console.log('📝 原始文件名已发送到后端: oldFileName={}, newFileName={}', originalOldFileName, originalNewFileName)
     
     // 4. 轮询任务状态
     statusText.value = '正在比对中...'
@@ -653,9 +656,9 @@ onMounted(() => {
 }
 
 .container-fluid {
-  max-width: 1400px;
+  max-width: 100%;
   margin: 0 auto;
-  padding: 0 30px;
+  padding: 0 40px;
 }
 
 /* 顶部导航栏 */
@@ -681,13 +684,14 @@ onMounted(() => {
 .logo-icon {
   width: 60px;
   height: 60px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 28px;
   color: white;
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.2);
 }
 
 .logo-text h1 {
@@ -708,12 +712,13 @@ onMounted(() => {
 .navbar-badge .badge-pro {
   display: inline-block;
   padding: 8px 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   border-radius: 50px;
   color: white;
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 1px;
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.3);
 }
 
 /* 主内容区 */
@@ -729,8 +734,9 @@ onMounted(() => {
 .history-card {
   background: white;
   border-radius: 24px;
-  padding: 40px;
+  padding: 48px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
 }
 
 .card-header-section {
@@ -751,13 +757,14 @@ onMounted(() => {
 .header-icon {
   width: 50px;
   height: 50px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
   color: white;
+  box-shadow: 0 2px 6px rgba(24, 144, 255, 0.2);
 }
 
 .header-text h2 {
@@ -798,7 +805,7 @@ onMounted(() => {
 }
 
 .upload-label i {
-  color: #667eea;
+  color: #1890ff;
 }
 
 .upload-zone {
@@ -816,13 +823,13 @@ onMounted(() => {
 }
 
 .upload-zone:hover {
-  border-color: #667eea;
-  background: #f8f9ff;
+  border-color: #1890ff;
+  background: #e6f7ff;
 }
 
 .upload-zone.drag-active {
-  border-color: #667eea;
-  background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+  border-color: #1890ff;
+  background: rgba(24, 144, 255, 0.08);
   border-style: solid;
 }
 
@@ -841,7 +848,7 @@ onMounted(() => {
 .upload-icon-circle {
   width: 80px;
   height: 80px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -849,6 +856,7 @@ onMounted(() => {
   font-size: 32px;
   color: white;
   margin-bottom: 8px;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.25);
 }
 
 .upload-text {
@@ -1023,13 +1031,14 @@ onMounted(() => {
 }
 
 .btn-compare {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   color: white;
 }
 
 .btn-compare:hover:not(:disabled) {
+  background: #40a9ff;
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
 }
 
 .btn-compare:disabled,
@@ -1076,7 +1085,7 @@ onMounted(() => {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  background: #1890ff;
   border-radius: 20px;
   transition: width 0.3s ease;
   display: flex;
@@ -1096,7 +1105,7 @@ onMounted(() => {
   bottom: 0;
   background: linear-gradient(90deg, 
     transparent, 
-    rgba(255, 255, 255, 0.3), 
+    rgba(255, 255, 255, 0.25), 
     transparent
   );
   animation: shimmer 2s infinite;
@@ -1198,50 +1207,84 @@ onMounted(() => {
 /* 表格样式 */
 .table-wrapper {
   overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid #f0f0f0;
+  border-radius: 16px;
+  border: 1px solid #e8e8e8;
 }
 
 .modern-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
+  table-layout: fixed;
 }
 
 .modern-table thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #fafafa;
+  border-bottom: 2px solid #e0e0e0;
 }
 
 .modern-table thead th {
-  padding: 18px 16px;
+  padding: 24px 24px;
   text-align: left;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  color: white;
+  color: #1a1a1a;
   border: none;
 }
 
 .modern-table thead th:first-child {
-  border-top-left-radius: 12px;
+  border-top-left-radius: 16px;
+  padding-left: 32px;
 }
 
 .modern-table thead th:last-child {
-  border-top-right-radius: 12px;
+  border-top-right-radius: 16px;
+  padding-right: 32px;
 }
+
+/* 列宽定义 */
+.modern-table thead th:nth-child(1) { width: 12%; } /* 任务ID */
+.modern-table thead th:nth-child(2) { width: 18%; } /* 原文档 */
+.modern-table thead th:nth-child(3) { width: 18%; } /* 新文档 */
+.modern-table thead th:nth-child(4) { width: 10%; } /* 差异数 */
+.modern-table thead th:nth-child(5) { width: 14%; } /* 开始时间 */
+.modern-table thead th:nth-child(6) { width: 14%; } /* 完成时间 */
+.modern-table thead th:nth-child(7) { width: 8%; }  /* 时长 */
+.modern-table thead th:nth-child(8) { width: 16%; } /* 操作 */
 
 .modern-table tbody tr {
   transition: all 0.3s ease;
 }
 
 .modern-table tbody tr:hover {
-  background: #fafafa;
+  background: #f5f5f5;
 }
 
 .modern-table tbody td {
-  padding: 16px;
-  font-size: 14px;
+  padding: 24px;
+  font-size: 15px;
   color: #333;
   border-bottom: 1px solid #f0f0f0;
+  line-height: 1.6;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modern-table tbody td:first-child {
+  padding-left: 32px;
+}
+
+.modern-table tbody td:last-child {
+  padding-right: 32px;
+}
+
+/* 文件名列允许换行 */
+.modern-table tbody td:nth-child(2),
+.modern-table tbody td:nth-child(3) {
+  white-space: normal;
+  word-break: break-word;
 }
 
 .modern-table tbody tr:last-child td {
@@ -1276,52 +1319,63 @@ onMounted(() => {
 
 .task-id code {
   background: #f5f5f5;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
   font-family: 'Courier New', monospace;
   font-size: 13px;
-  color: #667eea;
+  color: #1890ff;
+  font-weight: 500;
 }
-
 
 .badge-count {
   display: inline-block;
-  padding: 4px 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 6px 16px;
+  background: #1890ff;
   color: white;
-  border-radius: 12px;
-  font-size: 13px;
+  border-radius: 16px;
+  font-size: 14px;
   font-weight: 600;
+  vertical-align: middle;
 }
 
 .time-cell,
 .duration-cell {
-  font-size: 13px;
+  font-size: 14px;
   color: #666;
+  font-weight: 400;
 }
 
 .text-center {
-  text-align: center;
+  text-align: center !important;
+}
+
+/* 确保表格特定列居中对齐 */
+.modern-table th.text-center,
+.modern-table td.text-center {
+  text-align: center !important;
+  vertical-align: middle;
 }
 
 .action-cell {
-  white-space: nowrap;
+  white-space: nowrap !important;
+  text-align: center !important;
 }
 
 .action-cell .btn-icon {
   margin: 0 4px;
+  vertical-align: middle;
 }
 
 .btn-icon {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   color: white;
-  font-size: 14px;
+  font-size: 15px;
   cursor: pointer;
   transition: all 0.3s ease;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
 }
@@ -1331,11 +1385,12 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: #667eea;
+  background: #1890ff;
 }
 
 .btn-primary:hover {
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+  background: #40a9ff;
+  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
 }
 
 .btn-success {
@@ -1343,7 +1398,8 @@ onMounted(() => {
 }
 
 .btn-success:hover {
-  box-shadow: 0 6px 16px rgba(82, 196, 26, 0.4);
+  background: #73d13d;
+  box-shadow: 0 6px 16px rgba(82, 196, 26, 0.35);
 }
 
 .btn-danger {
@@ -1351,7 +1407,8 @@ onMounted(() => {
 }
 
 .btn-danger:hover {
-  box-shadow: 0 6px 16px rgba(255, 77, 79, 0.4);
+  background: #ff7875;
+  box-shadow: 0 6px 16px rgba(255, 77, 79, 0.35);
 }
 
 /* 页脚 */
@@ -1406,6 +1463,49 @@ onMounted(() => {
   
   .logo-text h1 {
     font-size: 22px;
+  }
+  
+  /* 表格在移动端的调整 */
+  .modern-table {
+    table-layout: auto;
+  }
+  
+  .modern-table thead th,
+  .modern-table tbody td {
+    padding: 16px 12px;
+    font-size: 13px;
+  }
+  
+  .modern-table thead th:first-child,
+  .modern-table tbody td:first-child {
+    padding-left: 16px;
+  }
+  
+  .modern-table thead th:last-child,
+  .modern-table tbody td:last-child {
+    padding-right: 16px;
+  }
+  
+  /* 移动端取消固定列宽 */
+  .modern-table thead th:nth-child(1),
+  .modern-table thead th:nth-child(2),
+  .modern-table thead th:nth-child(3),
+  .modern-table thead th:nth-child(4),
+  .modern-table thead th:nth-child(5),
+  .modern-table thead th:nth-child(6),
+  .modern-table thead th:nth-child(7),
+  .modern-table thead th:nth-child(8) {
+    width: auto;
+  }
+  
+  .btn-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+  
+  .action-cell .btn-icon {
+    margin: 0 2px;
   }
 }
 </style>

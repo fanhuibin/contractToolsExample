@@ -3,6 +3,7 @@ package com.zhaoxin.demo.controller;
 import com.zhaoxin.demo.model.request.CompareRequest;
 import com.zhaoxin.demo.model.response.ApiResponse;
 import com.zhaoxin.demo.service.CompareApiClient;
+import com.zhaoxin.demo.service.TaskFileMappingService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,9 +22,11 @@ import java.util.Map;
 public class CompareProxyController {
     
     private final CompareApiClient apiClient;
+    private final TaskFileMappingService mappingService;
     
-    public CompareProxyController(CompareApiClient apiClient) {
+    public CompareProxyController(CompareApiClient apiClient, TaskFileMappingService mappingService) {
         this.apiClient = apiClient;
+        this.mappingService = mappingService;
     }
     
     /**
@@ -32,13 +35,28 @@ public class CompareProxyController {
     @PostMapping("/submit")
     public ApiResponse submitCompare(@RequestBody CompareRequest request) {
         log.info("收到比对请求: {}", request);
-        return apiClient.submitCompare(
+        
+        // 提交任务到SDK（不传文件名，避免SDK保存UUID文件名）
+        ApiResponse response = apiClient.submitCompare(
             request.getOldFileUrl(), 
             request.getNewFileUrl(),
             request.getRemoveWatermark(),
-            request.getOldFileName(),
-            request.getNewFileName()
+            null,  // 不传给SDK
+            null   // 不传给SDK
         );
+        
+        // 如果提交成功，保存taskId和原始文件名的映射
+        if (response.getCode() == 200 && response.getData() != null) {
+            String taskId = response.getData().toString();
+            mappingService.saveMapping(
+                taskId, 
+                request.getOldFileName(), 
+                request.getNewFileName()
+            );
+            log.info("已保存任务文件名映射: taskId={}", taskId);
+        }
+        
+        return response;
     }
     
     /**
@@ -47,7 +65,12 @@ public class CompareProxyController {
     @GetMapping("/task/{taskId}")
     public ApiResponse getTaskStatus(@PathVariable String taskId) {
         log.info("查询任务状态: taskId={}", taskId);
-        return apiClient.getTaskStatus(taskId);
+        ApiResponse response = apiClient.getTaskStatus(taskId);
+        
+        // 替换为原始文件名
+        replaceFileNamesInResponse(response, taskId);
+        
+        return response;
     }
     
     /**
@@ -66,6 +89,10 @@ public class CompareProxyController {
     public ApiResponse<Void> deleteTask(@PathVariable String taskId) {
         log.info("删除任务: taskId={}", taskId);
         apiClient.deleteTask(taskId);
+        
+        // 同时删除本地映射
+        mappingService.deleteMapping(taskId);
+        
         return new ApiResponse<>(200, "删除成功", null);
     }
     
@@ -73,9 +100,53 @@ public class CompareProxyController {
      * 获取所有任务历史
      */
     @GetMapping("/tasks")
+    @SuppressWarnings("unchecked")
     public ApiResponse getAllTasks() {
         log.info("获取任务历史列表");
-        return apiClient.getAllTasks();
+        ApiResponse response = apiClient.getAllTasks();
+        
+        // 替换所有任务的文件名
+        if (response.getCode() == 200 && response.getData() != null) {
+            try {
+                if (response.getData() instanceof java.util.List) {
+                    java.util.List<Map<String, Object>> tasks = (java.util.List<Map<String, Object>>) response.getData();
+                    for (Map<String, Object> task : tasks) {
+                        String taskId = (String) task.get("taskId");
+                        if (taskId != null) {
+                            replaceFileNamesInTask(task, taskId);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.error("替换文件名时出错", e);
+            }
+        }
+        
+        return response;
+    }
+    
+    /**
+     * 替换响应中的文件名
+     */
+    @SuppressWarnings("unchecked")
+    private void replaceFileNamesInResponse(ApiResponse response, String taskId) {
+        if (response.getData() != null && response.getData() instanceof Map) {
+            Map<String, Object> data = (Map<String, Object>) response.getData();
+            replaceFileNamesInTask(data, taskId);
+        }
+    }
+    
+    /**
+     * 替换任务对象中的文件名
+     */
+    private void replaceFileNamesInTask(Map<String, Object> task, String taskId) {
+        var mapping = mappingService.getMapping(taskId);
+        if (mapping != null) {
+            task.put("oldFileName", mapping.getOldFileName());
+            task.put("newFileName", mapping.getNewFileName());
+            log.debug("已替换文件名: taskId={}, oldFileName={}, newFileName={}", 
+                    taskId, mapping.getOldFileName(), mapping.getNewFileName());
+        }
     }
     
     /**

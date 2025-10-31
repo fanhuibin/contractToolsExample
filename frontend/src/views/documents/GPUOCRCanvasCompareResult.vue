@@ -44,7 +44,7 @@
         
         <el-switch v-model="syncEnabled" @change="onSyncScrollToggle" size="small" active-text="同轴滚动" inactive-text=""
           style="margin-right: 8px;" />
-        <el-button size="small" text @click="goBack">返回上传</el-button>
+        <el-button v-if="!shouldHideBack" size="small" text @click="goBack">返回上传</el-button>
       </div>
     </div>
     <div class="compare-body" v-loading="loading">
@@ -335,6 +335,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight, View, Close, EditPen, DocumentChecked } from '@element-plus/icons-vue'
 import { getGPUOCRCanvasCompareResult, getGPUOCRCompareTaskStatus, saveUserModifications as saveUserModificationsAPI } from '@/api/gpu-ocr-compare'
 import ConcentricLoader from '@/components/ai/ConcentricLoader.vue'
+import { useEmbedMode } from '@/composables/useEmbedMode'
 
 // 导入GPU OCR Canvas模块
 import {
@@ -389,6 +390,9 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+
+// 使用统一的嵌入模式管理
+const { shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
 
 // 基础状态
 const loading = ref(false)
@@ -1287,7 +1291,10 @@ const nextResult = () => {
 }
 
 const goBack = () => {
-  router.push({ name: 'GPUOCRCompare' }).catch(() => {})
+  embedHandleBack(() => {
+    // 默认的返回逻辑
+    router.push({ name: 'GPUOCRCompare' }).catch(() => {})
+  })
 }
 
 // 映射函数
