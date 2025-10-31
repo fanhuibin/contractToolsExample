@@ -1,99 +1,94 @@
 <template>
-  <div class="ai-template-generator">
-    <h2>
-      <el-icon><Refresh /></el-icon>
-      AI 模板生成助手
-    </h2>
+  <div class="ai-template-generator-page">
+    <!-- 使用 PageHeader 组件 -->
+    <PageHeader 
+      title="AI 模板生成助手" 
+      description="通过AI技术自动分析文档内容，快速生成高质量的提取模板，提升模板创建效率"
+      :icon="Refresh"
+      tag="AI辅助"
+      tag-type="warning"
+    />
+
+    <!-- 重要提示 -->
+    <el-alert
+      type="warning"
+      :closable="false"
+      show-icon
+      class="important-notice">
+      <div class="notice-content">
+        AI 生成的模板需要<strong>人工二次确认和优化</strong>，包括：关键词准确性、正则表达式、提取规则等。
+      </div>
+    </el-alert>
 
     <!-- 步骤指示器 -->
-    <el-steps :active="currentStep - 1" align-center finish-status="success" class="steps">
-      <el-step title="上传文档">
-        <template #icon><el-icon><Upload /></el-icon></template>
-      </el-step>
-      <el-step title="准备提示词">
-        <template #icon><el-icon><Edit /></el-icon></template>
-      </el-step>
-      <el-step title="导入JSON">
-        <template #icon><el-icon><DocumentAdd /></el-icon></template>
-      </el-step>
-      <el-step title="完成">
-        <template #icon><el-icon><SuccessFilled /></el-icon></template>
-      </el-step>
-    </el-steps>
+    <el-card class="steps-card">
+      <el-steps :active="currentStep - 1" align-center finish-status="success" class="steps-indicator">
+        <el-step title="上传文档">
+          <template #icon><el-icon><Upload /></el-icon></template>
+        </el-step>
+        <el-step title="准备提示词">
+          <template #icon><el-icon><Edit /></el-icon></template>
+        </el-step>
+        <el-step title="导入JSON">
+          <template #icon><el-icon><DocumentAdd /></el-icon></template>
+        </el-step>
+        <el-step title="完成">
+          <template #icon><el-icon><SuccessFilled /></el-icon></template>
+        </el-step>
+      </el-steps>
+    </el-card>
 
     <!-- 步骤1: 上传文档 -->
     <el-card v-show="currentStep === 1" class="step-card">
       <template #header>
-        <span>
-          <el-icon style="vertical-align: middle; margin-right: 4px;"><Upload /></el-icon>
-          步骤1: 上传合同文档
-        </span>
+        <div class="card-header">
+          <el-icon><Upload /></el-icon>
+          <span>步骤1: 上传合同文档</span>
+        </div>
       </template>
 
       <el-alert
         type="info"
         :closable="false"
-        style="margin-bottom: 24px; border-radius: 12px;">
+        class="step-alert">
         <template #title>
-          <div style="font-size: 15px; font-weight: 500;">
-            📄 第一步：上传您的合同文档
-          </div>
+          <span class="alert-title">📄 第一步：上传您的合同文档</span>
         </template>
-        <div style="margin-top: 8px; line-height: 1.8;">
-          系统将使用先进的 MinerU OCR 技术自动识别文档内容，为 AI 分析做准备。
-          <br/>
-          💡 <strong>小提示：</strong>文档内容越完整，AI 生成的模板质量越高
-        </div>
+        系统将使用先进的 MinerU OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
+        💡 <strong>小提示：</strong>文档内容越完整，AI 生成的模板质量越高
       </el-alert>
       
       <el-upload
         ref="upload"
-        class="upload-demo"
+        class="upload-dragger"
         drag
         :on-change="handleFileChange"
         :show-file-list="false"
         :auto-upload="false"
         :disabled="extracting"
         accept=".pdf">
-        <div v-if="extracting" style="padding: 40px;">
-          <el-icon class="is-loading" style="font-size: 50px; color: #409EFF;">
+        <div v-if="extracting" class="uploading-content">
+          <el-icon class="is-loading loading-icon">
             <Loading />
           </el-icon>
-          <div style="margin-top: 16px; color: #606266; font-size: 16px;">
-            正在提取文档内容，请稍候...
-          </div>
+          <div class="uploading-text">正在提取文档内容，请稍候...</div>
         </div>
         <template v-else>
           <el-icon class="el-icon--upload"><Upload /></el-icon>
           <div class="el-upload__text">
             拖拽 PDF 文件到这里，或<em>点击选择文件</em>
           </div>
-        </template>
-        <template #tip>
-          <div v-if="!extracting" class="el-upload__tip" style="margin-top: 12px; color: #909399; font-size: 13px;">
+          <div class="el-upload__tip">
             ✓ 支持 PDF 格式 &nbsp;&nbsp; ✓ 建议文件大小 &lt; 20MB &nbsp;&nbsp; ✓ 推荐包含完整合同内容
           </div>
         </template>
       </el-upload>
 
       <div v-if="documentText" class="text-preview">
-        <el-divider content-position="left">文档内容预览</el-divider>
-        
-        <el-alert 
-          type="warning" 
-          :closable="false"
-          style="margin-bottom: 16px; border-radius: 8px;">
-          <template #title>
-            <span style="font-size: 13px; font-weight: 500;">🔍 重要提示：请先查看文档预览！</span>
-          </template>
-          <div style="font-size: 12px; line-height: 1.8;">
-            在步骤3粘贴 JSON 之前，请在下方预览中：<br/>
-            1️⃣ <strong>搜索关键词</strong>（如"合同编号"），确认它在文档中确实存在<br/>
-            2️⃣ <strong>复制准确格式</strong>（包括冒号、空格等），例如："合同编号：" 还是 "合同编号 :"<br/>
-            3️⃣ <strong>注意符号差异</strong>：中文冒号 <code>：</code> vs 英文冒号 <code>:</code><br/>
-            💡 如果关键词格式不匹配，即使 JSON 正确也无法提取数据！
-          </div>
-        </el-alert>
+        <el-divider content-position="left">
+          <el-icon><Document /></el-icon>
+          <span>文档内容预览</span>
+        </el-divider>
         
         <el-input
           type="textarea"
@@ -102,15 +97,17 @@
           readonly
           class="preview-textarea">
         </el-input>
+        
         <div class="preview-info">
           <el-tag>文件名: {{ fileName }}</el-tag>
           <el-tag type="info">字符数: {{ documentText.length }}</el-tag>
           <el-tag type="success">预估页数: {{ pageCount }}</el-tag>
         </div>
+        
         <div class="step-actions">
           <el-button size="large" type="primary" @click="nextStep">
-            <el-icon style="margin-right: 4px;"><ArrowRight /></el-icon>
             下一步：准备AI提示词
+            <el-icon><ArrowRight /></el-icon>
           </el-button>
         </div>
       </div>
@@ -119,31 +116,26 @@
     <!-- 步骤2: 准备提示词 -->
     <el-card v-show="currentStep === 2" class="step-card">
       <template #header>
-        <span>
-          <el-icon style="vertical-align: middle; margin-right: 4px;"><Edit /></el-icon>
-          步骤2: 准备AI提示词
-        </span>
+        <div class="card-header">
+          <el-icon><Edit /></el-icon>
+          <span>步骤2: 准备AI提示词</span>
+        </div>
       </template>
 
       <el-alert
         type="info"
         :closable="false"
-        style="margin-bottom: 24px; border-radius: 12px;">
+        class="step-alert">
         <template #title>
-          <div style="font-size: 15px; font-weight: 500;">
-            🤖 第二步：配置 AI 提示词
-          </div>
+          <span class="alert-title">🤖 第二步：配置 AI 提示词</span>
         </template>
-        <div style="margin-top: 8px; line-height: 1.8;">
-          选择预设模板，输入需要提取的字段，系统会自动生成完整的 AI 提示词。
-          <br/>
-          💡 <strong>小提示：</strong>复制生成的提示词到您喜欢的 AI 工具（如 ChatGPT、通义千问等）
-        </div>
+        选择预设模板，输入需要提取的字段，系统会自动生成完整的 AI 提示词。<br/>
+        💡 <strong>小提示：</strong>复制生成的提示词到您喜欢的 AI 工具（如 ChatGPT、通义千问等）
       </el-alert>
 
-      <el-form label-width="140px" label-position="left">
+      <el-form label-width="140px" label-position="left" class="prompt-form">
         <el-form-item label="🎯 提示词模板">
-          <el-tag size="large" type="success" effect="plain" style="padding: 8px 16px; font-size: 14px;">
+          <el-tag size="large" type="success" effect="plain" class="template-tag">
             标准提取模板 - 支持文本字段和表格数据提取
           </el-tag>
         </el-form-item>
@@ -155,26 +147,16 @@
             v-model="fieldsList"
             @input="generateFullPrompt"
             placeholder="请每行输入一个字段名称，例如：&#10;&#10;合同编号&#10;甲方名称&#10;乙方名称&#10;合同金额&#10;签订日期&#10;付款方式&#10;有效期限"
-            style="font-size: 14px;">
+            class="fields-textarea">
           </el-input>
-          <div class="field-hint">
-            <el-alert
-              type="info"
-              :closable="false"
-              style="margin-top: 12px; border-radius: 8px;">
-              <template #title>
-                <span style="font-size: 14px;">💡 字段输入技巧</span>
-              </template>
-              <p>✓ 每行输入一个字段名称（中文）</p>
-              <p>✓ AI 会自动生成对应的英文字段名和提取规则</p>
-              <p>✓ 常见字段：合同编号、甲方、乙方、金额、日期、联系人、有效期等</p>
-            </el-alert>
+          <div class="field-hint-text">
+            💡 每行输入一个字段名称（中文），AI 会自动生成对应的英文字段名和提取规则
           </div>
         </el-form-item>
 
         <el-divider content-position="left">
           <el-icon><DocumentCopy /></el-icon>
-          <span style="margin-left: 8px;">生成的完整提示词</span>
+          <span>生成的完整提示词</span>
         </el-divider>
 
         <el-form-item label="🤖 完整AI提示词">
@@ -190,44 +172,25 @@
             <el-tag type="success" size="small" effect="dark">
               字符数：{{ fullPrompt.length }} 字符
             </el-tag>
-            <el-tag type="info" size="small" style="margin-left: 8px;">
+            <el-tag type="info" size="small">
               准备就绪 ✓
             </el-tag>
           </div>
         </el-form-item>
       </el-form>
 
-      <el-alert
-        title="操作指引"
-        type="warning"
-        show-icon
-        :closable="false"
-        class="usage-alert">
-        <div class="usage-steps">
-          <p><strong>接下来的操作：</strong></p>
-          <ol>
-            <li>点击下方"复制提示词"按钮</li>
-            <li>打开AI工具（ChatGPT、通义千问、文心一言、Kimi等）</li>
-            <li>粘贴完整提示词到AI对话框</li>
-            <li>等待AI生成JSON配置（通常10-30秒）</li>
-            <li>复制AI返回的完整JSON内容</li>
-            <li>返回本页面，点击"下一步"继续</li>
-          </ol>
-        </div>
-      </el-alert>
-
       <div class="step-actions">
         <el-button size="large" @click="prevStep">
-          <el-icon style="margin-right: 4px;"><ArrowRight style="transform: rotate(180deg);" /></el-icon>
+          <el-icon><ArrowLeft /></el-icon>
           上一步
         </el-button>
         <el-button size="large" type="success" @click="copyPrompt" :disabled="!fullPrompt">
-          <el-icon style="margin-right: 4px;"><DocumentCopy /></el-icon>
+          <el-icon><DocumentCopy /></el-icon>
           复制提示词到剪贴板
         </el-button>
         <el-button size="large" type="primary" @click="nextStep">
-          <el-icon style="margin-right: 4px;"><ArrowRight /></el-icon>
           下一步：导入JSON模板
+          <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
     </el-card>
@@ -235,71 +198,23 @@
     <!-- 步骤3: 导入JSON -->
     <el-card v-show="currentStep === 3" class="step-card">
       <template #header>
-        <span>
-          <el-icon style="vertical-align: middle; margin-right: 4px;"><DocumentAdd /></el-icon>
-          步骤3: 导入AI生成的JSON
-        </span>
+        <div class="card-header">
+          <el-icon><DocumentAdd /></el-icon>
+          <span>步骤3: 导入AI生成的JSON</span>
+        </div>
       </template>
 
       <el-alert
         type="info"
         :closable="false"
-        style="margin-bottom: 24px; border-radius: 12px;">
+        class="step-alert">
         <template #title>
-          <div style="font-size: 15px; font-weight: 500;">
-            📋 第三步：导入 AI 生成的模板
-          </div>
+          <span class="alert-title">📋 第三步：导入 AI 生成的模板</span>
         </template>
-        <div style="margin-top: 8px; line-height: 1.8;">
-          从 AI 工具（ChatGPT、通义千问等）获取生成的 JSON 内容，粘贴到下方输入框。
-          <br/>
-          💡 <strong>小提示：</strong>只粘贴 JSON 代码块内容（大括号{}之间的部分），不要包含 AI 的解释文字或 markdown 标记
-        </div>
+        从 AI 工具获取生成的 JSON 内容，粘贴到下方输入框，然后点击"验证JSON格式"按钮。
       </el-alert>
 
-      <el-alert 
-        type="error" 
-        :closable="false"
-        style="margin-bottom: 16px; border-radius: 8px;">
-        <template #title>
-          <span style="font-size: 14px; font-weight: 500;">🚨 提取失败？90% 是关键词格式不匹配！</span>
-        </template>
-        <div style="font-size: 13px; line-height: 1.8;">
-          <strong style="color: #f56c6c;">常见问题：</strong><br/>
-          • AI 生成 <code>"keyword": "合同编号："</code>（中文冒号）<br/>
-          • 但文档实际是 <code>合同编号:</code>（英文冒号）或 <code>合同编号  </code>（无冒号）<br/><br/>
-          
-          <strong style="color: #e6a23c;">解决方法：</strong><br/>
-          1️⃣ 回到<strong>步骤1</strong>，在文档预览中用 Ctrl+F 搜索关键词<br/>
-          2️⃣ 复制文档中的<strong>准确格式</strong>（包括冒号、空格）<br/>
-          3️⃣ 修改下方 JSON 的 <code>keyword</code> 字段<br/>
-          4️⃣ 或查看"📋 正确格式示例"，使用正则表达式增加容错
-        </div>
-      </el-alert>
-
-      <el-alert 
-        type="warning" 
-        :closable="false"
-        style="margin-bottom: 16px; border-radius: 8px;">
-        <template #title>
-          <span style="font-size: 14px; font-weight: 500;">⚠️ JSON 必须包含以下字段</span>
-        </template>
-        <div style="font-size: 13px; line-height: 1.8;">
-          <strong>1. templateName</strong>: 模板名称（字符串）<br/>
-          <strong>2. fields</strong>: 字段数组，每个字段必须包含：<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;• <code>fieldName</code>: 英文字段名（驼峰命名）<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;• <code>fieldLabel</code>: 中文字段名<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;• <code>extractRules</code>: 提取规则对象，必须包含：<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <code>type</code>: 规则类型（"keyword" / "regex" / "table"）<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <code>keyword</code>: 关键词（type为keyword时必填）<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <code>pattern</code>: 正则表达式（type为regex时必填）<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- <code>tableRules</code>: 表格规则对象（type为table时必填）<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>tableKeyword</code>: 表格定位关键词<br/>
-          &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;• <code>columns</code>: 表格列名数组
-        </div>
-      </el-alert>
-
-      <el-tabs v-model="jsonTab" style="margin-bottom: 20px;">
+      <el-tabs v-model="jsonTab" class="json-tabs">
         <el-tab-pane label="粘贴 AI 生成的 JSON" name="input">
           <el-input
             type="textarea"
@@ -315,15 +230,14 @@
             :rows="18"
             :value="jsonExample"
             readonly
-            class="json-textarea"
-            style="background: #f5f7fa;">
+            class="json-textarea readonly-textarea">
           </el-input>
           <el-button 
             type="primary" 
             size="small" 
             @click="copyExample"
-            style="margin-top: 12px;">
-            <el-icon style="margin-right: 4px;"><DocumentCopy /></el-icon>
+            class="copy-example-btn">
+            <el-icon><DocumentCopy /></el-icon>
             复制示例到输入框
           </el-button>
         </el-tab-pane>
@@ -347,7 +261,7 @@
           type="warning"
           show-icon
           :closable="false"
-          style="margin-top: 10px">
+          class="warnings-alert">
           <ul>
             <li v-for="(warning, index) in validationResult.warnings" :key="index">{{ warning }}</li>
           </ul>
@@ -356,11 +270,11 @@
 
       <div class="step-actions">
         <el-button size="large" @click="prevStep">
-          <el-icon style="margin-right: 4px;"><ArrowRight style="transform: rotate(180deg);" /></el-icon>
+          <el-icon><ArrowLeft /></el-icon>
           上一步
         </el-button>
         <el-button size="large" type="warning" @click="validateJSON" :disabled="!aiGeneratedJSON">
-          <el-icon style="margin-right: 4px;"><Check /></el-icon>
+          <el-icon><Check /></el-icon>
           验证JSON格式
         </el-button>
         <el-button
@@ -369,7 +283,7 @@
           @click="importTemplate"
           :loading="importing"
           :disabled="!validationResult || !validationResult.valid">
-          <el-icon style="margin-right: 4px;"><UploadFilled /></el-icon>
+          <el-icon v-if="!importing"><UploadFilled /></el-icon>
           {{ importing ? '正在导入...' : '导入模板到系统' }}
         </el-button>
       </div>
@@ -378,10 +292,10 @@
     <!-- 步骤4: 完成 -->
     <el-card v-show="currentStep === 4" class="step-card success-card">
       <template #header>
-        <span>
-          <el-icon style="vertical-align: middle; margin-right: 4px;"><SuccessFilled /></el-icon>
-          步骤4: 导入成功
-        </span>
+        <div class="card-header">
+          <el-icon><SuccessFilled /></el-icon>
+          <span>步骤4: 导入成功</span>
+        </div>
       </template>
 
       <el-result
@@ -390,28 +304,28 @@
         :subTitle="'模板名称: ' + (importResult ? importResult.templateName : '')">
         <template #extra>
           <div class="result-info">
-            <p style="font-size: 16px; margin-bottom: 16px;">
+            <p class="result-main-text">
               <strong>✅ 模板已成功导入系统</strong>
             </p>
-            <p style="font-size: 15px;">
-              <el-icon style="vertical-align: middle; color: #67c23a;"><Check /></el-icon>
+            <p class="result-detail">
+              <el-icon class="success-icon"><Check /></el-icon>
               字段数量: <strong>{{ importResult ? importResult.fieldCount : 0 }} 个</strong>
             </p>
-            <p v-if="importResult && importResult.warnings && importResult.warnings.length > 0" style="margin-top: 16px;">
+            <div v-if="importResult && importResult.warnings && importResult.warnings.length > 0" class="warnings-section">
               <el-tag type="warning" size="large" effect="plain">⚠️ 需要注意</el-tag>
               <ul class="warnings-list">
                 <li v-for="(warning, index) in importResult.warnings" :key="index">{{ warning }}</li>
               </ul>
-            </p>
+            </div>
           </div>
 
-          <div style="margin-top: 32px; display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+          <div class="result-actions">
             <el-button type="primary" size="large" @click="goToEditor">
-              <el-icon style="margin-right: 4px;"><Edit /></el-icon>
-              前往模板编辑器精调规则
+              <el-icon><Edit /></el-icon>
+              返回
             </el-button>
             <el-button type="success" size="large" @click="resetGenerator">
-              <el-icon style="margin-right: 4px;"><RefreshLeft /></el-icon>
+              <el-icon><RefreshLeft /></el-icon>
               继续生成新模板
             </el-button>
           </div>
@@ -427,35 +341,48 @@
 </template>
 
 <script>
+// @ts-nocheck
+import { markRaw } from 'vue'
 import axios from 'axios'
+import PageHeader from '@/components/common/PageHeader.vue'
 import { 
   Upload, 
   Edit, 
   DocumentAdd, 
   SuccessFilled, 
-  ArrowRight, 
+  ArrowRight,
+  ArrowLeft,
   DocumentCopy, 
   Check, 
   UploadFilled, 
-  Refresh, 
+  Refresh as RefreshIcon, 
   RefreshLeft,
-  Loading
+  Loading,
+  Document
 } from '@element-plus/icons-vue'
 
 export default {
   name: 'AITemplateGenerator',
   components: {
+    PageHeader,
     Upload,
     Edit,
     DocumentAdd,
     SuccessFilled,
     ArrowRight,
+    ArrowLeft,
     DocumentCopy,
     Check,
     UploadFilled,
-    Refresh,
+    Refresh: RefreshIcon,
     RefreshLeft,
-    Loading
+    Loading,
+    Document
+  },
+  computed: {
+    Refresh() {
+      return markRaw(RefreshIcon)
+    }
   },
   data() {
     return {
@@ -509,15 +436,33 @@ export default {
       }
     },
     {
+      "fieldName": "partyBAddress",
+      "fieldLabel": "乙方地址（第2个）",
+      "fieldType": "text",
+      "required": false,
+      "extractRules": {
+        "type": "keyword",
+        "keyword": "地址：",
+        "offset": 0,
+        "length": 100,
+        "occurrence": 2
+      },
+      "note": "当"地址："出现多次时，提取第2个"
+    },
+    {
       "fieldName": "contractAmount",
       "fieldLabel": "合同金额",
       "fieldType": "text",
       "required": true,
       "extractRules": {
-        "type": "regex",
-        "pattern": "合同金额[：:\\\\s]*[￥¥RMB]*\\\\s*(\\\\d+(?:,\\\\d{3})*(?:\\\\.\\\\d{1,2})?)"
+        "type": "keyword",
+        "keyword": "合同金额：",
+        "offset": 0,
+        "length": 50,
+        "occurrence": 1,
+        "pattern": "\\\\d+(?:,\\\\d{3})*(?:\\\\.\\\\d{2})?"
       },
-      "note": "匹配多种金额格式（带逗号、货币符号等）"
+      "note": "使用关键词+正则提取，支持千分位格式"
     },
     {
       "fieldName": "productList",
@@ -561,7 +506,6 @@ export default {
     },
 
     handleFileChange(file) {
-      // 处理文件选择事件
       if (file && file.raw) {
         this.handleUpload(file.raw)
       }
@@ -668,7 +612,6 @@ export default {
     },
 
     goToEditor() {
-      // 跳转到模板编辑器
       if (this.importResult && this.importResult.templateId) {
         this.$router.push('/rule-extract/templates?id=' + this.importResult.templateId)
       } else {
@@ -705,353 +648,392 @@ export default {
 </script>
 
 <style scoped lang="scss">
-.ai-template-generator {
-  min-height: 100vh;
-  background: #ffffff;
-  padding: 40px 20px;
+.ai-template-generator-page {
+  padding: var(--zx-spacing-md);
+}
+
+/* 重要提示 */
+.important-notice {
+  margin-bottom: var(--zx-spacing-md);
+  border-radius: var(--zx-radius-md);
+  border-left: 4px solid var(--zx-warning);
   
-  > h2 {
-    max-width: 1200px;
-    margin: 0 auto 48px;
-    text-align: center;
-    font-size: 32px;
-    font-weight: 600;
-    color: #2c3e50;
-    letter-spacing: 0.5px;
-    padding: 0 20px;
-    position: relative;
+  .notice-title {
+    font-size: var(--zx-font-base);
+    font-weight: var(--zx-font-semibold);
+    color: var(--zx-warning-dark-2);
+  }
+  
+  .notice-content {
+    margin-top: var(--zx-spacing-sm);
+    font-size: var(--zx-font-sm);
+    line-height: var(--zx-leading-relaxed);
+    color: var(--zx-text-regular);
     
-    .el-icon {
-      vertical-align: middle;
-      margin-right: 12px;
-      font-size: 34px;
-      color: #409EFF;
-      animation: rotate 3s linear infinite;
+    strong {
+      color: var(--zx-warning-dark-2);
+      font-weight: var(--zx-font-semibold);
     }
     
-    &::after {
-      content: '';
-      display: block;
-      width: 60px;
-      height: 3px;
-      background: linear-gradient(90deg, #409EFF, #67c23a);
-      margin: 16px auto 0;
-      border-radius: 2px;
+    ul {
+      margin: var(--zx-spacing-sm) 0;
+      padding-left: var(--zx-spacing-xl);
+      
+      li {
+        margin: var(--zx-spacing-xs) 0;
+        line-height: var(--zx-leading-relaxed);
+        
+        strong {
+          color: var(--zx-primary);
+        }
+      }
     }
   }
-}
-
-@keyframes rotate {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.steps {
-  max-width: 1200px;
-  margin: 0 auto 40px;
-  padding: 32px;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e4e7ed;
   
-  ::v-deep(.el-step__title) {
-    font-size: 16px;
-    font-weight: 500;
-  }
-  
-  ::v-deep(.el-step__description) {
-    font-size: 13px;
-  }
-  
-  ::v-deep(.el-step.is-finish .el-step__icon) {
-    background: #667eea;
-    border-color: #667eea;
-  }
-  
-  ::v-deep(.el-step.is-process .el-step__icon) {
-    background: #667eea;
-    border-color: #667eea;
+  :deep(.el-alert__content) {
+    width: 100%;
   }
 }
 
-.step-card {
-  max-width: 1200px;
-  margin: 0 auto 24px;
-  min-height: 500px;
-  border-radius: 16px;
-  border: none;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-  background: #ffffff;
+/* 步骤指示器卡片 */
+.steps-card {
+  margin-bottom: var(--zx-spacing-md);
+  border-radius: var(--zx-radius-md);
+  box-shadow: var(--zx-shadow-sm);
+  transition: box-shadow var(--zx-transition-base);
   
   &:hover {
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-    transform: translateY(-2px);
+    box-shadow: var(--zx-shadow-md);
   }
   
-  ::v-deep(.el-card__header) {
-    background: #f8f9fa;
-    border-bottom: 2px solid #f0f2f5;
-    padding: 24px 32px;
+  :deep(.el-card__body) {
+    padding: var(--zx-spacing-xl);
+  }
+}
+
+.steps-indicator {
+  :deep(.el-step__title) {
+    font-size: var(--zx-font-base);
+    font-weight: var(--zx-font-medium);
+  }
+  
+  :deep(.el-step.is-finish .el-step__icon) {
+    background: var(--zx-primary);
+    border-color: var(--zx-primary);
+  }
+  
+  :deep(.el-step.is-process .el-step__icon) {
+    background: var(--zx-primary);
+    border-color: var(--zx-primary);
+  }
+}
+
+/* 步骤卡片 */
+.step-card {
+  margin-bottom: var(--zx-spacing-md);
+  border-radius: var(--zx-radius-md);
+  box-shadow: var(--zx-shadow-sm);
+  transition: all var(--zx-transition-base);
+  
+  &:hover {
+    box-shadow: var(--zx-shadow-md);
+  }
+  
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: var(--zx-spacing-sm);
+    font-weight: var(--zx-font-semibold);
+    font-size: var(--zx-font-base);
     
-    span {
+    .el-icon {
       font-size: 18px;
-      font-weight: 600;
-      color: #2c3e50;
-      
-      .el-icon {
-        margin-right: 8px;
-        color: #667eea;
-      }
+      color: var(--zx-primary);
     }
   }
   
-  ::v-deep(.el-card__body) {
-    padding: 32px;
+  :deep(.el-card__body) {
+    padding: var(--zx-spacing-xl);
   }
+}
 
-  .upload-demo {
-    margin: 32px 0;
+/* Alert 样式 */
+.step-alert {
+  margin-bottom: var(--zx-spacing-lg);
+  border-radius: var(--zx-radius-sm);
+  
+  .alert-title {
+    font-size: var(--zx-font-base);
+    font-weight: var(--zx-font-medium);
+  }
+  
+  :deep(.el-alert__content) {
+    font-size: var(--zx-font-sm);
+    line-height: var(--zx-leading-relaxed);
+  }
+}
+
+/* 上传区域 */
+.upload-dragger {
+  margin: var(--zx-spacing-xl) 0;
+  
+  :deep(.el-upload-dragger) {
+    padding: var(--zx-spacing-2xl);
+    border-radius: var(--zx-radius-md);
+    transition: all var(--zx-transition-base);
     
-    ::v-deep(.el-upload-dragger) {
-      border: 2px dashed #d9d9d9;
-      border-radius: 12px;
-      background: #fafbfc;
-      transition: all 0.3s ease;
-      padding: 40px 20px;
-      
-      &:hover {
-        border-color: #667eea;
-        background: #f8f9fe;
-        
-        .el-icon {
-          color: #667eea;
-          transform: scale(1.1);
-        }
-      }
-      
-      .el-icon {
-        font-size: 80px;
-        color: #c0c4cc;
-        margin: 0 0 16px;
-        transition: all 0.3s ease;
-      }
-      
-      .el-upload__text {
-        font-size: 16px;
-        color: #606266;
-        
-        em {
-          color: #667eea;
-          font-style: normal;
-          font-weight: 500;
-        }
-      }
+    &:hover {
+      border-color: var(--zx-primary);
+      background-color: var(--zx-primary-light-9);
     }
-  }
-
-  .text-preview {
-    margin-top: 32px;
-    animation: fadeIn 0.5s ease;
     
-    .el-divider {
-      margin: 24px 0;
+    .el-icon--upload {
+      font-size: 48px;
+      color: var(--zx-text-placeholder);
+      margin-bottom: var(--zx-spacing-md);
     }
-
-    .preview-textarea {
-      margin-bottom: 16px;
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      border-radius: 8px;
-      
-      ::v-deep(textarea) {
-        line-height: 1.6;
-        background: #f8f9fa;
-      }
-    }
-
-    .preview-info {
-      margin: 16px 0 24px 0;
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-
-      .el-tag {
-        padding: 8px 16px;
-        font-size: 14px;
-        border-radius: 20px;
-        border: none;
-        
-        &:first-child {
-          background: #667eea;
-          color: white;
-        }
-      }
-    }
-  }
-
-  .field-hint {
-    margin-top: 12px;
     
-    .el-alert {
-      border-radius: 8px;
+    .el-upload__text {
+      font-size: var(--zx-font-base);
+      color: var(--zx-text-regular);
       
-      p {
-        margin: 6px 0;
-        font-size: 13px;
-        line-height: 1.6;
+      em {
+        color: var(--zx-primary);
+        font-style: normal;
+        font-weight: var(--zx-font-medium);
       }
     }
-  }
-
-  .prompt-textarea {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 13px;
     
-    ::v-deep(textarea) {
-      line-height: 1.8;
-      background: #f8f9fa;
-      border-radius: 8px;
-    }
-  }
-
-  .prompt-info {
-    margin-top: 12px;
-    
-    .el-tag {
-      padding: 6px 14px;
-      border-radius: 16px;
-    }
-  }
-
-  .usage-alert {
-    margin: 24px 0;
-    border-radius: 12px;
-    
-    .usage-steps {
-      ol {
-        margin: 12px 0;
-        padding-left: 24px;
-
-        li {
-          margin: 10px 0;
-          line-height: 1.8;
-          color: #606266;
-          
-          strong {
-            color: #2c3e50;
-          }
-        }
-      }
-    }
-  }
-
-  .json-hint {
-    margin-bottom: 20px;
-    border-radius: 12px;
-
-    p {
-      margin: 6px 0;
-      line-height: 1.6;
-    }
-  }
-
-  .json-textarea {
-    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 13px;
-    margin-bottom: 20px;
-    
-    ::v-deep(textarea) {
-      line-height: 1.8;
-      background: #f8f9fa;
-      border-radius: 8px;
-      border: 1px solid #e4e7ed;
-      transition: all 0.3s ease;
-      
-      &:focus {
-        border-color: #667eea;
-        background: #ffffff;
-      }
-    }
-  }
-
-  .validation-result {
-    margin-bottom: 24px;
-    
-    .el-alert {
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-
-    ul {
-      margin: 12px 0;
-      padding-left: 24px;
-
-      li {
-        margin: 8px 0;
-        line-height: 1.6;
-      }
-    }
-  }
-
-  .step-actions {
-    margin-top: 32px;
-    text-align: center;
-    padding: 24px 0 0;
-    border-top: 2px solid #f0f2f5;
-
-    .el-button {
-      margin: 0 8px;
-      padding: 12px 28px;
-      font-size: 15px;
-      border-radius: 8px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-      
-      &.el-button--primary {
-        background: #667eea;
-        border: none;
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.35);
-        
-        &:hover {
-          background: #5568d3;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(102, 126, 234, 0.45);
-        }
-        
-        &:active {
-          background: #4451b8;
-          transform: translateY(0);
-        }
-      }
-      
-      &.el-button--success {
-        background: #67c23a;
-        border: none;
-        box-shadow: 0 4px 12px rgba(103, 194, 58, 0.35);
-        
-        &:hover {
-          background: #5daf34;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 20px rgba(103, 194, 58, 0.45);
-        }
-        
-        &:active {
-          background: #529b2e;
-        }
-      }
-      
-      &.el-button--default {
-        &:hover {
-          color: #667eea;
-          border-color: #667eea;
-          background: #f8f9fe;
-        }
-      }
+    .el-upload__tip {
+      font-size: var(--zx-font-sm);
+      color: var(--zx-text-secondary);
+      margin-top: var(--zx-spacing-sm);
     }
   }
 }
 
+.uploading-content {
+  padding: var(--zx-spacing-2xl);
+  
+  .loading-icon {
+    font-size: 50px;
+    color: var(--zx-primary);
+  }
+  
+  .uploading-text {
+    margin-top: var(--zx-spacing-md);
+    color: var(--zx-text-regular);
+    font-size: var(--zx-font-base);
+  }
+}
+
+/* 文档预览 */
+.text-preview {
+  margin-top: var(--zx-spacing-xl);
+  animation: fadeIn 0.3s ease-out;
+  
+  .el-divider {
+    margin: var(--zx-spacing-xl) 0;
+    
+    :deep(.el-divider__text) {
+      display: flex;
+      align-items: center;
+      gap: var(--zx-spacing-xs);
+      font-size: var(--zx-font-base);
+      font-weight: var(--zx-font-medium);
+      color: var(--zx-text-regular);
+    }
+  }
+  
+  .preview-textarea {
+    margin-bottom: var(--zx-spacing-md);
+    
+    :deep(textarea) {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      line-height: var(--zx-leading-relaxed);
+      background: var(--zx-bg-light);
+      font-size: var(--zx-font-sm);
+    }
+  }
+  
+  .preview-info {
+    margin: var(--zx-spacing-md) 0;
+    display: flex;
+    gap: var(--zx-spacing-sm);
+    flex-wrap: wrap;
+  }
+}
+
+/* 表单样式 */
+.prompt-form {
+  .template-tag {
+    padding: var(--zx-spacing-sm) var(--zx-spacing-md);
+    font-size: var(--zx-font-sm);
+  }
+  
+  .fields-textarea,
+  .prompt-textarea {
+    :deep(textarea) {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: var(--zx-font-sm);
+      line-height: var(--zx-leading-relaxed);
+    }
+  }
+  
+  .field-hint-text {
+    margin-top: var(--zx-spacing-sm);
+    padding: var(--zx-spacing-sm);
+    font-size: var(--zx-font-sm);
+    color: var(--zx-text-secondary);
+    line-height: var(--zx-leading-relaxed);
+  }
+  
+  .prompt-info {
+    margin-top: var(--zx-spacing-sm);
+    display: flex;
+    gap: var(--zx-spacing-sm);
+  }
+}
+
+/* JSON 标签页 */
+.json-tabs {
+  margin-bottom: var(--zx-spacing-lg);
+  
+  .json-textarea {
+    :deep(textarea) {
+      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      font-size: var(--zx-font-sm);
+      line-height: var(--zx-leading-relaxed);
+      background: var(--zx-bg-light);
+    }
+  }
+  
+  .readonly-textarea {
+    :deep(textarea) {
+      background: var(--zx-bg-light);
+      cursor: default;
+    }
+  }
+  
+  .copy-example-btn {
+    margin-top: var(--zx-spacing-sm);
+  }
+}
+
+/* 验证结果 */
+.validation-result {
+  margin-bottom: var(--zx-spacing-lg);
+  
+  .el-alert {
+    border-radius: var(--zx-radius-sm);
+    margin-bottom: var(--zx-spacing-sm);
+  }
+  
+  .warnings-alert {
+    margin-top: var(--zx-spacing-sm);
+  }
+  
+  ul {
+    margin: var(--zx-spacing-sm) 0;
+    padding-left: var(--zx-spacing-lg);
+    
+    li {
+      margin: var(--zx-spacing-xs) 0;
+      line-height: var(--zx-leading-relaxed);
+      font-size: var(--zx-font-sm);
+    }
+  }
+}
+
+/* 步骤操作按钮 */
+.step-actions {
+  margin-top: var(--zx-spacing-xl);
+  padding-top: var(--zx-spacing-lg);
+  border-top: 1px solid var(--zx-border-lighter);
+  text-align: center;
+  display: flex;
+  gap: var(--zx-spacing-sm);
+  justify-content: center;
+  flex-wrap: wrap;
+  
+  .el-button {
+    padding: var(--zx-spacing-sm) var(--zx-spacing-lg);
+    font-size: var(--zx-font-base);
+    border-radius: var(--zx-radius-sm);
+    font-weight: var(--zx-font-medium);
+    transition: all var(--zx-transition-fast);
+  }
+}
+
+/* 成功卡片 */
+.success-card {
+  background: var(--zx-success-light-9);
+  border: 1px solid var(--zx-success-light-5);
+  
+  .card-header {
+    color: var(--zx-success-dark-2);
+    
+    .el-icon {
+      color: var(--zx-success);
+      animation: pulse 2s ease infinite;
+    }
+  }
+  
+  .result-info {
+    text-align: left;
+    margin: var(--zx-spacing-lg) 0;
+    
+    .result-main-text {
+      margin: var(--zx-spacing-md) 0;
+      font-size: var(--zx-font-lg);
+      color: var(--zx-success-dark-2);
+      font-weight: var(--zx-font-semibold);
+    }
+    
+    .result-detail {
+      margin: var(--zx-spacing-sm) 0;
+      font-size: var(--zx-font-base);
+      color: var(--zx-text-regular);
+      display: flex;
+      align-items: center;
+      gap: var(--zx-spacing-xs);
+      
+      .success-icon {
+        color: var(--zx-success);
+      }
+    }
+    
+    .warnings-section {
+      margin-top: var(--zx-spacing-md);
+      
+      .warnings-list {
+        margin-top: var(--zx-spacing-sm);
+        padding: var(--zx-spacing-md);
+        padding-left: var(--zx-spacing-xl);
+        background: var(--zx-warning-light-9);
+        border-left: 3px solid var(--zx-warning);
+        border-radius: var(--zx-radius-sm);
+        
+        li {
+          margin: var(--zx-spacing-xs) 0;
+          line-height: var(--zx-leading-relaxed);
+          font-size: var(--zx-font-sm);
+          color: var(--zx-warning-dark-2);
+        }
+      }
+    }
+  }
+  
+  .result-actions {
+    margin-top: var(--zx-spacing-xl);
+    display: flex;
+    gap: var(--zx-spacing-md);
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
+/* 动画 */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1060,161 +1042,6 @@ export default {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-// Element Plus 组件样式优化
-::v-deep(.el-select) {
-  width: 100%;
-  
-  .el-input__wrapper {
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    
-    &:hover {
-      box-shadow: 0 0 0 1px #667eea inset;
-    }
-  }
-}
-
-::v-deep(.el-input__wrapper),
-::v-deep(.el-textarea__inner) {
-  border-radius: 8px;
-  transition: all 0.3s ease;
-  
-  &:hover {
-    border-color: #667eea;
-  }
-  
-  &:focus,
-  &.is-focus {
-    border-color: #667eea;
-    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
-  }
-}
-
-// 上传拖拽区域的背景已在 .upload-demo 中定义
-
-::v-deep(.el-divider) {
-  margin: 32px 0;
-  
-  .el-divider__text {
-    background: transparent;
-    font-size: 15px;
-    font-weight: 500;
-    color: #606266;
-    display: flex;
-    align-items: center;
-  }
-}
-
-::v-deep(.el-result) {
-  padding: 48px 0;
-  
-  .el-result__icon svg {
-    width: 80px;
-    height: 80px;
-  }
-  
-  .el-result__title {
-    font-size: 28px;
-    margin-top: 24px;
-  }
-  
-  .el-result__subtitle {
-    font-size: 16px;
-    margin-top: 12px;
-  }
-}
-
-::v-deep(.el-alert) {
-  &.el-alert--info {
-    background: #e1effe;
-    border: 1px solid #bfdbfe;
-    
-    .el-alert__title {
-      color: #1e40af;
-    }
-  }
-  
-  &.el-alert--success {
-    background: #d1fae5;
-    border: 1px solid #86efac;
-    
-    .el-alert__title {
-      color: #166534;
-    }
-  }
-  
-  &.el-alert--warning {
-    background: #fef3c7;
-    border: 1px solid #fde047;
-    
-    .el-alert__title {
-      color: #92400e;
-    }
-  }
-}
-
-// 加载动画优化
-::v-deep(.el-loading-mask) {
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(5px);
-}
-
-.success-card {
-  background: #f0fdf4;
-  border: 2px solid #86efac;
-  
-  ::v-deep(.el-card__header) {
-    background: #dcfce7;
-    border-bottom-color: #86efac;
-    
-    span {
-      color: #166534;
-      
-      .el-icon {
-        color: #16a34a;
-        animation: pulse 2s ease infinite;
-      }
-    }
-  }
-  
-  .result-info {
-    text-align: left;
-    margin: 24px 0;
-    animation: fadeIn 0.6s ease;
-
-    p {
-      margin: 12px 0;
-      font-size: 15px;
-      line-height: 1.8;
-      color: #166534;
-      
-      strong {
-        color: #15803d;
-        font-weight: 600;
-      }
-    }
-
-    .warnings-list {
-      margin-top: 16px;
-      padding: 16px;
-      padding-left: 36px;
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
-      border-radius: 8px;
-      color: #92400e;
-
-      li {
-        margin: 8px 0;
-        line-height: 1.6;
-      }
-    }
-  }
-  
-  .step-actions {
-    border-top-color: #86efac;
   }
 }
 
@@ -1227,119 +1054,78 @@ export default {
   }
 }
 
-.usage-guide {
-  line-height: 2;
-  color: #4b5563;
-  font-size: 14px;
-  
-  ::v-deep(h3) {
-    color: #1f2937;
-    margin-top: 24px;
-    margin-bottom: 12px;
-    font-size: 18px;
-    font-weight: 600;
-  }
-  
-  ::v-deep(h4) {
-    color: #374151;
-    margin-top: 20px;
-    margin-bottom: 10px;
-    font-size: 16px;
-    font-weight: 600;
-  }
-  
-  ::v-deep(p) {
-    margin: 10px 0;
-    line-height: 1.8;
-  }
-  
-  ::v-deep(ul), ::v-deep(ol) {
-    margin: 12px 0;
-    padding-left: 28px;
-    
-    li {
-      margin: 8px 0;
-      line-height: 1.8;
-    }
-  }
-  
-  ::v-deep(strong) {
-    color: #667eea;
-    font-weight: 600;
-  }
-}
-
-// code 标签样式
+/* code 标签样式 */
 code {
-  background: #f5f7fa;
-  color: #e83e8c;
+  background: var(--zx-bg-light);
+  color: var(--zx-danger);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--zx-radius-xs);
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   font-size: 0.9em;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--zx-border-lighter);
 }
 
-// 响应式设计
+/* 使用说明对话框 */
+.usage-guide {
+  line-height: var(--zx-leading-relaxed);
+  color: var(--zx-text-regular);
+  font-size: var(--zx-font-sm);
+  
+  :deep(h3) {
+    color: var(--zx-text-primary);
+    margin-top: var(--zx-spacing-lg);
+    margin-bottom: var(--zx-spacing-sm);
+    font-size: var(--zx-font-lg);
+    font-weight: var(--zx-font-semibold);
+  }
+  
+  :deep(h4) {
+    color: var(--zx-text-regular);
+    margin-top: var(--zx-spacing-md);
+    margin-bottom: var(--zx-spacing-sm);
+    font-size: var(--zx-font-base);
+    font-weight: var(--zx-font-medium);
+  }
+  
+  :deep(p) {
+    margin: var(--zx-spacing-sm) 0;
+    line-height: var(--zx-leading-relaxed);
+  }
+  
+  :deep(ul), :deep(ol) {
+    margin: var(--zx-spacing-sm) 0;
+    padding-left: var(--zx-spacing-xl);
+    
+    li {
+      margin: var(--zx-spacing-xs) 0;
+      line-height: var(--zx-leading-relaxed);
+    }
+  }
+  
+  :deep(strong) {
+    color: var(--zx-primary);
+    font-weight: var(--zx-font-semibold);
+  }
+}
+
+/* 响应式设计 */
 @media (max-width: 768px) {
-  .ai-template-generator {
-    padding: 20px 12px;
-  }
-  
-  .header-card {
-    ::v-deep(.el-card__body) {
-      padding: 32px 20px;
-    }
-    
-    h2 {
-      font-size: 28px;
-    }
-    
-    .subtitle {
-      font-size: 14px;
-    }
-  }
-  
-  .steps {
-    padding: 20px 16px;
-    
-    ::v-deep(.el-step__title) {
-      font-size: 14px;
-    }
+  .ai-template-generator-page {
+    padding: var(--zx-spacing-sm);
   }
   
   .step-card {
-    ::v-deep(.el-card__header) {
-      padding: 20px 16px;
-    }
-    
-    ::v-deep(.el-card__body) {
-      padding: 20px 16px;
-    }
-    
-    .step-actions {
-      .el-button {
-        margin: 4px;
-        padding: 10px 20px;
-        font-size: 14px;
-      }
-    }
-  }
-}
-
-// 打印样式
-@media print {
-  .ai-template-generator {
-    background: white;
-    padding: 0;
-    
-    &::before {
-      display: none;
+    :deep(.el-card__body) {
+      padding: var(--zx-spacing-md);
     }
   }
   
   .step-actions {
-    display: none;
+    flex-direction: column;
+    
+    .el-button {
+      width: 100%;
+    }
   }
 }
 </style>

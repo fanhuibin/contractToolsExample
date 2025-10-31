@@ -8,60 +8,7 @@ package com.zhaoxinms.contract.tools.ruleextract.constants;
 public class AIPromptTemplates {
     
     /**
-     * 基础字段提取模板
-     */
-    public static final String BASIC_EXTRACTION_TEMPLATE = 
-        "# 合同信息抽取模板生成器\n\n" +
-        "## 角色\n" +
-        "你是一个专业的合同分析专家，擅长识别文档结构并设计数据抽取规则。\n\n" +
-        "## 任务\n" +
-        "根据用户提供的合同文档和字段列表，生成标准的JSON格式抽取模板。\n\n" +
-        "## 需要提取的字段\n" +
-        "{FIELD_LIST}\n\n" +
-        "## 合同原文\n" +
-        "{DOCUMENT_CONTENT}\n\n" +
-        "## 输出格式（必须严格遵守）\n" +
-        "```json\n" +
-        "{\n" +
-        "  \"templateName\": \"根据合同类型命名（如：采购合同模板）\",\n" +
-        "  \"description\": \"简要说明模板用途\",\n" +
-        "  \"fields\": [\n" +
-        "    {\n" +
-        "      \"fieldName\": \"字段英文名（驼峰命名，如contractNo）\",\n" +
-        "      \"fieldLabel\": \"字段中文名（如合同编号）\",\n" +
-        "      \"fieldType\": \"text\",\n" +
-        "      \"required\": true,\n" +
-        "      \"extractRules\": {\n" +
-        "        \"type\": \"keyword\",\n" +
-        "        \"keyword\": \"定位关键词（如'合同编号：'）\",\n" +
-        "        \"offset\": 0,\n" +
-        "        \"length\": 50\n" +
-        "      },\n" +
-        "      \"confidence\": 85\n" +
-        "    }\n" +
-        "  ]\n" +
-        "}\n" +
-        "```\n\n" +
-        "## 规则设计原则\n" +
-        "1. **keyword**: 选择唯一且稳定的关键词，建议包含冒号或等特殊符号\n" +
-        "2. **offset**: 关键词后偏移字符数（通常为0，表示紧跟关键词）\n" +
-        "3. **length**: 提取最大长度（宁可设置大一些，如50）\n" +
-        "4. **type**: 默认使用 \"keyword\"，最准确\n" +
-        "5. **confidence**: 根据关键词唯一性打分，0-100\n\n" +
-        "## 常见字段类型的正则表达式参考\n" +
-        "- 日期：`\\\\d{4}年\\\\d{1,2}月\\\\d{1,2}日` 或 `\\\\d{4}-\\\\d{2}-\\\\d{2}`\n" +
-        "- 金额：`\\\\d+(\\\\.\\\\d{2})?` 或 `¥?\\\\d{1,3}(,\\\\d{3})*(\\\\.\\\\d{2})?`\n" +
-        "- 编号：`[A-Z]{2}-\\\\d{4}-\\\\d{3}` （根据实际格式调整）\n" +
-        "- 电话：`1[3-9]\\\\d{9}` 或 `\\\\d{3,4}-\\\\d{7,8}`\n\n" +
-        "## 重要提示\n" +
-        "1. 只输出JSON，不要添加任何解释文字\n" +
-        "2. 确保JSON格式完全正确，可以直接解析\n" +
-        "3. 如果某个字段在文档中找不到明确位置，设置 required: false 和 confidence: 0\n" +
-        "4. 每个字段必须有 extractRules\n" +
-        "5. JSON 输出不要包含在 ```json 代码块中，直接输出原始JSON\n";
-    
-    /**
-     * 高级提取模板（包含表格）
+     * 标准提取模板（支持文本字段和表格数据提取）
      */
     public static final String ADVANCED_EXTRACTION_TEMPLATE = 
         "# 高级合同信息抽取模板生成器（支持表格）\n\n" +
@@ -89,6 +36,7 @@ public class AIPromptTemplates {
         "        \"keyword\": \"定位关键词\",\n" +
         "        \"offset\": 0,\n" +
         "        \"length\": 50,\n" +
+        "        \"occurrence\": 1,\n" +
         "        \"tableRules\": {\n" +
         "          \"tableKeyword\": \"表格标题关键词\",\n" +
         "          \"columns\": [\"列名1\", \"列名2\"]\n" +
@@ -99,6 +47,50 @@ public class AIPromptTemplates {
         "  ]\n" +
         "}\n" +
         "```\n\n" +
+        "## 关键词锚点提取规则\n" +
+        "- type: 必须设置为 \"keyword\"（关键词锚点）\n" +
+        "- keyword: 定位关键词（必填，用于在文档中定位字段位置）\n" +
+        "- pattern: 正则表达式（可选但强烈推荐）\n" +
+        "  * 不写 pattern 时，提取关键词后到下一个标点的所有内容\n" +
+        "  * 建议根据字段类型设置精确的 pattern，提高准确性\n" +
+        "- offset: 偏移量（通常为0，表示紧跟关键词）\n" +
+        "- length: 提取最大长度（用于限制提取范围，建议50-100）\n" +
+        "- occurrence: 第几个匹配项（可选，默认1）\n" +
+        "  * 当关键词在文档中出现多次时使用\n" +
+        "  * 例如：【地址:】出现3次，设置 occurrence=2 提取第2个\n" +
+        "  * 例如：【日期:】出现多次，分别设置 occurrence=1,2,3 提取不同位置的日期\n\n" +
+        "## 常用正则表达式（pattern 字段）\n" +
+        "- 日期：\\\\d{4}年\\\\d{1,2}月\\\\d{1,2}日 或 \\\\d{4}-\\\\d{2}-\\\\d{2}\n" +
+        "- 金额（简单）：[\\\\d,]+(?:\\\\.\\\\d{1,2})?\n" +
+        "- 金额（带货币符号）：[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\n" +
+        "- 中文大写金额：[壹贰叁肆伍陆柒捌玖拾佰仟万亿元整]+\n" +
+        "- 编号代码：[A-Z0-9-]+\n" +
+        "- 电话号码：1[3-9]\\\\d{9} 或 \\\\d{3,4}-?\\\\d{7,8}\n" +
+        "- 邮编：\\\\d{6}\n" +
+        "- 通用文本（到换行）：[^\\\\r\\\\n]+\n" +
+        "- 通用文本（到括号）：[^（(）)]+\n\n" +
+        "## 特殊场景处理\n" +
+        "### 场景1：括号内内容提取\n" +
+        "当字段值在括号内时（如：`总价大写: 人民币陆萬陆仟陆佰元整 (¥66,600.00 元)`）\n" +
+        "```json\n" +
+        "{\n" +
+        "  \"fieldName\": \"totalAmountNumber\",\n" +
+        "  \"extractRules\": {\n" +
+        "    \"type\": \"keyword\",\n" +
+        "    \"keyword\": \"(\",\n" +
+        "    \"pattern\": \"[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\",\n" +
+        "    \"occurrence\": 1\n" +
+        "  }\n" +
+        "}\n" +
+        "```\n\n" +
+        "### 场景2：同一行多个值提取\n" +
+        "示例：`总价大写: 人民币陆萬陆仟陆佰元整 (¥66,600.00 元)`\n" +
+        "- 大写：keyword=\"总价大写:\", pattern=\"[壹贰叁肆伍陆柒捌玖拾佰仟万亿元整]+\"\n" +
+        "- 小写：keyword=\"(\", pattern=\"[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\"\n" +
+        "⚠️ 关键点：\n" +
+        "- 大写金额直接用\"总价大写:\"作为关键词\n" +
+        "- 小写金额用\"(\"作为关键词，因为金额在括号内\n" +
+        "- 两个字段使用不同的关键词，避免冲突\n\n" +
         "## 表格提取说明\n" +
         "- fieldType 设置为 \"table\"\n" +
         "- extractRules.type 设置为 \"table\"\n" +
@@ -106,9 +98,26 @@ public class AIPromptTemplates {
         "- tableKeyword: 表格前的标题关键词\n" +
         "- columns: 需要提取的列名列表\n\n" +
         "## 注意事项\n" +
-        "1. 只输出JSON，不要添加解释\n" +
-        "2. 确保JSON格式正确\n" +
-        "3. 表格字段要明确标注 fieldType: \"table\"\n";
+        "1. ⚠️ 只支持两种提取类型：\n" +
+        "   - type=\"keyword\" - 关键词锚点提取（用于普通字段）\n" +
+        "   - type=\"table\" - 表格提取（用于表格数据）\n" +
+        "   - ❌ 不支持 type=\"regex\" 纯正则提取\n" +
+        "2. ⚠️ 所有字段必须使用关键词定位：\n" +
+        "   - 找到能唯一定位字段的关键词（如\"合同编号：\"、\"甲方：\"）\n" +
+        "   - 使用 pattern 进一步精确提取内容\n" +
+        "   - 不同字段必须使用不同的关键词\n" +
+        "3. ⚠️ 金额字段推荐 pattern：\n" +
+        "   - 简单金额：[\\\\d,]+(?:\\\\.\\\\d{1,2})?\n" +
+        "   - 带货币符号：[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\n" +
+        "   - 大写金额：[壹贰叁肆伍陆柒捌玖拾佰仟万亿元整]+\n" +
+        "4. ⚠️ 括号内的内容：\n" +
+        "   - 使用括号\"(\"作为关键词\n" +
+        "   - 配合 pattern 提取具体内容\n" +
+        "5. 只输出JSON，不要添加解释\n" +
+        "6. 确保JSON格式正确，可以被直接解析\n" +
+        "7. 表格字段必须设置 fieldType=\"table\" 和 type=\"table\"\n" +
+        "8. 当关键词重复出现时，使用 occurrence 参数指定第几个\n" +
+        "9. pattern 中的正则表达式必须使用双反斜杠转义（\\\\d 而不是 \\d）\n";
     
     /**
      * 模板说明文档
@@ -166,7 +175,8 @@ public class AIPromptTemplates {
         "        \"type\": \"keyword\",\n" +
         "        \"keyword\": \"合同编号：\",\n" +
         "        \"offset\": 0,\n" +
-        "        \"length\": 30\n" +
+        "        \"length\": 30,\n" +
+        "        \"occurrence\": 1\n" +
         "      },\n" +
         "      \"confidence\": 95\n" +
         "    },\n" +
@@ -179,9 +189,25 @@ public class AIPromptTemplates {
         "        \"type\": \"keyword\",\n" +
         "        \"keyword\": \"甲方：\",\n" +
         "        \"offset\": 0,\n" +
-        "        \"length\": 50\n" +
+        "        \"length\": 50,\n" +
+        "        \"occurrence\": 1\n" +
         "      },\n" +
         "      \"confidence\": 90\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"fieldName\": \"partyBAddress\",\n" +
+        "      \"fieldLabel\": \"乙方地址\",\n" +
+        "      \"fieldType\": \"text\",\n" +
+        "      \"required\": false,\n" +
+        "      \"extractRules\": {\n" +
+        "        \"type\": \"keyword\",\n" +
+        "        \"keyword\": \"地址：\",\n" +
+        "        \"offset\": 0,\n" +
+        "        \"length\": 100,\n" +
+        "        \"occurrence\": 2\n" +
+        "      },\n" +
+        "      \"confidence\": 85,\n" +
+        "      \"note\": \"当'地址：'出现多次时，提取第2个\"\n" +
         "    },\n" +
         "    {\n" +
         "      \"fieldName\": \"contractAmount\",\n" +
@@ -191,11 +217,13 @@ public class AIPromptTemplates {
         "      \"extractRules\": {\n" +
         "        \"type\": \"keyword\",\n" +
         "        \"keyword\": \"合同金额：\",\n" +
+        "        \"pattern\": \"[\\\\d,]+(?:\\\\.\\\\d{1,2})?\",\n" +
         "        \"offset\": 0,\n" +
-        "        \"length\": 30,\n" +
-        "        \"pattern\": \"\\\\d+(\\\\.\\\\d{2})?\"\n" +
+        "        \"length\": 50,\n" +
+        "        \"occurrence\": 1\n" +
         "      },\n" +
-        "      \"confidence\": 85\n" +
+        "      \"confidence\": 90,\n" +
+        "      \"note\": \"使用简化的金额正则，支持千分位\"\n" +
         "    },\n" +
         "    {\n" +
         "      \"fieldName\": \"signDate\",\n" +
@@ -206,10 +234,44 @@ public class AIPromptTemplates {
         "        \"type\": \"keyword\",\n" +
         "        \"keyword\": \"签订日期：\",\n" +
         "        \"offset\": 0,\n" +
-        "        \"length\": 20,\n" +
+        "        \"length\": 30,\n" +
+        "        \"occurrence\": 1,\n" +
         "        \"pattern\": \"\\\\d{4}年\\\\d{1,2}月\\\\d{1,2}日\"\n" +
         "      },\n" +
-        "      \"confidence\": 88\n" +
+        "      \"confidence\": 95,\n" +
+        "      \"note\": \"使用正则精确匹配日期格式\"\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"fieldName\": \"totalAmountCapital\",\n" +
+        "      \"fieldLabel\": \"合同总价大写\",\n" +
+        "      \"fieldType\": \"text\",\n" +
+        "      \"required\": true,\n" +
+        "      \"extractRules\": {\n" +
+        "        \"type\": \"keyword\",\n" +
+        "        \"keyword\": \"总价大写:\",\n" +
+        "        \"pattern\": \"[壹贰叁肆伍陆柒捌玖拾佰仟万亿元整]+\",\n" +
+        "        \"offset\": 0,\n" +
+        "        \"length\": 100,\n" +
+        "        \"occurrence\": 1\n" +
+        "      },\n" +
+        "      \"confidence\": 90,\n" +
+        "      \"note\": \"提取中文大写金额\"\n" +
+        "    },\n" +
+        "    {\n" +
+        "      \"fieldName\": \"totalAmountNumber\",\n" +
+        "      \"fieldLabel\": \"合同总价小写\",\n" +
+        "      \"fieldType\": \"text\",\n" +
+        "      \"required\": true,\n" +
+        "      \"extractRules\": {\n" +
+        "        \"type\": \"keyword\",\n" +
+        "        \"keyword\": \"(\",\n" +
+        "        \"pattern\": \"[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\",\n" +
+        "        \"offset\": 0,\n" +
+        "        \"length\": 30,\n" +
+        "        \"occurrence\": 1\n" +
+        "      },\n" +
+        "      \"confidence\": 90,\n" +
+        "      \"note\": \"使用左括号'('作为关键词，从括号内提取小写金额\"\n" +
         "    }\n" +
         "  ]\n" +
         "}";

@@ -24,7 +24,7 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
 
-interface Props {
+export interface PageHeaderProps {
   title: string
   description?: string
   icon?: Component
@@ -32,7 +32,7 @@ interface Props {
   tagType?: 'success' | 'info' | 'warning' | 'danger' | ''
 }
 
-withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<PageHeaderProps>(), {
   description: '',
   tagType: 'info'
 })

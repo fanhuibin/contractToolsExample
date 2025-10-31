@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ruleextract.engine.enhanced;
 
 import cn.hutool.core.util.StrUtil;
 import com.alibaba.fastjson2.JSONObject;
+import com.zhaoxinms.contract.tools.compare.util.TextNormalizer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -72,8 +73,17 @@ public class KeywordAnchorMatcher {
             Integer occurrence = getOrDefault(config, "occurrence", 1);
             Integer anchorOccurrence = getOrDefault(config, "anchorOccurrence", 1);
 
+            // 【关键优化】标准化文本和关键词的标点符号，解决全角/半角标点符号不匹配的问题
+            String normalizedText = TextNormalizer.normalizePunctuation(text);
+            String normalizedAnchor = TextNormalizer.normalizePunctuation(anchor);
+            
             if (debug) {
-                result.addDebugInfo("锚点: " + anchor);
+                result.addDebugInfo("原始锚点: " + anchor);
+                if (!anchor.equals(normalizedAnchor)) {
+                    result.addDebugInfo("标准化锚点: " + normalizedAnchor + " (标点符号已标准化)");
+                } else {
+                    result.addDebugInfo("标准化锚点: " + normalizedAnchor);
+                }
                 result.addDebugInfo("方向: " + direction);
                 result.addDebugInfo("提取方法: " + extractMethod);
                 result.addDebugInfo("正则表达式: " + pattern);
@@ -82,8 +92,8 @@ public class KeywordAnchorMatcher {
                 }
             }
 
-            // 查找锚点位置
-            AnchorResult anchorResult = findAnchor(text, anchor, ignoreCase, anchorOccurrence);
+            // 查找锚点位置（使用标准化后的文本和关键词）
+            AnchorResult anchorResult = findAnchor(normalizedText, normalizedAnchor, ignoreCase, anchorOccurrence);
             if (anchorResult == null || anchorResult.position == -1) {
                 if (debug) {
                     result.addDebugInfo("未找到锚点关键词");
@@ -102,8 +112,8 @@ public class KeywordAnchorMatcher {
             
             // 显示锚点周围的文本用于调试
             int contextStart = Math.max(0, anchorResult.position - 50);
-            int contextEnd = Math.min(text.length(), anchorResult.position + anchorResult.matchedKeyword.length() + 100);
-            String context = text.substring(contextStart, contextEnd);
+            int contextEnd = Math.min(normalizedText.length(), anchorResult.position + anchorResult.matchedKeyword.length() + 100);
+            String context = normalizedText.substring(contextStart, contextEnd);
             log.info("锚点上下文: {}", context);
 
             // 根据方向获取搜索范围（使用实际匹配的关键词长度）
@@ -113,7 +123,8 @@ public class KeywordAnchorMatcher {
             // 计算搜索范围在原文中的起始位置
             int searchRangeStartPos = calculateSearchRangeStart(anchorPos, anchorLen, direction, maxDistance);
             
-            String searchText = getSearchRange(text, anchorPos, anchorLen, direction, maxDistance);
+            // 使用标准化后的文本获取搜索范围
+            String searchText = getSearchRange(normalizedText, anchorPos, anchorLen, direction, maxDistance);
             if (StrUtil.isBlank(searchText)) {
                 return ExtractionResult.failure("搜索范围为空");
             }
