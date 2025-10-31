@@ -158,3 +158,6 @@ ACCEPTANCE_CHECKLIST.md
 /contract-tools-sdk/newuploads/rule-extract-data/ocr-output
 /contract-tools-sdk/newuploads/rule-extract-data/ocr-texts
 /contract-tools-sdk/newuploads/rule-extract-data/tasks
+/.augment
+/contract-tools-sdk/testuploads/compare-pro
+/openspec
