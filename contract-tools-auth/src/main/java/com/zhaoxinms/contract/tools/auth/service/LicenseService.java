@@ -49,7 +49,8 @@ public class LicenseService {
     public LicenseValidationResult validateLicense() {
         try {
             // 读取License文件（路径已硬编码）
-            Resource resource = loadResource(AuthProperties.LICENSE_FILE_PATH);
+            // 添加 classpath: 前缀以触发优先级加载逻辑
+            Resource resource = loadResource("classpath:" + AuthProperties.LICENSE_FILE_PATH);
             if (resource == null || !resource.exists()) {
                 return LicenseValidationResult.failure("License文件不存在: " + AuthProperties.LICENSE_FILE_PATH);
             }
