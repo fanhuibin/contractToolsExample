@@ -170,6 +170,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/rule-extract/RuleExtractResult.vue'),
         meta: { title: '抽取结果' }
       },
+      {
+        path: '/rule-extract/ai-generator',
+        name: 'AITemplateGenerator',
+        component: () => import('@/views/rule-extract/AITemplateGenerator.vue'),
+        meta: { title: 'AI模板生成助手' }
+      },
       // 智能文档解析
       {
         path: '/ocr-extract',

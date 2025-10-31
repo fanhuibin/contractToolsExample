@@ -14,10 +14,16 @@
             </el-button>
             <h3>规则模板管理</h3>
           </div>
-          <el-button type="primary" @click="showCreateDialog">
-            <el-icon><Plus /></el-icon>
-            新建模板
-          </el-button>
+          <div style="display: flex; gap: 10px;">
+            <el-button type="primary" @click="showCreateDialog">
+              <el-icon><Plus /></el-icon>
+              新建模板
+            </el-button>
+            <el-button type="success" @click="goAIGenerator">
+              <el-icon><MagicStick /></el-icon>
+              AI生成模板
+            </el-button>
+          </div>
         </div>
       </template>
 
@@ -59,7 +65,7 @@
             <el-button size="small" @click="goDesign(row)">设计</el-button>
             <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
             <el-button size="small" @click="handleCopy(row)">复制</el-button>
-            <el-dropdown @command="(cmd) => handleCommand(cmd, row)" style="margin-left: 8px;">
+            <el-dropdown @command="(cmd: string) => handleCommand(cmd, row)" style="margin-left: 8px;">
               <el-button size="small">
                 更多<el-icon class="el-icon--right"><arrow-down /></el-icon>
               </el-button>
@@ -124,7 +130,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, ArrowDown, Back } from '@element-plus/icons-vue'
+import { Plus, ArrowDown, Back, MagicStick } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
 import {
   listTemplates,
@@ -246,6 +252,10 @@ const submitForm = async () => {
 
 const goDesign = (row: any) => {
   router.push(`/rule-extract/template/${row.id}`)
+}
+
+const goAIGenerator = () => {
+  router.push('/rule-extract/ai-generator')
 }
 
 const handleCopy = async (row: any) => {

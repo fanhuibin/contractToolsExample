@@ -337,22 +337,67 @@ public class HtmlTableParser {
     
     /**
      * 检查表头是否包含所有特征列（顺序不限）
+     * 支持多级容错匹配：
+     * 1. 完全匹配
+     * 2. 忽略空格匹配
+     * 3. 忽略全角/半角括号匹配
+     * 4. 部分包含匹配
      */
     private static boolean matchHeadersContains(List<String> headers, String[] featureColumns) {
         for (String featureColumn : featureColumns) {
             String trimmedFeature = featureColumn.trim();
             boolean found = false;
+            String matchType = null;
             
             for (String header : headers) {
-                if (header.trim().equals(trimmedFeature)) {
+                String trimmedHeader = header.trim();
+                
+                // 1. 完全匹配（精确匹配）
+                if (trimmedHeader.equals(trimmedFeature)) {
                     found = true;
+                    matchType = "完全匹配";
                     break;
+                }
+                
+                // 2. 忽略空格匹配
+                String headerNoSpace = trimmedHeader.replaceAll("\\s+", "");
+                String featureNoSpace = trimmedFeature.replaceAll("\\s+", "");
+                if (headerNoSpace.equals(featureNoSpace)) {
+                    found = true;
+                    matchType = "忽略空格匹配";
+                    log.debug("列 '{}' 通过忽略空格匹配到 '{}'", trimmedFeature, trimmedHeader);
+                    break;
+                }
+                
+                // 3. 忽略全角/半角括号匹配
+                String headerNormalized = normalizeBrackets(trimmedHeader);
+                String featureNormalized = normalizeBrackets(trimmedFeature);
+                if (headerNormalized.equals(featureNormalized)) {
+                    found = true;
+                    matchType = "忽略括号差异匹配";
+                    log.debug("列 '{}' 通过忽略括号差异匹配到 '{}'", trimmedFeature, trimmedHeader);
+                    break;
+                }
+                
+                // 4. 部分包含匹配（表头包含特征列名，或特征列名包含表头）
+                if (trimmedHeader.contains(trimmedFeature) || trimmedFeature.contains(trimmedHeader)) {
+                    // 额外检查：避免太短的字符串导致误匹配
+                    int minLen = Math.min(trimmedHeader.length(), trimmedFeature.length());
+                    if (minLen >= 2) {  // 至少2个字符才认为是有效匹配
+                        found = true;
+                        matchType = "部分包含匹配";
+                        log.debug("列 '{}' 通过部分包含匹配到 '{}'", trimmedFeature, trimmedHeader);
+                        break;
+                    }
                 }
             }
             
             if (!found) {
                 log.debug("表头特征匹配失败：未找到列 '{}'", trimmedFeature);
+                log.debug("实际表头: {}", String.join(", ", headers));
                 return false;
+            } else if (matchType != null && !matchType.equals("完全匹配")) {
+                log.info("表头列 '{}' 使用容错匹配成功（{}）", trimmedFeature, matchType);
             }
         }
         
@@ -361,7 +406,27 @@ public class HtmlTableParser {
     }
     
     /**
+     * 标准化括号（统一全角和半角括号）
+     */
+    private static String normalizeBrackets(String text) {
+        if (text == null) {
+            return "";
+        }
+        return text.replaceAll("[（(]", "(")
+                   .replaceAll("[）)]", ")")
+                   .replaceAll("[【\\[]", "[")
+                   .replaceAll("[】\\]]", "]")
+                   .replaceAll("[｛{]", "{")
+                   .replaceAll("[｝}]", "}");
+    }
+    
+    /**
      * 检查特征列是否按顺序出现在表头中
+     * 支持多级容错匹配：
+     * 1. 完全匹配
+     * 2. 忽略空格匹配
+     * 3. 忽略全角/半角括号匹配
+     * 4. 部分包含匹配
      */
     private static boolean matchHeadersInOrder(List<String> headers, String[] featureColumns) {
         int lastIndex = -1;
@@ -369,18 +434,60 @@ public class HtmlTableParser {
         for (String featureColumn : featureColumns) {
             String trimmedFeature = featureColumn.trim();
             boolean found = false;
+            String matchType = null;
             
             for (int i = lastIndex + 1; i < headers.size(); i++) {
-                if (headers.get(i).trim().equals(trimmedFeature)) {
+                String trimmedHeader = headers.get(i).trim();
+                
+                // 1. 完全匹配（精确匹配）
+                if (trimmedHeader.equals(trimmedFeature)) {
                     lastIndex = i;
                     found = true;
+                    matchType = "完全匹配";
                     break;
+                }
+                
+                // 2. 忽略空格匹配
+                String headerNoSpace = trimmedHeader.replaceAll("\\s+", "");
+                String featureNoSpace = trimmedFeature.replaceAll("\\s+", "");
+                if (headerNoSpace.equals(featureNoSpace)) {
+                    lastIndex = i;
+                    found = true;
+                    matchType = "忽略空格匹配";
+                    log.debug("列 '{}' 通过忽略空格匹配到 '{}'（顺序模式）", trimmedFeature, trimmedHeader);
+                    break;
+                }
+                
+                // 3. 忽略全角/半角括号匹配
+                String headerNormalized = normalizeBrackets(trimmedHeader);
+                String featureNormalized = normalizeBrackets(trimmedFeature);
+                if (headerNormalized.equals(featureNormalized)) {
+                    lastIndex = i;
+                    found = true;
+                    matchType = "忽略括号差异匹配";
+                    log.debug("列 '{}' 通过忽略括号差异匹配到 '{}'（顺序模式）", trimmedFeature, trimmedHeader);
+                    break;
+                }
+                
+                // 4. 部分包含匹配
+                if (trimmedHeader.contains(trimmedFeature) || trimmedFeature.contains(trimmedHeader)) {
+                    int minLen = Math.min(trimmedHeader.length(), trimmedFeature.length());
+                    if (minLen >= 2) {
+                        lastIndex = i;
+                        found = true;
+                        matchType = "部分包含匹配";
+                        log.debug("列 '{}' 通过部分包含匹配到 '{}'（顺序模式）", trimmedFeature, trimmedHeader);
+                        break;
+                    }
                 }
             }
             
             if (!found) {
                 log.debug("表头特征匹配失败（顺序模式）：未找到列 '{}' 或顺序不符", trimmedFeature);
+                log.debug("实际表头: {}", String.join(", ", headers));
                 return false;
+            } else if (matchType != null && !matchType.equals("完全匹配")) {
+                log.info("表头列 '{}' 使用容错匹配成功（{}，顺序模式）", trimmedFeature, matchType);
             }
         }
         
