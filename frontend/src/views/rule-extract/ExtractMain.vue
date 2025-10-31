@@ -1,6 +1,6 @@
 <template>
   <div class="extract-main-page">
-    <!-- 使用 PageHeader 组件 -->
+    <!-- 使用 PageHeader 组件 - 英雄区域 -->
     <PageHeader 
       title="智能文档抽取" 
       description="采用深度版面分析、OCR识别与智能文档检索技术，结合规则引擎精准定位，实现结构化信息高效抽取"
@@ -20,18 +20,20 @@
       </template>
     </PageHeader>
 
-    <!-- 主内容 - 三列式布局 -->
-    <el-row :gutter="16" class="main-operation-area mb16">
-      <!-- 左列：文档上传 -->
-      <el-col :span="8">
-        <el-card class="upload-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><UploadFilled /></el-icon>
-              <span>文档上传</span>
-            </div>
-          </template>
-          
+    <!-- 主内容区域 - 居中垂直布局 -->
+    <div class="main-content-wrapper">
+      <el-card class="main-card">
+        <!-- 顶部步骤指示器 -->
+        <div class="steps-section">
+          <el-steps align-center>
+            <el-step title="上传文档" description="上传PDF文档进行智能分析" />
+            <el-step title="选择模板" description="选择适合的抽取模板" />
+            <el-step title="查看结果" description="查看抽取结果并导出" />
+          </el-steps>
+        </div>
+
+        <!-- 文件上传区域 -->
+        <div class="upload-section">
           <el-upload
             drag
             v-model:file-list="fileList"
@@ -41,196 +43,123 @@
             accept=".pdf"
             :on-change="handleFileChange"
             :auto-upload="false"
+            class="centered-upload"
           >
-            <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-            <div class="el-upload__text">拖拽或点击上传PDF</div>
-            <div class="el-upload__tip">仅支持PDF格式，最大100MB</div>
-          </el-upload>
-          
-          <div v-if="selectedFile" class="selected-file">
-            <el-alert
-              :title="selectedFile?.name"
-              :description="`大小: ${formatFileSize(selectedFile?.size || 0)}`"
-              type="success"
-              show-icon
-              closable
-              @close="clearFile"
-            />
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 中列：提取配置 -->
-      <el-col :span="8">
-        <el-card class="config-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Setting /></el-icon>
-              <span>提取配置</span>
+            <div v-if="!selectedFile" class="upload-placeholder">
+              <el-icon :size="80" class="upload-icon">
+                <UploadFilled />
+              </el-icon>
+              <div class="upload-text">
+                <p class="main-text">点击或拖拽文件到此处</p>
+                <p class="sub-text">仅支持 PDF 格式，最大 100MB</p>
+              </div>
             </div>
-          </template>
-          
-          <el-form label-position="top">
-            <el-form-item label="选择模板" required>
-              <el-select 
-                v-model="selectedTemplateId" 
-                placeholder="请选择规则模板"
-                style="width: 100%"
-                :loading="loadingTemplates"
-                filterable
-              >
-                <el-option
-                  v-for="template in templates"
-                  :key="template.id"
-                  :label="template.templateName"
-                  :value="template.id"
-                >
-                  <div class="template-option">
-                    <span>{{ template.templateName }}</span>
-                    <el-tag size="small" type="info" style="margin-left: 8px;" v-if="template.templateCode">
-                      {{ template.templateCode }}
-                    </el-tag>
-                  </div>
-                </el-option>
-              </el-select>
-              <div class="form-tip">
-                <el-icon><InfoFilled /></el-icon>
-                没有合适的模板？<el-link type="primary" @click="$router.push('/rule-extract/templates')">去创建</el-link>
+            <div v-else class="file-selected">
+              <div class="file-icon-wrapper">
+                <el-icon :size="60" color="#52c41a">
+                  <Document />
+                </el-icon>
+                <el-icon :size="24" class="success-badge" color="#52c41a">
+                  <CircleCheck />
+                </el-icon>
               </div>
-            </el-form-item>
-
-            <el-form-item v-if="selectedTemplateInfo">
-              <div class="template-preview">
-                <div class="template-info">
-                  <div class="info-item">
-                    <span class="label">模板名称：</span>
-                    <span class="value">{{ selectedTemplateInfo.templateName }}</span>
-                  </div>
-                  <div class="info-item">
-                    <span class="label">字段数量：</span>
-                    <span class="value">{{ selectedTemplateInfo.fields?.length || 0 }} 个</span>
-                  </div>
-                </div>
-              </div>
-            </el-form-item>
-
-            <el-form-item label="文本提取设置">
-              <div class="extract-settings">
-                <div class="setting-item">
-                  <el-checkbox v-model="extractSettings.ignoreHeaderFooter">
-                    忽略页眉页脚
-                  </el-checkbox>
-                  <el-tooltip 
-                    content="忽略页眉页脚位置，避免页眉页脚干扰跨页提取" 
-                    placement="top"
-                  >
-                    <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
-                  </el-tooltip>
-                </div>
-                
-                <!-- 页眉页脚高度设置 -->
-                <div v-if="extractSettings.ignoreHeaderFooter" class="header-footer-settings">
-                  <el-form-item label="页眉高度(%)" style="margin-bottom: 12px;">
-                    <el-input-number 
-                      v-model="extractSettings.headerHeightPercent" 
-                      :min="0" 
-                      :max="50" 
-                      :step="0.5"
-                      :precision="1"
-                      size="small"
-                      style="width: 120px;"
-                    />
-                    <span style="margin-left: 8px; font-size: 12px; color: #909399;">
-                      文档顶部区域视为页眉
-                    </span>
-                  </el-form-item>
-                  <el-form-item label="页脚高度(%)" style="margin-bottom: 0;">
-                    <el-input-number 
-                      v-model="extractSettings.footerHeightPercent" 
-                      :min="0" 
-                      :max="50" 
-                      :step="0.5"
-                      :precision="1"
-                      size="small"
-                      style="width: 120px;"
-                    />
-                    <span style="margin-left: 8px; font-size: 12px; color: #909399;">
-                      文档底部区域视为页脚
-                    </span>
-                  </el-form-item>
-                </div>
-              </div>
-            </el-form-item>
-
-            <el-form-item>
+              <p class="file-name">已选择：{{ selectedFile.name }}</p>
+              <p class="file-size">大小: {{ formatFileSize(selectedFile.size) }}</p>
               <el-button 
+                text 
                 type="primary" 
-                size="large" 
-                style="width: 100%"
-                :loading="isExtracting"
-                :disabled="!canStartExtraction"
-                @click="startExtraction"
+                @click.stop="clearFile"
+                class="reselect-btn"
               >
-                <el-icon v-if="!isExtracting"><Refresh /></el-icon>
-                {{ isExtracting ? '提取中...' : '开始提取' }}
+                重新选择
               </el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-      </el-col>
-
-      <!-- 右列：最近任务 -->
-      <el-col :span="8">
-        <el-card class="history-card">
-          <template #header>
-            <div class="card-header">
-              <el-icon><Document /></el-icon>
-              <span>最近任务</span>
             </div>
-          </template>
-          
-          <el-alert
-            title="仅显示最近 20 条任务记录"
-            type="info"
-            :closable="false"
-            show-icon
-            class="task-tip"
-          />
-          
-          <div v-if="recentTasks.length > 0" class="task-list">
-            <div 
-              v-for="task in recentTasks.slice(0, 5)" 
-              :key="task.taskId"
-              class="task-item"
-              @click="viewTaskResult(task.taskId)"
+          </el-upload>
+        </div>
+
+        <!-- 模板选择区域 -->
+        <div class="template-selection">
+          <div class="selection-row">
+            <el-select 
+              v-model="selectedTemplateId" 
+              placeholder="请选择抽取模板"
+              :loading="loadingTemplates"
+              filterable
+              class="template-select"
             >
-              <div class="task-name">{{ task.fileName }}</div>
-              <div class="task-status">
-                <el-tag 
-                  :type="getTaskStatusType(task.status)" 
-                  size="small"
-                >
-                  {{ getTaskStatusLabel(task.status) }}
-                </el-tag>
+              <el-option
+                v-for="template in templates"
+                :key="template.id"
+                :label="`${template.templateName} (${template.templateCode || ''})`"
+                :value="template.id"
+              >
+                <div class="template-option">
+                  <span>{{ template.templateName }}</span>
+                  <el-tag size="small" type="info" v-if="template.templateCode">
+                    {{ template.templateCode }}
+                  </el-tag>
+                </div>
+              </el-option>
+            </el-select>
+
+            <!-- 页眉页脚设置 -->
+            <div class="header-footer-config">
+              <el-checkbox v-model="extractSettings.ignoreHeaderFooter">
+                忽略页眉页脚
+              </el-checkbox>
+              
+              <div v-if="extractSettings.ignoreHeaderFooter" class="percentage-inputs">
+                <div class="input-group">
+                  <label>页眉</label>
+                  <el-input-number 
+                    v-model="extractSettings.headerHeightPercent" 
+                    :min="0" 
+                    :max="50" 
+                    :step="0.5"
+                    :precision="1"
+                    class="percentage-input"
+                    controls-position="right"
+                  />
+                  <span class="unit">%</span>
+                </div>
+                <div class="input-group">
+                  <label>页脚</label>
+                  <el-input-number 
+                    v-model="extractSettings.footerHeightPercent" 
+                    :min="0" 
+                    :max="50" 
+                    :step="0.5"
+                    :precision="1"
+                    class="percentage-input"
+                    controls-position="right"
+                  />
+                  <span class="unit">%</span>
+                </div>
               </div>
             </div>
           </div>
-          
-          <el-empty v-else description="暂无历史任务" :image-size="80" />
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+
+       
+
+        <!-- 操作按钮区域 -->
+        <div class="action-buttons">
+          <el-button 
+            type="primary" 
+            size="large"
+            :loading="isExtracting"
+            :disabled="!canStartExtraction"
+            @click="startExtraction"
+            class="primary-btn"
+          >
+            {{ isExtracting ? '抽取中...' : '信息抽取' }}
+          </el-button>
+        </div>
+      </el-card>
+    </div>
 
     <!-- 结果展示区 -->
     <div class="result-area">
-      <!-- 使用 EmptyState 组件 -->
-      <EmptyState 
-        v-if="!currentTask"
-        title="准备就绪"
-        description="上传文件并选择模板，开始信息提取"
-        :icon="Document"
-      />
-
         <el-card v-if="currentTask && currentTask.status !== 'completed'" class="progress-card">
           <template #header>
             <div class="progress-header">
@@ -344,9 +273,8 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, UploadFilled, Refresh, Setting, InfoFilled, QuestionFilled } from '@element-plus/icons-vue'
+import { Document, UploadFilled, Refresh, CircleCheck, Setting } from '@element-plus/icons-vue'
 import PageHeader from '@/components/common/PageHeader.vue'
-import EmptyState from '@/components/common/EmptyState.vue'
 import { 
   listTemplates, 
   uploadAndExtract, 
@@ -371,7 +299,8 @@ const selectedTemplateId = ref('')
 const extractSettings = ref({
   ignoreHeaderFooter: true,  // 默认开启忽略页眉页脚
   headerHeightPercent: 6,    // 页眉高度百分比，默认6%
-  footerHeightPercent: 6     // 页脚高度百分比，默认6%
+  footerHeightPercent: 6,    // 页脚高度百分比，默认6%
+  changeContract: false      // 是否为变更合同
 })
 
 // 任务相关
@@ -635,273 +564,305 @@ onUnmounted(() => {
 <style scoped lang="scss">
 .extract-main-page {
   padding: 16px;
+  background: #f5f7fa;
+  min-height: 100vh;
 
-  /* 三列式主操作区 */
-  .main-operation-area {
-    /* 统一卡片样式 */
-    .el-card {
-      min-height: 420px;
-      border-radius: var(--zx-radius-md);
-      transition: box-shadow var(--zx-transition-base);
+  /* 主内容包装器 */
+  .main-content-wrapper {
+    margin: 0 auto;
 
-      &:hover {
-        box-shadow: var(--zx-shadow-md);
-      }
-    }
+    .main-card {
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      margin-bottom: 20px;
 
-    .card-header {
-      display: flex;
-      align-items: center;
-      gap: var(--zx-spacing-sm);
-      font-weight: var(--zx-font-semibold);
-      font-size: var(--zx-font-base);
+      /* 步骤指示器区域 */
+      .steps-section {
+        padding: 30px 40px;
+        border-bottom: 1px solid #f0f0f0;
+        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
 
-      .el-icon {
-        font-size: 18px;
-      }
-    }
-
-    /* 上传卡片 */
-    .upload-card {
-      :deep(.el-upload-dragger) {
-        padding: var(--zx-spacing-2xl);
-        border-radius: var(--zx-radius-md);
-        transition: all var(--zx-transition-base);
-
-        &:hover {
-          border-color: var(--zx-primary);
-          background-color: var(--zx-primary-light-9);
+        :deep(.el-step__head) {
+          color: #909399;
         }
 
-        .el-icon--upload {
-          font-size: 48px;
-          color: var(--zx-text-placeholder);
-          margin-bottom: var(--zx-spacing-md);
+        :deep(.el-step__title) {
+          font-weight: 500;
+          color: #606266;
         }
 
-        .el-upload__text {
-          font-size: var(--zx-font-base);
-          color: var(--zx-text-regular);
+        :deep(.el-step__description) {
+          color: #909399;
         }
 
-        .el-upload__tip {
-          font-size: var(--zx-font-sm);
-          color: var(--zx-text-secondary);
-          margin-top: var(--zx-spacing-sm);
+        :deep(.el-step__icon) {
+          border-color: #d9d9d9;
+          color: #909399;
+        }
+
+        :deep(.el-step__line) {
+          background-color: #e4e7ed;
         }
       }
 
-      .selected-file {
-        margin-top: var(--zx-spacing-lg);
-      }
-      }
+      /* 文件上传区域 */
+      .upload-section {
+        padding: 40px 20px;
+        
+        .centered-upload {
+          :deep(.el-upload) {
+            width: 100%;
+            
+            .el-upload-dragger {
+              width: 100%;
+              padding: 60px 40px;
+              border: 2px dashed #d9d9d9;
+              border-radius: 8px;
+              background: #fafafa;
+              transition: all 0.3s;
 
-    /* 配置卡片 */
-      .config-card {
-        .template-option {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
+              &:hover {
+                border-color: #409eff;
+                background: #f0f9ff;
+              }
+            }
+          }
 
-        .form-tip {
-        margin-top: var(--zx-spacing-sm);
-        font-size: var(--zx-font-sm);
-        color: var(--zx-text-secondary);
-          display: flex;
-          align-items: center;
-        gap: var(--zx-spacing-xs);
-
-          .el-link {
-          margin-left: var(--zx-spacing-xs);
-        }
-        }
-
-        .template-preview {
-        padding: var(--zx-spacing-md);
-        background: var(--zx-bg-light);
-        border-radius: var(--zx-radius-sm);
-        border-left: 3px solid var(--zx-success);
-
-          .template-info {
-            .info-item {
+          .upload-placeholder {
             display: flex;
-            margin-bottom: var(--zx-spacing-xs);
-            font-size: var(--zx-font-sm);
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
 
-            &:last-child {
-              margin-bottom: 0;
+            .upload-icon {
+              color: #c0c4cc;
             }
 
-              .label {
-              color: var(--zx-text-secondary);
-              min-width: 80px;
+            .upload-text {
+              text-align: center;
+
+              .main-text {
+                font-size: 16px;
+                color: #606266;
+                margin: 0 0 8px 0;
+                font-weight: 500;
               }
 
-              .value {
-              color: var(--zx-text-primary);
-              font-weight: var(--zx-font-medium);
-              flex: 1;
+              .sub-text {
+                font-size: 14px;
+                color: #909399;
+                margin: 0;
+              }
+            }
+          }
+
+          .file-selected {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 20px;
+
+            .file-icon-wrapper {
+              position: relative;
+              
+              .success-badge {
+                position: absolute;
+                right: -8px;
+                bottom: -8px;
+                background: white;
+                border-radius: 50%;
+              }
+            }
+
+            .file-name {
+              font-size: 15px;
+              color: #303133;
+              font-weight: 500;
+              margin: 8px 0 4px 0;
+              text-align: center;
+            }
+
+            .file-size {
+              font-size: 13px;
+              color: #909399;
+              margin: 0 0 8px 0;
+            }
+
+            .reselect-btn {
+              font-size: 14px;
             }
           }
         }
       }
 
-      .extract-settings {
-        padding: var(--zx-spacing-md);
-        background: var(--zx-bg-light);
-        border-radius: var(--zx-radius-sm);
-        border-left: 3px solid var(--zx-primary);
-        margin-bottom: var(--zx-spacing-sm);
+      /* 模板选择区域 */
+      .template-selection {
+        padding: 20px 40px;
+        border-top: 1px solid #f0f0f0;
 
-        .setting-item {
+        .selection-row {
           display: flex;
           align-items: center;
-          font-size: var(--zx-font-sm);
+          gap: 32px;
+        }
 
-          .el-checkbox {
-            font-size: var(--zx-font-sm);
+        .template-select {
+          width: 276px;
+          flex-shrink: 0;
+
+          :deep(.el-select__wrapper) {
+            height: 30px;
+            min-height: 30px;
+          }
+
+          :deep(.el-select__input) {
+            height: 28px;
+            line-height: 28px;
+          }
+
+          :deep(.el-select__placeholder) {
+            line-height: 28px;
+          }
+
+          :deep(.el-select__suffix) {
+            height: 28px;
+            display: flex;
+            align-items: center;
+          }
+
+          .template-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
           }
         }
-        
-        .header-footer-settings {
-          margin-top: 16px;
-          padding-top: 12px;
-          border-top: 1px dashed #dcdfe6;
-          
-          :deep(.el-form-item) {
-            margin-bottom: 12px;
-          }
-          
-          :deep(.el-form-item__label) {
-            font-size: 13px;
+
+        .header-footer-config {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex: 1;
+
+          :deep(.el-checkbox) {
+            font-size: 14px;
             color: #606266;
-          }
-        }
-      }
-
-      .setting-hint {
-        display: flex;
-        align-items: center;
-        gap: var(--zx-spacing-xs);
-        font-size: var(--zx-font-xs);
-        color: var(--zx-text-secondary);
-        padding: var(--zx-spacing-sm);
-        background: var(--zx-info-light-9);
-        border-radius: var(--zx-radius-sm);
-        border-left: 3px solid var(--zx-info);
-
-        .el-icon {
-          color: var(--zx-info);
-        }
-      }
-    }
-
-    /* 历史任务卡片 */
-      .history-card {
-        .task-tip {
-          margin-bottom: var(--zx-spacing-md);
-          
-          :deep(.el-alert__title) {
-            font-size: var(--zx-font-sm);
-          }
-        }
-        
-        .task-list {
-        max-height: 330px;
-        overflow-y: auto;
-
-        /* 美化滚动条 */
-        &::-webkit-scrollbar {
-          width: 6px;
-        }
-
-        &::-webkit-scrollbar-thumb {
-          background: var(--zx-border-light);
-          border-radius: 3px;
-
-          &:hover {
-            background: var(--zx-border-base);
-          }
-        }
-
-          .task-item {
-          padding: var(--zx-spacing-md);
-          border-radius: var(--zx-radius-sm);
-          margin-bottom: var(--zx-spacing-sm);
-            cursor: pointer;
-          transition: all var(--zx-transition-fast);
-          border: 1px solid var(--zx-border-lighter);
-          background: var(--zx-bg-white);
-
-          &:last-child {
-            margin-bottom: 0;
+            white-space: nowrap;
           }
 
-            &:hover {
-            background-color: var(--zx-primary-light-9);
-            border-color: var(--zx-primary);
-            transform: translateX(2px);
-            }
+          .percentage-inputs {
+            display: flex;
+            gap: 24px;
+            align-items: center;
 
-            .task-name {
-            font-size: var(--zx-font-sm);
-            color: var(--zx-text-primary);
-            margin-bottom: var(--zx-spacing-sm);
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            font-weight: var(--zx-font-medium);
-            }
-
-            .task-status {
+            .input-group {
               display: flex;
-              justify-content: flex-end;
+              align-items: center;
+              gap: 8px;
+
+              label {
+                font-size: 13px;
+                color: #606266;
+                white-space: nowrap;
+                min-width: 32px;
+              }
+
+              .percentage-input {
+                width: 100px;
+
+                :deep(.el-input__wrapper) {
+                  padding: 1px 11px;
+                }
+
+                :deep(.el-input__inner) {
+                  text-align: center;
+                  font-size: 14px;
+                  padding: 0 8px;
+                }
+              }
+
+              .unit {
+                font-size: 13px;
+                color: #909399;
+              }
             }
           }
         }
       }
+
+      /* 提取选项 */
+      .extract-options {
+        padding: 20px 40px;
+        border-top: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: center;
+
+        :deep(.el-radio-group) {
+          display: flex;
+          gap: 40px;
+        }
+      }
+
+      /* 操作按钮 */
+      .action-buttons {
+        padding: 30px 40px;
+        border-top: 1px solid #f0f0f0;
+        display: flex;
+        justify-content: center;
+
+        .primary-btn {
+          min-width: 160px;
+          font-size: 15px;
+          padding: 12px 32px;
+          border-radius: 6px;
+        }
+      }
     }
+  }
 
   /* 结果展示区 */
   .result-area {
+    margin: 0 auto;
+    
     .progress-card, .result-card {
       animation: fadeIn 0.3s ease-out;
-      border-radius: var(--zx-radius-md);
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+      margin-top: 20px;
       
       .progress-header, .result-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-weight: var(--zx-font-semibold);
+        font-weight: 600;
       }
 
       .progress-content {
         .task-info {
-          background: var(--zx-primary-light-9);
-          padding: var(--zx-spacing-lg);
-          border-radius: var(--zx-radius-md);
-          margin-bottom: var(--zx-spacing-xl);
-          border-left: 4px solid var(--zx-primary);
+          background: #f0f9ff;
+          padding: 20px;
+          border-radius: 8px;
+          margin-bottom: 24px;
+          border-left: 4px solid #409eff;
 
           .info-row {
             display: flex;
-            margin-bottom: var(--zx-spacing-sm);
-            font-size: var(--zx-font-sm);
+            margin-bottom: 12px;
+            font-size: 14px;
 
             &:last-child {
               margin-bottom: 0;
             }
 
             .label {
-              color: var(--zx-text-secondary);
+              color: #909399;
               min-width: 90px;
-              font-weight: var(--zx-font-medium);
+              font-weight: 500;
             }
 
             .value {
-              color: var(--zx-text-primary);
-              font-weight: var(--zx-font-medium);
+              color: #303133;
+              font-weight: 500;
               flex: 1;
               word-break: break-all;
             }
@@ -909,29 +870,25 @@ onUnmounted(() => {
         }
 
         .progress-bar {
-          margin-bottom: var(--zx-spacing-xl);
+          margin-bottom: 24px;
 
           .progress-message {
             text-align: center;
-            margin-top: var(--zx-spacing-md);
-            color: var(--zx-text-regular);
-            font-size: var(--zx-font-sm);
-            font-weight: var(--zx-font-medium);
+            margin-top: 12px;
+            color: #606266;
+            font-size: 14px;
+            font-weight: 500;
           }
         }
 
         .status-timeline {
-          padding: var(--zx-spacing-lg);
-          background: var(--zx-bg-light);
-          border-radius: var(--zx-radius-md);
-
-          :deep(.el-timeline-item__node) {
-            transition: all var(--zx-transition-base);
-          }
+          padding: 20px;
+          background: #f5f7fa;
+          border-radius: 8px;
 
           :deep(.el-timeline-item__content) {
-            color: var(--zx-text-regular);
-            font-size: var(--zx-font-sm);
+            color: #606266;
+            font-size: 14px;
           }
         }
       }
@@ -939,7 +896,7 @@ onUnmounted(() => {
 
     .result-card {
       :deep(.el-result) {
-        padding: var(--zx-spacing-2xl);
+        padding: 40px;
       }
     }
   }
@@ -957,37 +914,66 @@ onUnmounted(() => {
   }
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 通用样式类 */
-.mb12 {
-  margin-bottom: 12px;
-}
-
-.mb16 {
-  margin-bottom: 16px;
-}
-
 /* 响应式设计 */
-@media (max-width: 992px) {
+@media (max-width: 768px) {
   .extract-main-page {
-    .main-operation-area {
-      .el-card {
-        min-height: auto;
-      }
-      
-      :deep(.el-col) {
-        width: 100% !important;
-        margin-bottom: var(--zx-spacing-lg);
+    padding: 16px;
+
+    .main-content-wrapper {
+      .main-card {
+        .steps-section {
+          padding: 20px;
+          
+          :deep(.el-step__title) {
+            font-size: 14px;
+          }
+          
+          :deep(.el-step__description) {
+            font-size: 12px;
+          }
+        }
+
+        .upload-section {
+          padding: 20px 10px;
+        }
+
+        .template-selection,
+        .extract-options,
+        .action-buttons {
+          padding: 20px;
+        }
+
+        .template-selection {
+          .selection-row {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+          }
+
+          .template-select {
+            width: 100%;
+          }
+
+          .header-footer-config {
+            width: 100%;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 12px;
+
+            .percentage-inputs {
+              flex-direction: column;
+              gap: 12px;
+              align-items: flex-start;
+              width: 100%;
+            }
+          }
+        }
+
+        .action-buttons {
+          .primary-btn {
+            width: 100%;
+          }
+        }
       }
     }
   }
