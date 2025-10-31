@@ -161,3 +161,4 @@ ACCEPTANCE_CHECKLIST.md
 /.augment
 /contract-tools-sdk/testuploads/compare-pro
 /openspec
+contract-tools-sdk/src/main/resources/license.lic
