@@ -5,8 +5,9 @@
         <div class="header">
           <div class="header-left">
             <el-button 
+              v-if="!shouldHideBack"
               text 
-              @click="$router.push('/rule-extract')"
+              @click="handleBack"
               style="margin-right: 12px;"
             >
               <el-icon><Back /></el-icon>
@@ -122,10 +123,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated } from 'vue'
+import { ref, computed, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown, Back } from '@element-plus/icons-vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import {
   listTemplates,
   createTemplate,
@@ -136,8 +137,13 @@ import {
   copyTemplate as apiCopyTemplate
 } from '@/api/rule-extract'
 import { extractArrayData } from '@/utils/response-helper'
+import { useEmbedMode } from '@/composables/useEmbedMode'
 
 const router = useRouter()
+const route = useRoute()
+
+// 使用统一的嵌入模式管理
+const { shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -309,6 +315,14 @@ const getStatusType = (status: string): any => {
     'draft': 'info'
   }
   return map[status] || ''
+}
+
+// 返回处理
+const handleBack = () => {
+  embedHandleBack(() => {
+    // 默认的返回逻辑
+    router.push('/rule-extract')
+  })
 }
 
 // 格式化日期

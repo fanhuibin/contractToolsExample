@@ -458,6 +458,9 @@ public class MinerUOCRService {
             pageImageMap.put(pageIdx, pageImage);
         }
         
+        // 对content_list进行排序，确保页眉在前、页脚在后
+        List<JsonNode> sortedContentList = sortContentList(contentListNode);
+        
         // 按页面组织LayoutItem
         Map<Integer, List<TextExtractionUtil.LayoutItem>> pageLayoutItems = new HashMap<>();
         
@@ -466,11 +469,12 @@ public class MinerUOCRService {
         Set<String> matchedMiddleJsonTables = new HashSet<>();
         
         int contentListIndex = 0;
-        for (JsonNode item : contentListNode) {
+        for (JsonNode item : sortedContentList) {
             int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
             
-            // 过滤页眉页脚
-            if (options.isIgnoreHeaderFooter() && isHeaderFooterOrPageNumber(item)) {
+            // 过滤页眉页脚（同时判断类型和位置）
+            // 注意：content_list中的坐标是归一化到1000x1000的，所以传入[1000, 1000]而不是实际PDF尺寸
+            if (options.isIgnoreHeaderFooter() && isHeaderFooterOrPageNumber(item, new double[]{1000, 1000}, options)) {
                 String itemType = item.has("type") ? item.get("type").asText() : "unknown";
                 log.debug("🚫 过滤 MinerU 识别的页眉页脚 - 第{}页, 类型:{}", pageIdx + 1, itemType);
                 contentListIndex++;
@@ -1323,30 +1327,155 @@ public class MinerUOCRService {
     /**
      * 判断是否为页眉页脚或页码
      * 
-     * 【重要】仅基于MinerU明确识别的类型进行过滤，不根据位置过滤
-     * MinerU已经通过VLM AI模型识别出内容类型，我们应该信任它的判断
+     * 【重要修改】同时基于类型和位置进行判断
+     * 1. MinerU识别的类型（header/footer/page_number等）
+     * 2. bbox位置是否在设定的页眉页脚区域内
      * 
-     * 过滤以下类型（参考MinerU文档的discarded_blocks）：
-     * - header: 页眉
-     * - footer: 页脚
-     * - page_number: 页码
-     * - aside_text: 旁注文本
-     * - page_footnote: 页面脚注
+     * 只有同时满足"类型匹配"AND"位置匹配"才会过滤，避免误过滤正文内容
      * 
-     * 其他所有类型（包括list, text, table, image, code等）都保留
+     * 过滤条件：
+     * - header类型 AND 位置在页面顶部 headerHeightPercent% 区域内
+     * - footer类型 AND 位置在页面底部 footerHeightPercent% 区域内
+     * - page_number/aside_text/page_footnote 类型（无位置限制）
      * 
      * @param item MinerU识别的内容块
+     * @param pageSize 页面尺寸 [width, height]
+     * @param options 比对选项（包含页眉页脚百分比设置）
      * @return true表示应该过滤，false表示保留
      */
-    private boolean isHeaderFooterOrPageNumber(JsonNode item) {
+    private boolean isHeaderFooterOrPageNumber(JsonNode item, double[] pageSize, CompareOptions options) {
         String type = item.has("type") ? item.get("type").asText() : "";
         
-        // 仅基于MinerU识别的类型判断，过滤所有丢弃类型
-        return "header".equals(type) 
-            || "footer".equals(type) 
-            || "page_number".equals(type)
-            || "aside_text".equals(type)
-            || "page_footnote".equals(type);
+        // 页码、旁注、脚注等类型直接过滤（无位置限制）
+        if ("page_number".equals(type) || "aside_text".equals(type) || "page_footnote".equals(type)) {
+            return true;
+        }
+        
+        // 对于header和footer类型，需要同时判断位置
+        if ("header".equals(type) || "footer".equals(type)) {
+            // 如果没有bbox信息，无法判断位置，信任MinerU的类型判断
+            if (!item.has("bbox") || pageSize == null || pageSize.length < 2) {
+                return true;
+            }
+            
+            // 获取bbox: [x0, y0, x1, y1]
+            JsonNode bboxNode = item.get("bbox");
+            if (bboxNode.size() < 4) {
+                return true; // bbox格式错误，信任类型判断
+            }
+            
+            double y0 = bboxNode.get(1).asDouble();  // 顶部y坐标
+            double y1 = bboxNode.get(3).asDouble();  // 底部y坐标
+            double pageHeight = pageSize[1];
+            
+            // 计算元素中心点的y坐标
+            double centerY = (y0 + y1) / 2;
+            
+            // 计算页眉页脚区域阈值
+            double headerThreshold = pageHeight * options.getHeaderHeightPercent() / 100.0;
+            double footerThreshold = pageHeight * (1 - options.getFooterHeightPercent() / 100.0);
+            
+            if ("header".equals(type)) {
+                // header类型：中心点在页面顶部区域才过滤
+                boolean inHeaderRegion = centerY <= headerThreshold;
+                if (!inHeaderRegion) {
+                    log.debug("⚠️ 元素类型为header但位置不在页眉区域({}% = {}pt)，保留: y={}, 页面高度={}", 
+                        options.getHeaderHeightPercent(), headerThreshold, centerY, pageHeight);
+                }
+                return inHeaderRegion;
+            } else if ("footer".equals(type)) {
+                // footer类型：中心点在页面底部区域才过滤
+                boolean inFooterRegion = centerY >= footerThreshold;
+                if (!inFooterRegion) {
+                    log.debug("⚠️ 元素类型为footer但位置不在页脚区域({}% = {}pt)，保留: y={}, 页面高度={}", 
+                        options.getFooterHeightPercent(), footerThreshold, centerY, pageHeight);
+                }
+                return inFooterRegion;
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 对content_list进行简单排序，确保页眉在前
+     * 
+     * 排序规则：
+     * 1. 先按page_idx排序
+     * 2. 在同一页面内，header类型优先排在最前面
+     * 3. 其他内容保持原有顺序
+     * 
+     * @param contentListNode MinerU返回的content_list
+     * @return 排序后的内容列表
+     */
+    private List<JsonNode> sortContentList(JsonNode contentListNode) {
+        // 转换为List以便排序
+        List<JsonNode> contentList = new ArrayList<>();
+        contentListNode.forEach(contentList::add);
+        
+        // 按页面分组
+        Map<Integer, List<JsonNode>> pageGroups = new HashMap<>();
+        for (JsonNode item : contentList) {
+            int pageIdx = item.has("page_idx") ? item.get("page_idx").asInt() : 0;
+            pageGroups.computeIfAbsent(pageIdx, k -> new ArrayList<>()).add(item);
+        }
+        
+        // 对每个页面单独处理：把header提到最前面
+        List<JsonNode> sortedList = new ArrayList<>();
+        List<Integer> pageIndices = new ArrayList<>(pageGroups.keySet());
+        pageIndices.sort(Integer::compareTo);
+        
+        for (int pageIdx : pageIndices) {
+            List<JsonNode> pageItems = pageGroups.get(pageIdx);
+            
+            // 分离header和其他内容
+            List<JsonNode> headers = new ArrayList<>();
+            List<JsonNode> others = new ArrayList<>();
+            
+            for (JsonNode item : pageItems) {
+                String type = item.has("type") ? item.get("type").asText() : "";
+                if ("header".equals(type)) {
+                    headers.add(item);
+                } else {
+                    others.add(item);
+                }
+            }
+            
+            // header按y坐标排序（从上到下）
+            headers.sort((a, b) -> {
+                double yA = getCenterY(a);
+                double yB = getCenterY(b);
+                return Double.compare(yA, yB);
+            });
+            
+            // 先添加header，再添加其他内容
+            sortedList.addAll(headers);
+            sortedList.addAll(others);
+        }
+        
+        log.debug("📋 content_list排序完成，共{}项，header已提前", sortedList.size());
+        return sortedList;
+    }
+    
+    /**
+     * 获取元素中心点的y坐标
+     * 
+     * @param item 内容元素
+     * @return y坐标
+     */
+    private double getCenterY(JsonNode item) {
+        if (!item.has("bbox")) {
+            return 0;
+        }
+        
+        JsonNode bboxNode = item.get("bbox");
+        if (bboxNode.size() < 4) {
+            return 0;
+        }
+        
+        double y0 = bboxNode.get(1).asDouble();
+        double y1 = bboxNode.get(3).asDouble();
+        return (y0 + y1) / 2;
     }
     
     /**

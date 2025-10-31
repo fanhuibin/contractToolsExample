@@ -209,6 +209,7 @@ public class CharacterMappingConfig {
         rawMappingMap.put("；", ";");
         rawMappingMap.put("，", ",");
         rawMappingMap.put("。", ".");
+        rawMappingMap.put("．", ".");  // 全角点
         rawMappingMap.put("？", "?");
         rawMappingMap.put("！", "!");
         
@@ -246,7 +247,10 @@ public class CharacterMappingConfig {
         rawMappingMap.put("＼", "\\");
         rawMappingMap.put("／", "/");
         
-        // 数字符号
+        // 全角空格
+        rawMappingMap.put("　", " ");  // 全角空格转半角空格
+        
+        // 全角数字
         rawMappingMap.put("０", "0");
         rawMappingMap.put("１", "1");
         rawMappingMap.put("２", "2");
@@ -257,6 +261,86 @@ public class CharacterMappingConfig {
         rawMappingMap.put("７", "7");
         rawMappingMap.put("８", "8");
         rawMappingMap.put("９", "9");
+        
+        // 全角字母 - 大写
+        rawMappingMap.put("Ａ", "A");
+        rawMappingMap.put("Ｂ", "B");
+        rawMappingMap.put("Ｃ", "C");
+        rawMappingMap.put("Ｄ", "D");
+        rawMappingMap.put("Ｅ", "E");
+        rawMappingMap.put("Ｆ", "F");
+        rawMappingMap.put("Ｇ", "G");
+        rawMappingMap.put("Ｈ", "H");
+        rawMappingMap.put("Ｉ", "I");
+        rawMappingMap.put("Ｊ", "J");
+        rawMappingMap.put("Ｋ", "K");
+        rawMappingMap.put("Ｌ", "L");
+        rawMappingMap.put("Ｍ", "M");
+        rawMappingMap.put("Ｎ", "N");
+        rawMappingMap.put("Ｏ", "O");
+        rawMappingMap.put("Ｐ", "P");
+        rawMappingMap.put("Ｑ", "Q");
+        rawMappingMap.put("Ｒ", "R");
+        rawMappingMap.put("Ｓ", "S");
+        rawMappingMap.put("Ｔ", "T");
+        rawMappingMap.put("Ｕ", "U");
+        rawMappingMap.put("Ｖ", "V");
+        rawMappingMap.put("Ｗ", "W");
+        rawMappingMap.put("Ｘ", "X");
+        rawMappingMap.put("Ｙ", "Y");
+        rawMappingMap.put("Ｚ", "Z");
+        
+        // 全角字母 - 小写
+        rawMappingMap.put("ａ", "a");
+        rawMappingMap.put("ｂ", "b");
+        rawMappingMap.put("ｃ", "c");
+        rawMappingMap.put("ｄ", "d");
+        rawMappingMap.put("ｅ", "e");
+        rawMappingMap.put("ｆ", "f");
+        rawMappingMap.put("ｇ", "g");
+        rawMappingMap.put("ｈ", "h");
+        rawMappingMap.put("ｉ", "i");
+        rawMappingMap.put("ｊ", "j");
+        rawMappingMap.put("ｋ", "k");
+        rawMappingMap.put("ｌ", "l");
+        rawMappingMap.put("ｍ", "m");
+        rawMappingMap.put("ｎ", "n");
+        rawMappingMap.put("ｏ", "o");
+        rawMappingMap.put("ｐ", "p");
+        rawMappingMap.put("ｑ", "q");
+        rawMappingMap.put("ｒ", "r");
+        rawMappingMap.put("ｓ", "s");
+        rawMappingMap.put("ｔ", "t");
+        rawMappingMap.put("ｕ", "u");
+        rawMappingMap.put("ｖ", "v");
+        rawMappingMap.put("ｗ", "w");
+        rawMappingMap.put("ｘ", "x");
+        rawMappingMap.put("ｙ", "y");
+        rawMappingMap.put("ｚ", "z");
+        
+        // 其他全角标点符号补充
+        rawMappingMap.put("＂", "\"");  // 全角双引号
+        rawMappingMap.put("＇", "'");   // 全角单引号
+        rawMappingMap.put("﹐", ",");   // 小写全角逗号
+        rawMappingMap.put("﹑", ",");   // 顿号（变体）
+        rawMappingMap.put("﹒", ".");   // 小写全角点
+        rawMappingMap.put("﹔", ";");   // 小写全角分号
+        rawMappingMap.put("﹕", ":");   // 小写全角冒号
+        rawMappingMap.put("﹖", "?");   // 小写全角问号
+        rawMappingMap.put("﹗", "!");   // 小写全角叹号
+        
+        // 特殊符号统一化（保持长度一致）
+        rawMappingMap.put("°", " ");   // 度符号 → 空格
+        rawMappingMap.put("′", "'");   // 角分符号 → 单引号
+        rawMappingMap.put("″", "\"");  // 角秒符号 → 双引号
+        rawMappingMap.put("※", "*");   // 参考标记 → 星号
+        rawMappingMap.put("§", " ");   // 节标记 → 空格
+        rawMappingMap.put("¶", " ");   // 段落标记 → 空格
+        rawMappingMap.put("†", "+");   // 剑标 → 加号
+        rawMappingMap.put("‡", "+");   // 双剑标 → 加号
+        rawMappingMap.put("•", ".");   // 项目符号 → 点
+        rawMappingMap.put("◦", ".");   // 空心项目符号 → 点
+        rawMappingMap.put("‣", ".");   // 三角项目符号 → 点
         
         //金额常见识别错误
         rawMappingMap.put("貳", "贰");

@@ -1,0 +1,33 @@
+# 服务器配置
+server:
+  port: 8091
+  servlet:
+    context-path: /
+
+# 应用配置
+spring:
+  application:
+    name: zhaoxin-tools-demo
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      enabled: true
+
+# 肇新 API 配置
+zhaoxin:
+  api:
+    base-url: http://localhost:8080
+    timeout: 120000
+    connect-timeout: 10000
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.zhaoxin.tools.demo: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+

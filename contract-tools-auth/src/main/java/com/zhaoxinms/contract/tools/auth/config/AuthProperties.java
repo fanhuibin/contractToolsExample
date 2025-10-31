@@ -3,84 +3,40 @@ package com.zhaoxinms.contract.tools.auth.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-import java.time.LocalDateTime;
-import java.util.List;
-
 /**
- * 认证配置属性
+ * 授权配置属性
+ * <p>授权模块强制启用，证书文件路径已硬编码，不可配置</p>
+ * 
+ * @author 山西肇新科技有限公司
  */
 @Data
 @ConfigurationProperties(prefix = "zhaoxin.auth")
 public class AuthProperties {
     
     /**
-     * 是否启用认证
+     * 授权文件路径（硬编码，不可配置）
+     * <p>加载优先级：</p>
+     * <ol>
+     *   <li>jar包同级目录: ./license.lic</li>
+     *   <li>config目录: ./config/license.lic</li>
+     *   <li>classpath: classpath:license.lic (开发环境)</li>
+     * </ol>
      */
-    private boolean enabled = false;
+    public static final String LICENSE_FILE_PATH = "license.lic";
     
     /**
-     * 许可证配置
+     * 公钥文件路径（硬编码，不可配置）
+     * <p>加载优先级：</p>
+     * <ol>
+     *   <li>jar包同级目录: ./public.key</li>
+     *   <li>config目录: ./config/public.key</li>
+     *   <li>classpath: classpath:public.key (开发环境)</li>
+     * </ol>
      */
-    private License license = new License();
+    public static final String PUBLIC_KEY_PATH = "public.key";
     
     /**
-     * 签名配置
+     * 私钥文件路径（硬编码，仅用于授权生成器）
      */
-    private Signature signature = new Signature();
-    
-    @Data
-    public static class License {
-        /**
-         * 许可证代码
-         */
-        private String code;
-        
-        /**
-         * 许可证文件路径
-         */
-        private String filePath = "license.lic";
-        
-        /**
-         * 到期时间
-         */
-        private LocalDateTime expiration;
-        
-        /**
-         * 授权功能列表（模块代码）
-         */
-        private List<String> modules;
-        
-        /**
-         * 最大用户数
-         */
-        private Integer maxUsers = 1;
-        
-        /**
-         * 是否绑定硬件
-         */
-        private Boolean hardwareBound = true;
-    }
-    
-    @Data
-    public static class Signature {
-        /**
-         * 公钥字符串（用于验证签名）
-         */
-        private String publicKey;
-        
-        /**
-         * 私钥字符串（用于生成签名，仅在生成license时使用）
-         */
-        private String privateKey;
-        
-        /**
-         * 公钥文件路径
-         */
-        private String publicKeyPath = "public.key";
-        
-        /**
-         * 私钥文件路径
-         */
-        private String privateKeyPath = "private.key";
-    }
+    public static final String PRIVATE_KEY_PATH = "private.key";
 }

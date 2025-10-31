@@ -205,9 +205,13 @@ import { extractObjectData } from '@/utils/response-helper'
 import FieldConfigForm from './components/FieldConfigForm.vue'
 import FieldTestPanel from './components/FieldTestPanel.vue'
 import BatchTestPanel from './components/BatchTestPanel.vue'
+import { useEmbedMode } from '@/composables/useEmbedMode'
 
 const route = useRoute()
 const router = useRouter()
+
+// 使用统一的嵌入模式管理
+const { shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
 
 // 基本状态
 const loading = ref(true)
@@ -594,7 +598,10 @@ const saveTemplate = async () => {
 }
 
 const handleBack = () => {
-  router.push('/rule-extract/templates')
+  embedHandleBack(() => {
+    // 默认的返回逻辑
+    router.push('/rule-extract/templates')
+  })
 }
 
 onMounted(() => {

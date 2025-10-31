@@ -24,6 +24,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
+import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.merge.mergeImpl.ContentControlMerge;
@@ -43,6 +45,7 @@ import okhttp3.ResponseBody;
  */
 @RestController
 @RequestMapping("/api/compose")
+@RequireFeature(module = ModuleType.SMART_CONTRACT_SYNTHESIS, message = "智能合同合成功能需要授权")
 public class ComposeController {
 	private static final Logger logger = LoggerFactory.getLogger(ComposeController.class);
     private static final OkHttpClient HTTP = new OkHttpClient();

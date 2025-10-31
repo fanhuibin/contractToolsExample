@@ -15,8 +15,6 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import javax.annotation.PostConstruct;
 
@@ -207,8 +205,6 @@ public class CompareService {
                     System.err.println("加载任务失败: " + resultFile + ", error=" + e.getMessage());
                 }
             }
-            
-            System.out.println("✅ 已加载最近 " + tasks.size() + " 条比对任务到内存");
             
         } catch (Exception e) {
             System.err.println("启动时加载任务失败: " + e.getMessage());
@@ -1046,42 +1042,53 @@ public class CompareService {
             return "";
         }
 
-		// 调试：处理前长度
-		try {
-        // 预处理长度信息在调试模式下通过日志输出
-        //logger.debug("[PREPROCESS] before length={}", text.length());
-		} catch (Exception ignore) {
-        }
+        int originalLength = text.length();
         
         // 1. 使用TextNormalizer进行标点符号标准化
         String normalized = TextNormalizer.normalizePunctuation(text);
+        int afterNormLength = normalized.length();
+        
+        // 【调试】检查标点标准化是否改变了长度
+        if (originalLength != afterNormLength) {
+            logger.warn("[字符映射长度警告] 原始长度: {}, 标准化后长度: {}, 差异: {}", 
+                originalLength, afterNormLength, afterNormLength - originalLength);
+            logger.debug("[字符映射详情] 前30字符 - 原始: [{}...], 标准化: [{}...]", 
+                text.substring(0, Math.min(30, text.length())),
+                normalized.substring(0, Math.min(30, normalized.length())));
+        }
         
         // 2. 清理OCR识别中常见的特殊字符问题
         normalized = normalized.replace('$', ' ').replace('_', ' ');
 
-		// 4. 处理规则：空格 + 标点符号 场景替换为等长空格串，保持字符位移一致
-		// 示例：" ;"、" 。"、" \t, "、" . ." → 用相同长度的空格替换
-		// 说明：用正则逐段匹配并按匹配长度替换，避免位移差异
+		// 4. 处理多余的空白字符（保留有意义的标点符号）
+		// 说明：只规范化空白字符，不删除标点符号，保持文本完整性
 		// 
-		// 【重要修正】保护金额中的小数点和千分位逗号，避免误删除
-		// 策略：改进正则表达式，排除"数字.数字"和"数字,数字"模式
+		// 【重要】不再删除标点符号，保留引号、括号、句号等有意义的标点
+		// 【关键修复】保持字符串长度不变，避免diff索引错位
 		{
-			// 方案：使用负向零宽断言（negative lookbehind/lookahead）排除金额相关的点和逗号
-			// 正则说明：
-			// - (?<!\\d) : 前面不是数字
-			// - [\\s\\p{Punct}，。；：、！？…·•]+ : 空格或标点符号（一个或多个）
-			// - (?!\\d) : 后面不是数字
-			// 这样可以避免匹配"103400.00"中的点，同时匹配" . "这样的孤立标点
-			Pattern wsPunct = Pattern.compile("(?<!\\d)[\\s\\p{Punct}，。；：、！？…·•]+(?!\\d)");
-			Matcher m = wsPunct.matcher(normalized);
-			StringBuffer sb = new StringBuffer();
-			while (m.find()) {
-				int len = m.end() - m.start();
-				String spaces = " ".repeat(len);
-				m.appendReplacement(sb, Matcher.quoteReplacement(spaces));
-			}
-			m.appendTail(sb);
-			normalized = sb.toString();
+			// 将非普通空格的空白字符（制表符、全角空格、换行符等）替换为普通空格
+			// 但不合并连续空格，保持字符串长度不变
+			normalized = normalized
+				.replace('\t', ' ')      // 制表符 → 空格
+				.replace('\n', ' ')      // 换行符 → 空格
+				.replace('\r', ' ')      // 回车符 → 空格
+				.replace('\f', ' ')      // 换页符 → 空格
+				.replace('\u00A0', ' ')  // 不间断空格 → 普通空格
+				.replace('\u2000', ' ')  // En Quad → 空格
+				.replace('\u2001', ' ')  // Em Quad → 空格
+				.replace('\u2002', ' ')  // En Space → 空格
+				.replace('\u2003', ' ')  // Em Space → 空格
+				.replace('\u2004', ' ')  // 三分之一Em Space → 空格
+				.replace('\u2005', ' ')  // 四分之一Em Space → 空格
+				.replace('\u2006', ' ')  // 六分之一Em Space → 空格
+				.replace('\u2007', ' ')  // Figure Space → 空格
+				.replace('\u2008', ' ')  // Punctuation Space → 空格
+				.replace('\u2009', ' ')  // Thin Space → 空格
+				.replace('\u200A', ' ')  // Hair Space → 空格
+				.replace('\u202F', ' ')  // Narrow No-Break Space → 空格
+				.replace('\u205F', ' ')  // Medium Mathematical Space → 空格
+				.replace('\u3000', ' '); // 全角空格 → 半角空格（已在字符映射中处理）
+			// 注意：不使用正则\\s+替换，因为会合并连续空格，改变字符串长度！
 		}
         
         // 3. 根据选项处理大小写
@@ -1089,11 +1096,14 @@ public class CompareService {
             normalized = normalized.toLowerCase();
         }
 
-		// 调试：处理后长度
-		try {
-        // 预处理长度信息在调试模式下通过日志输出
-        //logger.debug("[PREPROCESS] after length={}", normalized.length());
-		} catch (Exception ignore) {
+        // 【最终检查】验证预处理没有改变字符串长度
+        int finalLength = normalized.length();
+        if (originalLength != finalLength) {
+            logger.error("[预处理长度错误] 预处理改变了字符串长度！原始: {}, 最终: {}, 差异: {}", 
+                originalLength, finalLength, finalLength - originalLength);
+            logger.error("[预处理详情] 这会导致diff索引错位！");
+            logger.error("[原始文本片段] {}", text.substring(0, Math.min(100, text.length())));
+            logger.error("[处理后片段] {}", normalized.substring(0, Math.min(100, normalized.length())));
         }
         
         return normalized;

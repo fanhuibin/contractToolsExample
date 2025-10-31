@@ -36,8 +36,37 @@ if not exist "config.xml" (
 echo [成功] 必要文件检查完成
 echo.
 
+REM 执行 Maven 打包
+echo [步骤 2/9] 执行 Maven 打包...
+echo [提示] 切换到项目根目录执行 Maven 打包...
+echo.
+
+cd ..\..
+echo [当前目录] %cd%
+echo.
+
+echo [开始] mvn clean package -DskipTests
+call mvn clean package -DskipTests
+
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo [错误] Maven 打包失败！错误代码: %ERRORLEVEL%
+    echo 请检查 Maven 配置和项目代码
+    pause
+    exit /b 1
+)
+
+echo.
+echo [成功] Maven 打包完成
+echo.
+
+REM 返回脚本目录
+cd docs\package
+echo [返回目录] %cd%
+echo.
+
 REM 检查 Maven 打包文件是否存在
-echo [步骤 2/8] 检查 Maven 打包文件...
+echo [步骤 3/9] 检查 Maven 打包文件...
 set SDK_JAR=..\..\contract-tools-sdk\target\contract-tools-sdk-1.0.0.jar
 if not exist "%SDK_JAR%" (
     echo [警告] 找不到 SDK 主 JAR 文件
@@ -54,7 +83,7 @@ echo [成功] Maven 打包文件检查完成
 echo.
 
 REM 清理旧的输出目录
-echo [步骤 3/8] 清理旧的输出目录...
+echo [步骤 4/9] 清理旧的输出目录...
 if exist "output" (
     rd /s /q output
     echo [成功] 已清理旧的输出目录
@@ -70,7 +99,7 @@ echo [成功] 输出目录创建完成
 echo.
 
 REM 执行 Allatori 代码混淆
-echo [步骤 4/8] 开始执行代码混淆（第一层保护）...
+echo [步骤 5/9] 开始执行代码混淆（第一层保护）...
 echo [提示] 这个过程可能需要几分钟，请耐心等待...
 echo.
 
@@ -89,7 +118,7 @@ echo [成功] 代码混淆完成
 echo.
 
 REM 合并混淆后的模块到主 JAR
-echo [步骤 5/8] 合并混淆后的模块...
+echo [步骤 6/9] 合并混淆后的模块...
 cd output
 jar -uvf0 contract-tools-sdk-obfuscated.jar BOOT-INF\lib
 
@@ -106,7 +135,7 @@ echo.
 
 REM 执行 JAR 加密（第二层保护）
 echo.
-echo [步骤 6/8] 开始执行 JAR 加密...
+echo [步骤 7/9] 开始执行 JAR 加密...
 echo [提示] 使用 runner 工具对混淆后的 JAR 进行加密保护...
 cd output
 java -jar ..\runner-1.0.0.jar contract-tools-sdk-obfuscated.jar contract-tools-sdk-encrypted.jar zhaoxinmsPsd
@@ -124,7 +153,7 @@ echo.
 
 REM 编译 Go 启动器（Linux 版本）
 echo.
-echo [步骤 7/8] 编译 Go 启动器 - Linux...
+echo [步骤 8/9] 编译 Go 启动器 - Linux...
 set GOOS=linux
 set GOARCH=amd64
 go build -o output/runner-linux runner.go
@@ -139,7 +168,7 @@ echo.
 
 REM 编译 Go 启动器（Windows 版本）
 echo.
-echo [步骤 8/8] 编译 Go 启动器 - Windows...
+echo [步骤 9/9] 编译 Go 启动器 - Windows...
 set GOOS=windows
 set GOARCH=amd64
 go build -o output/runner.exe runner.go

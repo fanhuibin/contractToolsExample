@@ -234,8 +234,8 @@ public class RuleExtractService {
                     task.getTaskId(), // 传递rule-extract的taskId
                     ocrOutputDir, // 传递输出目录
                     task.getIgnoreHeaderFooter() != null ? task.getIgnoreHeaderFooter() : true,
-                    task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 12.0,
-                    task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 12.0
+                    task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 6.0,
+                    task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 6.0
                 );
                 log.info("使用taskId和输出目录调用OCR服务成功: taskId={}, outputDir={}", task.getTaskId(), ocrOutputDir.getAbsolutePath());
             } catch (NoSuchMethodException e) {
@@ -250,8 +250,8 @@ public class RuleExtractService {
                         ocrProvider,
                         pdfFile,
                         task.getIgnoreHeaderFooter() != null ? task.getIgnoreHeaderFooter() : true,
-                        task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 12.0,
-                        task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 12.0
+                        task.getHeaderHeightPercent() != null ? task.getHeaderHeightPercent() : 6.0,
+                        task.getFooterHeightPercent() != null ? task.getFooterHeightPercent() : 6.0
                     );
                     log.info("使用页眉页脚参数调用OCR服务成功");
                 } catch (Exception e2) {

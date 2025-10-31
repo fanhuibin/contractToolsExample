@@ -127,6 +127,38 @@
                     <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
                   </el-tooltip>
                 </div>
+                
+                <!-- 页眉页脚高度设置 -->
+                <div v-if="extractSettings.ignoreHeaderFooter" class="header-footer-settings">
+                  <el-form-item label="页眉高度(%)" style="margin-bottom: 12px;">
+                    <el-input-number 
+                      v-model="extractSettings.headerHeightPercent" 
+                      :min="0" 
+                      :max="50" 
+                      :step="0.5"
+                      :precision="1"
+                      size="small"
+                      style="width: 120px;"
+                    />
+                    <span style="margin-left: 8px; font-size: 12px; color: #909399;">
+                      文档顶部区域视为页眉
+                    </span>
+                  </el-form-item>
+                  <el-form-item label="页脚高度(%)" style="margin-bottom: 0;">
+                    <el-input-number 
+                      v-model="extractSettings.footerHeightPercent" 
+                      :min="0" 
+                      :max="50" 
+                      :step="0.5"
+                      :precision="1"
+                      size="small"
+                      style="width: 120px;"
+                    />
+                    <span style="margin-left: 8px; font-size: 12px; color: #909399;">
+                      文档底部区域视为页脚
+                    </span>
+                  </el-form-item>
+                </div>
               </div>
             </el-form-item>
 
@@ -337,7 +369,9 @@ const selectedTemplateId = ref('')
 
 // 提取设置
 const extractSettings = ref({
-  ignoreHeaderFooter: true  // 默认开启忽略页眉页脚
+  ignoreHeaderFooter: true,  // 默认开启忽略页眉页脚
+  headerHeightPercent: 6,    // 页眉高度百分比，默认6%
+  footerHeightPercent: 6     // 页脚高度百分比，默认6%
 })
 
 // 任务相关
@@ -428,6 +462,8 @@ const startExtraction = async () => {
     formData.append('templateId', selectedTemplateId.value)
     formData.append('ocrProvider', 'mineru')
     formData.append('ignoreHeaderFooter', String(extractSettings.value.ignoreHeaderFooter))
+    formData.append('headerHeightPercent', String(extractSettings.value.headerHeightPercent))
+    formData.append('footerHeightPercent', String(extractSettings.value.footerHeightPercent))
 
     const res: any = await uploadAndExtract(formData)
     
@@ -725,6 +761,21 @@ onUnmounted(() => {
 
           .el-checkbox {
             font-size: var(--zx-font-sm);
+          }
+        }
+        
+        .header-footer-settings {
+          margin-top: 16px;
+          padding-top: 12px;
+          border-top: 1px dashed #dcdfe6;
+          
+          :deep(.el-form-item) {
+            margin-bottom: 12px;
+          }
+          
+          :deep(.el-form-item__label) {
+            font-size: 13px;
+            color: #606266;
           }
         }
       }

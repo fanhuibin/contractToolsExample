@@ -14,8 +14,8 @@ spring:
       - classpath:application-compare-progress.yml
   servlet:
     multipart:
-      max-file-size: 100MB
-      max-request-size: 100MB
+      max-file-size: 200MB
+      max-request-size: 200MB
       enabled: true
 
   # 数据库配置（固定数据源）
@@ -57,33 +57,6 @@ spring:
         login-username: admin
         login-password: admin
 
-# 肇新配置（zhaoxin命名空间）
-zhaoxin:
-  # 授权模块配置
-  auth:
-    enabled: true  # 启用授权模块
-    license:
-      # 授权文件路径
-      # 开发环境：使用 classpath:license.lic (从resources目录读取)
-      # 生产环境：文件加载优先级
-      #   1. jar包同级目录: ./license.lic
-      #   2. config目录: ./config/license.lic
-      #   3. classpath: classpath:license.lic (开发环境)
-      file-path: classpath:license.lic
-    signature:
-      # 公钥文件路径（同上优先级规则）
-      public-key-path: classpath:public.key
-  
-  # 合同提取功能配置
-  extract:
-    aliyun:
-      # 阿里云通义千问API密钥
-      # 获取方式：https://dashscope.console.aliyun.com/apiKey
-      api-key: your-aliyun-api-key-here
-      # 使用的模型，默认 qwen-plus
-      # 可选值: qwen-turbo, qwen-plus, qwen-max
-      model: qwen-plus
-
 # 日志配置
 logging:
   level:
@@ -108,6 +81,12 @@ logging:
 
 # 肇新合同工具集配置
 zxcm:
+  # 演示模式配置（全局设置）
+  demo-mode:
+    enabled: false  # 是否启用演示模式
+    max-file-size-mb: 20  # 演示模式下最大文件大小（MB）
+    max-pages: 20  # 演示模式下最大页数
+  
   # 应用配置
   application:
     # 应用基础URL（OnlyOffice服务会从这个URL下载文件）
@@ -139,7 +118,6 @@ zxcm:
         fillForms: true
         modifyContentControl: true
         modifyFilter: true
-  
   # 文件上传配置
   file-upload:
     root-path: ./testuploads

@@ -46,7 +46,7 @@
               />
               <div v-else class="editor-placeholder">
                  <el-icon class="placeholder-icon"><Document /></el-icon>
-                 <p>OnlyOffice编辑器将在这里显示</p>
+                 <p>文档编辑器将在这里显示</p>
                  <p class="placeholder-note">等待文件上传...</p>
               </div>
             </div>
@@ -204,7 +204,7 @@
           />
           <div v-else class="editor-placeholder">
             <el-icon class="placeholder-icon"><Document /></el-icon>
-            <p>OnlyOffice编辑器将在这里显示</p>
+            <p>文档编辑器将在这里显示</p>
             <p class="placeholder-note">等待文件上传...</p>
           </div>
         </div>
@@ -286,7 +286,7 @@ const usage = ref<any | null>(null)
 const libVisible = ref(false)
 const libRef = ref<any>(null)
 
-// OnlyOffice编辑器相关
+// 文档编辑器相关
 const showEditor = ref(false)
 const editorReady = ref(false)
 const uploadedFileId = ref('')
@@ -695,7 +695,7 @@ async function saveSelectionAsProfile() {
   }
 }
 
-// OnlyOffice编辑器相关方法
+// 文档编辑器相关方法
 async function openInEditor() {
   if (!selectedFile.value) {
     ElMessage.warning('请先上传文件')
@@ -1134,7 +1134,7 @@ function saveAuditResult() {
   color: var(--el-color-primary);
 }
 
-/* OnlyOffice编辑器样式 */
+/* 文档编辑器样式 */
 /* .editor-overlay {
   position: fixed;
   top: 0;
