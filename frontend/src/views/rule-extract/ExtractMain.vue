@@ -63,8 +63,101 @@
                   <CircleCheck />
                 </el-icon>
               </div>
+<<<<<<< HEAD
               <p class="file-name">已选择：{{ selectedFile.name }}</p>
               <p class="file-size">大小: {{ formatFileSize(selectedFile.size) }}</p>
+=======
+            </el-form-item>
+
+            <el-form-item v-if="selectedTemplateInfo">
+              <div class="template-preview">
+                <div class="template-info">
+                  <div class="info-item">
+                    <span class="label">模板名称：</span>
+                    <span class="value">{{ selectedTemplateInfo.templateName }}</span>
+                  </div>
+                  <div class="info-item">
+                    <span class="label">字段数量：</span>
+                    <span class="value">{{ selectedTemplateInfo.fields?.length || 0 }} 个</span>
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+
+            <el-form-item>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                <label style="font-size: 14px; color: #606266; font-weight: 500;">
+                  文本提取设置
+                  <span v-if="!showExtractSettings" style="font-size: 12px; color: #909399; font-weight: normal; margin-left: 4px;">
+                    (使用默认设置)
+                  </span>
+                </label>
+                <el-button 
+                  :type="showExtractSettings ? 'primary' : 'default'"
+                  text 
+                  size="small" 
+                  @click="showExtractSettings = !showExtractSettings"
+                  style="padding: 4px 8px;"
+                >
+                  <el-icon style="margin-right: 4px;">
+                    <Setting v-if="!showExtractSettings" />
+                    <CaretTop v-else />
+                  </el-icon>
+                  {{ showExtractSettings ? '收起' : '设置' }}
+                </el-button>
+              </div>
+              
+              <el-collapse-transition>
+                <div v-show="showExtractSettings" class="extract-settings">
+                  <div class="setting-item">
+                    <el-checkbox v-model="extractSettings.ignoreHeaderFooter">
+                      忽略页眉页脚
+                    </el-checkbox>
+                    <el-tooltip 
+                      content="忽略页眉页脚位置，避免页眉页脚干扰跨页提取" 
+                      placement="top"
+                    >
+                      <el-icon style="margin-left: 4px; cursor: help;"><QuestionFilled /></el-icon>
+                    </el-tooltip>
+                  </div>
+                  
+                  <!-- 页眉页脚高度设置 -->
+                  <div v-if="extractSettings.ignoreHeaderFooter" class="header-footer-settings">
+                    <el-form-item label="页眉高度(%)" style="margin-bottom: 12px;">
+                      <el-input-number 
+                        v-model="extractSettings.headerHeightPercent" 
+                        :min="0" 
+                        :max="50" 
+                        :step="0.5"
+                        :precision="1"
+                        size="small"
+                        style="width: 120px;"
+                      />
+                      <span style="margin-left: 8px; font-size: 12px; color: #909399;">
+                        文档顶部区域视为页眉
+                      </span>
+                    </el-form-item>
+                    <el-form-item label="页脚高度(%)" style="margin-bottom: 0;">
+                      <el-input-number 
+                        v-model="extractSettings.footerHeightPercent" 
+                        :min="0" 
+                        :max="50" 
+                        :step="0.5"
+                        :precision="1"
+                        size="small"
+                        style="width: 120px;"
+                      />
+                      <span style="margin-left: 8px; font-size: 12px; color: #909399;">
+                        文档底部区域视为页脚
+                      </span>
+                    </el-form-item>
+                  </div>
+                </div>
+              </el-collapse-transition>
+            </el-form-item>
+
+            <el-form-item>
+>>>>>>> 6475cdb0e484c3f5fb49b4b392a8f7ede8ea7dd0
               <el-button 
                 text 
                 type="primary" 
@@ -273,7 +366,11 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+<<<<<<< HEAD
 import { Document, UploadFilled, Refresh, CircleCheck, Setting } from '@element-plus/icons-vue'
+=======
+import { Document, UploadFilled, Refresh, Setting, InfoFilled, QuestionFilled, CaretTop } from '@element-plus/icons-vue'
+>>>>>>> 6475cdb0e484c3f5fb49b4b392a8f7ede8ea7dd0
 import PageHeader from '@/components/common/PageHeader.vue'
 import { 
   listTemplates, 
@@ -296,6 +393,7 @@ const templates = ref<any[]>([])
 const selectedTemplateId = ref('')
 
 // 提取设置
+const showExtractSettings = ref(false)  // 默认隐藏文本提取设置
 const extractSettings = ref({
   ignoreHeaderFooter: true,  // 默认开启忽略页眉页脚
   headerHeightPercent: 6,    // 页眉高度百分比，默认6%

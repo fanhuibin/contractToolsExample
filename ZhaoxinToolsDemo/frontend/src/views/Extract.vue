@@ -149,60 +149,84 @@
             </button>
           </div>
           
-          <!-- 成功提示及任务统计 -->
-          <div v-if="success" class="result-stats-card">
-            <div class="stats-header">
-              <div class="header-icon-success">
-                <i class="fas fa-check-circle"></i>
-              </div>
-              <div class="header-content">
-                <h3>抽取完成！</h3>
-                <p>文档信息已成功提取</p>
+          <!-- 成功提示 -->
+          <div v-if="success" class="alert-box alert-success">
+            <div class="alert-icon">
+              <i class="fas fa-check-circle"></i>
+            </div>
+            <div class="alert-content">
+              <h4>抽取完成！</h4>
+              <p>文档信息抽取已成功完成，点击下方按钮查看详细结果</p>
+            </div>
+            <button @click="viewResult" class="btn-view-result">
+              <i class="fas fa-eye"></i>
+              查看结果
+            </button>
+          </div>
+        </div>
+
+        <!-- 任务历史卡片 -->
+        <div class="history-card">
+          <div class="card-header-section">
+            <div class="header-left">
+              <i class="fas fa-history header-icon"></i>
+              <div class="header-text">
+                <h2>任务历史</h2>
+                <p>查看所有抽取任务记录</p>
               </div>
             </div>
-            
-            <div class="stats-grid">
-              <div class="stat-item">
-                <div class="stat-icon">
-                  <i class="fas fa-clock"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">抽取时长</div>
-                  <div class="stat-value">{{ taskDuration }}</div>
-                </div>
-              </div>
-              
-              <div class="stat-item">
-                <div class="stat-icon">
-                  <i class="fas fa-list-alt"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">提取字段</div>
-                  <div class="stat-value">{{ extractedFields }} 个</div>
-                </div>
-              </div>
-              
-              <div class="stat-item">
-                <div class="stat-icon">
-                  <i class="fas fa-check-double"></i>
-                </div>
-                <div class="stat-content">
-                  <div class="stat-label">成功率</div>
-                  <div class="stat-value">{{ successRate }}%</div>
-                </div>
-              </div>
-            </div>
-            
-            <div class="result-actions">
-              <button @click="viewResult" class="btn-view-result">
-                <i class="fas fa-eye"></i>
-                查看详细结果
-              </button>
-              <button @click="downloadResult" class="btn-download-result">
-                <i class="fas fa-download"></i>
-                下载结果
-              </button>
-            </div>
+            <button @click="loadTaskHistory" class="btn-refresh">
+              <i class="fas fa-sync-alt"></i>
+              <span>刷新</span>
+            </button>
+          </div>
+          
+          <div class="table-wrapper">
+            <table class="modern-table">
+              <thead>
+                <tr>
+                  <th>任务ID</th>
+                  <th>文件名</th>
+                  <th>模板</th>
+                  <th class="text-center">状态</th>
+                  <th>开始时间</th>
+                  <th class="text-center">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="taskHistory.length === 0">
+                  <td colspan="6" class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>暂无历史任务</p>
+                  </td>
+                </tr>
+                <tr v-for="task in taskHistory" :key="task.taskId">
+                  <td class="task-id" :title="task.taskId">
+                    <code>{{ task.taskId.substring(0, 12) }}...</code>
+                  </td>
+                  <td :title="task.fileName">
+                    {{ task.fileName || '-' }}
+                  </td>
+                  <td>{{ task.templateId || '-' }}</td>
+                  <td class="text-center">
+                    <span class="badge-status" :class="`status-${task.status}`">
+                      {{ getStatusText(task.status) }}
+                    </span>
+                  </td>
+                  <td class="time-cell">{{ formatTime(task.createdAt) }}</td>
+                  <td class="text-center action-cell">
+                    <button 
+                      v-if="task.status === 'completed'" 
+                      @click="viewTaskResult(task.taskId)" 
+                      class="btn-icon btn-primary" 
+                      title="查看结果"
+                    >
+                      <i class="fas fa-eye"></i>
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -263,10 +287,8 @@ const success = ref(false)
 const error = ref(false)
 const errorMessage = ref('')
 
-// 任务结果数据
-const taskResult = ref(null)
-const taskStartTime = ref(null)
-const taskEndTime = ref(null)
+// 任务历史
+const taskHistory = ref([])
 
 // 弹窗状态
 const resultDialogVisible = ref(false)
@@ -286,27 +308,6 @@ const resultUrl = computed(() => {
 
 const templateManageUrl = computed(() => {
   return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/templates`
-})
-
-// 任务统计计算属性
-const taskDuration = computed(() => {
-  if (!taskStartTime.value || !taskEndTime.value) return '0秒'
-  const duration = Math.round((taskEndTime.value - taskStartTime.value) / 1000)
-  if (duration < 60) return `${duration}秒`
-  const minutes = Math.floor(duration / 60)
-  const seconds = duration % 60
-  return `${minutes}分${seconds}秒`
-})
-
-const extractedFields = computed(() => {
-  if (!taskResult.value) return 0
-  return taskResult.value.extractedCount || 0
-})
-
-const successRate = computed(() => {
-  if (!taskResult.value || !taskResult.value.totalCount) return 0
-  const rate = (taskResult.value.successCount / taskResult.value.totalCount) * 100
-  return Math.round(rate)
 })
 
 // 处理文件选择
@@ -366,8 +367,6 @@ const handleSubmit = async () => {
     error.value = false
     success.value = false
     currentTaskId.value = null
-    taskResult.value = null
-    taskStartTime.value = Date.now()
     
     console.log('📤 开始上传文件并抽取...')
     
@@ -387,25 +386,16 @@ const handleSubmit = async () => {
       statusText.value = status.message || '正在抽取中...'
     })
     
-    // 获取结果统计
-    const taskResultData = await api.getTaskResult(taskId)
-    if (taskResultData.data && taskResultData.data.data) {
-      const resultInfo = taskResultData.data.data
-      taskResult.value = {
-        extractedCount: resultInfo.extractResults?.length || 0,
-        totalCount: resultInfo.extractResults?.length || 0,
-        successCount: resultInfo.extractResults?.filter(r => r.success !== false).length || 0
-      }
-    }
-    
     // 完成
-    taskEndTime.value = Date.now()
     progress.value = 100
     statusText.value = '抽取完成！'
     extracting.value = false
     success.value = true
     
-    console.log('🎉 抽取完成！', taskResult.value)
+    // 刷新任务列表
+    await loadTaskHistory()
+    
+    console.log('🎉 抽取完成！')
     
   } catch (err) {
     console.error('❌ 抽取失败:', err)
@@ -446,34 +436,10 @@ const openTemplateManage = () => {
   templateDialogVisible.value = true
 }
 
-// 下载结果
-const downloadResult = async () => {
-  if (!currentTaskId.value) return
-  
-  try {
-    console.log('📥 下载任务结果:', currentTaskId.value)
-    const response = await api.getTaskResult(currentTaskId.value)
-    
-    if (response.data && response.data.data) {
-      const result = response.data.data
-      const jsonContent = JSON.stringify(result, null, 2)
-      const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' })
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = `抽取结果_${currentTaskId.value.substring(0, 8)}_${Date.now()}.json`
-      link.click()
-      URL.revokeObjectURL(link.href)
-      console.log('✅ 下载成功')
-    }
-  } catch (error) {
-    console.error('❌ 下载失败:', error)
-    alert('下载失败，请重试')
-  }
-}
-
 // 弹窗关闭回调
 const onResultDialogClose = () => {
   console.log('抽取结果弹窗已关闭')
+  // 可以在这里刷新任务列表或做其他清理工作
 }
 
 const onTemplateDialogClose = () => {
@@ -511,10 +477,41 @@ const loadTemplates = async () => {
   }
 }
 
+// 加载任务历史
+const loadTaskHistory = async () => {
+  try {
+    console.log('🔄 加载任务历史...')
+    const result = await api.getAllTasks()
+    const tasks = result.data.data || result.data || []
+    
+    taskHistory.value = (Array.isArray(tasks) ? tasks : []).sort((a, b) => {
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    })
+    
+    console.log('✅ 任务历史加载成功，共', taskHistory.value.length, '条记录')
+  } catch (error) {
+    console.error('❌ 加载任务历史失败:', error)
+    taskHistory.value = []
+  }
+}
+
+// 获取状态文本
+const getStatusText = (status) => {
+  const statusMap = {
+    'pending': '等待中',
+    'processing': '处理中',
+    'completed': '已完成',
+    'failed': '失败',
+    'cancelled': '已取消'
+  }
+  return statusMap[status] || status
+}
+
 // 组件挂载时加载数据
 onMounted(() => {
   console.log('🚀 页面加载完成，开始初始化')
   loadTemplates()
+  loadTaskHistory()
 })
 </script>
 
@@ -610,7 +607,8 @@ onMounted(() => {
 }
 
 /* 卡片通用样式 */
-.upload-card {
+.upload-card,
+.history-card {
   background: white;
   border-radius: 24px;
   padding: 48px;
@@ -1015,12 +1013,21 @@ onMounted(() => {
   border: 1px solid #ffccc7;
 }
 
+.alert-success {
+  background: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
 .alert-icon {
   font-size: 32px;
 }
 
 .alert-error .alert-icon {
   color: #ff4d4f;
+}
+
+.alert-success .alert-icon {
+  color: #52c41a;
 }
 
 .alert-content {
@@ -1035,6 +1042,10 @@ onMounted(() => {
 
 .alert-error .alert-content h4 {
   color: #ff4d4f;
+}
+
+.alert-success .alert-content h4 {
+  color: #52c41a;
 }
 
 .alert-content p {
@@ -1060,129 +1071,192 @@ onMounted(() => {
   color: #333;
 }
 
-/* 任务统计卡片 */
-.result-stats-card {
-  background: linear-gradient(135deg, #f6ffed 0%, #e6f7ff 100%);
-  border: 2px solid #52c41a;
+/* 表格样式 */
+.table-wrapper {
+  overflow-x: auto;
   border-radius: 16px;
-  padding: 32px;
-  margin-top: 24px;
+  border: 1px solid #e8e8e8;
 }
 
-.stats-header {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  margin-bottom: 32px;
-  padding-bottom: 24px;
-  border-bottom: 2px solid rgba(82, 196, 26, 0.2);
+.modern-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
 }
 
-.header-icon-success {
-  width: 64px;
-  height: 64px;
-  background: #52c41a;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 32px;
-  color: white;
-  box-shadow: 0 8px 20px rgba(82, 196, 26, 0.3);
+.modern-table thead {
+  background: #fafafa;
+  border-bottom: 2px solid #e0e0e0;
 }
 
-.header-content h3 {
-  margin: 0 0 6px 0;
-  font-size: 24px;
-  font-weight: 700;
+.modern-table thead th {
+  padding: 24px 24px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+  border: none;
+}
+
+.modern-table thead th:first-child {
+  border-top-left-radius: 16px;
+  padding-left: 32px;
+}
+
+.modern-table thead th:last-child {
+  border-top-right-radius: 16px;
+  padding-right: 32px;
+}
+
+.modern-table thead th:nth-child(1) { width: 15%; }
+.modern-table thead th:nth-child(2) { width: 25%; }
+.modern-table thead th:nth-child(3) { width: 20%; }
+.modern-table thead th:nth-child(4) { width: 15%; }
+.modern-table thead th:nth-child(5) { width: 15%; }
+.modern-table thead th:nth-child(6) { width: 10%; }
+
+.modern-table tbody tr {
+  transition: all 0.3s ease;
+}
+
+.modern-table tbody tr:hover {
+  background: #f5f5f5;
+}
+
+.modern-table tbody td {
+  padding: 24px;
+  font-size: 15px;
+  color: #333;
+  border-bottom: 1px solid #f0f0f0;
+  line-height: 1.6;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modern-table tbody td:first-child {
+  padding-left: 32px;
+}
+
+.modern-table tbody td:last-child {
+  padding-right: 32px;
+}
+
+.modern-table tbody td:nth-child(2) {
+  white-space: normal;
+  word-break: break-word;
+}
+
+.modern-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.modern-table th.text-center,
+.modern-table td.text-center {
+  text-align: center !important;
+  vertical-align: middle;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px !important;
+  color: #999;
+}
+
+.empty-state i {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.empty-state p {
+  font-size: 15px;
+  margin: 0;
+}
+
+.task-id code {
+  background: #f5f5f5;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: #1890ff;
+  font-weight: 500;
+}
+
+.badge-status {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-pending {
+  background: #fff7e6;
+  color: #fa8c16;
+}
+
+.status-processing {
+  background: #e6f7ff;
+  color: #1890ff;
+}
+
+.status-completed {
+  background: #f6ffed;
   color: #52c41a;
 }
 
-.header-content p {
-  margin: 0;
+.status-failed {
+  background: #fff2f0;
+  color: #ff4d4f;
+}
+
+.status-cancelled {
+  background: #f5f5f5;
+  color: #999;
+}
+
+.time-cell {
   font-size: 14px;
   color: #666;
+  font-weight: 400;
 }
 
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 24px;
-  margin-bottom: 32px;
+.action-cell {
+  white-space: nowrap !important;
+  text-align: center !important;
 }
 
-.stat-item {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
-}
-
-.stat-item:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-}
-
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  background: linear-gradient(135deg, #1890ff 0%, #52c41a 100%);
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: white;
-  flex-shrink: 0;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 6px;
-}
-
-.stat-value {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1a1a1a;
-}
-
-.result-actions {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-}
-
-.btn-download-result {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 14px 32px;
+.btn-icon {
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 10px;
+  color: white;
   font-size: 15px;
-  font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: #1890ff;
-  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.btn-download-result:hover {
-  background: #40a9ff;
+.btn-icon:hover {
   transform: translateY(-2px);
+}
+
+.btn-primary {
+  background: #1890ff;
+}
+
+.btn-primary:hover {
+  background: #40a9ff;
   box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
 }
-
 
 /* 页脚 */
 .page-footer {
@@ -1208,7 +1282,8 @@ onMounted(() => {
     padding: 0 20px;
   }
   
-  .upload-card {
+  .upload-card,
+  .history-card {
     padding: 24px;
   }
   
@@ -1233,18 +1308,20 @@ onMounted(() => {
     font-size: 22px;
   }
   
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .modern-table thead th,
+  .modern-table tbody td {
+    padding: 16px 12px;
+    font-size: 13px;
   }
   
-  .result-actions {
-    flex-direction: column;
+  .modern-table thead th:first-child,
+  .modern-table tbody td:first-child {
+    padding-left: 16px;
   }
   
-  .btn-view-result,
-  .btn-download-result {
-    width: 100%;
-    justify-content: center;
+  .modern-table thead th:last-child,
+  .modern-table tbody td:last-child {
+    padding-right: 16px;
   }
 }
 </style>

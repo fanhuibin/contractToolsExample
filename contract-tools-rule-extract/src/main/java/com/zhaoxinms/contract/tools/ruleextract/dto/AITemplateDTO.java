@@ -103,6 +103,13 @@ public class AITemplateDTO {
         private String endKeyword;
         
         /**
+         * 第几个匹配项（可选，默认为 1，表示第1个）
+         * 用于处理关键词在文档中多次出现的情况
+         * 例如："地址："出现3次，occurrence=2 表示提取第2个
+         */
+        private Integer occurrence;
+        
+        /**
          * 表格规则（当 type 为 table 时使用）
          */
         private TableRules tableRules;

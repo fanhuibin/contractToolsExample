@@ -343,9 +343,8 @@ public class AITemplateService {
                 result.addError(prefix + "keyword 类型规则必须有 keyword 字段");
             }
         } else if ("regex".equals(type)) {
-            if (!rules.has("pattern") || rules.get("pattern").asText().isEmpty()) {
-                result.addError(prefix + "regex 类型规则必须有 pattern 字段");
-            }
+            // 拒绝纯正则提取，建议使用关键词锚点
+            result.addError(prefix + "不支持 type=\"regex\" 纯正则提取。请使用 type=\"keyword\" 关键词锚点提取，配合 pattern 参数实现精确提取");
         } else if ("table".equals(type)) {
             // 验证表格规则
             if (!rules.has("tableRules")) {
@@ -371,7 +370,7 @@ public class AITemplateService {
                 }
             }
         } else {
-            result.addWarning(prefix + "未知的规则类型: " + type + "，支持的类型：keyword, regex, table");
+            result.addError(prefix + "不支持的规则类型: " + type + "。仅支持：keyword（关键词锚点）、table（表格提取）");
         }
     }
 
@@ -480,6 +479,11 @@ public class AITemplateService {
             // AI 的 "keyword" → 系统的 "KEYWORD_ANCHOR"
             systemRuleType = "KEYWORD_ANCHOR";
             
+            // 读取 occurrence 值
+            Integer occurrenceValue = extractRules.getOccurrence() != null ? extractRules.getOccurrence() : 1;
+            log.debug("字段 [{}] 的 occurrence 值: AI JSON={}, 处理后={}", 
+                aiField.getFieldLabel(), extractRules.getOccurrence(), occurrenceValue);
+            
             // 构建 KEYWORD_ANCHOR 规则配置
             // 前端期望的字段名：anchor, direction, extractMethod, pattern, maxLength, maxDistance 等
             ruleContent.put("anchor", extractRules.getKeyword()); // keyword → anchor
@@ -488,7 +492,8 @@ public class AITemplateService {
             ruleContent.put("delimiter", "："); // 默认分隔符
             ruleContent.put("multiline", false); // 是否多行
             ruleContent.put("matchMode", "single"); // 匹配模式
-            ruleContent.put("occurrence", 1); // 出现次数
+            ruleContent.put("anchorOccurrence", occurrenceValue); // AI的occurrence → 前端的anchorOccurrence（锚点序号）
+            ruleContent.put("occurrence", 1); // 正则结果序号，默认第1个
             ruleContent.put("returnAll", false); // 是否返回全部
             
             // 根据是否有 pattern 决定提取方法
@@ -497,9 +502,9 @@ public class AITemplateService {
                 ruleContent.put("extractMethod", "regex");
                 ruleContent.put("pattern", extractRules.getPattern());
             } else {
-                // 无正则表达式，使用固定长度提取
-                ruleContent.put("extractMethod", "fixed");
-                ruleContent.put("maxLength", extractRules.getLength() != null ? extractRules.getLength() : 50);
+                // 无正则表达式，默认使用正则提取全部内容（前端不支持 fixed 方法）
+                ruleContent.put("extractMethod", "regex");
+                ruleContent.put("pattern", ".*"); // 提取关键词后的所有内容（最多 maxDistance 个字符）
             }
             
         } else if ("regex".equals(aiRuleType)) {
