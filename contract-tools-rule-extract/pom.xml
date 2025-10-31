@@ -69,7 +69,7 @@
             <version>${project.version}</version>
         </dependency>
         
-        <!-- 内部依赖 -->
+        <!-- 内部依赖 - core 模块 (包含 MinerUOCRService) -->
         <dependency>
             <groupId>com.zhaoxinms</groupId>
             <artifactId>contract-tools-core</artifactId>
