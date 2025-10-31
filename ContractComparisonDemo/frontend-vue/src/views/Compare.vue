@@ -180,111 +180,44 @@
             </button>
           </div>
           
-          <!-- 成功提示 -->
-          <div v-if="success" class="alert-box alert-success">
-            <div class="alert-icon">
-              <i class="fas fa-check-circle"></i>
-            </div>
-            <div class="alert-content">
-              <h4>比对完成！</h4>
-              <p>文档比对已成功完成，点击下方按钮查看详细结果</p>
-            </div>
-            <button @click="viewResult" class="btn-view-result">
-              <i class="fas fa-eye"></i>
-              查看结果
-            </button>
-          </div>
-        </div>
-
-        <!-- 任务历史卡片 -->
-        <div class="history-card">
-          <div class="card-header-section">
-            <div class="header-left">
-              <i class="fas fa-history header-icon"></i>
-              <div class="header-text">
-                <h2>任务历史</h2>
-                <p>查看所有比对任务记录</p>
+          <!-- 成功提示及任务统计 -->
+          <div v-if="success" class="comparison-stats-card">
+            <div class="stats-grid-compact">
+              <!-- 比对时长卡片 -->
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-text">比对时长：{{ taskDuration }}</div>
+              </div>
+              
+              <!-- 差异数量卡片 -->
+              <div class="stat-card">
+                <div class="stat-icon">
+                  <i class="fas fa-exchange-alt"></i>
+                </div>
+                <div class="stat-text">差异数量：{{ taskDifferenceCount }} 处</div>
+              </div>
+              
+              <!-- 查看详细结果卡片 -->
+              <div class="stat-card stat-card-action" @click="viewResult">
+                <div class="stat-icon">
+                  <i class="fas fa-eye"></i>
+                </div>
+                <div class="stat-text">查看详细结果</div>
+              </div>
+              
+              <!-- 下载比对结果卡片 -->
+              <div class="stat-card stat-card-action" @click="downloadComparisonResult">
+                <div class="stat-icon">
+                  <i class="fas fa-download"></i>
+                </div>
+                <div class="stat-text">下载比对结果</div>
               </div>
             </div>
-            <button @click="loadTaskHistory" class="btn-refresh">
-              <i class="fas fa-sync-alt"></i>
-              <span>刷新</span>
-            </button>
-          </div>
-          
-          <div class="table-wrapper">
-            <table class="modern-table">
-              <thead>
-                <tr>
-                  <th>任务ID</th>
-                  <th>原文档</th>
-                  <th>新文档</th>
-                  <th class="text-center">差异数</th>
-                  <th>开始时间</th>
-                  <th>完成时间</th>
-                  <th class="text-center">时长</th>
-                  <th class="text-center">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-if="taskHistory.length === 0">
-                  <td colspan="8" class="empty-state">
-                    <i class="fas fa-inbox"></i>
-                    <p>暂无历史任务</p>
-                  </td>
-                </tr>
-                <tr v-for="task in taskHistory" :key="task.taskId">
-                  <td class="task-id" :title="task.taskId">
-                    <code>{{ task.taskId.substring(0, 12) }}...</code>
-                  </td>
-                  <td :title="task.oldFileName">
-                    {{ task.oldFileName || '-' }}
-                  </td>
-                  <td :title="task.newFileName">
-                    {{ task.newFileName || '-' }}
-                  </td>
-                  <td class="text-center">
-                    <span class="badge-count">{{ getDifferencesCount(task) }}</span>
-                  </td>
-                  <td class="time-cell">{{ formatTime(task.startTime) }}</td>
-                  <td class="time-cell">{{ formatTime(task.endTime) }}</td>
-                  <td class="text-center duration-cell">{{ getProcessingDuration(task) }}</td>
-                  <td class="text-center action-cell">
-                    <button 
-                      v-if="task.resultUrl" 
-                      @click="viewTaskResult(task.taskId)" 
-                      class="btn-icon btn-primary" 
-                      title="查看结果"
-                    >
-                      <i class="fas fa-eye"></i>
-                    </button>
-                    <button 
-                      v-if="task.resultUrl" 
-                      @click="downloadTaskResult(task.taskId)" 
-                      class="btn-icon btn-success" 
-                      title="下载结果"
-                    >
-                      <i class="fas fa-download"></i>
-                    </button>
-                    <button 
-                      @click="deleteTaskItem(task.taskId)" 
-                      class="btn-icon btn-danger" 
-                      title="删除任务"
-                    >
-                      <i class="fas fa-trash-alt"></i>
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
-      
-      <!-- 页脚 -->
-      <footer class="page-footer">
-        <p>肇新智能文档比对系统 · Demo 演示 © 2025</p>
-      </footer>
     </div>
   </div>
 </template>
@@ -317,12 +250,38 @@ const success = ref(false)
 const error = ref(false)
 const errorMessage = ref('')
 
-// 任务历史
-const taskHistory = ref([])
+// 任务统计数据（使用 API 返回的真实数据）
+const taskStartTime = ref(null)  // ISO 时间字符串
+const taskEndTime = ref(null)    // ISO 时间字符串
+const taskDifferenceCount = ref(0)
 
 // 计算属性
 const canSubmit = computed(() => {
   return oldFile.value && newFile.value && !comparing.value
+})
+
+// 计算任务时长（使用 API 返回的时间）
+const taskDuration = computed(() => {
+  if (!taskStartTime.value || !taskEndTime.value) return '-'
+  
+  // 将 ISO 时间字符串转为时间戳
+  const startMs = new Date(taskStartTime.value).getTime()
+  const endMs = new Date(taskEndTime.value).getTime()
+  const durationMs = endMs - startMs
+  
+  if (durationMs < 1000) {
+    return '<1秒'
+  } else if (durationMs < 60000) {
+    return `${Math.round(durationMs / 1000)}秒`
+  } else if (durationMs < 3600000) {
+    const minutes = Math.floor(durationMs / 60000)
+    const seconds = Math.round((durationMs % 60000) / 1000)
+    return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
+  } else {
+    const hours = Math.floor(durationMs / 3600000)
+    const minutes = Math.round((durationMs % 3600000) / 60000)
+    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
+  }
 })
 
 // 处理旧文件选择
@@ -416,6 +375,9 @@ const handleSubmit = async () => {
     error.value = false
     success.value = false
     currentTaskId.value = null
+    taskStartTime.value = null
+    taskEndTime.value = null
+    taskDifferenceCount.value = 0
     
     console.log('📤 开始上传文件...')
     
@@ -460,13 +422,45 @@ const handleSubmit = async () => {
       statusText.value = status.statusMessage || '正在比对中...'
     })
     
-    // 5. 完成
+    // 5. 获取任务统计信息（时间和差异数量）
+    progress.value = 95
+    statusText.value = '正在获取结果统计...'
+    
+    try {
+      // 5.1 从任务状态获取时间信息
+      const taskStatus = await api.getTaskStatus(taskId)
+      if (taskStatus.data) {
+        taskStartTime.value = taskStatus.data.startTime
+        taskEndTime.value = taskStatus.data.endTime
+        console.log('✅ 获取时间信息:', {
+          startTime: taskStartTime.value,
+          endTime: taskEndTime.value
+        })
+      }
+      
+      // 5.2 从 Canvas 结果获取差异数量
+      const canvasResult = await api.getResult(taskId)
+      if (canvasResult.data && canvasResult.data.differences) {
+        taskDifferenceCount.value = canvasResult.data.differences.length
+        console.log('✅ 获取差异数量:', taskDifferenceCount.value)
+      }
+    } catch (err) {
+      console.warn('⚠️ 获取任务统计失败:', err)
+      // 不影响主流程，继续执行
+    }
+    
+    // 6. 完成
     progress.value = 100
     statusText.value = '比对完成！'
     comparing.value = false
     success.value = true
     
-    console.log('🎉 比对完成！')
+    console.log('🎉 比对完成！', {
+      startTime: taskStartTime.value,
+      endTime: taskEndTime.value,
+      duration: taskDuration.value,
+      differences: taskDifferenceCount.value
+    })
     
   } catch (err) {
     console.error('❌ 比对失败:', err)
@@ -487,117 +481,29 @@ const resetForm = () => {
   error.value = false
   success.value = false
   currentTaskId.value = null
+  taskStartTime.value = null
+  taskEndTime.value = null
+  taskDifferenceCount.value = 0
 }
 
 // 查看结果
 const viewResult = () => {
   if (currentTaskId.value) {
-    // 刷新任务历史（任务已经在后端记录了）
-    refreshTaskHistory()
     // 在新窗口打开结果页
     const resultUrl = `${window.location.origin}/result/${currentTaskId.value}`
     window.open(resultUrl, '_blank')
   }
 }
 
-// 查看任务结果
-const viewTaskResult = (taskId) => {
-  const resultUrl = `${window.location.origin}/result/${taskId}`
-  window.open(resultUrl, '_blank')
-}
-
-// 加载任务历史
-const loadTaskHistory = async () => {
-  try {
-    console.log('🔄 加载任务历史...')
-    const result = await api.getAllTasks()
-    console.log('📊 任务历史数据:', result)
-    
-    // result.data 是任务数组
-    taskHistory.value = (result.data || []).sort((a, b) => {
-      return new Date(b.startTime || 0).getTime() - new Date(a.startTime || 0).getTime()
-    })
-    
-    console.log('✅ 任务历史加载成功，共', taskHistory.value.length, '条记录')
-  } catch (error) {
-    console.error('❌ 加载任务历史失败:', error)
-    // 失败时显示空列表
-    taskHistory.value = []
-  }
-}
-
-// 删除任务
-const deleteTaskItem = async (taskId) => {
-  if (confirm('确定要删除这个任务吗？')) {
-    try {
-      console.log('🗑️ 删除任务:', taskId)
-      await api.deleteTask(taskId)
-      console.log('✅ 任务删除成功')
-      
-      // 重新加载任务列表
-      await loadTaskHistory()
-    } catch (error) {
-      console.error('❌ 删除任务失败:', error)
-      alert('删除任务失败: ' + error.message)
-    }
-  }
-}
-
-// 格式化时间
-const formatTime = (timeString) => {
-  if (!timeString) return '-'
-  const date = new Date(timeString)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
-// 获取差异总数
-const getDifferencesCount = (task) => {
-  // 使用 differenceCount 字段（不带s）
-  if (task.differenceCount !== null && task.differenceCount !== undefined) {
-    return task.differenceCount.toString()
-  }
-  return '-'
-}
-
-// 计算分析时长
-const getProcessingDuration = (task) => {
-  if (!task.startTime || !task.endTime) {
-    return '-'
-  }
+// 下载比对结果
+const downloadComparisonResult = async () => {
+  if (!currentTaskId.value) return
   
-  const startTime = new Date(task.startTime || 0).getTime()
-  const endTime = new Date(task.endTime || 0).getTime()
-  const durationMs = endTime - startTime
-  
-  if (durationMs < 1000) {
-    return '<1秒'
-  } else if (durationMs < 60000) {
-    return `${Math.round(durationMs / 1000)}秒`
-  } else if (durationMs < 3600000) {
-    const minutes = Math.floor(durationMs / 60000)
-    const seconds = Math.round((durationMs % 60000) / 1000)
-    return seconds > 0 ? `${minutes}分${seconds}秒` : `${minutes}分钟`
-  } else {
-    const hours = Math.floor(durationMs / 3600000)
-    const minutes = Math.round((durationMs % 3600000) / 60000)
-    return minutes > 0 ? `${hours}小时${minutes}分钟` : `${hours}小时`
-  }
-}
-
-// 下载任务结果
-const downloadTaskResult = async (taskId) => {
   try {
-    console.log('📥 下载任务结果:', taskId)
+    console.log('📥 下载比对结果:', currentTaskId.value)
     
     // 调用导出API，同时导出 doc 和 html 格式（打包成 zip）
-    const response = await api.exportReport(taskId, ['doc', 'html'])
+    const response = await api.exportReport(currentTaskId.value, ['doc', 'html'])
     
     // 创建 Blob 对象
     const blob = new Blob([response.data], {
@@ -608,7 +514,7 @@ const downloadTaskResult = async (taskId) => {
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `比对报告_${taskId}.zip`  // 多格式导出为 zip
+    link.download = `comparison-result-${currentTaskId.value}.zip`
     document.body.appendChild(link)
     link.click()
     
@@ -622,20 +528,6 @@ const downloadTaskResult = async (taskId) => {
     alert('下载失败: ' + error.message)
   }
 }
-
-// 完成任务后刷新任务列表（不再需要手动保存，后端会自动记录）
-const refreshTaskHistory = async () => {
-  try {
-    await loadTaskHistory()
-  } catch (error) {
-    console.error('刷新任务历史失败:', error)
-  }
-}
-
-// 组件挂载时加载任务历史
-onMounted(() => {
-  loadTaskHistory()
-})
 </script>
 
 <style scoped>
@@ -727,6 +619,7 @@ onMounted(() => {
   flex-direction: column;
   gap: 30px;
   margin-bottom: 30px;
+  width: 100%;
 }
 
 /* 卡片通用样式 */
@@ -737,6 +630,8 @@ onMounted(() => {
   padding: 48px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
   margin-bottom: 30px;
+  width: 100%;
+  max-width: 100%;
 }
 
 .card-header-section {
@@ -783,15 +678,17 @@ onMounted(() => {
 /* 上传区域 */
 .upload-grid {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(300px, 450px) auto minmax(300px, 450px);
   gap: 30px;
   margin-bottom: 30px;
   align-items: center;
+  justify-content: center;
 }
 
 .upload-item {
   display: flex;
   flex-direction: column;
+  max-width: 450px;
 }
 
 .upload-label {
@@ -834,8 +731,8 @@ onMounted(() => {
 }
 
 .upload-zone.has-file {
-  border-color: #52c41a;
-  background: #f6ffed;
+  border-color: #1890ff;
+  background: #fafafa;
 }
 
 .upload-empty {
@@ -880,7 +777,7 @@ onMounted(() => {
 
 .file-icon {
   font-size: 48px;
-  color: #52c41a;
+  color: #1890ff;
 }
 
 .file-info {
@@ -930,8 +827,9 @@ onMounted(() => {
 /* 操作栏 */
 .action-bar {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
+  gap: 16px;
   padding: 24px 0;
   border-top: 2px solid #f0f0f0;
 }
@@ -1059,13 +957,14 @@ onMounted(() => {
 }
 
 .btn-view-result {
-  background: #52c41a;
+  background: #1890ff;
   color: white;
 }
 
 .btn-view-result:hover {
+  background: #40a9ff;
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(82, 196, 26, 0.4);
+  box-shadow: 0 8px 20px rgba(24, 144, 255, 0.4);
 }
 
 /* 进度条 */
@@ -1147,8 +1046,8 @@ onMounted(() => {
 }
 
 .alert-success {
-  background: #f6ffed;
-  border: 1px solid #b7eb8f;
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
 }
 
 .alert-icon {
@@ -1160,7 +1059,7 @@ onMounted(() => {
 }
 
 .alert-success .alert-icon {
-  color: #52c41a;
+  color: #1890ff;
 }
 
 .alert-content {
@@ -1178,7 +1077,7 @@ onMounted(() => {
 }
 
 .alert-success .alert-content h4 {
-  color: #52c41a;
+  color: #1890ff;
 }
 
 .alert-content p {
@@ -1204,223 +1103,61 @@ onMounted(() => {
   color: #333;
 }
 
-/* 表格样式 */
-.table-wrapper {
-  overflow-x: auto;
-  border-radius: 16px;
-  border: 1px solid #e8e8e8;
+/* 比对统计卡片 */
+.comparison-stats-card {
+  margin-top: 24px;
 }
 
-.modern-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  table-layout: fixed;
-}
-
-.modern-table thead {
-  background: #fafafa;
-  border-bottom: 2px solid #e0e0e0;
-}
-
-.modern-table thead th {
-  padding: 24px 24px;
-  text-align: left;
-  font-size: 15px;
-  font-weight: 600;
-  color: #1a1a1a;
-  border: none;
-}
-
-.modern-table thead th:first-child {
-  border-top-left-radius: 16px;
-  padding-left: 32px;
-}
-
-.modern-table thead th:last-child {
-  border-top-right-radius: 16px;
-  padding-right: 32px;
-}
-
-/* 列宽定义 */
-.modern-table thead th:nth-child(1) { width: 12%; } /* 任务ID */
-.modern-table thead th:nth-child(2) { width: 18%; } /* 原文档 */
-.modern-table thead th:nth-child(3) { width: 18%; } /* 新文档 */
-.modern-table thead th:nth-child(4) { width: 10%; } /* 差异数 */
-.modern-table thead th:nth-child(5) { width: 14%; } /* 开始时间 */
-.modern-table thead th:nth-child(6) { width: 14%; } /* 完成时间 */
-.modern-table thead th:nth-child(7) { width: 8%; }  /* 时长 */
-.modern-table thead th:nth-child(8) { width: 16%; } /* 操作 */
-
-.modern-table tbody tr {
-  transition: all 0.3s ease;
-}
-
-.modern-table tbody tr:hover {
-  background: #f5f5f5;
-}
-
-.modern-table tbody td {
-  padding: 24px;
-  font-size: 15px;
-  color: #333;
-  border-bottom: 1px solid #f0f0f0;
-  line-height: 1.6;
-  vertical-align: middle;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.modern-table tbody td:first-child {
-  padding-left: 32px;
-}
-
-.modern-table tbody td:last-child {
-  padding-right: 32px;
-}
-
-/* 文件名列允许换行 */
-.modern-table tbody td:nth-child(2),
-.modern-table tbody td:nth-child(3) {
-  white-space: normal;
-  word-break: break-word;
-}
-
-.modern-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-.modern-table tbody tr:last-child td:first-child {
-  border-bottom-left-radius: 12px;
-}
-
-.modern-table tbody tr:last-child td:last-child {
-  border-bottom-right-radius: 12px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 60px 20px !important;
-  color: #999;
-}
-
-.empty-state i {
-  font-size: 48px;
-  display: block;
-  margin-bottom: 12px;
-  opacity: 0.5;
-}
-
-.empty-state p {
-  font-size: 15px;
-  margin: 0;
-}
-
-.task-id code {
-  background: #f5f5f5;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  color: #1890ff;
-  font-weight: 500;
-}
-
-.badge-count {
-  display: inline-block;
-  padding: 6px 16px;
-  background: #1890ff;
-  color: white;
-  border-radius: 16px;
-  font-size: 14px;
-  font-weight: 600;
-  vertical-align: middle;
-}
-
-.time-cell,
-.duration-cell {
-  font-size: 14px;
-  color: #666;
-  font-weight: 400;
-}
-
-.text-center {
-  text-align: center !important;
-}
-
-/* 确保表格特定列居中对齐 */
-.modern-table th.text-center,
-.modern-table td.text-center {
-  text-align: center !important;
-  vertical-align: middle;
-}
-
-.action-cell {
-  white-space: nowrap !important;
-  text-align: center !important;
-}
-
-.action-cell .btn-icon {
-  margin: 0 4px;
-  vertical-align: middle;
-}
-
-.btn-icon {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 10px;
-  color: white;
-  font-size: 15px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  display: inline-flex;
-  align-items: center;
+.stats-grid-compact {
+  display: grid;
+  grid-template-columns: repeat(4, 163px);
+  gap: 16px;
   justify-content: center;
 }
 
-.btn-icon:hover {
-  transform: translateY(-2px);
-}
-
-.btn-primary {
-  background: #1890ff;
-}
-
-.btn-primary:hover {
-  background: #40a9ff;
-  box-shadow: 0 6px 16px rgba(24, 144, 255, 0.35);
-}
-
-.btn-success {
-  background: #52c41a;
-}
-
-.btn-success:hover {
-  background: #73d13d;
-  box-shadow: 0 6px 16px rgba(82, 196, 26, 0.35);
-}
-
-.btn-danger {
-  background: #ff4d4f;
-}
-
-.btn-danger:hover {
-  background: #ff7875;
-  box-shadow: 0 6px 16px rgba(255, 77, 79, 0.35);
-}
-
-/* 页脚 */
-.page-footer {
-  text-align: center;
-  padding: 30px 0;
-  color: #999;
-  font-size: 14px;
+.stat-card {
+  width: 163px;
+  height: 100px;
   background: white;
-  margin-top: 30px;
-  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.06);
+  border: 2px solid #e8e8e8;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  cursor: pointer;
 }
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+  border-color: #1890ff;
+}
+
+.stat-card .stat-icon {
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #1890ff 0%, #40a9ff 100%);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: white;
+  flex-shrink: 0;
+}
+
+.stat-card .stat-text {
+  font-size: 14px;
+  color: #1a1a1a;
+  text-align: center;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
 
 /* 响应式设计 */
 @media (max-width: 1024px) {
@@ -1432,6 +1169,10 @@ onMounted(() => {
   .compare-arrow {
     display: none;
   }
+  
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 768px) {
@@ -1439,8 +1180,7 @@ onMounted(() => {
     padding: 0 20px;
   }
   
-  .upload-card,
-  .history-card {
+  .upload-card {
     padding: 24px;
   }
   
@@ -1465,47 +1205,15 @@ onMounted(() => {
     font-size: 22px;
   }
   
-  /* 表格在移动端的调整 */
-  .modern-table {
-    table-layout: auto;
+  /* 统计卡片移动端样式 */
+  .stats-grid-compact {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
   }
   
-  .modern-table thead th,
-  .modern-table tbody td {
-    padding: 16px 12px;
-    font-size: 13px;
-  }
-  
-  .modern-table thead th:first-child,
-  .modern-table tbody td:first-child {
-    padding-left: 16px;
-  }
-  
-  .modern-table thead th:last-child,
-  .modern-table tbody td:last-child {
-    padding-right: 16px;
-  }
-  
-  /* 移动端取消固定列宽 */
-  .modern-table thead th:nth-child(1),
-  .modern-table thead th:nth-child(2),
-  .modern-table thead th:nth-child(3),
-  .modern-table thead th:nth-child(4),
-  .modern-table thead th:nth-child(5),
-  .modern-table thead th:nth-child(6),
-  .modern-table thead th:nth-child(7),
-  .modern-table thead th:nth-child(8) {
-    width: auto;
-  }
-  
-  .btn-icon {
-    width: 36px;
-    height: 36px;
-    font-size: 13px;
-  }
-  
-  .action-cell .btn-icon {
-    margin: 0 2px;
+  .stat-card {
+    width: 100%;
+    height: 100px;
   }
 }
 </style>
