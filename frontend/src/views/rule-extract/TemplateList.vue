@@ -149,7 +149,7 @@ const router = useRouter()
 const route = useRoute()
 
 // 使用统一的嵌入模式管理
-const { shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
+const { isEmbedMode, shouldHideBack, handleBack: embedHandleBack } = useEmbedMode()
 
 const list = ref<any[]>([])
 const loading = ref(false)
@@ -261,7 +261,21 @@ const goDesign = (row: any) => {
 }
 
 const goAIGenerator = () => {
-  router.push('/rule-extract/ai-generator')
+  if (isEmbedMode.value) {
+    // 嵌入模式：发送消息到父页面，请求打开AI生成模板弹窗
+    console.log('🤖 [嵌入模式] 发送打开AI生成模板消息到父页面')
+    window.parent.postMessage({
+      type: 'OPEN_AI_GENERATOR',
+      source: 'zhaoxin-sdk',
+      payload: {
+        from: route.path,
+        timestamp: Date.now()
+      }
+    }, '*')
+  } else {
+    // 独立模式：正常路由跳转
+    router.push('/rule-extract/ai-generator')
+  }
 }
 
 const handleCopy = async (row: any) => {

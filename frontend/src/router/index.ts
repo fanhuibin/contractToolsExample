@@ -147,6 +147,10 @@ const routes: RouteRecordRaw[] = [
       },
       // 智能文档抽取模块（重构版本）
       {
+        path: '/extract',
+        redirect: '/rule-extract'
+      },
+      {
         path: '/rule-extract',
         name: 'RuleExtract',
         component: () => import('@/views/rule-extract/ExtractMain.vue'),

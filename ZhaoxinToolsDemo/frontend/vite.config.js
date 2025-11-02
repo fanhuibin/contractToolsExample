@@ -11,10 +11,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3003,  // 使用3003端口，避免与肇新前端(3000)和比对Demo(3002)冲突
+    port: 3004,  // 使用3004端口，避免与肇新前端(3000)和其他Demo冲突
     proxy: {
       '/api': {
-        target: 'http://localhost:8091',  // Demo后端地址
+        target: 'http://localhost:8080',  // 肇新SDK后端地址
         changeOrigin: true,
       }
     }

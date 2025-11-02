@@ -11,7 +11,19 @@ import './styles/index.scss'
 import App from './App.vue'
 import router from './router'
 
+// 导入全局通用组件
+import { GlobalBackButton } from './components/common'
+
+// 导入嵌入模式插件
+import { setupEmbedModePlugin } from './utils/embed-mode-plugin'
+
 const app = createApp(App)
+
+// 注册全局通用组件
+app.component('GlobalBackButton', GlobalBackButton)
+
+// 安装嵌入模式插件（拦截 router.back()）
+setupEmbedModePlugin(router)
 
 // 注册Element Plus图标
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {

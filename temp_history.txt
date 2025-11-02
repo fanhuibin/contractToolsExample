@@ -1,0 +1,1 @@
+how ccde559:frontend/src/views/rule-extract/ExtractMain.vue

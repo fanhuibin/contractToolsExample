@@ -12,7 +12,7 @@
         <el-button 
           type="primary" 
           size="large"
-          @click="$router.push('/rule-extract/templates')"
+          @click="openTemplateManage"
         >
           <el-icon><Setting /></el-icon>
           模板管理
@@ -265,102 +265,65 @@
             </template>
           </el-result>
         </el-card>
-
-        <!-- 历史任务列表 -->
-        <el-card v-if="recentTasks.length > 0" class="history-card">
-          <template #header>
-            <div class="history-header">
-              <span>历史任务</span>
-              <el-button 
-                type="primary" 
-                size="small" 
-                text
-                @click="loadRecentTasks"
-              >
-                <el-icon><Refresh /></el-icon>
-                刷新
-              </el-button>
-            </div>
-          </template>
-
-          <el-table 
-            :data="recentTasks" 
-            style="width: 100%"
-            :default-sort="{ prop: 'createdAt', order: 'descending' }"
-          >
-            <el-table-column prop="fileName" label="文件名" min-width="200">
-              <template #default="{ row }">
-                <div class="file-name-cell">
-                  <el-icon><Document /></el-icon>
-                  <span>{{ row.fileName }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            
-            <el-table-column prop="templateName" label="模板" width="180">
-              <template #default="{ row }">
-                <el-tag size="small" type="info">{{ row.templateName || '-' }}</el-tag>
-              </template>
-            </el-table-column>
-            
-            <el-table-column prop="status" label="状态" width="100">
-              <template #default="{ row }">
-                <el-tag :type="getTaskStatusType(row.status)" size="small">
-                  {{ getTaskStatusLabel(row.status) }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            
-            <el-table-column prop="createdAt" label="创建时间" width="180" sortable>
-              <template #default="{ row }">
-                {{ formatTime(row.createdAt) }}
-              </template>
-            </el-table-column>
-            
-            <el-table-column label="操作" width="120" fixed="right">
-              <template #default="{ row }">
-                <el-button 
-                  v-if="row.status === 'completed'"
-                  type="primary" 
-                  size="small" 
-                  link
-                  @click="viewTaskResult(row.taskId)"
-                >
-                  查看结果
-                </el-button>
-                <span v-else class="no-action">-</span>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
     </div>
+    
+    <!-- 模板管理弹窗 -->
+    <IframeDialog
+      v-model="templateDialogVisible"
+      :url="templateManageUrl"
+      title="模板管理"
+      :fullscreen="false"
+      width="90%"
+      @close="onTemplateDialogClose"
+    />
+    
+    <!-- AI生成模板弹窗 -->
+    <IframeDialog
+      v-model="aiGeneratorDialogVisible"
+      :url="aiGeneratorUrl"
+      title="AI生成模板"
+      :fullscreen="false"
+      width="75%"
+      @close="onAIGeneratorDialogClose"
+    />
+    
+    <!-- 提取结果详情弹窗 -->
+    <IframeDialog
+      v-model="resultDialogVisible"
+      :url="resultUrl"
+      title="提取结果详情"
+      :fullscreen="false"
+      width="90%"
+      @close="onResultDialogClose"
+    />
   </div>
 </template>
 
-<script setup lang="ts">
+<script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, UploadFilled, Refresh, CircleCheck, Setting, InfoFilled, QuestionFilled, CaretTop } from '@element-plus/icons-vue'
-import PageHeader from '@/components/common/PageHeader.vue'
+import { Document, UploadFilled, CircleCheck, Setting } from '@element-plus/icons-vue'
+import PageHeader from '@/components/PageHeader.vue'
+import IframeDialog from '@/components/IframeDialog.vue'
+import { ZHAOXIN_CONFIG } from '@/config'
 import { 
   listTemplates, 
   uploadAndExtract, 
   getRuleExtractTaskStatus,
-  cancelRuleExtractTask,
-  listRuleExtractTasks
-} from '@/api/rule-extract'
-import { extractArrayData } from '@/utils/response-helper'
+  cancelRuleExtractTask
+} from '@/api/ruleExtract'
+import { extractArrayData, formatFileSize, formatTime } from '@/utils/responseHelper'
 
 const router = useRouter()
 
 // 文件相关
 const fileList = ref([])
-const selectedFile = ref<File | null>(null)
+const selectedFile = ref(null)
 
 // 模板相关
 const loadingTemplates = ref(false)
-const templates = ref<any[]>([])
+const templates = ref([])
 const selectedTemplateId = ref('')
 
 // 提取设置
@@ -374,9 +337,13 @@ const extractSettings = ref({
 
 // 任务相关
 const isExtracting = ref(false)
-const currentTask = ref<any>(null)
-const recentTasks = ref<any[]>([])
-let statusCheckTimer: any = null
+const currentTask = ref(null)
+let statusCheckTimer = null
+
+// 弹窗状态
+const templateDialogVisible = ref(false)
+const aiGeneratorDialogVisible = ref(false)
+const resultDialogVisible = ref(false)
 
 const canStartExtraction = computed(() => {
   return selectedFile.value && selectedTemplateId.value && !isExtracting.value
@@ -386,12 +353,28 @@ const selectedTemplateInfo = computed(() => {
   return templates.value.find(t => t.id === selectedTemplateId.value)
 })
 
+// iframe URL构建
+const templateManageUrl = computed(() => {
+  return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/templates`
+})
+
+const aiGeneratorUrl = computed(() => {
+  return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/ai-generator`
+})
+
+const resultUrl = computed(() => {
+  if (currentTask.value?.taskId) {
+    return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/result/${currentTask.value.taskId}`
+  }
+  return ''
+})
+
 const loadTemplates = async () => {
   try {
     loadingTemplates.value = true
-    const res: any = await listTemplates({ status: 'active' })
+    const res = await listTemplates({ status: 'active' })
     templates.value = extractArrayData(res)
-  } catch (error: any) {
+  } catch (error) {
     console.error('加载模板失败:', error)
     ElMessage.error('加载模板失败：' + (error.message || '未知错误'))
     templates.value = []
@@ -400,21 +383,11 @@ const loadTemplates = async () => {
   }
 }
 
-const loadRecentTasks = async () => {
-  try {
-    const res: any = await listRuleExtractTasks()
-    recentTasks.value = extractArrayData(res)
-  } catch (error) {
-    console.error('加载任务历史失败', error)
-    recentTasks.value = []
-  }
-}
-
-const handleFileChange = (file: any) => {
+const handleFileChange = (file) => {
   selectedFile.value = file.raw
 }
 
-const beforeUpload = (file: File) => {
+const beforeUpload = (file) => {
   const isPDF = file.type === 'application/pdf'
   const isLt100M = file.size / 1024 / 1024 < 100
 
@@ -432,14 +405,6 @@ const beforeUpload = (file: File) => {
 const clearFile = () => {
   selectedFile.value = null
   fileList.value = []
-}
-
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
 }
 
 const startExtraction = async () => {
@@ -463,7 +428,7 @@ const startExtraction = async () => {
     formData.append('headerHeightPercent', String(extractSettings.value.headerHeightPercent))
     formData.append('footerHeightPercent', String(extractSettings.value.footerHeightPercent))
 
-    const res: any = await uploadAndExtract(formData)
+    const res = await uploadAndExtract(formData)
     
     if (res.data.code === 200) {
       const taskId = res.data.data.taskId
@@ -482,20 +447,20 @@ const startExtraction = async () => {
     } else {
       throw new Error(res.message || '创建任务失败')
     }
-  } catch (error: any) {
+  } catch (error) {
     ElMessage.error('开始提取失败：' + (error.message || '未知错误'))
     isExtracting.value = false
   }
 }
 
-const startStatusPolling = (taskId: string) => {
+const startStatusPolling = (taskId) => {
   if (statusCheckTimer) {
     clearInterval(statusCheckTimer)
   }
 
   statusCheckTimer = setInterval(async () => {
     try {
-      const res: any = await getRuleExtractTaskStatus(taskId)
+      const res = await getRuleExtractTaskStatus(taskId)
       if (res.data.code === 200) {
         currentTask.value = res.data.data
         
@@ -505,7 +470,6 @@ const startStatusPolling = (taskId: string) => {
           
           if (currentTask.value.status === 'completed') {
             ElMessage.success('提取完成！')
-            loadRecentTasks()
           } else if (currentTask.value.status === 'failed') {
             ElMessage.error('提取失败：' + (currentTask.value.errorMessage || '未知错误'))
           }
@@ -538,7 +502,7 @@ const cancelTask = async () => {
     ElMessage.success('任务已取消')
     stopStatusPolling()
     isExtracting.value = false
-  } catch (error: any) {
+  } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('取消任务失败：' + (error.message || '未知错误'))
     }
@@ -546,13 +510,9 @@ const cancelTask = async () => {
 }
 
 const viewDetailedResult = () => {
-  if (currentTask.value) {
-    router.push(`/rule-extract/result/${currentTask.value.taskId}`)
+  if (currentTask.value?.taskId) {
+    resultDialogVisible.value = true
   }
-}
-
-const viewTaskResult = (taskId: string) => {
-  router.push(`/rule-extract/result/${taskId}`)
 }
 
 const startNewTask = () => {
@@ -561,8 +521,30 @@ const startNewTask = () => {
   selectedTemplateId.value = ''
 }
 
-const getTaskStatusType = (status: string) => {
-  const types: Record<string, string> = {
+const openTemplateManage = () => {
+  templateDialogVisible.value = true
+}
+
+const onTemplateDialogClose = () => {
+  console.log('模板管理弹窗已关闭')
+  loadTemplates()
+}
+
+const openAIGenerator = () => {
+  aiGeneratorDialogVisible.value = true
+}
+
+const onAIGeneratorDialogClose = () => {
+  console.log('AI生成模板弹窗已关闭')
+  loadTemplates()
+}
+
+const onResultDialogClose = () => {
+  console.log('提取结果详情弹窗已关闭')
+}
+
+const getTaskStatusType = (status) => {
+  const types = {
     pending: 'info',
     file_uploaded: 'info',
     ocr_processing: 'warning',
@@ -574,8 +556,8 @@ const getTaskStatusType = (status: string) => {
   return types[status] || 'info'
 }
 
-const getTaskStatusLabel = (status: string) => {
-  const labels: Record<string, string> = {
+const getTaskStatusLabel = (status) => {
+  const labels = {
     pending: '等待中',
     file_uploaded: '已上传',
     ocr_processing: 'OCR中',
@@ -587,13 +569,13 @@ const getTaskStatusLabel = (status: string) => {
   return labels[status] || status
 }
 
-const getProgressStatus = (status: string) => {
+const getProgressStatus = (status) => {
   if (status === 'completed') return 'success'
   if (status === 'failed') return 'exception'
   return undefined
 }
 
-const getTimelineType = (status: string) => {
+const getTimelineType = (status) => {
   if (!currentTask.value) return 'info'
   
   const statusOrder = ['pending', 'file_uploaded', 'ocr_processing', 'extracting', 'completed']
@@ -604,7 +586,7 @@ const getTimelineType = (status: string) => {
   return 'info'
 }
 
-const isStatusPassed = (status: string) => {
+const isStatusPassed = (status) => {
   if (!currentTask.value) return false
   
   const statusOrder = ['pending', 'file_uploaded', 'ocr_processing', 'extracting', 'completed']
@@ -614,19 +596,32 @@ const isStatusPassed = (status: string) => {
   return currentIndex >= targetIndex
 }
 
-const formatTime = (time: any) => {
-  if (!time) return '-'
-  const date = new Date(time)
-  return date.toLocaleString('zh-CN')
+// 处理来自iframe的postMessage消息
+const handleMessage = (event) => {
+  // 验证消息来源
+  if (event.origin !== ZHAOXIN_CONFIG.frontendUrl) {
+    return
+  }
+  
+  // 处理打开AI生成模板的消息
+  if (event.data?.type === 'OPEN_AI_GENERATOR' && event.data?.source === 'zhaoxin-sdk') {
+    console.log('🤖 收到打开AI生成模板的消息', event.data.payload)
+    openAIGenerator()
+  }
 }
 
 onMounted(() => {
   loadTemplates()
-  loadRecentTasks()
+  // 添加 postMessage 监听器
+  window.addEventListener('message', handleMessage)
+  console.log('📡 已添加 postMessage 监听器')
 })
 
 onUnmounted(() => {
   stopStatusPolling()
+  // 移除 postMessage 监听器
+  window.removeEventListener('message', handleMessage)
+  console.log('🔌 已移除 postMessage 监听器')
 })
 </script>
 
@@ -966,63 +961,6 @@ onUnmounted(() => {
     .result-card {
       :deep(.el-result) {
         padding: 40px;
-      }
-    }
-
-    .history-card {
-      animation: fadeIn 0.3s ease-out;
-      border-radius: 12px;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-      margin-top: 20px;
-
-      .history-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-weight: 600;
-      }
-
-      .file-name-cell {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-
-        .el-icon {
-          color: #409eff;
-          font-size: 16px;
-        }
-
-        span {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      }
-
-      .no-action {
-        color: #909399;
-        font-size: 14px;
-      }
-
-      :deep(.el-table) {
-        font-size: 14px;
-
-        .el-table__header {
-          th {
-            background-color: #f5f7fa;
-            color: #606266;
-            font-weight: 600;
-          }
-        }
-
-        .el-table__row {
-          cursor: pointer;
-          transition: background-color 0.2s;
-
-          &:hover {
-            background-color: #f5f7fa;
-          }
-        }
       }
     }
   }
