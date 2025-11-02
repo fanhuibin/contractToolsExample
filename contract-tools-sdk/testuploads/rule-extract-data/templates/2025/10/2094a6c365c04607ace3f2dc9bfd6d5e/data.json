@@ -6,14 +6,14 @@
 			"fieldCode":"field_1",
 			"fieldName":"新字段",
 			"fieldType":"string",
-			"id":"field_1761717077203_0.1704061721330905",
+			"id":"field_1762088678439_0.47517069866487494",
 			"isRequired":false,
 			"rules":[
 				{
-					"id":"rule_1761717077203_0.3606697645926209",
+					"id":"rule_1762088678439_0.05685726813677583",
 					"isEnabled":true,
 					"priority":1,
-					"ruleContent":"{\"anchor\":\"甲方\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\"[\\\\u4e00-\\\\u9fa5a-zA-Z]+\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"matchMode\":\"single\",\"occurrence\":1,\"returnAll\":false}",
+					"ruleContent":"{\"anchor\":\"\",\"direction\":\"after\",\"extractMethod\":\"regex\",\"pattern\":\".*\",\"maxDistance\":200,\"delimiter\":\"：\",\"multiline\":false,\"occurrence\":1}",
 					"ruleName":"新字段的提取规则",
 					"ruleType":"KEYWORD_ANCHOR"
 				}
@@ -24,6 +24,6 @@
 	"status":"active",
 	"templateCode":"123",
 	"templateName":"测试模板",
-	"updatedAt":"2025-10-29 13:53:35.396989400",
-	"version":3
+	"updatedAt":"2025-11-02 21:04:38.476319",
+	"version":10
 }

@@ -64,9 +64,29 @@
           </template>
         </el-table-column>
 
-        <el-table-column label="规则概要" min-width="300" show-overflow-tooltip>
+        <el-table-column label="规则概要" min-width="450">
           <template #default="{ row }">
-            <div class="rule-summary">{{ getRuleSummary(row) }}</div>
+            <el-tooltip effect="dark" placement="top" :show-after="500">
+              <template #content>
+                <div class="rule-detail-tooltip">
+                  <div class="tooltip-title">完整配置详情</div>
+                  <pre class="config-json">{{ JSON.stringify(row.ruleConfig, null, 2) }}</pre>
+                </div>
+              </template>
+              <div class="rule-summary-wrapper">
+                <el-tag 
+                  size="small" 
+                  :type="getRuleTypeTagType(row.ruleType)"
+                  effect="plain"
+                  class="rule-type-tag"
+                >
+                  {{ getRuleTypeLabel(row.ruleType) }}
+                </el-tag>
+                <span class="rule-summary">
+                  {{ getRuleSummary(row) }}
+                </span>
+              </div>
+            </el-tooltip>
           </template>
         </el-table-column>
 
@@ -257,21 +277,186 @@ const getFieldTypeColor = (type: string) => {
   return colorMap[type] || ''
 }
 
+// 获取规则类型标签文本
+const getRuleTypeLabel = (ruleType: string) => {
+  const typeMap: Record<string, string> = {
+    'KEYWORD_ANCHOR': '关键词锚点',
+    'REGEX_PATTERN': '纯正则',
+    'CONTEXT_BOUNDARY': '上下文边界',
+    'TABLE_CELL': '表格提取'
+  }
+  return typeMap[ruleType] || ruleType
+}
+
+// 获取规则类型标签颜色
+const getRuleTypeTagType = (ruleType: string) => {
+  const colorMap: Record<string, string> = {
+    'KEYWORD_ANCHOR': 'primary',
+    'REGEX_PATTERN': 'warning',
+    'CONTEXT_BOUNDARY': 'info',
+    'TABLE_CELL': 'success'
+  }
+  return colorMap[ruleType] || ''
+}
+
 const getRuleSummary = (field: any) => {
   if (!field.ruleConfig) return '未配置规则'
   
+  const cfg = field.ruleConfig
+  const parts: string[] = []
+  
   switch (field.ruleType) {
     case 'KEYWORD_ANCHOR':
-      return `锚点: ${field.ruleConfig.anchor || '未设置'} | 方向: ${field.ruleConfig.direction || 'after'}`
+      // 1. 锚点关键词（必显）
+      parts.push(`锚点: "${cfg.anchor || '未设置'}"`)
+      
+      // 2. 锚点序号（重要！当锚点重复时）
+      if (cfg.anchorOccurrence && cfg.anchorOccurrence > 1) {
+        parts.push(`锚点第${cfg.anchorOccurrence}个`)
+      }
+      
+      // 3. 方向（重要！总是显示）
+      const directionMap: Record<string, string> = {
+        'after': '向后',
+        'before': '向前', 
+        'both': '双向'
+      }
+      parts.push(`方向: ${directionMap[cfg.direction || 'after'] || cfg.direction}`)
+      
+      // 4. 提取方法（重要！）
+      if (cfg.extractMethod) {
+        const methodMap: Record<string, string> = {
+          'regex': '正则',
+          'line': '行',
+          'delimiter': '分隔符',
+          'paragraph': '段落'
+        }
+        parts.push(`方法: ${methodMap[cfg.extractMethod] || cfg.extractMethod}`)
+      }
+      
+      // 5. 正则表达式（重要！）
+      if (cfg.pattern) {
+        const displayPattern = cfg.pattern.length > 30 
+          ? cfg.pattern.substring(0, 30) + '...' 
+          : cfg.pattern
+        parts.push(`正则: ${displayPattern}`)
+      }
+      
+      // 6. 分隔符（当提取方法是 delimiter 时很重要）
+      if (cfg.extractMethod === 'delimiter' && cfg.delimiter) {
+        parts.push(`分隔符: "${cfg.delimiter}"`)
+      }
+      
+      // 7. 结果序号（重要！当匹配多次时）
+      if (cfg.occurrence && cfg.occurrence > 1) {
+        parts.push(`取第${cfg.occurrence}个`)
+      }
+      
+      // 8. 偏移量（非0时显示）
+      if (cfg.offset && cfg.offset !== 0) {
+        parts.push(`偏移: ${cfg.offset}`)
+      }
+      
+      // 9. 长度限制或最大距离
+      const maxLen = cfg.length || cfg.maxDistance
+      if (maxLen) {
+        parts.push(`范围: ${maxLen}`)
+      }
+      
+      // 10. 锚点类型（非默认值时显示）
+      if (cfg.anchorType && cfg.anchorType !== 'exact') {
+        const typeMap: Record<string, string> = {
+          'fuzzy': '模糊匹配',
+          'regex': '正则匹配'
+        }
+        parts.push(typeMap[cfg.anchorType] || cfg.anchorType)
+      }
+      
+      return parts.join(' | ')
+      
     case 'CONTEXT_BOUNDARY':
-      const start = field.ruleConfig.startBoundary || '无'
-      const end = field.ruleConfig.endBoundary || '无'
-      return `开始: ${start} | 结束: ${end}`
+      const start = cfg.startBoundary || '无'
+      const end = cfg.endBoundary || '无'
+      parts.push(`开始: "${start}"`)
+      parts.push(`结束: "${end}"`)
+      if (cfg.inclusive !== undefined) {
+        parts.push(cfg.inclusive ? '包含边界' : '不含边界')
+      }
+      return parts.join(' | ')
+      
     case 'REGEX_PATTERN':
-      return `正则: ${field.ruleConfig.pattern || '未设置'}`
+      // 1. 正则表达式（必显）
+      const displayPattern = cfg.pattern?.length > 50 
+        ? cfg.pattern.substring(0, 50) + '...' 
+        : (cfg.pattern || '未设置')
+      parts.push(`正则: ${displayPattern}`)
+      
+      // 2. 捕获组（重要！）
+      if (cfg.group !== undefined && cfg.group !== 0) {
+        parts.push(`捕获组: ${cfg.group}`)
+      }
+      
+      // 3. 序号（重要！）
+      if (cfg.occurrence && cfg.occurrence > 1) {
+        parts.push(`第${cfg.occurrence}个`)
+      }
+      
+      // 4. 多行模式
+      if (cfg.multiline) {
+        parts.push('多行模式')
+      }
+      
+      return parts.join(' | ')
+      
     case 'TABLE_CELL':
-      const mode = field.ruleConfig.extractMode === 'table' ? '整表' : '单元格'
-      return `模式: ${mode} | 表头: ${field.ruleConfig.headerPattern || '未设置'}`
+      // 1. 提取模式（必显）
+      const mode = cfg.extractMode === 'table' ? '整表' : '单元格'
+      parts.push(`模式: ${mode}`)
+      
+      // 2. 表格定位关键词（重要！）
+      if (cfg.tableKeyword) {
+        parts.push(`表格: "${cfg.tableKeyword}"`)
+      }
+      
+      // 3. 表头模式（重要！）
+      if (cfg.headerPattern) {
+        const displayHeader = cfg.headerPattern.length > 30 
+          ? cfg.headerPattern.substring(0, 30) + '...'
+          : cfg.headerPattern
+        parts.push(`表头: ${displayHeader}`)
+      }
+      
+      // 4. 列名（单元格模式下重要）
+      if (cfg.columnName) {
+        parts.push(`列: "${cfg.columnName}"`)
+      }
+      
+      // 5. 行条件（单元格模式下重要）
+      if (cfg.rowCondition) {
+        const displayCondition = cfg.rowCondition.length > 30
+          ? cfg.rowCondition.substring(0, 30) + '...'
+          : cfg.rowCondition
+        parts.push(`行: ${displayCondition}`)
+      }
+      
+      // 6. 表格序号（当表格重复时）
+      if (cfg.tableOccurrence && cfg.tableOccurrence > 1) {
+        parts.push(`第${cfg.tableOccurrence}个表格`)
+      }
+      
+      // 7. 提取方向（对于表格周围的文本）
+      if (cfg.direction) {
+        const dirMap: Record<string, string> = {
+          'above': '表格上方',
+          'below': '表格下方',
+          'left': '表格左侧',
+          'right': '表格右侧'
+        }
+        parts.push(dirMap[cfg.direction] || cfg.direction)
+      }
+      
+      return parts.join(' | ')
+      
     default:
       return '未知规则'
   }
@@ -642,9 +827,66 @@ onMounted(() => {
       gap: 8px;
     }
 
-    .rule-summary {
+    .rule-summary-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: help;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background-color 0.2s;
+      
+      &:hover {
+        background-color: #f5f7fa;
+      }
+      
+      .rule-type-tag {
+        flex-shrink: 0;
+        font-weight: 600;
+        border-width: 1.5px;
+      }
+      
+      .rule-summary {
+        font-size: 12px;
+        color: #606266;
+        line-height: 1.6;
+        flex: 1;
+      }
+    }
+  }
+  
+  // 工具提示样式
+  .rule-detail-tooltip {
+    max-width: 600px;
+    
+    .tooltip-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      font-size: 14px;
+    }
+    
+    .config-json {
+      margin: 0;
+      padding: 8px;
+      background-color: rgba(0, 0, 0, 0.3);
+      border-radius: 4px;
       font-size: 12px;
-      color: #606266;
+      line-height: 1.5;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+      
+      &::-webkit-scrollbar-thumb {
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 3px;
+      }
     }
   }
 
