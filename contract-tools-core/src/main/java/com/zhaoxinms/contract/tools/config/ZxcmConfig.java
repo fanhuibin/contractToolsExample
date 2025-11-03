@@ -47,11 +47,6 @@ public class ZxcmConfig {
         private String port = "80";
         
         /**
-         * 回调配置
-         */
-        private Callback callback = new Callback();
-        
-        /**
          * 插件列表
          */
         private String[] plugins = {};
@@ -70,17 +65,6 @@ public class ZxcmConfig {
          * 权限配置
          */
         private Permissions permissions = new Permissions();
-        
-        /**
-         * 回调配置
-         */
-        @Data
-        public static class Callback {
-            /**
-             * 回调URL
-             */
-            private String url = "http://localhost:8081/onlyoffice/callback";
-        }
         
         /**
          * Logo配置

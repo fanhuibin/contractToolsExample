@@ -86,6 +86,9 @@ public class OnlyOfficeController {
         user.setName("Anonymous");
         user.setId("0");
 
+        // 构建回调基础URL（使用应用基础URL）
+        String callbackBaseUrl = zxcmConfig.getApplication().getBaseUrl() + "/api/onlyoffice";
+
         // 构建文件模型
         OnlyofficeFileModel fileModel = fileConfigurer.getFileModel(
             DefaultFileWrapper.builder()
@@ -94,11 +97,11 @@ public class OnlyOfficeController {
                 .key(key)
                 .canEdit(canEdit)
                 .canReview(canReview && canEdit) // 只有可编辑时才能审阅
-                .callbackUrl(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/save?fileId=" + fileId + 
+                .callbackUrl(callbackBaseUrl + "/callback/save?fileId=" + fileId + 
                            (templateId != null ? "&templateId=" + templateId : "") +
                            (sessionId != null ? "&sessionId=" + sessionId : "") +
                            (callbackUrl != null ? "&callbackUrl=" + callbackUrl : ""))
-                .url(zxcmConfig.getOnlyOffice().getCallback().getUrl().replace("/save", "") + "/download/" + fileId)
+                .url(callbackBaseUrl + "/download/" + fileId)
                 .type(Type.desktop)
                 .lang("zh-CN")
                 .action(canEdit ? Action.edit : Action.view)
