@@ -7,7 +7,18 @@
       :icon="Refresh"
       tag="AI辅助"
       tag-type="warning"
-    />
+    >
+      <template #actions>
+        <el-button 
+          type="default" 
+          size="large"
+          @click="goBack"
+        >
+          <el-icon><ArrowLeft /></el-icon>
+          返回
+        </el-button>
+      </template>
+    </PageHeader>
 
     <!-- 重要提示 -->
     <el-alert
@@ -642,6 +653,10 @@ export default {
       if (this.currentStep > 1) {
         this.currentStep--
       }
+    },
+
+    goBack() {
+      this.$router.push('/rule-extract/templates')
     }
   }
 }
