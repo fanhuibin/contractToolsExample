@@ -101,7 +101,7 @@ public class OnlyOfficeController {
                            (templateId != null ? "&templateId=" + templateId : "") +
                            (sessionId != null ? "&sessionId=" + sessionId : "") +
                            (callbackUrl != null ? "&callbackUrl=" + callbackUrl : ""))
-                .url(callbackBaseUrl + "/download/" + fileId)
+                .url(callbackBaseUrl + "/callback/download/" + fileId)  // 修复：加上 /callback 路径
                 .type(Type.desktop)
                 .lang("zh-CN")
                 .action(canEdit ? Action.edit : Action.view)
