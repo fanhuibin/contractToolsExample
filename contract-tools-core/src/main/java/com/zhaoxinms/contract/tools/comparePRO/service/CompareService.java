@@ -1823,7 +1823,7 @@ public class CompareService {
 		
 		try {
 			if (mineruOcrService == null) {
-				throw new RuntimeException("MinerU服务未初始化");
+				throw new RuntimeException("OCR服务未初始化");
 			}
 			
 			// 准备输出目录：compare-pro/{年}/{月}/{任务id}/ocr-intermediate/

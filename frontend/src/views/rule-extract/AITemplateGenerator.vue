@@ -54,7 +54,7 @@
         <template #title>
           <span class="alert-title">📄 第一步：上传您的合同文档</span>
         </template>
-        系统将使用先进的 MinerU OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
+        系统将使用先进的OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
         💡 <strong>小提示：</strong>文档内容越完整，AI 生成的模板质量越高
       </el-alert>
       

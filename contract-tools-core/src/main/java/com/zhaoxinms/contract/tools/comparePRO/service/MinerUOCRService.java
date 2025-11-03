@@ -75,7 +75,7 @@ public class MinerUOCRService {
                 log.info("并行处理：提交PDF识别和生成图片");
                 return callMinerUAPI(pdfFile);
             } catch (Exception e) {
-                throw new RuntimeException("MinerU识别失败", e);
+                throw new RuntimeException("OCR识别失败", e);
             }
         });
         
@@ -193,7 +193,7 @@ public class MinerUOCRService {
         conn.disconnect();
         
         if (responseCode != 200) {
-            throw new IOException("MinerU API调用失败，状态码: " + responseCode + "\n" + response.toString());
+            throw new IOException("OCR服务调用失败，状态码: " + responseCode + "\n" + response.toString());
         }
         
         return response.toString();

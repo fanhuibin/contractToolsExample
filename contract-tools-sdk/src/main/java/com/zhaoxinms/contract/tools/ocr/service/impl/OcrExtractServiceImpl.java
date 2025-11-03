@@ -265,7 +265,8 @@ public class OcrExtractServiceImpl implements OcrExtractService {
         resultMetadata.put("imagesDir", imagesDir);
         resultMetadata.put("textLength", ocrText.length());
         resultMetadata.put("textBoxCount", textBoxes.size());
-        resultMetadata.put("provider", "mineru");
+        // OCR 引擎信息由后端统一管理，不在此处硬编码
+        // 前端如需显示可以从系统配置或统一接口获取
         resultMetadata.put("hasPositionInfo", bboxMappings != null && !bboxMappings.isEmpty());
         
         // 页面维度信息

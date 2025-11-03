@@ -423,7 +423,6 @@ const startExtraction = async () => {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
     formData.append('templateId', selectedTemplateId.value)
-    formData.append('ocrProvider', 'mineru')
     formData.append('ignoreHeaderFooter', String(extractSettings.value.ignoreHeaderFooter))
     formData.append('headerHeightPercent', String(extractSettings.value.headerHeightPercent))
     formData.append('footerHeightPercent', String(extractSettings.value.footerHeightPercent))

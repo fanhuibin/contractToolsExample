@@ -160,9 +160,9 @@ public enum ApiCode {
     DOCUMENT_PARSE_FAILED(14001, "文档解析失败"),
     
     /**
-     * MinerU服务不可用
+     * OCR服务不可用
      */
-    MINERU_SERVICE_UNAVAILABLE(14002, "MinerU服务不可用"),
+    OCR_SERVICE_UNAVAILABLE(14002, "OCR服务不可用"),
     
     /**
      * 文档页数超限

@@ -72,8 +72,7 @@ public class GPUCompareController {
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
             @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals,
             @RequestParam(value = "removeWatermark", defaultValue = "false") boolean removeWatermark,
-            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength,
-            @RequestParam(value = "ocrServiceType", defaultValue = "dotsocr") String ocrServiceType) {
+            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength) {
 
         try {
             // 创建比对选项
@@ -87,7 +86,7 @@ public class GPUCompareController {
             options.setIgnoreSeals(ignoreSeals);
             options.setRemoveWatermark(removeWatermark);
             options.setWatermarkRemovalStrength(watermarkRemovalStrength);
-            options.setOcrServiceType(ocrServiceType);
+            // OCR 引擎由后端统一配置，不再接受前端参数
 
             // 提交比对任务
             String taskId = compareService.submitCompareTask(oldFile, newFile, options);
