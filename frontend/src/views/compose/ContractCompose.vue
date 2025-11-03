@@ -115,7 +115,7 @@ import { ref, onMounted, computed } from 'vue'
 import { EditPen } from '@element-plus/icons-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { composeContract, type ComposeRequest } from '@/api/contract-compose'
+import { composeContract, type ComposeRequest, type ComposeResponseData } from '@/api/contract-compose'
 import { getTemplateDesignByTemplateId, getTemplateDesignDetail } from '@/api/templateDesign'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import ClauseEditor from '@/components/ClauseEditor.vue'
@@ -386,7 +386,7 @@ async function doCompose() {
     }
     
     const res = await composeContract(payload)
-    const composeData = res.data.data || res.data
+    const composeData: ComposeResponseData = res.data.data
     const composedFileId = composeData.fileId
     
     if (!composedFileId) {

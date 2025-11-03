@@ -38,12 +38,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { watch } from 'vue'
 import { ElLoading, ElButton, ElSpace, ElTag, ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentAdd, View, Refresh } from '@element-plus/icons-vue'
 import { getEditorConfig, getServerInfo, forceSaveFile } from '@/api/onlyoffice'
+import type { OnlyOfficeDocEditor } from '@/types/onlyoffice'
 
 // Props定义
 const props = defineProps({
@@ -91,7 +92,8 @@ const emit = defineEmits([
   'documentStateChange',
   'error',
   'save',
-  'warning'
+  'warning',
+  'pluginLoaded'
 ])
 
 // 响应式数据
@@ -100,8 +102,8 @@ const loadingText = ref('正在加载编辑器...')
 const onlyofficeLoaded = ref(false)
 const pluginLoaded = ref(false)
 const editorReady = ref(false)
-const docEditor = ref(null)
-const serverInfo = ref(null)
+const docEditor = ref<OnlyOfficeDocEditor | null>(null)
+const serverInfo = ref<any>(null)
 
 const fileInfo = reactive({
   originalName: '',
@@ -215,7 +217,7 @@ const initEditor = async () => {
 
 
 const loadOnlyOfficeScript = () => {
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     // 检查是否已经加载
     if (window.DocsAPI) {
       onlyofficeLoaded.value = true
@@ -240,7 +242,7 @@ const loadOnlyOfficeScript = () => {
 
     const script = document.createElement('script')
     script.type = 'text/javascript'
-    script.src = `${serverInfo.value.fullUrl}/web-apps/apps/api/documents/api.js`
+    script.src = `${serverInfo.value?.fullUrl}/web-apps/apps/api/documents/api.js`
     script.async = true // 异步加载
 
     script.onload = () => {
@@ -256,12 +258,14 @@ const loadOnlyOfficeScript = () => {
   })
 }
 
-const initOnlyOfficeEditor = (config) => {
-  return new Promise((resolve, reject) => {
+const initOnlyOfficeEditor = (config: any) => {
+  return new Promise<void>((resolve, reject) => {
     try {
       // 清空容器并立即创建编辑器容器
       const container = document.getElementById('onlyoffice-editor-container')
-      container.innerHTML = '<div id="onlyoffice-editor" style="height: 100%; width: 100%;"></div>'
+      if (container) {
+        container.innerHTML = '<div id="onlyoffice-editor" style="height: 100%; width: 100%;"></div>'
+      }
 
       // 设置超时机制，防止编辑器加载时间过长
       const timeout = setTimeout(() => {
@@ -299,10 +303,10 @@ const initOnlyOfficeEditor = (config) => {
             pluginLoaded.value = true
             emit('pluginLoaded')
           },
-          onDocumentStateChange: (event) => {
+          onDocumentStateChange: (event: any) => {
             emit('documentStateChange', event)
           },
-          onError: (event) => {
+          onError: (event: any) => {
             console.error('OnlyOffice错误:', event)
             clearTimeout(timeout) // 清除超时
             ElMessage.error('文档编辑器错误: ' + event.data)
@@ -519,7 +523,7 @@ defineExpose({
     await postToPlugin({ action: 'risk.clearAnchors' });
   },
   // 触发 OnlyOffice 插件强制保存，让 Document Server 回调持久化文件
-  forceSave: async () => {
+  forceSaveViaPlugin: async () => {
     await postToPlugin({ action: 'forceSave' });
   },
   // -------------------------

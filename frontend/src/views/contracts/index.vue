@@ -307,7 +307,7 @@ const handleExtract = () => {
 const handleTest = async () => {
   try {
     const res = await testContract()
-    ElMessage.success(res.message)
+    ElMessage.success(res.data.message)
   } catch (error) {
     console.error('测试失败:', error)
   }

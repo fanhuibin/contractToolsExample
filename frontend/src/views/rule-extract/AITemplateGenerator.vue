@@ -7,18 +7,7 @@
       :icon="Refresh"
       tag="AI辅助"
       tag-type="warning"
-    >
-      <template #actions>
-        <el-button 
-          type="default" 
-          size="large"
-          @click="goBack"
-        >
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-      </template>
-    </PageHeader>
+    />
 
     <!-- 重要提示 -->
     <el-alert
@@ -65,7 +54,7 @@
         <template #title>
           <span class="alert-title">📄 第一步：上传您的合同文档</span>
         </template>
-        系统将使用先进的OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
+        系统将使用先进的 OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
         💡 <strong>小提示：</strong>文档内容越完整，AI 生成的模板质量越高
       </el-alert>
       
@@ -351,7 +340,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 // @ts-nocheck
 import { markRaw } from 'vue'
 import axios from 'axios'
@@ -653,10 +642,6 @@ export default {
       if (this.currentStep > 1) {
         this.currentStep--
       }
-    },
-
-    goBack() {
-      this.$router.push('/rule-extract/templates')
     }
   }
 }
