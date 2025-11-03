@@ -46,7 +46,6 @@ import com.zhaoxinms.contract.tools.comparePRO.util.DiffProcessingUtil;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.comparePRO.util.WatermarkRemover;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
-import com.zhaoxinms.contract.tools.watermark.OpenCVWatermarkUtil; // 直接调用OpenCV去水印
 
 /**
  * GPU OCR比对服务 - 基于DotsOcrCompareDemoTest的完整比对功能
@@ -1904,35 +1903,34 @@ public class CompareService {
 				}
 				strengthStr = strengthStr.toLowerCase(); // 统一转为小写
 				
-				logger.info("水印去除强度: {}", strengthStr);
-				
-				// 直接对已拆分的图片去水印（使用OpenCVWatermarkUtil）
-				int successCount = 0;
-				OpenCVWatermarkUtil opencvUtil = new OpenCVWatermarkUtil();
-				
-				for (java.io.File imageFile : imageFiles) {
-					try {
-						boolean success = false;
-						String imagePath = imageFile.getAbsolutePath();
-						
-						// 根据强度字符串调用对应的OpenCV方法
-						switch (strengthStr) {
-							case "default":
-								success = opencvUtil.removeWatermark(imagePath);
-								break;
-							case "extended":
-								success = opencvUtil.removeWatermarkExtended(imagePath);
-								break;
-							case "loose":
-								success = opencvUtil.removeWatermarkLoose(imagePath);
-								break;
-							case "smart":
-								success = opencvUtil.removeWatermarkSmart(imagePath);
-								break;
-							default:
-								logger.warn("未知的水印强度: {}, 使用default模式", strengthStr);
-								success = opencvUtil.removeWatermark(imagePath);
-						}
+			logger.info("水印去除强度: {}", strengthStr);
+			
+			// 直接对已拆分的图片去水印（使用 Java 原生实现）
+			int successCount = 0;
+			
+			for (java.io.File imageFile : imageFiles) {
+				try {
+					boolean success = false;
+					String imagePath = imageFile.getAbsolutePath();
+					
+					// 根据强度字符串调用对应的方法
+					switch (strengthStr) {
+						case "default":
+							success = watermarkRemover.removeWatermark(imagePath);
+							break;
+						case "extended":
+							success = watermarkRemover.removeWatermarkExtended(imagePath);
+							break;
+						case "loose":
+							success = watermarkRemover.removeWatermarkLoose(imagePath);
+							break;
+						case "smart":
+							success = watermarkRemover.removeWatermarkSmart(imagePath);
+							break;
+						default:
+							logger.warn("未知的水印强度: {}, 使用default模式", strengthStr);
+							success = watermarkRemover.removeWatermark(imagePath);
+					}
 						
 						if (success) {
 							successCount++;

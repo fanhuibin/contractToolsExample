@@ -119,17 +119,18 @@ public class DatabaseInitializer implements ApplicationRunner {
 
         log.info("🚀 开始执行初始化脚本...");
         
+        // 清理 SQL 脚本：移除注释和空行
+        String cleanedScript = cleanSqlScript(sqlScript);
+        
         // 分割 SQL 语句（按分号分割）
-        String[] sqlStatements = sqlScript.split(";");
+        String[] sqlStatements = cleanedScript.split(";");
         
         int executedCount = 0;
         for (String sql : sqlStatements) {
             String trimmedSql = sql.trim();
             
-            // 跳过空语句和注释
-            if (trimmedSql.isEmpty() || 
-                trimmedSql.startsWith("--") || 
-                trimmedSql.startsWith("/*")) {
+            // 跳过空语句
+            if (trimmedSql.isEmpty()) {
                 continue;
             }
 
@@ -154,6 +155,46 @@ public class DatabaseInitializer implements ApplicationRunner {
         }
 
         log.info("📊 成功执行 {} 条SQL语句", executedCount);
+    }
+
+    /**
+     * 清理 SQL 脚本，移除注释和空行
+     */
+    private String cleanSqlScript(String sqlScript) {
+        StringBuilder cleaned = new StringBuilder();
+        String[] lines = sqlScript.split("\n");
+        
+        boolean inMultiLineComment = false;
+        
+        for (String line : lines) {
+            String trimmedLine = line.trim();
+            
+            // 处理多行注释
+            if (trimmedLine.startsWith("/*")) {
+                inMultiLineComment = true;
+            }
+            if (inMultiLineComment) {
+                if (trimmedLine.endsWith("*/")) {
+                    inMultiLineComment = false;
+                }
+                continue;
+            }
+            
+            // 跳过单行注释
+            if (trimmedLine.startsWith("--")) {
+                continue;
+            }
+            
+            // 跳过空行
+            if (trimmedLine.isEmpty()) {
+                continue;
+            }
+            
+            // 添加有效的 SQL 行
+            cleaned.append(line).append("\n");
+        }
+        
+        return cleaned.toString();
     }
 
     /**
