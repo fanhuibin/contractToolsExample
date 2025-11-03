@@ -169,3 +169,5 @@ contract-tools-sdk/src/main/resources/license.lic
 /contract-tools-sdk/testuploads/ocr-extract-tasks/2025
 /contract-tools-auth-generator/licenses
 /contract-tools-sdk/testuploads/rule-extract-data/ocr-output
+contract-tools-extract/.classpath
+contract-tools-sdk/.classpath

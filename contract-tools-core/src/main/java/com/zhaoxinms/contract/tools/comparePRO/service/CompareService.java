@@ -749,9 +749,6 @@ public class CompareService {
                 options = CompareOptions.createDefault();
             }
             
-            // 使用 ZXOCR (MinerU) 服务
-            options.setOcrServiceType("mineru");
-            
             progressManager.logStepDetail("使用 ZXOCR 服务");
             
             // 检查 MinerU 服务
