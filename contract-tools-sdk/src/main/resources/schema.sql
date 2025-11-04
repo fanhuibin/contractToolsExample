@@ -3,9 +3,9 @@
 -- 山西肇新科技有限公司
 -- ============================================
 
--- 文件信息表
+-- 文件信息表（使用雪花算法生成ID）
 CREATE TABLE IF NOT EXISTS `file_info` (
-  `id` BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `id` BIGINT NOT NULL COMMENT '主键ID（雪花算法生成）',
   `original_name` VARCHAR(255) DEFAULT NULL COMMENT '原始文件名',
   `file_name` VARCHAR(255) DEFAULT NULL COMMENT '存储文件名',
   `file_path` VARCHAR(500) DEFAULT NULL COMMENT '文件路径（兼容旧字段）',
@@ -26,14 +26,14 @@ CREATE TABLE IF NOT EXISTS `file_info` (
   INDEX `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文件信息表';
 
--- 模板设计记录表
+-- 模板设计记录表（使用雪花算法生成ID）
 CREATE TABLE IF NOT EXISTS `template_design_record` (
-  `id` VARCHAR(64) NOT NULL COMMENT '主键ID',
+  `id` BIGINT NOT NULL COMMENT '主键ID（雪花算法生成）',
   `template_code` VARCHAR(100) DEFAULT NULL COMMENT '模板编码（多个版本共用）',
   `template_name` VARCHAR(255) DEFAULT NULL COMMENT '模板名称',
   `version` VARCHAR(20) DEFAULT NULL COMMENT '版本号（如：1.0, 1.1, 2.0）',
   `template_id` VARCHAR(64) DEFAULT NULL COMMENT '旧字段，保留兼容性',
-  `file_id` VARCHAR(64) DEFAULT NULL COMMENT '文件ID',
+  `file_id` BIGINT DEFAULT NULL COMMENT '文件ID（对应file_info表）',
   `elements_json` LONGTEXT DEFAULT NULL COMMENT '元素JSON数据',
   `status` VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态：DRAFT-草稿, PUBLISHED-已发布, DISABLED-已禁用, DELETED-已删除',
   `description` TEXT DEFAULT NULL COMMENT '模板描述',
@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS `template_design_record` (
   `updated_by` VARCHAR(100) DEFAULT NULL COMMENT '更新人',
   PRIMARY KEY (`id`),
   INDEX `idx_template_code` (`template_code`),
-  INDEX `idx_status` (`status`)
+  INDEX `idx_status` (`status`),
+  INDEX `idx_file_id` (`file_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='模板设计记录表';
 

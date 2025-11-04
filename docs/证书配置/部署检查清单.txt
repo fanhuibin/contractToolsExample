@@ -1,0 +1,49 @@
+SSL证书部署检查清单
+==================
+
+部署前检查：
+□ 证书文件已准备好：onlyoffice.crt, onlyoffice.key, dhparam.pem
+□ 服务器可以SSH连接
+□ 确认服务器IP：192.168.0.100
+
+第1步 - 上传证书文件：
+□ Nginx证书已上传到 /docker/nginx/cert/
+□ OnlyOffice证书已上传到 /app/onlyoffice/DocumentServer/certs/
+
+第2步 - 设置权限：
+□ Nginx证书权限已设置（crt:644, key:600）
+□ OnlyOffice证书权限已设置
+
+第3步 - 配置docker-compose.yml：
+□ 已添加证书目录映射：/app/onlyoffice/DocumentServer/certs:/var/www/onlyoffice/Data/certs
+
+第4步 - 配置Nginx：
+□ 原nginx.conf已备份
+□ 新nginx.conf已上传
+□ nginx -t 测试通过
+
+第5步 - 修改application.yml：
+□ base-url: http → https
+□ onlyoffice.domain: http → https
+□ plugins URL: http → https
+
+第6步 - 重启服务：
+□ OnlyOffice已重启
+□ Nginx已重载
+□ 应用已重启
+
+第7步 - 验证：
+□ 443端口已监听
+□ 8082端口已监听
+□ curl -k https://192.168.0.100 正常
+□ curl -k https://192.168.0.100:8082 正常
+
+第8步 - 浏览器测试：
+□ https://192.168.0.100 可以访问
+□ https://192.168.0.100:8082 可以访问
+□ 文档编辑功能正常
+□ 模板设计功能正常
+□ 文档合成功能正常
+
+部署完成！
+

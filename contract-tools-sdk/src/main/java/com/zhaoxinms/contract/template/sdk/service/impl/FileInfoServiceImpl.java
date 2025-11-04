@@ -27,6 +27,7 @@ import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.exception.FileOperationException;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
+import com.zhaoxinms.contract.tools.common.util.SnowflakeIdGenerator;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -334,6 +335,8 @@ public class FileInfoServiceImpl implements FileInfoService {
         try {
             if (fileInfoRecordMapper == null) throw new IllegalStateException("文件表未配置");
             FileInfoRecord rec = new FileInfoRecord();
+            // 使用雪花算法生成唯一ID
+            rec.setId(SnowflakeIdGenerator.getInstance().nextId());
             rec.setOriginalName(originalName != null ? originalName : new java.io.File(absolutePath).getName());
             rec.setFileName(rec.getOriginalName());
             rec.setFileExtension(extension);
@@ -342,7 +345,7 @@ public class FileInfoServiceImpl implements FileInfoService {
             rec.setStatus(0);
             rec.setCreateTime(LocalDateTime.now());
             rec.setUpdateTime(LocalDateTime.now());
-            // 先插入记录以获取ID
+            // 插入记录（ID已生成）
             fileInfoRecordMapper.insert(rec);
             // 使用ID生成唯一的onlyofficeKey，避免缓存冲突
             String onlyofficeKey = generateOnlyOfficeKeyForFile(String.valueOf(rec.getId()));
@@ -522,6 +525,8 @@ public class FileInfoServiceImpl implements FileInfoService {
         try {
             if (fileInfoRecordMapper == null) throw new IllegalStateException("文件表未配置");
             FileInfoRecord rec = new FileInfoRecord();
+            // 使用雪花算法生成唯一ID
+            rec.setId(SnowflakeIdGenerator.getInstance().nextId());
             rec.setOriginalName(originalName != null ? originalName : new java.io.File(storePath).getName());
             rec.setFileName(rec.getOriginalName());
             rec.setFileExtension(extension);
@@ -531,7 +536,7 @@ public class FileInfoServiceImpl implements FileInfoService {
             rec.setStatus(0);
             rec.setCreateTime(LocalDateTime.now());
             rec.setUpdateTime(LocalDateTime.now());
-            // 先插入记录以获取ID
+            // 插入记录（ID已生成）
             fileInfoRecordMapper.insert(rec);
             // 使用ID生成唯一的onlyofficeKey，避免缓存冲突
             String onlyofficeKey = generateOnlyOfficeKeyForFile(String.valueOf(rec.getId()));

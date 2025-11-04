@@ -550,10 +550,35 @@ export default {
 
     async copyPrompt() {
       try {
-        await navigator.clipboard.writeText(this.fullPrompt)
-        this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+        // 方法1: 优先使用现代 Clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(this.fullPrompt)
+          this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+          return
+        }
+        
+        // 方法2: 降级使用传统的 execCommand 方法
+        const textarea = document.createElement('textarea')
+        textarea.value = this.fullPrompt
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        textarea.setSelectionRange(0, this.fullPrompt.length)
+        
+        const successful = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        
+        if (successful) {
+          this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+        } else {
+          throw new Error('execCommand 复制失败')
+        }
       } catch (error) {
-        this.$message.error('复制失败，请手动复制')
+        console.error('复制失败:', error)
+        this.$message.warning('自动复制失败，请手动选择文本复制（Ctrl+C）')
       }
     },
 
