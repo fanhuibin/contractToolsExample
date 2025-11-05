@@ -66,8 +66,8 @@ Content-Type: multipart/form-data
 |--------|------|------|--------|------|
 | `file` | file | ✅ | - | PDF文档文件 |
 | `ignoreHeaderFooter` | boolean | ❌ | true | 是否忽略页眉页脚 |
-| `headerHeightPercent` | number | ❌ | 12.0 | 页眉高度百分比（0-50） |
-| `footerHeightPercent` | number | ❌ | 12.0 | 页脚高度百分比（0-50） |
+| `headerHeightPercent` | number | ❌ | 6.0 | 页眉高度百分比（0-50） |
+| `footerHeightPercent` | number | ❌ | 6.0 | 页脚高度百分比（0-50） |
 
 **支持的文件格式**:
 - PDF格式: `.pdf`
@@ -87,8 +87,8 @@ Content-Type: multipart/form-data
 页脚区域 = 页面高度 × footerHeightPercent%
 
 示例：A4页面高度 = 842pt
-     页眉高度 = 842 × 12% = 101pt
-     页脚高度 = 842 × 12% = 101pt
+     页眉高度 = 842 × 6% = 51pt
+     页脚高度 = 842 × 6% = 51pt
 ```
 
 ### 请求示例
@@ -109,8 +109,8 @@ HttpPost uploadFile = new HttpPost("https://your-domain.com/api/ocr/extract/uplo
 MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 builder.addBinaryBody("file", new File("document.pdf"));
 builder.addTextBody("ignoreHeaderFooter", "true");
-builder.addTextBody("headerHeightPercent", "12.0");
-builder.addTextBody("footerHeightPercent", "12.0");
+builder.addTextBody("headerHeightPercent", "6.0");
+builder.addTextBody("footerHeightPercent", "6.0");
 HttpEntity multipart = builder.build();
 
 uploadFile.setEntity(multipart);
@@ -127,8 +127,8 @@ url = 'https://your-domain.com/api/ocr/extract/upload'
 files = {'file': open('document.pdf', 'rb')}
 data = {
     'ignoreHeaderFooter': 'true',
-    'headerHeightPercent': '12.0',
-    'footerHeightPercent': '12.0'
+    'headerHeightPercent': '6.0',
+    'footerHeightPercent': '6.0'
 }
 
 response = requests.post(url, files=files, data=data)
@@ -173,8 +173,8 @@ echo "任务ID: " . $task_id;
 const formData = new FormData()
 formData.append('file', fileObject)
 formData.append('ignoreHeaderFooter', 'true')
-formData.append('headerHeightPercent', '12.0')
-formData.append('footerHeightPercent', '12.0')
+formData.append('headerHeightPercent', '6.0')
+formData.append('footerHeightPercent', '6.0')
 
 const response = await axios.post('/api/ocr/extract/upload', formData, {
   headers: {
@@ -196,8 +196,8 @@ headers = {'X-API-Key': 'your-api-key-here'}
 files = {'file': open('document.pdf', 'rb')}
 data = {
     'ignoreHeaderFooter': 'true',
-    'headerHeightPercent': '12.0',
-    'footerHeightPercent': '12.0'
+    'headerHeightPercent': '6.0',
+    'footerHeightPercent': '6.0'
 }
 
 response = requests.post(url, headers=headers, files=files, data=data)
@@ -860,7 +860,7 @@ const startParse = async () => {
 
 | 文档类型 | 页眉高度 | 页脚高度 | 说明 |
 |---------|---------|---------|------|
-| 标准文档 | 12% | 12% | 默认推荐值 |
+| 标准文档 | 6% | 6% | 默认推荐值 |
 | 简单文档 | 10% | 10% | 页眉页脚较少 |
 | 复杂文档 | 15% | 15% | 页眉页脚较多 |
 | 无页眉页脚 | 0% | 0% | 关闭过滤 |

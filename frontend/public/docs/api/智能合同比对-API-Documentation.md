@@ -81,23 +81,15 @@ Content-Type: application/json
 |--------|------|--------|------|------|
 | `removeWatermark` | boolean | `false` | ✅ 已实现 | 是否去除水印（默认使用默认强度） |
 
-#### 比对选项（开发中）
-⚠️ **以下功能正在开发中，暂不可用**
 
-| 参数名 | 类型 | 默认值 | 计划用途 |
-|--------|------|--------|----------|
-| `ignoreCase` | boolean | `true` | 是否忽略大小写差异 |
-| `ignoredSymbols` | string | `"_＿"` | 忽略指定符号集（如下划线、破折号等） |
-| `ignoreSpaces` | boolean | `false` | 是否忽略空格差异 |
-| `ignoreSeals` | boolean | `true` | 是否忽略印章区域 |
 
-#### 系统固定参数（无需传递）
-| 参数名 | 固定值 | 说明 |
-|--------|--------|------|
-| `ignoreHeaderFooter` | `true` | 系统自动忽略页眉页脚 |
-| `headerHeightPercent` | `12.0` | 页眉高度固定为12% |
-| `footerHeightPercent` | `12.0` | 页脚高度固定为12% |
-| `watermarkRemovalStrength` | `"default"` | 水印去除强度固定为默认强度 |
+#### 页眉页脚参数（可选）
+| 参数名 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `ignoreHeaderFooter` | boolean | `true` | 是否忽略页眉页脚 |
+| `headerHeightPercent` | number | `6.0` | 页眉高度百分比 |
+| `footerHeightPercent` | number | `6.0` | 页脚高度百分比 |
+
 
 ### 请求示例
 

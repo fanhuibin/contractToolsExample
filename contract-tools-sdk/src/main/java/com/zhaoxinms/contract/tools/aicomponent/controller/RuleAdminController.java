@@ -3,9 +3,13 @@ package com.zhaoxinms.contract.tools.aicomponent.controller;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.zhaoxinms.contract.tools.aicomponent.service.RuleFileService;
 import com.zhaoxinms.contract.tools.aicomponent.service.RuleStoreService;
+import com.zhaoxinms.contract.tools.api.common.ApiCode;
 import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.api.exception.BusinessException;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,6 +23,7 @@ public class RuleAdminController {
 
     private final RuleFileService ruleFileService; // legacy file loader (backward compatible)
     private final RuleStoreService ruleStoreService;
+    private final DemoModeConfig demoModeConfig;
 
     @GetMapping("/models")
     public ApiResponse<List<Map<String, String>>> listModels() {
@@ -58,6 +63,11 @@ public class RuleAdminController {
      */
     @PutMapping("/{contractType}")
     public ApiResponse<String> saveRule(@PathVariable String contractType, @RequestBody JsonNode content) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            throw BusinessException.of(ApiCode.FORBIDDEN, "演示环境不允许修改模板");
+        }
+        
         try {
             String name = content.has("name") ? content.get("name").asText() : contractType;
             // Save to DB first
@@ -105,6 +115,11 @@ public class RuleAdminController {
      */
     @PutMapping("/template/{templateId}")
     public ApiResponse<String> saveRuleByTemplate(@PathVariable Long templateId, @RequestBody JsonNode content) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            throw BusinessException.of(ApiCode.FORBIDDEN, "演示环境不允许修改模板");
+        }
+        
         try {
             String name = content.has("name") ? content.get("name").asText() : ("template-" + templateId);
             String contractType = content.has("contractType") ? content.get("contractType").asText() : null;
@@ -121,6 +136,11 @@ public class RuleAdminController {
      */
     @PutMapping("/by-template")
     public ApiResponse<String> saveRuleByTemplateQuery(@RequestParam("templateId") Long templateId, @RequestBody JsonNode content) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            throw BusinessException.of(ApiCode.FORBIDDEN, "演示环境不允许修改模板");
+        }
+        
         try {
             String name = content.has("name") ? content.get("name").asText() : ("template-" + templateId);
             String contractType = content.has("contractType") ? content.get("contractType").asText() : null;

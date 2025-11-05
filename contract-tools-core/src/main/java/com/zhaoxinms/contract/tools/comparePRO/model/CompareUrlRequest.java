@@ -12,8 +12,8 @@ public class CompareUrlRequest {
     
     // 比对选项（可选）
     private Boolean ignoreHeaderFooter = true;
-    private Double headerHeightPercent = 12.0;
-    private Double footerHeightPercent = 12.0;
+    private Double headerHeightPercent = 6.0;
+    private Double footerHeightPercent = 6.0;
     private Boolean ignoreCase = true;
     private String ignoredSymbols = "_＿";
     private Boolean ignoreSpaces = false;

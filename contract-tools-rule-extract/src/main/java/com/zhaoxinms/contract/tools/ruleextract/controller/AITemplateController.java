@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ruleextract.controller;
 
 import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 import com.zhaoxinms.contract.tools.ruleextract.constants.AIPromptTemplates;
 import com.zhaoxinms.contract.tools.ruleextract.dto.*;
 import com.zhaoxinms.contract.tools.ruleextract.service.AITemplateService;
@@ -31,6 +32,7 @@ import java.util.*;
 public class AITemplateController {
 
     private final AITemplateService aiTemplateService;
+    private final DemoModeConfig demoModeConfig;
 
     /**
      * 提取文档文本（用于AI分析）
@@ -148,6 +150,11 @@ public class AITemplateController {
     @ApiOperation(value = "导入AI生成的模板", notes = "将AI生成的JSON导入为抽取模板")
     public Map<String, Object> importTemplate(
             @ApiParam(value = "JSON内容", required = true) @RequestBody Map<String, String> request) {
+        
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            return error("演示环境不允许导入模板");
+        }
         
         try {
             String jsonContent = request.get("jsonContent");

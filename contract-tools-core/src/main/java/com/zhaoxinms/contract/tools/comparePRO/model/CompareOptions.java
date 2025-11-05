@@ -6,8 +6,8 @@ package com.zhaoxinms.contract.tools.comparePRO.model;
 public class CompareOptions {
 
     private boolean ignoreHeaderFooter = false;
-    private double headerHeightPercent = 12;
-    private double footerHeightPercent = 12;
+    private double headerHeightPercent = 6;
+    private double footerHeightPercent = 6;
     private boolean ignoreCase = true;
     private String ignoredSymbols = "_＿";
     private boolean ignoreSpaces = false;

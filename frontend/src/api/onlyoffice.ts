@@ -94,7 +94,7 @@ export function uploadFileForOnlyOffice(file: File) {
  */
 export function forceSaveFile(fileId: string | number) {
   return request({
-    url: `/files/forcesave/${fileId}`,
+    url: `/file/forcesave/${fileId}`,
     method: 'post'
   })
 }

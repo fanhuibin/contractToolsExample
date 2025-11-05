@@ -2,6 +2,7 @@ package com.zhaoxinms.contract.tools.ruleextract.controller;
 
 import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 import com.zhaoxinms.contract.tools.ruleextract.model.FieldDefinitionModel;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleTemplateModel;
 import com.zhaoxinms.contract.tools.ruleextract.service.TemplateService;
@@ -27,12 +28,21 @@ import java.util.Map;
 public class TemplateController {
 
     private final TemplateService templateService;
+    private final DemoModeConfig demoModeConfig;
 
     /**
      * 创建模板
      */
     @PostMapping
     public Map<String, Object> createTemplate(@RequestBody RuleTemplateModel template) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许新增模板");
+            return result;
+        }
+        
         try {
             String id = templateService.createTemplate(template);
             
@@ -55,6 +65,14 @@ public class TemplateController {
      */
     @PutMapping("/{id}")
     public Map<String, Object> updateTemplate(@PathVariable String id, @RequestBody RuleTemplateModel template) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             template.setId(id);
             templateService.updateTemplate(template);
@@ -77,6 +95,14 @@ public class TemplateController {
      */
     @DeleteMapping("/{id}")
     public Map<String, Object> deleteTemplate(@PathVariable String id) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许删除模板");
+            return result;
+        }
+        
         try {
             templateService.deleteTemplate(id);
             
@@ -142,6 +168,14 @@ public class TemplateController {
      */
     @PostMapping("/{id}/enable")
     public Map<String, Object> enableTemplate(@PathVariable String id) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             templateService.enableTemplate(id);
             
@@ -163,6 +197,14 @@ public class TemplateController {
      */
     @PostMapping("/{id}/disable")
     public Map<String, Object> disableTemplate(@PathVariable String id) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             templateService.disableTemplate(id);
             
@@ -184,6 +226,14 @@ public class TemplateController {
      */
     @PostMapping("/{id}/copy")
     public Map<String, Object> copyTemplate(@PathVariable String id, @RequestParam String newName) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许复制模板");
+            return result;
+        }
+        
         try {
             String newId = templateService.copyTemplate(id, newName);
             
@@ -206,6 +256,14 @@ public class TemplateController {
      */
     @PostMapping("/{templateId}/fields")
     public Map<String, Object> addField(@PathVariable String templateId, @RequestBody FieldDefinitionModel field) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             templateService.addField(templateId, field);
             
@@ -231,6 +289,14 @@ public class TemplateController {
             @PathVariable String templateId,
             @PathVariable String fieldId,
             @RequestBody FieldDefinitionModel field) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             field.setId(fieldId);
             templateService.updateField(templateId, field);
@@ -253,6 +319,14 @@ public class TemplateController {
      */
     @DeleteMapping("/{templateId}/fields/{fieldId}")
     public Map<String, Object> deleteField(@PathVariable String templateId, @PathVariable String fieldId) {
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("code", 403);
+            result.put("message", "演示环境不允许修改模板");
+            return result;
+        }
+        
         try {
             templateService.deleteField(templateId, fieldId);
             
