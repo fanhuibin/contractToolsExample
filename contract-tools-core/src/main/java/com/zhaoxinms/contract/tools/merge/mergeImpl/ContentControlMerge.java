@@ -479,10 +479,34 @@ public class ContentControlMerge implements Merge {
         
         // 第二步：游标关闭后，复制样式（复制操作也会修改文档）
         org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr originalStyle = null;
+        boolean isShowingPlaceholder = false; // 是否正在显示占位符
+        
+        // 检查SDT是否正在显示占位符
+        try {
+        	if (sdt.getSdtPr() != null && sdt.getSdtPr().isSetShowingPlcHdr()) {
+        		// showingPlcHdr存在即表示正在显示占位符
+        		isShowingPlaceholder = true;
+        		debugPrint("检测到showingPlcHdr属性，正在显示占位符");
+        	}
+        } catch (Exception e) {
+        	debugPrintException("检查showingPlcHdr属性时发生异常: " + e.getMessage(), e);
+        }
+        
         if (styleToSave != null) {
         	try {
         		originalStyle = (org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) styleToSave.copy();
         		debugPrint("已复制原有样式: " + originalStyle);
+        		
+        		// ===== 严谨的占位符颜色判断 =====
+        		// 只有当showingPlcHdr=true且颜色是占位符灰色时，才修正颜色
+        		if (isShowingPlaceholder) {
+        			String originalColor = getStyleColorValue(originalStyle);
+        			if (isPlaceholderGrayColor(originalColor)) {
+        				debugPrint("[占位符颜色修正] showingPlcHdr=true 且颜色为占位符灰色(" + originalColor + ")，修正为黑色");
+        				setStyleColorValue(originalStyle, "000000");
+        			}
+        		}
+        		
         	} catch (Exception e) {
         		debugPrintException("复制样式时发生异常，将跳过样式保留: " + e.getMessage(), e);
         	}
@@ -564,10 +588,34 @@ public class ContentControlMerge implements Merge {
 				
 				// 复制样式（在清空操作之前，但不在游标内）
 				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr originalStyle = null;
+				boolean isShowingPlaceholder = false; // 是否正在显示占位符
+				
+				// 检查块级SDT是否正在显示占位符
+				try {
+					if (sdt.getSdtPr() != null && sdt.getSdtPr().isSetShowingPlcHdr()) {
+						// showingPlcHdr存在即表示正在显示占位符
+						isShowingPlaceholder = true;
+						debugPrint("检测到块级SDT的showingPlcHdr属性，正在显示占位符");
+					}
+				} catch (Exception e) {
+					debugPrintException("检查块级SDT的showingPlcHdr属性时发生异常: " + e.getMessage(), e);
+				}
+				
 				if (styleToSave != null) {
 					try {
 						originalStyle = (org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) styleToSave.copy();
 						debugPrint("已复制块级SDT原有样式: " + originalStyle);
+						
+						// ===== 严谨的占位符颜色判断 =====
+						// 只有当showingPlcHdr=true且颜色是占位符灰色时，才修正颜色
+						if (isShowingPlaceholder) {
+							String originalColor = getStyleColorValue(originalStyle);
+							if (isPlaceholderGrayColor(originalColor)) {
+								debugPrint("[占位符颜色修正] 块级SDT showingPlcHdr=true 且颜色为占位符灰色(" + originalColor + ")，修正为黑色");
+								setStyleColorValue(originalStyle, "000000");
+							}
+						}
+						
 					} catch (Exception e) {
 						debugPrintException("复制块级SDT样式时发生异常，将跳过样式保留: " + e.getMessage(), e);
 					}
@@ -1948,22 +1996,15 @@ public class ContentControlMerge implements Merge {
 			if (!lines[i].trim().isEmpty()) {
 				CTR run = sdtContentRun.addNewR();
 				
-				// ===== 应用原有样式，但修复占位符颜色问题 =====
+				// ===== 应用原有样式（占位符灰色已在复制样式时通过showingPlcHdr判断处理） =====
 				if (originalStyle != null) {
 					// 复制样式到新的运行对象
 					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr copiedStyle = 
 						(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy();
 					
-					// 检测并修复占位符的灰色问题
+					// 检查颜色，如果没有颜色，设置为黑色
 					String originalColor = getStyleColorValue(copiedStyle);
-					
-					// 如果是占位符的灰色（DCDCDC或类似的浅灰色），强制改为黑色
-					if (isPlaceholderGrayColor(originalColor)) {
-						debugPrint("[颜色修正] 占位符灰色 (" + originalColor + ") -> 黑色, 文本: \"" + 
-							(lines[i].length() > 30 ? lines[i].substring(0, 30) + "..." : lines[i]) + "\"");
-						setStyleColorValue(copiedStyle, "000000");
-					} else if (originalColor == null || originalColor.isEmpty()) {
-						// 如果没有颜色，设置为黑色
+					if (originalColor == null || originalColor.isEmpty()) {
 						debugPrint("[颜色修正] 无颜色 -> 黑色, 文本: \"" + 
 							(lines[i].length() > 30 ? lines[i].substring(0, 30) + "..." : lines[i]) + "\"");
 						setStyleColorValue(copiedStyle, "000000");
@@ -2000,11 +2041,8 @@ public class ContentControlMerge implements Merge {
 		try {
 			CTR[] runs = sdtContentRun.getRArray();
 			if (runs != null && runs.length > 0) {
-				// 检测原始样式的颜色
+				// 检测原始样式的颜色（占位符灰色已在复制样式时通过showingPlcHdr判断处理）
 				String originalColor = getStyleColorValue(originalStyle);
-				
-				// 如果原始样式是占位符灰色，需要修正
-				boolean needFixColor = isPlaceholderGrayColor(originalColor);
 				
 				for (CTR run : runs) {
 					// 如果运行对象还没有样式，或者需要覆盖样式
@@ -2013,25 +2051,14 @@ public class ContentControlMerge implements Merge {
 						org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr copiedStyle = 
 							(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy();
 						
-						// 修正占位符灰色
-						if (needFixColor) {
-							setStyleColorValue(copiedStyle, "000000");
-						} else if (originalColor == null || originalColor.isEmpty()) {
-							// 如果没有颜色，设置为黑色
+						// 如果没有颜色，设置为黑色
+						if (originalColor == null || originalColor.isEmpty()) {
 							setStyleColorValue(copiedStyle, "000000");
 						}
 						
 						run.setRPr(copiedStyle);
 					} else {
 						// 已有样式，尝试合并（保留HTML样式，补充ContentControl默认样式）
-						String existingColor = getStyleColorValue(run.getRPr());
-						
-						// 如果现有颜色也是占位符灰色，修正它
-						if (isPlaceholderGrayColor(existingColor)) {
-							debugPrint("[颜色修正] HTML内容占位符灰色 (" + existingColor + ") -> 黑色");
-							setStyleColorValue(run.getRPr(), "000000");
-						}
-						
 						mergeStyles(run.getRPr(), originalStyle);
 					}
 				}
