@@ -1419,9 +1419,41 @@ public class ContentControlMerge implements Merge {
 						if (isHeader) {
 							run.getRPr().addNewB().setVal(true);
 						}
-						// 应用表级字体大小
-						if (tableFontSizeHalfPts != null) {
-							run.getRPr().addNewSz().setVal(java.math.BigInteger.valueOf(tableFontSizeHalfPts));
+						
+						// 先应用表级字体大小（作为默认值）
+						Integer finalFontSizeHalfPts = tableFontSizeHalfPts;
+						
+						// 检查单元格是否有自己的font-size设置 - 优先级：单元格 > 表级
+						java.util.regex.Pattern fontSizePattern = java.util.regex.Pattern.compile(
+							"<(td|th)\\s*[^>]*?style\\s*=\\s*[\"'][^\"']*?font-size\\s*:\\s*(\\d+(?:\\.\\d+)?)\\s*(px|pt|em|rem)?[^\"']*[\"'][^>]*>",
+							java.util.regex.Pattern.CASE_INSENSITIVE
+						);
+						java.util.regex.Matcher fontSizeMatcher = fontSizePattern.matcher(fullCellTag);
+						if (fontSizeMatcher.find()) {
+							try {
+								double fontSize = Double.parseDouble(fontSizeMatcher.group(2));
+								String unit = fontSizeMatcher.group(3);
+								int pt;
+								if (unit == null || "px".equalsIgnoreCase(unit)) {
+									pt = (int) Math.round(fontSize * 0.75);
+								} else if ("pt".equalsIgnoreCase(unit)) {
+									pt = (int) Math.round(fontSize);
+								} else if ("em".equalsIgnoreCase(unit) || "rem".equalsIgnoreCase(unit)) {
+									pt = (int) Math.round(fontSize * 12);
+								} else {
+									pt = (int) Math.round(fontSize);
+								}
+								finalFontSizeHalfPts = Math.max(2, Math.min(3276, pt * 2));
+								debugPrint("检测到单元格字体大小: " + fontSize + unit + " -> " + pt + "pt");
+							} catch (Exception ignore) {
+								debugPrint("解析单元格字体大小失败: " + ignore.getMessage());
+							}
+						}
+						
+						// 应用最终确定的字体大小
+						if (finalFontSizeHalfPts != null) {
+							run.getRPr().addNewSz().setVal(java.math.BigInteger.valueOf(finalFontSizeHalfPts));
+							run.getRPr().addNewSzCs().setVal(java.math.BigInteger.valueOf(finalFontSizeHalfPts));
 						}
 						
 						// 检查是否有颜色设置 - 优先级：单元格 > 行 > thead/tbody > 表级
@@ -1689,10 +1721,24 @@ public class ContentControlMerge implements Merge {
 								} else if ("em".equals(unit) || "rem".equals(unit)) {
 									wordFontSize = (int) Math.round(fontSize * 12);
 								} else {
-									wordFontSize = (int) Math.round(fontSize);
+								wordFontSize = (int) Math.round(fontSize);
 								}
 								
 								wordFontSize = Math.max(1, Math.min(1638, wordFontSize));
+								
+								// 清除已有的字体大小设置，避免冲突
+								if (runProperties.getSzArray().length > 0) {
+									for (int i = runProperties.getSzArray().length - 1; i >= 0; i--) {
+										runProperties.removeSz(i);
+									}
+								}
+								if (runProperties.getSzCsArray().length > 0) {
+									for (int i = runProperties.getSzCsArray().length - 1; i >= 0; i--) {
+										runProperties.removeSzCs(i);
+									}
+								}
+								
+								// 设置新的字体大小
 								runProperties.addNewSz().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
 								runProperties.addNewSzCs().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
 							}
@@ -1954,15 +2000,6 @@ public class ContentControlMerge implements Merge {
 			   lowerContent.contains("padding:") || lowerContent.contains("display:");
 	}
 	
-	/**
-	 * 插入纯文本内容到行内SDT（旧版本，保留兼容性）
-	 * 
-	 * @param sdtContentRun ContentControl运行对象
-	 * @param content 文本内容
-	 */
-	private void insertPlainTextToRun(CTSdtContentRun sdtContentRun, String content) {
-		insertPlainTextToRun(sdtContentRun, content, null);
-	}
 	
 	/**
 	 * 插入纯文本内容到行内SDT，并应用样式
@@ -2527,41 +2564,6 @@ public class ContentControlMerge implements Merge {
 		}
 		
 		return false;
-	}
-	
-	/**
-	 * 获取运行对象的文本内容（用于日志输出）
-	 * 
-	 * @param run 运行对象
-	 * @return 文本内容（最多50个字符）
-	 */
-	private String getRunTextContent(CTR run) {
-		if (run == null) {
-			return "";
-		}
-		
-		try {
-			StringBuilder text = new StringBuilder();
-			
-			// 获取所有文本元素
-			if (run.getTList() != null) {
-				for (org.openxmlformats.schemas.wordprocessingml.x2006.main.CTText ctText : run.getTList()) {
-					if (ctText != null && ctText.getStringValue() != null) {
-						text.append(ctText.getStringValue());
-					}
-				}
-			}
-			
-			String result = text.toString();
-			// 限制长度，避免日志过长
-			if (result.length() > 50) {
-				return result.substring(0, 50) + "...";
-			}
-			return result;
-			
-		} catch (Exception e) {
-			return "[无法获取文本]";
-		}
 	}
 
 }
