@@ -274,13 +274,7 @@ npm install
 
 - 📧 官方网站：[https://zhaoxinms.com](https://zhaoxinms.com)
 - 📦 产品价格：[https://zhaoxinms.com/price](https://zhaoxinms.com/price)
-- ☎️ 技术支持：18306806281
 
 ---
 
-## 🎉 享受使用！
-
-现在您可以在系统中直接查看和管理所有技术文档了！
-
-**快捷访问**: [http://localhost:3000/doc-center](http://localhost:3000/doc-center)
 

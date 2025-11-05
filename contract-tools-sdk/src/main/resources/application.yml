@@ -83,7 +83,7 @@ logging:
 zxcm:
   # 演示模式配置（全局设置）
   demo-mode:
-    enabled: true  # 是否启用演示模式
+    enabled: false  # 是否启用演示模式
     max-file-size-mb: 20  # 演示模式下最大文件大小（MB）
     max-pages: 20  # 演示模式下最大页数
   

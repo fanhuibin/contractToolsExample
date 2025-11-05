@@ -332,6 +332,68 @@ public class ContentControlMerge implements Merge {
 		}
 		return null;
 	}
+	
+	/**
+	 * 更新行内SDT属性，确保插入内容后可编辑
+	 * 
+	 * 关键修复：当ContentControl原本为空时，插入内容后需要更新showingPlcHdr属性，
+	 * 否则在Word中会显示为不可编辑状态。
+	 */
+	private void updateSdtPropertiesAfterInsert(CTSdtRun sdt) {
+		try {
+			if (sdt == null) {
+				return;
+			}
+			
+			// 获取或创建SDT属性
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSdtPr sdtPr = sdt.getSdtPr();
+			if (sdtPr == null) {
+				sdtPr = sdt.addNewSdtPr();
+			}
+			
+			// 关键修复：确保showingPlcHdr属性不存在或设置为false
+			// 这个属性如果为true，表示正在显示占位符，内容不可编辑
+			// 删除该属性或设置为false，表示显示的是正常内容，可编辑
+			if (sdtPr.isSetShowingPlcHdr()) {
+				sdtPr.unsetShowingPlcHdr();
+				debugPrint("已清除行内SDT的showingPlcHdr属性，内容现在可编辑");
+			}
+			
+		} catch (Exception e) {
+			debugPrintException("更新行内SDT属性时发生异常: " + e.getMessage(), e);
+		}
+	}
+	
+	/**
+	 * 更新块级SDT属性，确保插入内容后可编辑
+	 * 
+	 * 关键修复：当ContentControl原本为空时，插入内容后需要更新showingPlcHdr属性，
+	 * 否则在Word中会显示为不可编辑状态。
+	 */
+	private void updateSdtPropertiesAfterInsert(CTSdtBlock sdt) {
+		try {
+			if (sdt == null) {
+				return;
+			}
+			
+			// 获取或创建SDT属性
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTSdtPr sdtPr = sdt.getSdtPr();
+			if (sdtPr == null) {
+				sdtPr = sdt.addNewSdtPr();
+			}
+			
+			// 关键修复：确保showingPlcHdr属性不存在或设置为false
+			// 这个属性如果为true，表示正在显示占位符，内容不可编辑
+			// 删除该属性或设置为false，表示显示的是正常内容，可编辑
+			if (sdtPr.isSetShowingPlcHdr()) {
+				sdtPr.unsetShowingPlcHdr();
+				debugPrint("已清除块级SDT的showingPlcHdr属性，内容现在可编辑");
+			}
+			
+		} catch (Exception e) {
+			debugPrintException("更新块级SDT属性时发生异常: " + e.getMessage(), e);
+		}
+	}
 
 	/**
 	 * 处理行内SDT内容替换
@@ -473,6 +535,9 @@ public class ContentControlMerge implements Merge {
         		insertPlainTextToRun(targetContentRun, content, originalStyle);
         		debugPrint("已处理纯文本内容 (行内SDT): " + content + ", 已应用原有样式");
         	}
+        	
+        	// ===== 关键修复：更新ContentControl属性，确保内容可编辑 =====
+        	updateSdtPropertiesAfterInsert(sdt);
         }
 	}
 	
@@ -539,6 +604,9 @@ public class ContentControlMerge implements Merge {
 					insertPlainTextToBlock(sdtContent, content, originalStyle);
 					debugPrint("已处理纯文本内容 (块级SDT): " + content + ", 已应用原有样式");
 				}
+				
+				// ===== 关键修复：更新ContentControl属性，确保内容可编辑 =====
+				updateSdtPropertiesAfterInsert(sdt);
 			}
 		} catch (Exception e) {
 			debugPrintException("替换块级SDT内容时发生异常: " + e.getMessage(), e);
@@ -1105,6 +1173,21 @@ public class ContentControlMerge implements Merge {
 					// 设置单元格属性
 					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTcPr tcPr = cell.addNewTcPr();
 					
+					// 检查并处理 colspan 属性
+					java.util.regex.Pattern colspanPattern = java.util.regex.Pattern.compile(
+						"<(td|th)\\s*[^>]*?colspan\\s*=\\s*[\"']?(\\d+)[\"']?[^>]*>",
+						java.util.regex.Pattern.CASE_INSENSITIVE
+					);
+					java.util.regex.Matcher colspanMatcher = colspanPattern.matcher(fullCellTag);
+					if (colspanMatcher.find()) {
+						int colspan = Integer.parseInt(colspanMatcher.group(2));
+						if (colspan > 1) {
+							org.openxmlformats.schemas.wordprocessingml.x2006.main.CTDecimalNumber gridSpan = tcPr.addNewGridSpan();
+							gridSpan.setVal(java.math.BigInteger.valueOf(colspan));
+							debugPrint("  设置单元格合并: colspan=" + colspan);
+						}
+					}
+					
 					// 设置单元格宽度
 					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTTblWidth cellWidth = tcPr.addNewTcW();
 					cellWidth.setType(org.openxmlformats.schemas.wordprocessingml.x2006.main.STTblWidth.DXA);
@@ -1197,10 +1280,31 @@ public class ContentControlMerge implements Merge {
 					tcBorders.setLeft(cellLeftBorder);
 					tcBorders.setRight(cellRightBorder);
 					
-					// 如果是表头行且检测到了背景色，设置单元格底纹
-					if (isHeader && rowBgHex != null) {
+					// 设置单元格背景色（优先级：单元格自身 > 行级 > 区域级）
+					String cellBgHex = null;
+					
+					// 1. 检查单元格自身的背景色
+					try {
+						java.util.regex.Matcher cellBgM = java.util.regex.Pattern.compile(
+							"(?i)<(td|th)\\s*[^>]*?style\\s*=\\s*['\"][^'\"]*?background(?:-color)?\\s*:\\s*([^;\"']+)"
+						).matcher(fullCellTag);
+						if (cellBgM.find()) {
+							cellBgHex = convertColorToHex(cellBgM.group(2).trim());
+							debugPrint("  检测到单元格背景色: " + cellBgHex);
+						}
+					} catch (Exception ignore) {}
+					
+					// 2. 如果单元格没有背景色，使用行级背景色
+					if (cellBgHex == null && rowBgHex != null) {
+						cellBgHex = rowBgHex;
+						debugPrint("  使用行背景色: " + cellBgHex);
+					}
+					
+					// 3. 应用背景色
+					if (cellBgHex != null) {
 						org.openxmlformats.schemas.wordprocessingml.x2006.main.CTShd shd = tcPr.addNewShd();
-						shd.setFill(rowBgHex);
+						shd.setFill(cellBgHex);
+						debugPrint("  最终应用背景色: " + cellBgHex);
 					}
 					
 					// 创建单元格段落
@@ -1325,79 +1429,231 @@ public class ContentControlMerge implements Merge {
 			// 去除段落标签，单元格内容作为单行处理
 			String cleanContent = content.replaceAll("(?i)</?p[^>]*>", " ").trim();
 			
-			if (cleanContent.contains("<br")) {
-				// 处理换行
-				String[] lines = cleanContent.split("(?i)<br\\s*/?>");
-				for (int i = 0; i < lines.length; i++) {
-					if (i > 0) {
-						// 添加换行符
-						CTR breakRun = paragraph.addNewR();
-						breakRun.addNewBr();
-					}
-					
-					if (!lines[i].trim().isEmpty()) {
-						CTR run = paragraph.addNewR();
-						
-						// 设置运行属性
-						if (run.getRPr() == null) {
-							run.addNewRPr();
-						}
-						
-						if (isHeader) {
-							run.getRPr().addNewB().setVal(true);
-						}
-						
-						// 应用继承的字体大小
-						if (inheritedFontSize != null) {
-							run.getRPr().addNewSz().setVal(inheritedFontSize);
-						}
-						
-						// 应用继承的文字颜色
-						if (inheritedTextHex != null) {
-							org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = run.getRPr().addNewColor();
-							ctColor.setVal(inheritedTextHex);
-						}
-						
-						CTText text = run.addNewT();
-						text.setStringValue(stripHtmlTags(lines[i]));
-						applyHtmlFormattingToRun(run, lines[i]);
-					}
-				}
-			} else {
-				// 单行内容
-				CTR run = paragraph.addNewR();
-				
-				// 设置运行属性
-				if (run.getRPr() == null) {
-					run.addNewRPr();
-				}
-				
-				if (isHeader) {
-					run.getRPr().addNewB().setVal(true);
-				}
-				
-				// 应用继承的字体大小
-				if (inheritedFontSize != null) {
-					run.getRPr().addNewSz().setVal(inheritedFontSize);
-				}
-				
-				// 应用继承的文字颜色
-				if (inheritedTextHex != null) {
-					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = run.getRPr().addNewColor();
-					ctColor.setVal(inheritedTextHex);
-				}
-				
-				CTText text = run.addNewT();
-				text.setStringValue(stripHtmlTags(cleanContent));
-				applyHtmlFormattingToRun(run, cleanContent);
-			}
+			// 使用 Jsoup 解析 HTML
+			org.jsoup.nodes.Document doc = org.jsoup.Jsoup.parse(cleanContent);
+			org.jsoup.nodes.Element body = doc.body();
+			
+			// 递归处理 body 中的所有节点
+			processHtmlNodesForTableCell(paragraph, body, isHeader, inheritedTextHex, inheritedFontSize, null);
 			
 		} catch (Exception e) {
 			debugPrintException("插入HTML到单元格时发生异常: " + e.getMessage(), e);
-			// 降级处理
+			// 降级处理：当作纯文本插入
 			CTR run = paragraph.addNewR();
+			
+			if (run.getRPr() == null) {
+				run.addNewRPr();
+			}
+			if (isHeader) {
+				run.getRPr().addNewB().setVal(true);
+			}
+			if (inheritedFontSize != null) {
+				run.getRPr().addNewSz().setVal(inheritedFontSize);
+				run.getRPr().addNewSzCs().setVal(inheritedFontSize);
+			}
+			if (inheritedTextHex != null) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = run.getRPr().addNewColor();
+				ctColor.setVal(inheritedTextHex);
+			}
+			
 			CTText text = run.addNewT();
 			text.setStringValue(stripHtmlTags(content));
+		}
+	}
+	
+	/**
+	 * 递归处理HTML节点并插入到表格单元格段落中
+	 */
+	private void processHtmlNodesForTableCell(CTP paragraph, org.jsoup.nodes.Element element, 
+			boolean isHeader, String inheritedTextHex, java.math.BigInteger inheritedFontSize,
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr parentStyle) {
+		
+		String tagName = element.tagName().toLowerCase();
+		
+		// 创建当前节点的样式（继承父节点样式）
+		org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr currentStyle = 
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr.Factory.newInstance();
+		
+		// 继承父样式
+		if (parentStyle != null) {
+			try {
+				currentStyle.set(parentStyle);
+			} catch (Exception e) {
+				// 忽略复制错误
+			}
+		}
+		
+		// 应用继承的表级样式
+		if (isHeader && currentStyle.getBArray().length == 0) {
+			currentStyle.addNewB().setVal(true);
+		}
+		if (inheritedFontSize != null && currentStyle.getSzArray().length == 0) {
+			currentStyle.addNewSz().setVal(inheritedFontSize);
+			currentStyle.addNewSzCs().setVal(inheritedFontSize);
+		}
+		if (inheritedTextHex != null && currentStyle.getColorList().isEmpty()) {
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = currentStyle.addNewColor();
+			ctColor.setVal(inheritedTextHex);
+		}
+		
+		// 根据标签类型应用样式
+		applyTagStyleToRunProperties(currentStyle, tagName);
+		
+		// 解析style属性
+		String styleAttr = element.attr("style");
+		if (styleAttr != null && !styleAttr.trim().isEmpty()) {
+			applyInlineStyleToRunProperties(currentStyle, styleAttr);
+		}
+		
+		// 处理特殊标签
+		if ("br".equals(tagName)) {
+			CTR run = paragraph.addNewR();
+			run.addNewBr();
+			return;
+		}
+		
+		// 递归处理子节点
+		for (org.jsoup.nodes.Node child : element.childNodes()) {
+			if (child instanceof org.jsoup.nodes.TextNode) {
+				org.jsoup.nodes.TextNode textNode = (org.jsoup.nodes.TextNode) child;
+				String text = textNode.text();
+				if (!text.trim().isEmpty()) {
+					CTR run = paragraph.addNewR();
+					if (currentStyle != null) {
+						run.setRPr((org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) currentStyle.copy());
+					}
+					CTText ctText = run.addNewT();
+					ctText.setStringValue(text);
+				}
+			} else if (child instanceof org.jsoup.nodes.Element) {
+				org.jsoup.nodes.Element childElement = (org.jsoup.nodes.Element) child;
+				processHtmlNodesForTableCell(paragraph, childElement, isHeader, inheritedTextHex, inheritedFontSize, currentStyle);
+			}
+		}
+	}
+	
+	/**
+	 * 根据HTML标签应用样式到运行属性
+	 */
+	private void applyTagStyleToRunProperties(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr runProperties, String tagName) {
+		switch (tagName) {
+			case "b":
+			case "strong":
+				if (runProperties.getBArray().length == 0) {
+					runProperties.addNewB().setVal(true);
+				}
+				break;
+			case "i":
+			case "em":
+				if (runProperties.getIArray().length == 0) {
+					runProperties.addNewI().setVal(true);
+				}
+				break;
+			case "u":
+				if (runProperties.getUArray().length == 0) {
+					runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
+				}
+				break;
+			case "s":
+			case "strike":
+			case "del":
+				if (runProperties.getStrikeArray().length == 0) {
+					runProperties.addNewStrike().setVal(true);
+				}
+				break;
+			case "sup":
+				if (runProperties.getVertAlignArray().length == 0) {
+					runProperties.addNewVertAlign().setVal(org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STVerticalAlignRun.SUPERSCRIPT);
+				}
+				break;
+			case "sub":
+				if (runProperties.getVertAlignArray().length == 0) {
+					runProperties.addNewVertAlign().setVal(org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STVerticalAlignRun.SUBSCRIPT);
+				}
+				break;
+		}
+	}
+	
+	/**
+	 * 应用内联样式到运行属性
+	 */
+	private void applyInlineStyleToRunProperties(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr runProperties, String style) {
+		if (style == null || style.trim().isEmpty()) {
+			return;
+		}
+		
+		String[] styles = style.split(";");
+		for (String s : styles) {
+			String[] keyValue = s.split(":");
+			if (keyValue.length == 2) {
+				String property = keyValue[0].trim().toLowerCase();
+				String value = keyValue[1].trim().toLowerCase();
+				
+				switch (property) {
+					case "font-weight":
+						if ("bold".equals(value) || "700".equals(value) || "800".equals(value) || "900".equals(value)) {
+							runProperties.addNewB().setVal(true);
+						}
+						break;
+					case "font-style":
+						if ("italic".equals(value)) {
+							runProperties.addNewI().setVal(true);
+						}
+						break;
+					case "text-decoration":
+						if ("underline".equals(value)) {
+							runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
+						} else if ("line-through".equals(value)) {
+							runProperties.addNewStrike().setVal(true);
+						}
+						break;
+					case "color":
+						String hex = convertColorToHex(value);
+						if (hex != null) {
+							// 清除现有颜色
+							if (runProperties.getColorList() != null && !runProperties.getColorList().isEmpty()) {
+								runProperties.getColorList().clear();
+							}
+							org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = runProperties.addNewColor();
+							ctColor.setVal(hex);
+						}
+						break;
+					case "font-size":
+						try {
+							String sizeStr = value.trim();
+							double fontSize = 0;
+							String unit = "px";
+							
+							java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(px|pt|em|rem)?");
+							java.util.regex.Matcher matcher = pattern.matcher(sizeStr);
+							
+							if (matcher.find()) {
+								fontSize = Double.parseDouble(matcher.group(1));
+								if (matcher.group(2) != null && !matcher.group(2).isEmpty()) {
+									unit = matcher.group(2).toLowerCase();
+								}
+								
+								int wordFontSize;
+								if ("px".equals(unit)) {
+									wordFontSize = (int) Math.round(fontSize * 0.75);
+								} else if ("pt".equals(unit)) {
+									wordFontSize = (int) Math.round(fontSize);
+								} else if ("em".equals(unit) || "rem".equals(unit)) {
+									wordFontSize = (int) Math.round(fontSize * 12);
+								} else {
+									wordFontSize = (int) Math.round(fontSize);
+								}
+								
+								wordFontSize = Math.max(1, Math.min(1638, wordFontSize));
+								runProperties.addNewSz().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
+								runProperties.addNewSzCs().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
+							}
+						} catch (Exception e) {
+							// 忽略解析错误
+						}
+						break;
+				}
+			}
 		}
 	}
 	
@@ -1497,6 +1753,9 @@ public class ContentControlMerge implements Merge {
 	 */
 	private void applyHtmlFormattingToRun(CTR run, String htmlContent) {
 		try {
+			// 标记是否设置了颜色
+			boolean colorSet = false;
+			
 			// 改进的HTML标签检测，支持更复杂的属性
 			if (htmlContent.matches("(?i).*<(b|strong)\\s*[^>]*>.*")) {
 				if (run.getRPr() == null) {
@@ -1565,7 +1824,21 @@ public class ContentControlMerge implements Merge {
 				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = run.getRPr().addNewColor();
 				String hexColor = convertColorToHex(color);
 				ctColor.setVal(hexColor);
+				colorSet = true;
 				debugPrint("设置字体颜色: " + hexColor + " (原始值: " + color + ")");
+			}
+			
+			// 如果没有设置颜色，默认设置为黑色，避免继承ContentControl的浅灰色（DCDCDC）
+			if (!colorSet) {
+				if (run.getRPr() == null) {
+					run.addNewRPr();
+				}
+				// 检查是否已有颜色设置
+				if (run.getRPr().getColorList().isEmpty()) {
+					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = run.getRPr().addNewColor();
+					ctColor.setVal("000000"); // 黑色
+					debugPrint("未检测到颜色样式，设置默认黑色");
+				}
 			}
 			
 		} catch (Exception e) {
@@ -1603,10 +1876,12 @@ public class ContentControlMerge implements Merge {
 			return true;
 		}
 		
-		// 检查其他HTML标签 - 支持自闭合标签和复杂属性
+		// 检查其他HTML标签 - 支持自闭合标签和复杂属性（包括删除线和上下标）
 		return lowerContent.contains("<b") || lowerContent.contains("<strong") ||
 			   lowerContent.contains("<i") || lowerContent.contains("<em") ||
 			   lowerContent.contains("<u") || lowerContent.contains("<span") ||
+			   lowerContent.contains("<s") || lowerContent.contains("<strike") || lowerContent.contains("<del") ||
+			   lowerContent.contains("<sup") || lowerContent.contains("<sub") ||
 			   lowerContent.contains("<p") || lowerContent.contains("<br") ||
 			   lowerContent.contains("<tr") || lowerContent.contains("<td") ||
 			   lowerContent.contains("<th") || lowerContent.contains("</tr>") ||
@@ -1614,6 +1889,8 @@ public class ContentControlMerge implements Merge {
 			   lowerContent.contains("</b>") || lowerContent.contains("</strong>") ||
 			   lowerContent.contains("</i>") || lowerContent.contains("</em>") ||
 			   lowerContent.contains("</u>") || lowerContent.contains("</span>") ||
+			   lowerContent.contains("</s>") || lowerContent.contains("</strike>") || lowerContent.contains("</del>") ||
+			   lowerContent.contains("</sup>") || lowerContent.contains("</sub>") ||
 			   lowerContent.contains("</p>") ||
 			   // 检查样式属性
 			   lowerContent.contains("style=") ||
@@ -1654,13 +1931,16 @@ public class ContentControlMerge implements Merge {
 		
 		// 处理换行符
 		String[] lines = content.split("\\r?\\n");
+		
 		for (int i = 0; i < lines.length; i++) {
 			if (i > 0) {
 				// 添加换行
 				CTR breakRun = sdtContentRun.addNewR();
-				// 换行符也应用样式
+				// 换行符也应用样式（但不需要颜色）
 				if (originalStyle != null) {
-					breakRun.setRPr((org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy());
+					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr cleanStyle = 
+						(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy();
+					breakRun.setRPr(cleanStyle);
 				}
 				breakRun.addNewBr();
 			}
@@ -1668,11 +1948,35 @@ public class ContentControlMerge implements Merge {
 			if (!lines[i].trim().isEmpty()) {
 				CTR run = sdtContentRun.addNewR();
 				
-				// ===== 应用原有样式 =====
+				// ===== 应用原有样式，但修复占位符颜色问题 =====
 				if (originalStyle != null) {
 					// 复制样式到新的运行对象
-					run.setRPr((org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy());
-					debugPrint("已应用原有样式到新文本: " + lines[i]);
+					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr copiedStyle = 
+						(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy();
+					
+					// 检测并修复占位符的灰色问题
+					String originalColor = getStyleColorValue(copiedStyle);
+					
+					// 如果是占位符的灰色（DCDCDC或类似的浅灰色），强制改为黑色
+					if (isPlaceholderGrayColor(originalColor)) {
+						debugPrint("[颜色修正] 占位符灰色 (" + originalColor + ") -> 黑色, 文本: \"" + 
+							(lines[i].length() > 30 ? lines[i].substring(0, 30) + "..." : lines[i]) + "\"");
+						setStyleColorValue(copiedStyle, "000000");
+					} else if (originalColor == null || originalColor.isEmpty()) {
+						// 如果没有颜色，设置为黑色
+						debugPrint("[颜色修正] 无颜色 -> 黑色, 文本: \"" + 
+							(lines[i].length() > 30 ? lines[i].substring(0, 30) + "..." : lines[i]) + "\"");
+						setStyleColorValue(copiedStyle, "000000");
+					}
+					
+					run.setRPr(copiedStyle);
+				} else {
+					// 如果没有原有样式，创建新样式并设置黑色
+					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr newStyle = run.addNewRPr();
+					org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor color = newStyle.addNewColor();
+					color.setVal("000000");
+					debugPrint("[颜色修正] 无样式 -> 黑色, 文本: \"" + 
+						(lines[i].length() > 30 ? lines[i].substring(0, 30) + "..." : lines[i]) + "\"");
 				}
 				
 				CTText text = run.addNewT();
@@ -1696,18 +2000,41 @@ public class ContentControlMerge implements Merge {
 		try {
 			CTR[] runs = sdtContentRun.getRArray();
 			if (runs != null && runs.length > 0) {
-				debugPrint("开始应用样式到 " + runs.length + " 个运行对象");
+				// 检测原始样式的颜色
+				String originalColor = getStyleColorValue(originalStyle);
+				
+				// 如果原始样式是占位符灰色，需要修正
+				boolean needFixColor = isPlaceholderGrayColor(originalColor);
+				
 				for (CTR run : runs) {
 					// 如果运行对象还没有样式，或者需要覆盖样式
 					if (run.getRPr() == null) {
 						// 复制并应用样式
-						run.setRPr((org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy());
+						org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr copiedStyle = 
+							(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr) originalStyle.copy();
+						
+						// 修正占位符灰色
+						if (needFixColor) {
+							setStyleColorValue(copiedStyle, "000000");
+						} else if (originalColor == null || originalColor.isEmpty()) {
+							// 如果没有颜色，设置为黑色
+							setStyleColorValue(copiedStyle, "000000");
+						}
+						
+						run.setRPr(copiedStyle);
 					} else {
 						// 已有样式，尝试合并（保留HTML样式，补充ContentControl默认样式）
+						String existingColor = getStyleColorValue(run.getRPr());
+						
+						// 如果现有颜色也是占位符灰色，修正它
+						if (isPlaceholderGrayColor(existingColor)) {
+							debugPrint("[颜色修正] HTML内容占位符灰色 (" + existingColor + ") -> 黑色");
+							setStyleColorValue(run.getRPr(), "000000");
+						}
+						
 						mergeStyles(run.getRPr(), originalStyle);
 					}
 				}
-				debugPrint("样式应用完成");
 			}
 		} catch (Exception e) {
 			debugPrintException("应用样式时发生异常: " + e.getMessage(), e);
@@ -1717,7 +2044,7 @@ public class ContentControlMerge implements Merge {
 	/**
 	 * 合并样式：将 defaultStyle 中的属性合并到 currentStyle，但不覆盖 currentStyle 中已有的属性
 	 * 
-	 * 注意：此方法采用保守策略，仅当 currentStyle 中缺少某些基础样式属性时，才从 defaultStyle 补充。
+	 * 注意：此方法采用补充策略，从 defaultStyle 中补充 currentStyle 缺失的属性。
 	 * HTML 内容自带的样式（如粗体、斜体、颜色）会被优先保留。
 	 * 
 	 * @param currentStyle 当前样式（会被修改）
@@ -1730,23 +2057,54 @@ public class ContentControlMerge implements Merge {
 		}
 		
 		try {
-			// Apache POI 的 CTRPr 使用 XmlBeans API，没有标准的 isSet/get/set 方法
-			// 我们采用简化策略：通过 XML 字符串判断属性是否存在
-			String currentXml = currentStyle.xmlText();
-			
-			// 如果当前样式为空（只有基本XML标签），则直接复制默认样式的所有内容
-			if (currentXml.length() < 50) { // 简单判断是否为空样式
-				debugPrint("当前样式为空，直接应用默认样式");
-				// 注意：由于 XmlBeans 的限制，我们不能直接替换，而是创建新的属性
-				// 这里采用保守策略：如果 HTML 没有设置样式，就保留 ContentControl 的默认样式
-			} else {
-				debugPrint("当前样式非空，保留HTML样式（字体大小、颜色等可能来自ContentControl默认样式）");
+			// 1. 合并字体大小 (sz - 字体大小)
+			if (currentStyle.getSzArray().length == 0 && defaultStyle.getSzArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHpsMeasure sz = currentStyle.addNewSz();
+				sz.setVal(defaultStyle.getSzArray(0).getVal());
+				debugPrint("[样式合并] 继承字体大小: " + defaultStyle.getSzArray(0).getVal());
 			}
 			
-			// 由于 Apache POI 的 XmlBeans API 限制，细粒度的样式合并比较复杂
-			// 这里采用简化策略：如果 currentStyle 已有内容，优先保留
-			// 如果需要更精细的控制，建议在插入文本时就直接应用样式，而不是事后合并
-			debugPrint("样式合并完成（采用保守策略）");
+			// 2. 合并复杂字体大小 (szCs - 复杂文字字体大小)
+			if (currentStyle.getSzCsArray().length == 0 && defaultStyle.getSzCsArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTHpsMeasure szCs = currentStyle.addNewSzCs();
+				szCs.setVal(defaultStyle.getSzCsArray(0).getVal());
+			}
+			
+			// 3. 合并字体名称 (rFonts)
+			if (currentStyle.getRFontsArray().length == 0 && defaultStyle.getRFontsArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTFonts rFonts = 
+					(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTFonts) defaultStyle.getRFontsArray(0).copy();
+				currentStyle.setRFontsArray(new org.openxmlformats.schemas.wordprocessingml.x2006.main.CTFonts[]{rFonts});
+				debugPrint("[样式合并] 继承字体名称");
+			}
+			
+			// 4. 合并粗体 (b) - 如果HTML没有设置粗体，但原样式有粗体，则继承
+			if (currentStyle.getBArray().length == 0 && defaultStyle.getBArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTOnOff b = currentStyle.addNewB();
+				b.setVal(defaultStyle.getBArray(0).getVal());
+			}
+			
+			// 5. 合并斜体 (i) - 如果HTML没有设置斜体，但原样式有斜体，则继承
+			if (currentStyle.getIArray().length == 0 && defaultStyle.getIArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTOnOff i = currentStyle.addNewI();
+				i.setVal(defaultStyle.getIArray(0).getVal());
+			}
+			
+			// 6. 合并下划线 (u) - 如果HTML没有设置下划线，但原样式有下划线，则继承
+			if (currentStyle.getUArray().length == 0 && defaultStyle.getUArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTUnderline u = 
+					(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTUnderline) defaultStyle.getUArray(0).copy();
+				currentStyle.setUArray(new org.openxmlformats.schemas.wordprocessingml.x2006.main.CTUnderline[]{u});
+			}
+			
+			// 7. 合并字符样式 (rStyle) - 如果HTML没有设置样式引用，但原样式有，则继承
+			if (currentStyle.getRStyleArray().length == 0 && defaultStyle.getRStyleArray().length > 0) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTString rStyle = currentStyle.addNewRStyle();
+				rStyle.setVal(defaultStyle.getRStyleArray(0).getVal());
+			}
+			
+			// 注意：颜色 (color) 不合并，因为HTML可能已经设置了颜色，我们要保留HTML的颜色
+			
 		} catch (Exception e) {
 			debugPrintException("合并样式时发生异常: " + e.getMessage(), e);
 		}
@@ -1988,6 +2346,195 @@ public class ContentControlMerge implements Merge {
 		// 如果无法解析，返回默认黑色
 		debugPrint("无法解析颜色值: " + color + "，使用默认黑色");
 		return "000000";
+	}
+	
+	/**
+	 * 从样式中获取颜色值
+	 * 
+	 * @param style 样式对象
+	 * @return 颜色的十六进制值（不含#），如果没有颜色则返回null
+	 */
+	private String getStyleColorValue(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr style) {
+		if (style == null) {
+			return null;
+		}
+		
+		try {
+			// 检查是否有颜色列表
+			if (style.getColorList() != null && !style.getColorList().isEmpty()) {
+				org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = style.getColorList().get(0);
+				if (ctColor != null && ctColor.getVal() != null) {
+					// getVal() 返回 Object，实际是 byte[]，需要转换为十六进制字符串
+					Object valObj = ctColor.getVal();
+					String colorVal;
+					
+					if (valObj instanceof byte[]) {
+						colorVal = bytesToHex((byte[]) valObj);
+					} else {
+						// 如果不是byte[]，直接转换为字符串
+						colorVal = valObj.toString();
+					}
+					
+					// 移除可能的 # 前缀并转为大写
+					if (colorVal.startsWith("#")) {
+						colorVal = colorVal.substring(1);
+					}
+					return colorVal.toUpperCase();
+				}
+			}
+		} catch (Exception e) {
+			debugPrintException("获取颜色值时发生异常: " + e.getMessage(), e);
+		}
+		
+		return null;
+	}
+	
+	/**
+	 * 将字节数组转换为十六进制字符串
+	 * 
+	 * @param bytes 字节数组
+	 * @return 十六进制字符串
+	 */
+	private String bytesToHex(byte[] bytes) {
+		if (bytes == null || bytes.length == 0) {
+			return "";
+		}
+		
+		StringBuilder hexString = new StringBuilder();
+		for (byte b : bytes) {
+			// 将字节转换为对应的ASCII字符
+			hexString.append((char) (b & 0xFF));
+		}
+		return hexString.toString();
+	}
+	
+	/**
+	 * 设置样式的颜色值
+	 * 
+	 * @param style 样式对象
+	 * @param colorHex 颜色的十六进制值（不含#）
+	 */
+	private void setStyleColorValue(org.openxmlformats.schemas.wordprocessingml.x2006.main.CTRPr style, String colorHex) {
+		if (style == null || colorHex == null) {
+			return;
+		}
+		
+		try {
+			// 清除现有颜色
+			if (style.getColorList() != null && !style.getColorList().isEmpty()) {
+				style.getColorList().clear();
+			}
+			
+			// 设置新颜色
+			org.openxmlformats.schemas.wordprocessingml.x2006.main.CTColor ctColor = style.addNewColor();
+			ctColor.setVal(colorHex.toUpperCase());
+		} catch (Exception e) {
+			debugPrintException("设置颜色值时发生异常: " + e.getMessage(), e);
+		}
+	}
+	
+	/**
+	 * 判断颜色是否为占位符的灰色
+	 * 
+	 * 常见的占位符灰色包括：
+	 * - DCDCDC (Gainsboro)
+	 * - D3D3D3 (LightGray)
+	 * - C0C0C0 (Silver)
+	 * - A9A9A9 (DarkGray)
+	 * - 808080 (Gray)
+	 * 以及接近这些颜色的值
+	 * 
+	 * @param colorHex 颜色的十六进制值（不含#）
+	 * @return 如果是占位符灰色返回true，否则返回false
+	 */
+	private boolean isPlaceholderGrayColor(String colorHex) {
+		if (colorHex == null || colorHex.isEmpty()) {
+			return false;
+		}
+		
+		try {
+			// 转为大写并移除可能的 # 前缀
+			String cleanColor = colorHex.toUpperCase().trim();
+			if (cleanColor.startsWith("#")) {
+				cleanColor = cleanColor.substring(1);
+			}
+			
+			// 检查常见的占位符灰色
+			String[] placeholderGrays = {
+				"DCDCDC", // Gainsboro - Word默认占位符颜色
+				"D3D3D3", // LightGray
+				"C0C0C0", // Silver
+				"A9A9A9", // DarkGray
+				"808080", // Gray
+				"999999", // Medium Gray
+				"CCCCCC", // Light Gray
+				"B0B0B0", // Another common placeholder gray
+			};
+			
+			for (String grayColor : placeholderGrays) {
+				if (cleanColor.equals(grayColor)) {
+					return true;
+				}
+			}
+			
+			// 进一步检查：如果RGB三个分量都相近（表示灰色），且在浅灰色范围内（128-220）
+			if (cleanColor.length() == 6) {
+				try {
+					int r = Integer.parseInt(cleanColor.substring(0, 2), 16);
+					int g = Integer.parseInt(cleanColor.substring(2, 4), 16);
+					int b = Integer.parseInt(cleanColor.substring(4, 6), 16);
+					
+					// RGB差异小于20，且都在浅灰色范围内（128-220）
+					int maxDiff = Math.max(Math.abs(r - g), Math.max(Math.abs(g - b), Math.abs(r - b)));
+					boolean isGrayish = maxDiff <= 20;
+					boolean isLightGray = r >= 128 && r <= 220 && g >= 128 && g <= 220 && b >= 128 && b <= 220;
+					
+					return isGrayish && isLightGray;
+				} catch (NumberFormatException e) {
+					// 解析失败，忽略
+				}
+			}
+			
+		} catch (Exception e) {
+			debugPrintException("判断占位符灰色时发生异常: " + e.getMessage(), e);
+		}
+		
+		return false;
+	}
+	
+	/**
+	 * 获取运行对象的文本内容（用于日志输出）
+	 * 
+	 * @param run 运行对象
+	 * @return 文本内容（最多50个字符）
+	 */
+	private String getRunTextContent(CTR run) {
+		if (run == null) {
+			return "";
+		}
+		
+		try {
+			StringBuilder text = new StringBuilder();
+			
+			// 获取所有文本元素
+			if (run.getTList() != null) {
+				for (org.openxmlformats.schemas.wordprocessingml.x2006.main.CTText ctText : run.getTList()) {
+					if (ctText != null && ctText.getStringValue() != null) {
+						text.append(ctText.getStringValue());
+					}
+				}
+			}
+			
+			String result = text.toString();
+			// 限制长度，避免日志过长
+			if (result.length() > 50) {
+				return result.substring(0, 50) + "...";
+			}
+			return result;
+			
+		} catch (Exception e) {
+			return "[无法获取文本]";
+		}
 	}
 
 }
