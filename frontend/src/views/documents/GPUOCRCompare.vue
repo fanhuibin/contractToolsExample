@@ -308,6 +308,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, EditPen, Download, Delete } from '@element-plus/icons-vue'
 import { PageHeader } from '@/components/common'
 import { SimpleProgressCalculator } from '@/utils/simpleProgressCalculator'
+import { formatDateTime } from '@/utils/dateFormat'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -750,10 +751,9 @@ const startDebugCompare = async () => {
   }
 }
 
-// 格式化时间
+// 格式化时间（已废弃，使用统一的 formatDateTime）
 const formatTime = (timeStr: string | undefined) => {
-  if (!timeStr) return ''
-  return new Date(timeStr).toLocaleString()
+  return formatDateTime(timeStr)
 }
 
 // 获取差异总数

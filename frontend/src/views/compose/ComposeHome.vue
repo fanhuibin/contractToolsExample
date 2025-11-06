@@ -24,7 +24,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="updatedAt" label="更新时间" width="180" />
+        <el-table-column prop="updatedAt" label="更新时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.updatedAt) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" @click="backendCompose(row)">
@@ -75,6 +79,7 @@ import { ElMessage } from 'element-plus'
 import { Document, EditPen } from '@element-plus/icons-vue'
 import { PageHeader, EmptyState } from '@/components/common'
 import { listTemplateDesigns, getTemplateDesignDetail } from '@/api/templateDesign'
+import { formatDateTime } from '@/utils/dateFormat'
 
 const router = useRouter()
 const loading = ref(false)
