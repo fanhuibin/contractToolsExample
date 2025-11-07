@@ -3,7 +3,7 @@
     <!-- 使用 PageHeader 组件 - 英雄区域 -->
     <PageHeader 
       title="智能文档抽取" 
-      description="采用深度版面分析、OCR识别与智能文档检索技术，结合规则引擎精准定位，实现结构化信息高效抽取"
+      description="采用深度版面分析、智能识别与智能文档检索技术，结合规则引擎精准定位，实现结构化信息高效抽取"
       :icon="Document"
       tag="规则引擎"
       tag-type="success"
@@ -218,7 +218,7 @@
                 :type="getTimelineType('ocr_processing')" 
                 :hollow="!isStatusPassed('ocr_processing')"
               >
-                OCR处理中
+                智能识别处理中
               </el-timeline-item>
               <el-timeline-item 
                 :type="getTimelineType('extracting')" 
