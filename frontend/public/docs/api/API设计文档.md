@@ -243,7 +243,7 @@ POST /api/rule-extract/extract
   "fileId": "file-123",
   "options": {
     "ignoreHeaderFooter": true,
-    "headerHeightPercent": 12.0
+    "headerHeightPercent": 6.0
   }
 }
 ```
@@ -256,7 +256,7 @@ Content-Type: multipart/form-data
 
 file=@document.pdf
 ignoreHeaderFooter=true
-headerHeightPercent=12.0
+headerHeightPercent=6.0
 ```
 
 ### 5.3 查询参数

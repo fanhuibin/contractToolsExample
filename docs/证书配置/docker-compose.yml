@@ -1,0 +1,145 @@
+version: '3'
+
+services:
+  mysql:
+    image: mysql:8.0.27
+    container_name: mysql
+    environment:
+      # 时区上海
+      TZ: Asia/Shanghai
+      # root 密码
+      MYSQL_ROOT_PASSWORD: mypassFan
+      # 初始化数据库(后续的初始化sql会在这个库执行)
+      MYSQL_DATABASE: contract_tools
+    ports:
+      - "3306:3306"
+    volumes:
+      # 数据挂载
+      - /docker/mysql/data/:/var/lib/mysql/
+      # 配置挂载
+      - /docker/mysql/conf/:/etc/mysql/conf.d/
+    command:
+      # 将mysql8.0默认密码策略 修改为 原先 策略 (mysql8.0对其默认策略做了更改 会导致密码无法匹配)
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_general_ci
+      --explicit_defaults_for_timestamp=true
+      --lower_case_table_names=1
+    privileged: true
+    restart: always
+    networks:
+      ruoyi_net:
+        ipv4_address: 172.30.0.36
+
+  nginx-web:
+    image: openresty/openresty:1.25.3.2-0-alpine-fat
+    container_name: nginx-web
+    environment:
+      # 时区上海
+      TZ: Asia/Shanghai
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8082:8082"
+      - "180:180"
+    volumes:
+      # 证书映射
+      - /docker/nginx/cert:/etc/nginx/cert
+      # openresty配置文件映射
+      - /docker/nginx/conf/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - /docker/nginx/conf/script:/usr/local/openresty/nginx/conf/script
+      # 页面目录
+      - /docker/nginx/html:/usr/share/nginx/html
+      - /docker/nginx/onlyoffice:/usr/share/nginx/onlyoffice
+      # 移动端
+      - /docker/nginx/mobile:/usr/share/nginx/mobile
+      # 日志目录
+      - /docker/nginx/log:/var/log/nginx
+    privileged: true
+    restart: always
+    networks:
+      - ruoyi_net
+
+  zxcm-tool:
+    image: 13671354640/zxcm:0.9.1
+    container_name: zxcm-tool
+    environment:
+      # 时区上海
+      TZ: Asia/Shanghai
+    volumes:
+      # 配置文件
+      - /docker/server1/logs/:/zxcm/server/logs/
+      - /docker/server1/application.yml:/zxcm/server/application.yml
+      - /docker/server1/license.lic:/zxcm/server/license.lic
+      - /docker/server1/uploadPath:/zxcm/server/uploadPath
+      - /docker/server1/contract-tools-sdk-encrypted.jar:/zxcm/server/app.jar
+      - /docker/server1/runner:/zxcm/server/runner
+    privileged: true
+    restart: always
+    networks:
+      ruoyi_net:
+        ipv4_address: 172.30.0.60
+    
+  docServer:
+    image: onlyoffice/documentserver:8.3.3
+    container_name: docServer
+    ports:
+      - "8081:80"
+    environment:
+      # 时区上海
+      TZ: Asia/Shanghai
+      JWT_SECRET: zxcm
+    volumes:
+      - /app/onlyoffice/DocumentServer/logs:/var/log/onlyoffice
+      - /app/onlyoffice/DocumentServer/data:/var/www/onlyoffice/Data
+      - /app/onlyoffice/DocumentServer/lib:/var/lib/onlyoffice
+      - /app/onlyoffice/DocumentServer/db:/var/lib/postgresql
+    privileged: true
+    restart: always
+    networks:
+      ruoyi_net:
+        ipv4_address: 172.30.0.100
+
+# 新增的 mineru-vllm-server 服务
+  zxcm-ocr-server:
+    image: mineru-vllm:latest
+    container_name: zxcm-ocr-server
+    ports:
+      - "30000:30000"
+    environment:
+      CUDA_VISIBLE_DEVICES: "0"
+    command: bash -c "mineru-vllm-server --port 30000 --gpu-memory-utilization 0.85"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    privileged: true
+    restart: always
+    networks:
+      ruoyi_net:
+        ipv4_address: 172.30.0.200  # 分配一个IP地址
+
+  # 新增的 mineru-api 服务
+  zxcm-ocr-api:
+    image: mineru-vllm:latest
+    container_name: zxcm-ocr-api
+    ports:
+      - "8000:8000"
+    command: bash -c "mineru-api --host 0.0.0.0 --port 8000"
+    depends_on:
+      - zxcm-ocr-server
+    privileged: true
+    restart: always
+    networks:
+      ruoyi_net:
+        ipv4_address: 172.30.0.201  # 分配一个IP地址
+
+networks:
+  ruoyi_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

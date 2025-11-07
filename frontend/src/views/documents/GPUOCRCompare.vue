@@ -21,7 +21,7 @@
           <input
             ref="oldInput"
             type="file"
-            accept=".pdf,.doc,.docx,.docm,.xls,.xlsx,.xlsm,.xlsb,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".pdf,application/pdf"
             @change="onFileChange('old', $event)"
           />
         </el-form-item>
@@ -30,7 +30,7 @@
           <input
             ref="newInput"
             type="file"
-            accept=".pdf,.doc,.docx,.docm,.xls,.xlsx,.xlsm,.xlsb,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            accept=".pdf,application/pdf"
             @change="onFileChange('new', $event)"
           />
         </el-form-item>
@@ -308,6 +308,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, EditPen, Download, Delete } from '@element-plus/icons-vue'
 import { PageHeader } from '@/components/common'
 import { SimpleProgressCalculator } from '@/utils/simpleProgressCalculator'
+import { formatDateTime } from '@/utils/dateFormat'
 import {
   uploadGPUOCRCompare,
   getGPUOCRCompareTaskStatus,
@@ -412,6 +413,13 @@ const onFileChange = (type: 'old' | 'new', event: Event) => {
   const file = target.files?.[0]
 
   if (file) {
+    // 验证文件类型，只允许PDF
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      ElMessage.error('仅支持PDF格式文档，请选择PDF文件')
+      target.value = '' // 清空文件选择
+      return
+    }
+
     if (type === 'old') {
       oldFile.value = file
       oldFileName.value = file.name
@@ -743,10 +751,9 @@ const startDebugCompare = async () => {
   }
 }
 
-// 格式化时间
+// 格式化时间（已废弃，使用统一的 formatDateTime）
 const formatTime = (timeStr: string | undefined) => {
-  if (!timeStr) return ''
-  return new Date(timeStr).toLocaleString()
+  return formatDateTime(timeStr)
 }
 
 // 获取差异总数

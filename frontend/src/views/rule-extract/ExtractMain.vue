@@ -458,7 +458,7 @@ const startExtraction = async () => {
     const formData = new FormData()
     formData.append('file', selectedFile.value)
     formData.append('templateId', selectedTemplateId.value)
-    formData.append('ocrProvider', 'mineru')
+    // OCR 引擎由后端配置控制，前端不传 ocrProvider 参数
     formData.append('ignoreHeaderFooter', String(extractSettings.value.ignoreHeaderFooter))
     formData.append('headerHeightPercent', String(extractSettings.value.headerHeightPercent))
     formData.append('footerHeightPercent', String(extractSettings.value.footerHeightPercent))

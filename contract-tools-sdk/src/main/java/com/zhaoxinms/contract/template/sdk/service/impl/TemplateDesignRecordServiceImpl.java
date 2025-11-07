@@ -5,6 +5,7 @@ import com.zhaoxinms.contract.template.sdk.mapper.TemplateDesignRecordMapper;
 import com.zhaoxinms.contract.template.sdk.service.TemplateDesignRecordService;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
+import com.zhaoxinms.contract.tools.common.util.SnowflakeIdGenerator;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Primary;
@@ -36,25 +37,47 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
 
     @Override
     public TemplateDesignRecord save(String id, String templateId, String fileId, String elementsJson) {
+        // 解析 ID（兼容 String 参数）
+        Long longId = null;
+        if (id != null && !id.trim().isEmpty()) {
+            try {
+                longId = Long.parseLong(id.trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("无效的ID格式: " + id);
+            }
+        }
+        
+        // 解析 fileId
+        Long longFileId = null;
+        if (fileId != null && !fileId.trim().isEmpty()) {
+            try {
+                longFileId = Long.parseLong(fileId.trim());
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("无效的文件ID格式: " + fileId);
+            }
+        }
+        
         // 唯一性校验：template_id 不可重复
         if (templateId != null && !templateId.isEmpty()) {
             TemplateDesignRecord exist = mapper.selectOne(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<TemplateDesignRecord>()
                     .eq("template_id", templateId)
                     .last("limit 1"));
-            if (exist != null && (id == null || id.isEmpty() || !exist.getId().equals(id))) {
+            if (exist != null && (longId == null || !exist.getId().equals(longId))) {
                 throw new IllegalArgumentException("模板ID已存在，请更换模板ID");
             }
         }
-        TemplateDesignRecord record = id == null || id.isEmpty() ? null : mapper.selectById(id);
+        
+        TemplateDesignRecord record = longId == null ? null : mapper.selectById(longId);
         if (record == null) {
             record = new TemplateDesignRecord();
-            record.setId(id == null || id.isEmpty() ? UUID.randomUUID().toString() : id);
+            // 使用雪花算法生成 ID
+            record.setId(SnowflakeIdGenerator.getInstance().nextId());
             record.setCreatedAt(LocalDateTime.now());
             record.setStatus("DRAFT"); // 默认草稿状态
         }
         record.setUpdatedAt(LocalDateTime.now());
         record.setTemplateId(templateId);
-        record.setFileId(fileId);
+        record.setFileId(longFileId);
         record.setElementsJson(elementsJson);
         if (mapper.selectById(record.getId()) == null) {
             mapper.insert(record);
@@ -66,8 +89,9 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
 
     @Override
     public TemplateDesignRecord saveTemplate(TemplateDesignRecord record) {
-        if (record.getId() == null || record.getId().isEmpty()) {
-            record.setId(UUID.randomUUID().toString());
+        if (record.getId() == null) {
+            // 使用雪花算法生成 ID
+            record.setId(SnowflakeIdGenerator.getInstance().nextId());
             record.setCreatedAt(LocalDateTime.now());
             if (record.getStatus() == null || record.getStatus().isEmpty()) {
                 record.setStatus("DRAFT");
@@ -115,14 +139,14 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
         }
         
         // 复制文件
-        String newFileId = null;
-        if (source.getFileId() != null && !source.getFileId().isEmpty() && fileInfoService != null) {
+        Long newFileId = null;
+        if (source.getFileId() != null && fileInfoService != null) {
             try {
-                FileInfo sourceFile = fileInfoService.getById(source.getFileId());
+                FileInfo sourceFile = fileInfoService.getById(String.valueOf(source.getFileId()));
                 if (sourceFile != null && sourceFile.getFilePath() != null) {
                     File srcFile = new File(sourceFile.getFilePath());
                     if (srcFile.exists()) {
-                        // 生成新文件路径
+                        // 生成新文件路径（文件名使用 UUID 避免冲突）
                         String newFileName = "v" + newVersion + "_" + sourceFile.getOriginalName();
                         File destFile = new File(srcFile.getParent(), UUID.randomUUID().toString() + "_" + newFileName);
                         
@@ -136,7 +160,7 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
                             destFile.getAbsolutePath(),
                             destFile.length()
                         );
-                        newFileId = String.valueOf(newFile.getId());
+                        newFileId = newFile.getId();
                     }
                 }
             } catch (IOException e) {
@@ -149,7 +173,8 @@ public class TemplateDesignRecordServiceImpl implements TemplateDesignRecordServ
         
         // 创建新版本记录（复制所有字段）
         TemplateDesignRecord newRecord = new TemplateDesignRecord();
-        newRecord.setId(UUID.randomUUID().toString());
+        // 使用雪花算法生成 ID
+        newRecord.setId(SnowflakeIdGenerator.getInstance().nextId());
         newRecord.setTemplateCode(source.getTemplateCode());
         newRecord.setTemplateName(source.getTemplateName());
         newRecord.setVersion(newVersion);

@@ -7,18 +7,7 @@
       :icon="Refresh"
       tag="AI辅助"
       tag-type="warning"
-    >
-      <template #actions>
-        <el-button 
-          type="default" 
-          size="large"
-          @click="goBack"
-        >
-          <el-icon><ArrowLeft /></el-icon>
-          返回
-        </el-button>
-      </template>
-    </PageHeader>
+    />
 
     <!-- 重要提示 -->
     <el-alert
@@ -65,7 +54,7 @@
         <template #title>
           <span class="alert-title">📄 第一步：上传您的合同文档</span>
         </template>
-        系统将使用先进的 MinerU OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
+        系统将使用先进的 OCR 技术自动识别文档内容，为 AI 分析做准备。<br/>
         💡 <strong>小提示：</strong>文档内容越完整，AI 生成的模板质量越高
       </el-alert>
       
@@ -351,7 +340,7 @@
   </div>
 </template>
 
-<script>
+<script lang="ts">
 // @ts-nocheck
 import { markRaw } from 'vue'
 import axios from 'axios'
@@ -561,10 +550,35 @@ export default {
 
     async copyPrompt() {
       try {
-        await navigator.clipboard.writeText(this.fullPrompt)
-        this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+        // 方法1: 优先使用现代 Clipboard API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(this.fullPrompt)
+          this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+          return
+        }
+        
+        // 方法2: 降级使用传统的 execCommand 方法
+        const textarea = document.createElement('textarea')
+        textarea.value = this.fullPrompt
+        textarea.style.position = 'fixed'
+        textarea.style.opacity = '0'
+        textarea.style.top = '0'
+        textarea.style.left = '0'
+        document.body.appendChild(textarea)
+        textarea.select()
+        textarea.setSelectionRange(0, this.fullPrompt.length)
+        
+        const successful = document.execCommand('copy')
+        document.body.removeChild(textarea)
+        
+        if (successful) {
+          this.$message.success('提示词已复制到剪贴板！请前往AI工具使用')
+        } else {
+          throw new Error('execCommand 复制失败')
+        }
       } catch (error) {
-        this.$message.error('复制失败，请手动复制')
+        console.error('复制失败:', error)
+        this.$message.warning('自动复制失败，请手动选择文本复制（Ctrl+C）')
       }
     },
 
@@ -653,10 +667,6 @@ export default {
       if (this.currentStep > 1) {
         this.currentStep--
       }
-    },
-
-    goBack() {
-      this.$router.push('/rule-extract/templates')
     }
   }
 }

@@ -173,5 +173,4 @@ MIT License
 
 如有问题，请联系肇新技术支持团队。
 - 📧 官方网站：[https://zhaoxinms.com](https://zhaoxinms.com)
-- ☎️ 技术支持：18306806281
 

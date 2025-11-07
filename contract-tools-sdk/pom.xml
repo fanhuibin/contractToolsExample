@@ -155,6 +155,11 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <!-- 指定主类 -->
+                    <mainClass>com.zhaoxinms.contract.template.sdk.SdkApplication</mainClass>
+                    <!-- 打包为可执行的 Fat JAR -->
+                    <layout>JAR</layout>
+                    <!-- 排除不需要打包的依赖 -->
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>
@@ -162,6 +167,14 @@
                         </exclude>
                     </excludes>
                 </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <!-- 在 package 阶段重新打包为可执行 JAR -->
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             
             <!-- 源码打包插件 -->

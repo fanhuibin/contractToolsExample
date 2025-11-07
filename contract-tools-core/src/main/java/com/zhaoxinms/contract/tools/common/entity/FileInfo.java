@@ -10,12 +10,13 @@ import java.time.LocalDateTime;
 public class FileInfo {
     
     /**
-     * 文件ID（数据库ID）
+     * 文件ID（数据库ID，雪花算法生成）
      */
     private Long id;
     
     /**
-     * 完整文件ID（带年月前缀，如：202410_123456）
+     * 完整文件ID（带年月前缀，如：202411_244043953257713664）
+     * 用于API传输和前端展示，避免JavaScript精度丢失
      */
     private String fileId;
     

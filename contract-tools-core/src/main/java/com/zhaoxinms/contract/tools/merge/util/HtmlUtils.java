@@ -199,7 +199,7 @@ public class HtmlUtils {
                 processHtmlElementToContentControl(sdtContentRun, parent, doc);
             }
         } catch (Exception e) {
-            System.err.println("HTML内容处理异常: " + e.getMessage());
+            System.err.println("[HTML处理异常] " + e.getMessage());
             // 如果HTML解析失败，则作为纯文本处理
             CTR run = sdtContentRun.addNewR();
             CTText text = run.addNewT();
@@ -240,60 +240,163 @@ public class HtmlUtils {
      * @param element HTML元素
      */
     private static void processHtmlTagToContentControl(CTSdtContentRun sdtContentRun, XWPFParagraph parent, Element element) {
+        processHtmlTagToContentControlWithStyle(sdtContentRun, parent, element, null);
+    }
+    
+    /**
+     * 处理具体的HTML标签到ContentControl（带样式继承）
+     * 
+     * @param sdtContentRun ContentControl运行对象
+     * @param parent 父段落对象
+     * @param element HTML元素
+     * @param inheritedStyle 继承的样式（来自父元素）
+     */
+    private static void processHtmlTagToContentControlWithStyle(CTSdtContentRun sdtContentRun, XWPFParagraph parent, 
+                                                                  Element element, CTRPr inheritedStyle) {
         String tagName = element.tagName().toLowerCase();
-        String text = element.text();
         
-        if (text.trim().isEmpty()) {
+        // 特殊标签处理
+        if ("br".equals(tagName)) {
+            CTR run = sdtContentRun.addNewR();
+            run.addNewBr();
             return;
         }
         
-        CTR run = sdtContentRun.addNewR();
-        CTText ctText = run.addNewT();
-        ctText.setStringValue(text);
+        // 创建当前元素的样式（基于继承样式）
+        CTRPr currentStyle = createMergedStyle(element, inheritedStyle);
         
-        // 根据HTML标签设置文本样式
-        CTRPr runProperties = run.addNewRPr();
+        // 递归处理子节点
+        for (Node child : element.childNodes()) {
+            if (child instanceof TextNode) {
+                // 处理文本节点
+                TextNode textNode = (TextNode) child;
+                String text = textNode.text();
+                if (!text.trim().isEmpty()) {
+                    CTR run = sdtContentRun.addNewR();
+                    CTText ctText = run.addNewT();
+                    ctText.setStringValue(text);
+                    
+                    // 应用合并后的样式
+                    if (currentStyle != null) {
+                        run.setRPr((CTRPr) currentStyle.copy());
+                    }
+                }
+            } else if (child instanceof Element) {
+                // 递归处理子元素，传递当前样式
+                Element childElement = (Element) child;
+                processHtmlTagToContentControlWithStyle(sdtContentRun, parent, childElement, currentStyle);
+            }
+        }
+    }
+    
+    /**
+     * 创建合并后的样式（当前元素样式 + 继承样式）
+     * 
+     * @param element HTML元素
+     * @param inheritedStyle 继承的样式
+     * @return 合并后的样式
+     */
+    private static CTRPr createMergedStyle(Element element, CTRPr inheritedStyle) {
+        CTRPr style = CTRPr.Factory.newInstance();
         
+        // 1. 先复制继承的样式
+        if (inheritedStyle != null) {
+            try {
+                style.set(inheritedStyle);
+            } catch (Exception e) {
+                // 忽略复制错误
+            }
+        }
+        
+        // 2. 应用当前元素的样式（会覆盖继承的样式）
+        applyElementStyleToRunProperties(style, element);
+        
+        return style;
+    }
+    
+    /**
+     * 将元素的样式应用到RunProperties
+     * 
+     * @param runProperties CTRPr对象
+     * @param element HTML元素
+     */
+    private static void applyElementStyleToRunProperties(CTRPr runProperties, Element element) {
+        String tagName = element.tagName().toLowerCase();
+        
+        // 标记是否已设置颜色
+        boolean colorSet = false;
+        
+        // 根据标签类型应用样式
         switch (tagName) {
             case "b":
             case "strong":
-                runProperties.addNewB().setVal(true);
+                if (runProperties.getBArray().length == 0) {
+                    runProperties.addNewB().setVal(true);
+                }
                 break;
             case "i":
             case "em":
-                runProperties.addNewI().setVal(true);
-                break;
-            case "u":
-                runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
-                break;
-            case "span":
-                // 处理span标签的style属性
-                String style = element.attr("style");
-                processInlineStyleToContentControl(runProperties, style);
-                break;
-            case "font":
-                // 支持 <font style="color: ..."> 与 <font color="...">
-                String fontStyle = element.attr("style");
-                processInlineStyleToContentControl(runProperties, fontStyle);
-                String fontColorAttr = element.attr("color");
-                if (fontColorAttr != null && !fontColorAttr.trim().isEmpty()) {
-                    String hex = toHexColor(fontColorAttr.trim());
-                    if (hex != null) {
-                        CTColor color = runProperties.addNewColor();
-                        color.setVal(hex);
-                    }
+                if (runProperties.getIArray().length == 0) {
+                    runProperties.addNewI().setVal(true);
                 }
                 break;
-            case "p":
-                // 段落标签处理 - 可能需要添加换行
+            case "u":
+                if (runProperties.getUArray().length == 0) {
+                    runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
+                }
                 break;
-            case "br":
-                // 换行标签 - 添加换行符
-                run.addNewBr();
+            case "s":
+            case "strike":
+            case "del":
+                // 删除线
+                if (runProperties.getStrikeArray().length == 0) {
+                    runProperties.addNewStrike().setVal(true);
+                }
                 break;
-            default:
-                // 其他标签作为普通文本处理
+            case "sup":
+                // 上标
+                if (runProperties.getVertAlignArray().length == 0) {
+                    runProperties.addNewVertAlign().setVal(org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STVerticalAlignRun.SUPERSCRIPT);
+                }
                 break;
+            case "sub":
+                // 下标
+                if (runProperties.getVertAlignArray().length == 0) {
+                    runProperties.addNewVertAlign().setVal(org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STVerticalAlignRun.SUBSCRIPT);
+                }
+                break;
+        }
+        
+        // 处理style属性（所有标签都支持style属性）
+        String style = element.attr("style");
+        if (style != null && !style.trim().isEmpty()) {
+            if (style.contains("color")) {
+                colorSet = true;
+            }
+            processInlineStyleToContentControl(runProperties, style);
+        }
+        
+        // 特殊处理font标签的color属性
+        if ("font".equals(tagName)) {
+            String fontColorAttr = element.attr("color");
+            if (fontColorAttr != null && !fontColorAttr.trim().isEmpty()) {
+                String hex = toHexColor(fontColorAttr.trim());
+                if (hex != null) {
+                    // 清除现有颜色
+                    if (runProperties.getColorList() != null && !runProperties.getColorList().isEmpty()) {
+                        runProperties.getColorList().clear();
+                    }
+                    CTColor color = runProperties.addNewColor();
+                    color.setVal(hex);
+                    colorSet = true;
+                }
+            }
+        }
+        
+        // 如果没有设置颜色，默认设置为黑色
+        if (!colorSet && runProperties.getColorList().isEmpty()) {
+            CTColor color = runProperties.addNewColor();
+            color.setVal("000000");
         }
     }
     
@@ -330,6 +433,8 @@ public class HtmlUtils {
                     case "text-decoration":
                         if ("underline".equals(value)) {
                             runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
+                        } else if ("line-through".equals(value)) {
+                            runProperties.addNewStrike().setVal(true);
                         }
                         break;
                     case "color":
@@ -340,7 +445,45 @@ public class HtmlUtils {
                         }
                         break;
                     case "font-size":
-                        // 可以根据需要处理字体大小
+                        // 处理字体大小
+                        try {
+                            // 提取数值和单位
+                            String sizeStr = value.trim();
+                            double fontSize = 0;
+                            String unit = "px"; // 默认单位
+                            
+                            // 尝试解析数值和单位
+                            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+)?)\\s*(px|pt|em|rem)?");
+                            java.util.regex.Matcher matcher = pattern.matcher(sizeStr);
+                            
+                            if (matcher.find()) {
+                                fontSize = Double.parseDouble(matcher.group(1));
+                                if (matcher.group(2) != null && !matcher.group(2).isEmpty()) {
+                                    unit = matcher.group(2).toLowerCase();
+                                }
+                                
+                                // 转换字体大小到Word单位（半磅）
+                                int wordFontSize;
+                                if ("px".equals(unit)) {
+                                    wordFontSize = (int) Math.round(fontSize * 0.75); // 1px ≈ 0.75pt
+                                } else if ("pt".equals(unit)) {
+                                    wordFontSize = (int) Math.round(fontSize);
+                                } else if ("em".equals(unit) || "rem".equals(unit)) {
+                                    wordFontSize = (int) Math.round(fontSize * 12); // 1em ≈ 12pt
+                                } else {
+                                    wordFontSize = (int) Math.round(fontSize);
+                                }
+                                
+                                // 确保字体大小在合理范围内 (1-1638 pt)
+                                wordFontSize = Math.max(1, Math.min(1638, wordFontSize));
+                                
+                                // Word使用半磅单位，所以需要乘以2
+                                runProperties.addNewSz().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
+                                runProperties.addNewSzCs().setVal(java.math.BigInteger.valueOf(wordFontSize * 2));
+                            }
+                        } catch (Exception e) {
+                            System.err.println("字体大小解析异常: " + e.getMessage());
+                        }
                         break;
                 }
             }

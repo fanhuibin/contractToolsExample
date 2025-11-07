@@ -82,7 +82,7 @@ public class RuleExtractService {
             task.setFileName(file.getOriginalFilename());
             task.setFilePath(filePath);
             task.setFileSize(file.getSize());
-            task.setOcrProvider(ocrProvider != null ? ocrProvider : "mineru");
+            task.setOcrProvider("");//不告诉别人使用什么OCR引擎
             task.setIgnoreHeaderFooter(ignoreHeaderFooter);
             task.setHeaderHeightPercent(headerHeightPercent);
             task.setFooterHeightPercent(footerHeightPercent);
@@ -1337,262 +1337,32 @@ public class RuleExtractService {
     }
     
     /**
-     * 查找content_list文件
-     * 尝试多个可能的路径
+     * 获取content_list文件路径
+     * 
+     * 文件结构说明：
+     * - UnifiedOCRService 调用 MinerUOCRService.recognizePdf 时传入 docMode = "extract"
+     * - MinerUOCRService 会将 content_list 保存到：{outputDir}/mineru_intermediate/extract/02_content_list.json
+     * 
+     * @param ocrOutputDir OCR输出目录（由 storage.getOcrOutputDir(taskId) 返回）
+     * @return content_list文件，如果不存在则返回 null
      */
     private File findContentListFile(File ocrOutputDir) {
         if (ocrOutputDir == null || !ocrOutputDir.exists()) {
+            log.warn("⚠️ OCR输出目录不存在: {}", ocrOutputDir);
             return null;
         }
         
-        // 可能的路径列表
-        String[] possiblePaths = {
-            "mineru_intermediate/extract/02_content_list.json",
-            "mineru_intermediate/old/extract/02_content_list.json",
-            "mineru_intermediate/new/extract/02_content_list.json",
-            "extract/02_content_list.json",
-            "02_content_list.json"
-        };
+        // 标准路径：mineru_intermediate/extract/02_content_list.json
+        // 其中 "extract" 是 docMode，表示用于智能文档提取（区别于比对时的 "old"/"new"）
+        File contentListFile = new File(ocrOutputDir, "mineru_intermediate/extract/02_content_list.json");
         
-        for (String path : possiblePaths) {
-            File file = new File(ocrOutputDir, path);
-            if (file.exists()) {
-                log.info("✅ 找到content_list文件: {}", file.getAbsolutePath());
-                return file;
-            }
+        if (contentListFile.exists()) {
+            log.info("✅ 找到content_list文件: {}", contentListFile.getAbsolutePath());
+            return contentListFile;
         }
         
-        log.warn("⚠️ 未找到content_list文件，尝试的路径: {}", 
-            String.join(", ", possiblePaths));
+        log.warn("⚠️ 未找到content_list文件，期望路径: {}", contentListFile.getAbsolutePath());
         return null;
-    }
-    
-    /**
-     * 更新metadata中TextBox的字符索引
-     * 当表格合并后，需要重新计算TextBox的startPos和endPos
-     * 
-     * 策略：建立旧文本到新文本的索引映射
-     * 
-     * @param metadata 原始metadata
-     * @param oldText 旧的OCR文本
-     * @param newText 新的OCR文本
-     * @return 更新后的metadata
-     */
-    private Map<String, Object> updateTextBoxIndices(Map<String, Object> metadata, String oldText, String newText) {
-        if (metadata == null) {
-            return new java.util.HashMap<>();
-        }
-        
-        Map<String, Object> updatedMetadata = new java.util.HashMap<>(metadata);
-        
-        try {
-            // 获取TextBox数据
-            String textBoxesJson = (String) metadata.get("textBoxes");
-            if (textBoxesJson == null || textBoxesJson.isEmpty()) {
-                log.warn("metadata中没有textBoxes数据");
-                return updatedMetadata;
-            }
-            
-            com.alibaba.fastjson2.JSONArray textBoxArray = JSON.parseArray(textBoxesJson);
-            if (textBoxArray == null || textBoxArray.isEmpty()) {
-                return updatedMetadata;
-            }
-            
-            log.info("开始更新 {} 个TextBox的字符索引", textBoxArray.size());
-            
-            // 建立旧索引到新索引的映射
-            int[] indexMapping = buildIndexMapping(oldText, newText);
-            int updatedCount = 0;
-            
-            // 为每个TextBox重新计算索引
-            for (int i = 0; i < textBoxArray.size(); i++) {
-                com.alibaba.fastjson2.JSONObject textBox = textBoxArray.getJSONObject(i);
-                Integer oldStartPos = textBox.getInteger("startPos");
-                Integer oldEndPos = textBox.getInteger("endPos");
-                
-                if (oldStartPos != null && oldEndPos != null && 
-                    oldStartPos >= 0 && oldStartPos < indexMapping.length) {
-                    
-                    int newStartPos = indexMapping[oldStartPos];
-                    // endPos需要特殊处理：找到旧endPos在新文本中的位置
-                    int newEndPos = (oldEndPos < indexMapping.length) ? indexMapping[oldEndPos] : newText.length();
-                    
-                    if (newStartPos >= 0 && newEndPos > newStartPos && newEndPos <= newText.length()) {
-                        textBox.put("startPos", newStartPos);
-                        textBox.put("endPos", newEndPos);
-                        updatedCount++;
-                        
-                        if (Math.abs(newStartPos - oldStartPos) > 10) {
-                            String text = textBox.getString("text");
-                            if (text != null && !text.isEmpty()) {
-                                log.debug("TextBox索引更新: [{}] {} -> {}", 
-                                    text.substring(0, Math.min(20, text.length())),
-                                    oldStartPos, newStartPos);
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // 更新metadata
-            updatedMetadata.put("textBoxes", textBoxArray.toJSONString());
-            log.info("✅ 成功更新 {}/{} 个TextBox的字符索引", updatedCount, textBoxArray.size());
-            
-        } catch (Exception e) {
-            log.error("更新TextBox索引失败: {}", e.getMessage(), e);
-        }
-        
-        return updatedMetadata;
-    }
-    
-    /**
-     * 建立旧文本到新文本的索引映射
-     * 
-     * @param oldText 旧文本
-     * @param newText 新文本
-     * @return 索引映射数组，indexMapping[oldPos] = newPos
-     */
-    private int[] buildIndexMapping(String oldText, String newText) {
-        int[] mapping = new int[oldText.length() + 1];
-        
-        int oldPos = 0;
-        int newPos = 0;
-        
-        // 逐字符对比，建立映射关系
-        while (oldPos < oldText.length() && newPos < newText.length()) {
-            mapping[oldPos] = newPos;
-            
-            char oldChar = oldText.charAt(oldPos);
-            char newChar = newText.charAt(newPos);
-            
-            if (oldChar == newChar) {
-                // 字符相同，都前进
-                oldPos++;
-                newPos++;
-            } else {
-                // 字符不同，说明有插入或删除
-                // 尝试在新文本中找到相同的字符序列
-                boolean found = false;
-                
-                // 向前查找一小段，看是否能对齐
-                int lookAhead = Math.min(50, oldText.length() - oldPos);
-                String oldSegment = oldText.substring(oldPos, oldPos + lookAhead);
-                
-                // 在新文本的当前位置附近查找
-                int searchEnd = Math.min(newPos + 200, newText.length());
-                int foundPos = newText.indexOf(oldSegment, newPos);
-                
-                if (foundPos >= 0 && foundPos < searchEnd) {
-                    // 找到了，填充中间的映射
-                    while (newPos < foundPos) {
-                        newPos++;
-                    }
-                    found = true;
-                }
-                
-                if (!found) {
-                    // 没找到，可能是删除，跳过旧文本的这个字符
-                    oldPos++;
-                }
-            }
-        }
-        
-        // 填充剩余的映射
-        while (oldPos < oldText.length()) {
-            mapping[oldPos] = newPos;
-            oldPos++;
-        }
-        mapping[oldText.length()] = newText.length();
-        
-        return mapping;
-    }
-    
-    /**
-     * 从合并后的content_list重新生成OCR文本
-     * 
-     * @param taskId 任务ID
-     * @param originalOcrResult 原始OCR结果（用于获取metadata）
-     * @return 重新生成的OCR文本
-     */
-    private String regenerateOcrTextFromContentList(String taskId, OCRProvider.OCRResult originalOcrResult) {
-        try {
-            log.info("🔄 开始从合并后的content_list重新生成OCR文本");
-            
-            File ocrOutputDir = storage.getOcrOutputDir(taskId);
-            File contentListFile = findContentListFile(ocrOutputDir);
-            
-            if (contentListFile == null || !contentListFile.exists()) {
-                log.warn("⚠️ 未找到content_list文件，使用原始OCR文本");
-                return originalOcrResult.getContent();
-            }
-            
-            // 读取合并后的content_list
-            String contentListJson = FileUtil.readUtf8String(contentListFile);
-            JSONArray contentList = JSON.parseArray(contentListJson);
-            
-            if (contentList == null || contentList.isEmpty()) {
-                log.warn("⚠️ content_list为空，使用原始OCR文本");
-                return originalOcrResult.getContent();
-            }
-            
-            // 重新生成文本：遍历content_list，提取text和table_body
-            StringBuilder newText = new StringBuilder();
-            for (int i = 0; i < contentList.size(); i++) {
-                JSONObject item = contentList.getJSONObject(i);
-                String type = item.getString("type");
-                
-                if ("text".equals(type) || "title".equals(type)) {
-                    String text = item.getString("text");
-                    if (text != null && !text.trim().isEmpty()) {
-                        newText.append(text).append("\n");
-                    }
-                } else if ("table".equals(type)) {
-                    String tableBody = item.getString("table_body");
-                    if (tableBody != null && !tableBody.trim().isEmpty()) {
-                        newText.append(tableBody).append("\n");
-                    }
-                    // 添加table_caption
-                    JSONArray captions = item.getJSONArray("table_caption");
-                    if (captions != null) {
-                        for (int j = 0; j < captions.size(); j++) {
-                            newText.append(captions.getString(j)).append("\n");
-                        }
-                    }
-                    // 添加table_footnote
-                    JSONArray footnotes = item.getJSONArray("table_footnote");
-                    if (footnotes != null) {
-                        for (int j = 0; j < footnotes.size(); j++) {
-                            newText.append(footnotes.getString(j)).append("\n");
-                        }
-                    }
-                } else if ("list".equals(type)) {
-                    // 处理list类型，字段名可能是list_items或list
-                    JSONArray listItems = item.getJSONArray("list_items");
-                    if (listItems == null) {
-                        listItems = item.getJSONArray("list");
-                    }
-                    if (listItems != null) {
-                        for (int j = 0; j < listItems.size(); j++) {
-                            newText.append(listItems.getString(j)).append("\n");
-                        }
-                    }
-                }
-            }
-            
-            String regeneratedText = newText.toString();
-            int originalLength = originalOcrResult.getContent().length();
-            int newLength = regeneratedText.length();
-            int diff = newLength - originalLength;
-            
-            log.info("✅ 成功重新生成OCR文本，长度: {} (原始: {}), 差异: {}{}", 
-                newLength, originalLength, diff > 0 ? "+" : "", diff);
-            
-            return regeneratedText;
-            
-        } catch (Exception e) {
-            log.error("❌ 重新生成OCR文本失败，使用原始文本", e);
-            return originalOcrResult.getContent();
-        }
     }
     
     // 栏位验证功能已移除

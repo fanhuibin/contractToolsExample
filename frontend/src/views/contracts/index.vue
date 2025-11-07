@@ -66,7 +66,11 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="createTime" label="创建时间" width="180" />
+        <el-table-column prop="createTime" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDateTime(row.createTime) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="handleEdit(row)">
@@ -181,6 +185,7 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Search, Refresh, Plus, Connection, Document } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
+import { formatDateTime } from '@/utils/dateFormat'
 import {
   getContractPage,
   createContract,
@@ -307,7 +312,7 @@ const handleExtract = () => {
 const handleTest = async () => {
   try {
     const res = await testContract()
-    ElMessage.success(res.message)
+    ElMessage.success(res.data.message)
   } catch (error) {
     console.error('测试失败:', error)
   }

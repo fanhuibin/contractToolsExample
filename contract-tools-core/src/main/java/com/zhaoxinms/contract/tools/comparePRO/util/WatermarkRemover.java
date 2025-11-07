@@ -1,53 +1,21 @@
 package com.zhaoxinms.contract.tools.comparePRO.util;
 
-import org.opencv.core.*;
-import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgproc.Imgproc;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.io.File;
 
 /**
  * 去水印工具类
- * 使用OpenCV去除图片中的水印
+ * 使用 Java 原生图像处理去除图片中的水印
  */
 @Component
 public class WatermarkRemover {
 
     private static final Logger logger = LoggerFactory.getLogger(WatermarkRemover.class);
-
-    // 默认水印颜色范围（BGR色彩空间）- 对应原算法的[160,160,160]到[255,255,255]
-    private static final Scalar DEFAULT_LOWER_BGR = new Scalar(160, 160, 160);
-    private static final Scalar DEFAULT_UPPER_BGR = new Scalar(255, 255, 255);
-    
-    // 扩展颜色范围 - 适用于更多水印类型
-    private static final Scalar EXTENDED_LOWER_BGR = new Scalar(120, 120, 120);
-    private static final Scalar EXTENDED_UPPER_BGR = new Scalar(255, 255, 255);
-    
-    // 宽松颜色范围 - 适用于深色半透明水印
-    private static final Scalar LOOSE_LOWER_BGR = new Scalar(80, 80, 80);
-    private static final Scalar LOOSE_UPPER_BGR = new Scalar(255, 255, 255);
-    
-    // 高斯模糊核大小
-    private static final Size GAUSSIAN_KERNEL_SIZE = new Size(1, 1);
-    private static final double GAUSSIAN_SIGMA = 0;
-    
-    // 替换颜色（白色）
-    private static final Scalar REPLACEMENT_COLOR = new Scalar(255, 255, 255);
-
-    /**
-     * 加载OpenCV库
-     */
-    static {
-        try {
-            nu.pattern.OpenCV.loadLocally();
-            logger.info("OpenCV库加载成功");
-        } catch (Exception e) {
-            logger.error("OpenCV库加载失败", e);
-        }
-    }
 
     /**
      * 去除图片水印（使用默认参数）
@@ -56,7 +24,7 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermark(String imagePath) {
-        return removeWatermark(imagePath, DEFAULT_LOWER_BGR, DEFAULT_UPPER_BGR);
+        return removeWatermark(imagePath, 160, 160, 160, 255, 255, 255);
     }
 
     /**
@@ -66,7 +34,7 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermarkExtended(String imagePath) {
-        return removeWatermark(imagePath, EXTENDED_LOWER_BGR, EXTENDED_UPPER_BGR);
+        return removeWatermark(imagePath, 120, 120, 120, 255, 255, 255);
     }
 
     /**
@@ -76,7 +44,7 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermarkLoose(String imagePath) {
-        return removeWatermark(imagePath, LOOSE_LOWER_BGR, LOOSE_UPPER_BGR);
+        return removeWatermark(imagePath, 80, 80, 80, 255, 255, 255);
     }
 
     /**
@@ -86,19 +54,18 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermarkSmart(String imagePath) {
-        
         // 先尝试默认范围
-        if (removeWatermark(imagePath, DEFAULT_LOWER_BGR, DEFAULT_UPPER_BGR)) {
+        if (removeWatermark(imagePath, 160, 160, 160, 255, 255, 255)) {
             return true;
         }
         
         // 如果默认范围效果不好，尝试扩展范围
-        if (removeWatermark(imagePath, EXTENDED_LOWER_BGR, EXTENDED_UPPER_BGR)) {
+        if (removeWatermark(imagePath, 120, 120, 120, 255, 255, 255)) {
             return true;
         }
         
         // 最后尝试宽松范围
-        if (removeWatermark(imagePath, LOOSE_LOWER_BGR, LOOSE_UPPER_BGR)) {
+        if (removeWatermark(imagePath, 80, 80, 80, 255, 255, 255)) {
             return true;
         }
         
@@ -109,11 +76,16 @@ public class WatermarkRemover {
      * 去除图片水印
      * 
      * @param imagePath 图片路径
-     * @param lowerBgr 水印颜色下限（BGR）
-     * @param upperBgr 水印颜色上限（BGR）
+     * @param lowerR 水印颜色下限 R
+     * @param lowerG 水印颜色下限 G
+     * @param lowerB 水印颜色下限 B
+     * @param upperR 水印颜色上限 R
+     * @param upperG 水印颜色上限 G
+     * @param upperB 水印颜色上限 B
      * @return 是否成功
      */
-    public boolean removeWatermark(String imagePath, Scalar lowerBgr, Scalar upperBgr) {
+    public boolean removeWatermark(String imagePath, int lowerR, int lowerG, int lowerB,
+                                   int upperR, int upperG, int upperB) {
         try {
             File imageFile = new File(imagePath);
             if (!imageFile.exists()) {
@@ -124,30 +96,58 @@ public class WatermarkRemover {
             logger.debug("开始处理图片去水印: {}", imagePath);
 
             // 读取图片
-            Mat img = Imgcodecs.imread(imagePath);
-            if (img.empty()) {
+            BufferedImage img = ImageIO.read(imageFile);
+            if (img == null) {
                 logger.error("无法读取图片: {}", imagePath);
                 return false;
             }
+
+            int width = img.getWidth();
+            int height = img.getHeight();
+
+            // 创建新图像用于处理
+            BufferedImage processedImg = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
             
-            // 创建掩码
-            Mat mask = new Mat();
-            Core.inRange(img, lowerBgr, upperBgr, mask);
+            // 逐像素处理
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int rgb = img.getRGB(x, y);
+                    
+                    // 提取 RGB 分量
+                    int r = (rgb >> 16) & 0xFF;
+                    int g = (rgb >> 8) & 0xFF;
+                    int b = rgb & 0xFF;
+                    
+                    // 检测是否在水印颜色范围内
+                    if (r >= lowerR && r <= upperR &&
+                        g >= lowerG && g <= upperG &&
+                        b >= lowerB && b <= upperB) {
+                        // 替换为白色
+                        processedImg.setRGB(x, y, 0xFFFFFF);
+                    } else {
+                        // 保持原色
+                        processedImg.setRGB(x, y, rgb);
+                    }
+                }
+            }
 
-            // 高斯模糊处理掩码
-            Mat blurredMask = new Mat();
-            Imgproc.GaussianBlur(mask, blurredMask, GAUSSIAN_KERNEL_SIZE, GAUSSIAN_SIGMA);
+            // 应用简单的模糊处理（可选，模拟高斯模糊效果）
+            // 这里使用简单的平均模糊来柔化边缘
+            BufferedImage blurredImg = applySimpleBlur(processedImg);
 
-            // 将掩码区域替换为白色
-            img.setTo(REPLACEMENT_COLOR, blurredMask);
+            // 确定输出格式
+            String fileExtension = getFileExtension(imagePath);
+            String formatName = "png";
+            if (fileExtension != null) {
+                if (fileExtension.equalsIgnoreCase("jpg") || fileExtension.equalsIgnoreCase("jpeg")) {
+                    formatName = "jpg";
+                } else if (fileExtension.equalsIgnoreCase("bmp")) {
+                    formatName = "bmp";
+                }
+            }
 
             // 保存处理后的图片
-            boolean success = Imgcodecs.imwrite(imagePath, img);
-
-            // 释放内存
-            img.release();
-            mask.release();
-            blurredMask.release();
+            boolean success = ImageIO.write(blurredImg, formatName, imageFile);
 
             if (success) {
                 logger.debug("图片去水印完成: {}", imagePath);
@@ -161,6 +161,68 @@ public class WatermarkRemover {
             logger.error("图片去水印处理失败: {}", imagePath, e);
             return false;
         }
+    }
+
+    /**
+     * 应用简单的模糊处理
+     * 
+     * @param img 原始图像
+     * @return 模糊后的图像
+     */
+    private BufferedImage applySimpleBlur(BufferedImage img) {
+        int width = img.getWidth();
+        int height = img.getHeight();
+        BufferedImage blurred = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        
+        // 简单的 3x3 平均模糊
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                int sumR = 0, sumG = 0, sumB = 0;
+                int count = 0;
+                
+                // 遍历 3x3 邻域
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        int nx = x + dx;
+                        int ny = y + dy;
+                        
+                        // 边界检查
+                        if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                            int rgb = img.getRGB(nx, ny);
+                            sumR += (rgb >> 16) & 0xFF;
+                            sumG += (rgb >> 8) & 0xFF;
+                            sumB += rgb & 0xFF;
+                            count++;
+                        }
+                    }
+                }
+                
+                // 计算平均值
+                int avgR = sumR / count;
+                int avgG = sumG / count;
+                int avgB = sumB / count;
+                
+                // 设置像素值
+                int newRgb = (avgR << 16) | (avgG << 8) | avgB;
+                blurred.setRGB(x, y, newRgb);
+            }
+        }
+        
+        return blurred;
+    }
+
+    /**
+     * 获取文件扩展名
+     * 
+     * @param filePath 文件路径
+     * @return 扩展名
+     */
+    private String getFileExtension(String filePath) {
+        int lastDot = filePath.lastIndexOf('.');
+        if (lastDot > 0 && lastDot < filePath.length() - 1) {
+            return filePath.substring(lastDot + 1);
+        }
+        return null;
     }
 
     /**
@@ -229,9 +291,9 @@ public class WatermarkRemover {
      * @return 是否成功
      */
     public boolean removeWatermarkWithConfig(String imagePath, WatermarkConfig config) {
-        Scalar lowerBgr = new Scalar(config.getLowerB(), config.getLowerG(), config.getLowerR());
-        Scalar upperBgr = new Scalar(config.getUpperB(), config.getUpperG(), config.getUpperR());
-        return removeWatermark(imagePath, lowerBgr, upperBgr);
+        return removeWatermark(imagePath, 
+            config.getLowerR(), config.getLowerG(), config.getLowerB(),
+            config.getUpperR(), config.getUpperG(), config.getUpperB());
     }
 
     /**

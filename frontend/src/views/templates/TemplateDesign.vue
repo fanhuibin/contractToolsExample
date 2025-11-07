@@ -10,6 +10,7 @@
         size="small" 
         @click="handleSave"
         :loading="saving"
+        :disabled="isDemoMode"
       >
         <el-icon style="margin-right: 4px;"><DocumentChecked /></el-icon>
         保存模板
@@ -34,7 +35,7 @@
         <OnlyOfficeEditor
           ref="editorRef"
           :file-id="fileId"
-          :can-edit="true"
+          :can-edit="!isDemoMode"
           :can-review="false"
           :height="'100%'"
           :show-toolbar="false"
@@ -93,6 +94,7 @@ import InsertedElementsPanel from '@/components/template-design/InsertedElements
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
 import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignDetail, getTemplateDesignByTemplateId } from '@/api/templateDesign'
 import { forceSaveFile } from '@/api/file'
+import { getSystemConfig } from '@/api/system'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,6 +120,7 @@ const elementsKeyword = ref('')
 const elements = ref<Array<{ key: string; tag: string; type: string; name: string; customName?: string; meta?: any }>>([])
 const editorRef = ref<any>(null)
 const saving = ref(false)
+const isDemoMode = ref(false)
 
 function goBack() {
   router.push(returnUrl.value)
@@ -125,6 +128,12 @@ function goBack() {
 
 // 保存模板（调用强制保存API）
 async function handleSave() {
+  // 演示模式检查
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许保存模板')
+    return
+  }
+  
   if (!fileId.value) {
     ElMessage.warning('缺少文件ID，无法保存')
     return
@@ -208,6 +217,19 @@ onMounted(async () => {
     ElMessage.error('缺少模板ID或记录ID')
     return
   }
+  
+  // 加载系统配置（演示模式）
+  try {
+    const configRes = await getSystemConfig() as any
+    // 注意：axios 响应结构是 response.data.data
+    isDemoMode.value = configRes?.data?.data?.demoMode || false
+    if (isDemoMode.value) {
+      ElMessage.info('当前为演示模式，文档将以只读方式打开')
+    }
+  } catch (e) {
+    console.error('获取系统配置失败', e)
+  }
+  
   await loadFields()
   await loadDesignByTemplateId()
 })

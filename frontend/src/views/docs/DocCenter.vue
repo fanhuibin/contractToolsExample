@@ -68,6 +68,17 @@
           </el-menu-item>
         </el-sub-menu>
         
+        <el-sub-menu index="deploy">
+          <template #title>
+            <el-icon><Setting /></el-icon>
+            <span>部署运维</span>
+          </template>
+          <el-menu-item index="deploy-ssl">
+            <el-icon><Lock /></el-icon>
+            <span>SSL证书部署</span>
+          </el-menu-item>
+        </el-sub-menu>
+        
         <el-sub-menu index="other">
           <template #title>
             <el-icon><Files /></el-icon>
@@ -75,7 +86,7 @@
           </template>
           <el-menu-item index="postman">
             <el-icon><Download /></el-icon>
-            <span>Postman 使用指南</span>
+            <span>API Collection 使用指南</span>
           </el-menu-item>
         </el-sub-menu>
       </el-menu>
@@ -126,7 +137,10 @@ import {
   Download,
   CopyDocument,
   EditPen,
-  HomeFilled
+  HomeFilled,
+  Setting,
+  Monitor,
+  Lock
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 
@@ -140,7 +154,8 @@ const docMap: Record<string, { title: string; path: string }> = {
   'api-compose-api': { title: '智能合同合成API', path: '/docs/api/智能合同合成-API版本-API文档.md' },
   'api-compose-features': { title: '文档合成功能支持', path: '/docs/api/文档合成功能支持说明.md' },
   'api-design': { title: 'API设计规范', path: '/docs/api/API设计文档.md' },
-  'postman': { title: 'Postman Collection 使用指南', path: '/docs/api/Postman-Collection使用指南.md' }
+  'deploy-ssl': { title: 'SSL证书部署步骤', path: '/docs/api/SSL证书部署步骤.md' },
+  'postman': { title: 'API Collection 使用指南', path: '/docs/api/Postman-Collection使用指南.md' }
 }
 
 const route = useRoute()

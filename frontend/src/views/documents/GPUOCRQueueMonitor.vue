@@ -246,15 +246,15 @@ const refreshStats = async () => {
   try {
     // 获取详细统计
     const statsResponse = await getQueueStats()
-    if (statsResponse.success) {
-      Object.assign(queueStats, statsResponse.data)
+    if (statsResponse.data.code === 200) {
+      Object.assign(queueStats, statsResponse.data.data)
       newMaxThreads.value = queueStats.maxThreads
     }
     
     // 获取繁忙状态
     const busyResponse = await checkQueueBusy()
-    if (busyResponse.success) {
-      queueStats.isBusy = busyResponse.data.isBusy
+    if (busyResponse.data.code === 200) {
+      queueStats.isBusy = busyResponse.data.data.isBusy
     }
     
   } catch (error) {
@@ -273,11 +273,11 @@ const adjustConcurrency = async () => {
   adjusting.value = true
   try {
     const response = await adjustMaxConcurrency(newMaxThreads.value)
-    if (response.success) {
-      ElMessage.success(response.message)
+    if (response.data.code === 200) {
+      ElMessage.success(response.data.message)
       await refreshStats()
     } else {
-      ElMessage.error(response.message)
+      ElMessage.error(response.data.message)
     }
   } catch (error) {
     console.error('调整并发线程数失败:', error)

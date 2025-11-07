@@ -82,9 +82,14 @@ if not exist "%SDK_JAR%" (
 echo [成功] Maven 打包文件检查完成
 echo.
 
-REM 清理旧的输出目录
+REM 清理旧的输出目录（保留 runner 相关文件）
 echo [步骤 4/9] 清理旧的输出目录...
 if exist "output" (
+    REM 备份 runner 相关文件
+    if exist "output\runner-1.0.0.jar" move /Y "output\runner-1.0.0.jar" "runner-1.0.0.jar.bak" >nul 2>&1
+    if exist "output\runner.go" move /Y "output\runner.go" "runner.go.bak" >nul 2>&1
+    
+    REM 清理目录
     rd /s /q output
     echo [成功] 已清理旧的输出目录
 ) else (
@@ -95,7 +100,18 @@ REM 创建输出目录
 mkdir output
 mkdir output\BOOT-INF
 mkdir output\BOOT-INF\lib
-echo [成功] 输出目录创建完成
+
+REM 恢复 runner 相关文件
+if exist "runner-1.0.0.jar.bak" (
+    move /Y "runner-1.0.0.jar.bak" "output\runner-1.0.0.jar" >nul 2>&1
+    echo [成功] 已恢复 runner-1.0.0.jar
+)
+if exist "runner.go.bak" (
+    move /Y "runner.go.bak" "output\runner.go" >nul 2>&1
+    echo [成功] 已恢复 runner.go
+)
+
+echo [成功] 输出目录准备完成
 echo.
 
 REM 执行 Allatori 代码混淆
@@ -137,8 +153,11 @@ REM 执行 JAR 加密（第二层保护）
 echo.
 echo [步骤 7/9] 开始执行 JAR 加密...
 echo [提示] 使用 runner 工具对混淆后的 JAR 进行加密保护...
+echo [提示] 加密工具会自动更新 runner.go 中的 MD5/SHA1 值
+echo.
+
 cd output
-java -jar ..\runner-1.0.0.jar contract-tools-sdk-obfuscated.jar contract-tools-sdk-encrypted.jar zhaoxinmsPsd
+call java -jar runner-1.0.0.jar contract-tools-sdk-obfuscated.jar contract-tools-sdk-encrypted.jar zhaoxinmsPsd
 
 if %ERRORLEVEL% NEQ 0 (
     echo [错误] JAR 加密失败！
@@ -147,22 +166,24 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-cd ..
+echo.
 echo [成功] JAR 加密完成
+echo [提示] runner.go 已自动更新 MD5/SHA1 值
 echo.
 
 REM 编译 Go 启动器（Linux 版本）
 echo.
 echo [步骤 8/9] 编译 Go 启动器 - Linux...
+echo [提示] 使用更新后的 runner.go 编译启动器
 set GOOS=linux
 set GOARCH=amd64
-go build -o output/runner-linux runner.go
+call go build runner.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [警告] Linux 启动器编译失败，请确保已安装 Go 环境
     echo [提示] 如不需要 Linux 版本可忽略此警告
 ) else (
-    echo [成功] Linux 启动器编译完成
+    echo [成功] Linux 启动器编译完成 - runner-linux
 )
 echo.
 
@@ -171,42 +192,32 @@ echo.
 echo [步骤 9/9] 编译 Go 启动器 - Windows...
 set GOOS=windows
 set GOARCH=amd64
-go build -o output/runner.exe runner.go
+call go build runner.go
 
 if %ERRORLEVEL% NEQ 0 (
     echo [警告] Windows 启动器编译失败，请确保已安装 Go 环境
     echo [提示] 如不需要 Windows 版本可忽略此警告
 ) else (
-    echo [成功] Windows 启动器编译完成
+    echo [成功] Windows 启动器编译完成 - runner.exe
 )
+
+cd ..
 echo.
 
 REM 显示输出文件信息
+echo.
 echo ========================================
-echo 打包完成！双重保护已启用
+echo 打包完成
 echo ========================================
 echo.
-echo 生成的文件：
-echo   [第一层] 混淆版: output\contract-tools-sdk-obfuscated.jar
-echo   [第二层] 加密版: output\contract-tools-sdk-encrypted.jar
-echo   [启动器] Linux:   output\runner-linux
-echo   [启动器] Windows: output\runner.exe
+echo 输出目录: output
 echo.
-echo 混淆日志：
-echo   日志文件: output\allatori-obfuscation-log.xml
+echo 混淆版JAR: contract-tools-sdk-obfuscated.jar
+echo 加密版JAR: contract-tools-sdk-encrypted.jar
+echo Windows启动器: runner.exe
+echo Linux启动器: runner
 echo.
-echo 部署说明：
-echo   方式一（推荐 - 双重保护）：
-echo     1. 将 contract-tools-sdk-encrypted.jar 上传到服务器
-echo     2. 将对应的 runner 启动器上传（Linux用runner-linux，Windows用runner.exe）
-echo     3. 复制配置文件（application.yml、license.lic 等）
-echo     4. Linux启动: ./runner-linux java -jar contract-tools-sdk-encrypted.jar
-echo        Windows启动: runner.exe java -jar contract-tools-sdk-encrypted.jar
-echo.
-echo   方式二（仅混淆保护）：
-echo     1. 将 contract-tools-sdk-obfuscated.jar 上传到服务器
-echo     2. 复制配置文件（application.yml、license.lic 等）
-echo     3. 启动命令: java -jar contract-tools-sdk-obfuscated.jar
+echo 混淆日志: output\allatori-obfuscation-log.xml
 echo.
 echo ========================================
 

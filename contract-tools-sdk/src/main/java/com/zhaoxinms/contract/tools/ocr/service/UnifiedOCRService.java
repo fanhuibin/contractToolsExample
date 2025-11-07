@@ -94,7 +94,7 @@ public class UnifiedOCRService implements OCRProvider {
             pdfFile.getName(), taskId, taskOutputDir.getAbsolutePath(), ignoreHeaderFooter);
         
         if (mineruOcrService == null) {
-            throw new RuntimeException("MinerU OCR 服务未启用，请检查配置");
+            throw new RuntimeException("OCR 服务未启用，请检查配置");
         }
         
         try {
@@ -283,12 +283,12 @@ public class UnifiedOCRService implements OCRProvider {
             
         } catch (Exception e) {
             log.error("MinerU OCR识别失败，文件: {}", pdfFile.getName(), e);
-            throw new RuntimeException("MinerU OCR识别失败: " + e.getMessage(), e);
+            throw new RuntimeException("OCR识别失败: " + e.getMessage(), e);
         }
     }
     
     public String getProviderName() {
-        return "mineru";
+        return "OCR";  // 不暴露具体的OCR引擎名称
     }
     
     public boolean isAvailable() {
@@ -320,7 +320,7 @@ public class UnifiedOCRService implements OCRProvider {
             pdfFile.getAbsolutePath(), taskId, ignoreHeaderFooter);
         
         if (mineruOcrService == null) {
-            throw new IllegalStateException("MinerU OCR 服务未启用，请检查配置");
+            throw new IllegalStateException("OCR 服务未启用，请检查配置");
         }
         
         try {
@@ -404,7 +404,7 @@ public class UnifiedOCRService implements OCRProvider {
             
         } catch (Exception e) {
             log.error("MinerU 增强OCR识别失败: {}", pdfFile.getName(), e);
-            throw new RuntimeException("MinerU 增强OCR识别失败: " + e.getMessage(), e);
+            throw new RuntimeException("OCR识别失败: " + e.getMessage(), e);
         }
     }
 }

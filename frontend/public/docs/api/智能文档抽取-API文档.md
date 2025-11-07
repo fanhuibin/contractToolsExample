@@ -249,10 +249,9 @@ Content-Type: multipart/form-data
 |--------|------|------|--------|------|
 | `file` | file | ✅ | - | PDF文档文件 |
 | `templateId` | string | ✅ | - | 抽取模板ID |
-| `ocrProvider` | string | ❌ | gpu | OCR提供商（gpu/cloud） |
 | `ignoreHeaderFooter` | boolean | ❌ | true | 是否忽略页眉页脚 |
-| `headerHeightPercent` | number | ❌ | 12.0 | 页眉高度百分比 |
-| `footerHeightPercent` | number | ❌ | 12.0 | 页脚高度百分比 |
+| `headerHeightPercent` | number | ❌ | 6.0 | 页眉高度百分比 |
+| `footerHeightPercent` | number | ❌ | 6.0 | 页脚高度百分比 |
 
 **支持的文件格式**:
 - PDF格式: `.pdf`
@@ -282,8 +281,8 @@ MultipartEntityBuilder builder = MultipartEntityBuilder.create();
 builder.addBinaryBody("file", new File("contract.pdf"));
 builder.addTextBody("templateId", "contract-template-001");
 builder.addTextBody("ignoreHeaderFooter", "true");
-builder.addTextBody("headerHeightPercent", "12.0");
-builder.addTextBody("footerHeightPercent", "12.0");
+builder.addTextBody("headerHeightPercent", "6.0");
+builder.addTextBody("footerHeightPercent", "6.0");
 HttpEntity multipart = builder.build();
 
 uploadFile.setEntity(multipart);
@@ -301,8 +300,8 @@ files = {'file': open('contract.pdf', 'rb')}
 data = {
     'templateId': 'contract-template-001',
     'ignoreHeaderFooter': 'true',
-    'headerHeightPercent': '12.0',
-    'footerHeightPercent': '12.0'
+    'headerHeightPercent': '6.0',
+    'footerHeightPercent': '6.0'
 }
 
 response = requests.post(url, files=files, data=data)
@@ -323,8 +322,8 @@ $post_data = array(
     'file' => $file,
     'templateId' => 'contract-template-001',
     'ignoreHeaderFooter' => 'true',
-    'headerHeightPercent' => '12.0',
-    'footerHeightPercent' => '12.0'
+    'headerHeightPercent' => '6.0',
+    'footerHeightPercent' => '6.0'
 );
 
 curl_setopt_array($curl, array(
@@ -1276,11 +1275,7 @@ try {
 
 - 📧 官方网站：[https://zhaoxinms.com](https://zhaoxinms.com)
 - 📦 产品价格：[https://zhaoxinms.com/price](https://zhaoxinms.com/price)
-- ☎️ 技术支持：18306806281
 
 ---
 
-**文档版本**: 1.0  
-**最后更新**: 2025-01-18  
-**维护者**: 山西肇新科技有限公司
 

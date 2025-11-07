@@ -1,0 +1,163 @@
+server:
+  port: 8080
+  tomcat:
+    uri-encoding: UTF-8
+
+spring:
+  application:
+    name: contract-template-sdk
+  mvc:
+    pathmatch:
+      matching-strategy: ant_path_matcher
+  config:
+    import:
+      - classpath:application-compare-progress.yml
+  servlet:
+    multipart:
+      max-file-size: 200MB
+      max-request-size: 200MB
+      enabled: true
+
+  # 数据库配置（固定数据源）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://172.30.0.36:3306/contract_tools?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&autoReconnect=true&rewriteBatchedStatements=true&nullCatalogMeansCurrent=true
+    username: root
+    password: mypassFan
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 50
+      max-wait: 60000
+      # 连接回收和验证配置
+      time-between-eviction-runs-millis: 60000  # 每60秒运行一次回收器
+      min-evictable-idle-time-millis: 300000    # 连接空闲5分钟后可被回收
+      max-evictable-idle-time-millis: 600000    # 连接空闲10分钟后强制回收（减少到10分钟）
+      # 连接验证配置
+      validation-query: SELECT 1
+      test-while-idle: true      # 空闲时测试连接是否有效
+      test-on-borrow: false      # 获取连接时不测试（提高性能）
+      test-on-return: false      # 归还连接时不测试
+      # 保持连接活跃
+      keep-alive: true
+      keep-alive-between-time-millis: 120000  # 每2分钟发送保活信号
+      # 物理连接超时设置（避免长时间未使用的连接）
+      phy-timeout-millis: 600000              # 物理连接10分钟超时
+      # 移除废弃连接的日志记录（减少日志噪音）
+      remove-abandoned: false
+      # 过滤器配置
+      filters: stat
+      # 监控页面配置
+      web-stat-filter:
+        enabled: true
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: admin
+        login-password: admin
+
+# 日志配置
+logging:
+  level:
+    # 授权模块日志（启动时必须显示授权信息）
+    com.zhaoxinms.contract.tools.auth.listener: INFO
+    com.zhaoxinms.contract.tools.auth: ERROR
+    # 合同工具核心模块日志 - 改为 INFO 以显示保存回调等重要日志
+    com.zhaoxinms.contract: INFO
+    # OnlyOffice 回调日志 - 显示保存相关的详细日志
+    com.zhaoxinms.contract.tools.onlyoffice.callbacks: INFO
+    # 关闭 Druid 连接池的警告日志（discard long time none received connection）
+    com.alibaba.druid.pool.DruidAbstractDataSource: ERROR
+    com.alibaba.druid: WARN
+    # 根日志级别
+    root: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/contract-tools-sdk.log
+    max-size: 100MB
+    max-history: 30 
+
+# 肇新合同工具集配置
+zxcm:
+  # 演示模式配置（全局设置）
+  demo-mode:
+    enabled: false  # 是否启用演示模式
+    max-file-size-mb: 20  # 演示模式下最大文件大小（MB）
+    max-pages: 20  # 演示模式下最大页数
+  
+  # 应用配置
+  application:
+    # 应用基础URL（OnlyOffice服务会从这个URL下载文件）
+    base-url: http://192.168.0.100:80
+  
+  # OnlyOffice配置
+  onlyoffice:
+    domain: http://192.168.0.100
+    port: 8082
+    secret: zxcm
+    plugins:
+      - http://192.168.0.100:8082/plugin/html/config.json
+      - http://192.168.0.100:8082/plugin/comment/config.json
+    logo:
+      logo: ""
+      logoEmbedded: ""
+      logoUrl: ""
+    permissions:
+      view:
+        print: true
+      edit:
+        print: true
+        download: true
+        comment: true
+        chat: true
+        review: true
+        fillForms: true
+        modifyContentControl: true
+        modifyFilter: true
+  # 文件上传配置
+  file-upload:
+    root-path: /zxcm/server/uploadPath
+  
+  
+  # 比对功能配置
+  compare:
+    # ZXOCR配置
+    zxocr:
+      # OCR服务配置
+      api-url: http://192.168.0.100:8000  # ZXOCR API地址
+      vllm-server-url: http://192.168.0.100:30000  # vLLM Server地址
+      backend: vlm-http-client  # 后端模式
+      
+      # 并发处理配置
+      parallel-threads: 20  # 最大并发线程数（控制同时处理的比对任务数量）
+      
+      # 图像处理配置
+      # DPI 设置：影响前端显示清晰度
+      # 160: 平衡清晰度和文件大小（推荐）
+      # 200: 标准清晰度，适合屏幕显示
+      # 300: 高清显示，文件较大
+      render-dpi: 160
+      
+      # 图片格式：PNG 无损格式
+      image-format: PNG
+  
+  # Swagger API文档配置
+  swagger:
+    enabled: true  # 是否启用Swagger文档，生产环境建议设置为false
+    require-password: true  # 是否需要密码访问Swagger文档
+    password: zxcm  # Swagger访问密码（当require-password=true时生效）
+    
+    # 企业信息配置
+    company:
+      name: 肇新科技  # 企业名称
+      url: https://www.zhaoxinms.com  # 企业网址
+      email: develop@zhaoxinms.com  # 联系邮箱
+    
+    # API文档信息
+    api:
+      title: 肇新合同工具集API文档  # API文档标题
+      description: 提供合同比对、模板设计、规则提取等功能的RESTful API接口  # API描述
+      version: 1.0.0  # API版本号
+      base-package: com.zhaoxinms.contract  # 扫描的基础

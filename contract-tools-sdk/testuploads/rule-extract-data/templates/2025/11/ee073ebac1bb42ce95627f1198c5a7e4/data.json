@@ -1,0 +1,93 @@
+{
+	"createdAt":"2025-11-05 10:49:55.173344",
+	"createdBy":"AI生成",
+	"description":"从合同文档中提取基本信息",
+	"fields":[
+		{
+			"fieldCode":"contractNumber",
+			"fieldName":"合同编号",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"合同编号\",\"multiline\":false,\"pattern\":\"[A-Z0-9-]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"合同编号 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":1
+		},
+		{
+			"fieldCode":"partyA",
+			"fieldName":"甲方名称",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"甲方\",\"multiline\":false,\"pattern\":\"[^\\\\r\\\\n]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"甲方名称 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":2
+		},
+		{
+			"fieldCode":"partyB",
+			"fieldName":"乙方名称",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"乙方\",\"multiline\":false,\"pattern\":\"[^\\\\r\\\\n]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"乙方名称 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":3
+		},
+		{
+			"fieldCode":"contractAmount",
+			"fieldName":"合同金额",
+			"fieldType":"number",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"合同金额\",\"multiline\":false,\"pattern\":\"[¥￥]?[\\\\d,]+(?:\\\\.\\\\d{1,2})?\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"合同金额 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":4
+		},
+		{
+			"fieldCode":"signDate",
+			"fieldName":"签订日期",
+			"fieldType":"date",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"签订日期\",\"multiline\":false,\"pattern\":\"\\\\d{4}年\\\\d{1,2}月\\\\d{1,2}日|\\\\d{4}-\\\\d{2}-\\\\d{2}\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"签订日期 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":5
+		}
+	],
+	"id":"202511_ee073ebac1bb42ce95627f1198c5a7e4",
+	"status":"draft",
+	"templateCode":"AI_TEMPLATE_1762310995152",
+	"templateName":"合同信息抽取模板",
+	"updatedAt":"2025-11-05 10:49:55.173344",
+	"version":1
+}

@@ -6,17 +6,14 @@ package com.zhaoxinms.contract.tools.comparePRO.model;
 public class CompareOptions {
 
     private boolean ignoreHeaderFooter = false;
-    private double headerHeightPercent = 12;
-    private double footerHeightPercent = 12;
+    private double headerHeightPercent = 6;
+    private double footerHeightPercent = 6;
     private boolean ignoreCase = true;
     private String ignoredSymbols = "_＿";
     private boolean ignoreSpaces = false;
     private boolean ignoreSeals = true;
     private boolean removeWatermark = false;
     private String watermarkRemovalStrength = "smart"; // default, extended, loose, smart
-    
-    // OCR服务选择
-    private String ocrServiceType = "mineru"; // dotsocr, thirdparty, mineru（默认使用MinerU）
 
     public CompareOptions() {}
 
@@ -95,34 +92,5 @@ public class CompareOptions {
 
     public void setWatermarkRemovalStrength(String watermarkRemovalStrength) {
         this.watermarkRemovalStrength = watermarkRemovalStrength;
-    }
-
-    public String getOcrServiceType() {
-        return ocrServiceType;
-    }
-
-    public void setOcrServiceType(String ocrServiceType) {
-        this.ocrServiceType = ocrServiceType;
-    }
-
-    /**
-     * 判断是否使用第三方OCR服务
-     */
-    public boolean isUseThirdPartyOcr() {
-        return "thirdparty".equalsIgnoreCase(ocrServiceType);
-    }
-
-    /**
-     * 判断是否使用DotsOCR服务
-     */
-    public boolean isUseDotsOcr() {
-        return "dotsocr".equalsIgnoreCase(ocrServiceType);
-    }
-
-    /**
-     * 判断是否使用MinerU OCR服务
-     */
-    public boolean isUseMinerU() {
-        return "mineru".equalsIgnoreCase(ocrServiceType);
     }
 }

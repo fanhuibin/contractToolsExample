@@ -61,9 +61,10 @@ request.interceptors.response.use(
     const apiResponse: ApiResponse = data
     
     if (apiResponse.code === 200) {
-      // 成功响应，返回包装后的格式以保持与前端期待的结构一致
+      // 成功响应，返回完整的 AxiosResponse 对象
       // 前端期待: response.data.code / response.data.data
-      return { data: apiResponse }
+      response.data = apiResponse
+      return response
     } else {
       // 业务错误
       if (!config.skipErrorNotification) {

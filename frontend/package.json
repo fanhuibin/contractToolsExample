@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:skip-check": "vite build",
     "preview": "vite preview",
     "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix --ignore-path .gitignore",
     "console-monitor": "node console-monitor.js",
@@ -35,6 +36,7 @@
     "eslint": "^8.45.0",
     "eslint-plugin-vue": "^9.15.1",
     "sass": "^1.93.2",
+    "terser": "^5.44.0",
     "typescript": "~5.1.6",
     "vite": "^4.4.5",
     "vue-tsc": "^1.8.5"

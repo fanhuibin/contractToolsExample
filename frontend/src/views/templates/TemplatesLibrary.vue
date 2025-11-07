@@ -27,7 +27,7 @@
               </template>
             </el-input>
             <el-button @click="fetchList">搜索</el-button>
-            <el-button type="primary" @click="goNew" style="margin-left: 8px;">
+            <el-button type="primary" @click="goNew" :disabled="isDemoMode" style="margin-left: 8px;">
               <el-icon><Plus /></el-icon>
               新建模板
             </el-button>
@@ -60,14 +60,14 @@
             <el-button link type="primary" @click="openDesigner(row)">设计模板</el-button>
             <el-button link @click="viewElements(row)">查看元素</el-button>
             <el-button link @click="viewVersions(row)">版本管理</el-button>
-            <el-dropdown trigger="click" @command="(cmd: string) => handleStatusChange(row, cmd)">
-              <el-button link>状态<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+            <el-dropdown trigger="click" @command="(cmd: string) => handleStatusChange(row, cmd)" :disabled="isDemoMode">
+              <el-button link :disabled="isDemoMode">状态<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="publish" :disabled="row.status === 'PUBLISHED'">发布</el-dropdown-item>
-                  <el-dropdown-item command="draft" :disabled="row.status === 'DRAFT'">设为草稿</el-dropdown-item>
-                  <el-dropdown-item command="disable" :disabled="row.status === 'DISABLED'">禁用</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>删除</el-dropdown-item>
+                  <el-dropdown-item command="publish" :disabled="isDemoMode || row.status === 'PUBLISHED'">发布</el-dropdown-item>
+                  <el-dropdown-item command="draft" :disabled="isDemoMode || row.status === 'DRAFT'">设为草稿</el-dropdown-item>
+                  <el-dropdown-item command="disable" :disabled="isDemoMode || row.status === 'DISABLED'">禁用</el-dropdown-item>
+                  <el-dropdown-item command="delete" :disabled="isDemoMode" divided>删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -105,7 +105,7 @@
 
     <el-dialog v-model="versionsVisible" title="版本管理" width="900px" append-to-body :lock-scroll="false">
       <div class="versions-header">
-        <el-button type="primary" size="small" @click="showCreateVersionDialog">创建新版本</el-button>
+        <el-button type="primary" size="small" @click="showCreateVersionDialog" :disabled="isDemoMode">创建新版本</el-button>
       </div>
       <el-table :data="versionsList" v-loading="versionsLoading" border style="width:100%; margin-top: 16px;">
         <el-table-column prop="version" label="版本号" width="80">
@@ -125,7 +125,7 @@
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
         <el-table-column label="操作" width="200">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="publishVersionAction(row)">发布</el-button>
+            <el-button link type="primary" size="small" @click="publishVersionAction(row)" :disabled="isDemoMode">发布</el-button>
             <el-button link size="small" @click="openDesigner(row)">设计</el-button>
             <el-button link size="small" @click="viewElements(row)">查看元素</el-button>
           </template>
@@ -182,6 +182,7 @@ import {
   createNewVersion
 } from '@/api/templateDesign'
 import { EmptyState } from '@/components/common'
+import { getSystemConfig } from '@/api/system'
 
 const router = useRouter()
 const loading = ref(false)
@@ -190,6 +191,7 @@ const records = ref<any[]>([])
 const viewVisible = ref(false)
 const elementRows = ref<any[]>([])
 const viewing = ref(false)
+const isDemoMode = ref(false)
 
 const versionsVisible = ref(false)
 const versionsList = ref<any[]>([])
@@ -272,7 +274,13 @@ const filtered = computed(() => {
   })
 })
 
-function goNew() { router.push('/templates/new') }
+function goNew() { 
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许新建模板')
+    return
+  }
+  router.push('/templates/new') 
+}
 
 function goBack() { router.push('/smart-compose') }
 
@@ -339,6 +347,12 @@ async function loadVersions(templateCode: string) {
 }
 
 function showCreateVersionDialog() {
+  // 演示模式检查
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许创建新版本')
+    return
+  }
+  
   // 获取最新版本作为源版本
   if (versionsList.value.length === 0) {
     ElMessage.warning('没有可用的源版本')
@@ -355,6 +369,12 @@ function showCreateVersionDialog() {
 }
 
 async function doCreateVersion() {
+  // 演示模式检查
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许创建新版本')
+    return
+  }
+  
   if (!versionFormRef.value) return
   
   try {
@@ -385,6 +405,12 @@ async function doCreateVersion() {
 }
 
 async function publishVersionAction(row: any) {
+  // 演示模式检查
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许发布版本')
+    return
+  }
+  
   try {
     await ElMessageBox.confirm(`确定要发布版本 v${row.version} 吗？发布后，同一编码的其他已发布版本将被设为草稿状态。`, '确认发布', {
       confirmButtonText: '确定',
@@ -411,6 +437,12 @@ async function publishVersionAction(row: any) {
 }
 
 async function handleStatusChange(row: any, command: string) {
+  // 演示模式检查
+  if (isDemoMode.value) {
+    ElMessage.warning('演示环境不允许修改模板状态')
+    return
+  }
+  
   try {
     let statusValue = ''
     let confirmMsg = ''
@@ -466,7 +498,17 @@ async function fetchList() {
   } finally { loading.value = false }
 }
 
-onMounted(fetchList)
+onMounted(async () => {
+  // 加载系统配置（演示模式）
+  try {
+    const configRes = await getSystemConfig() as any
+    isDemoMode.value = configRes?.data?.data?.demoMode || false
+  } catch (e) {
+    console.error('获取系统配置失败', e)
+  }
+  
+  await fetchList()
+})
 
 async function loadElements(templateId: string) {
   try {

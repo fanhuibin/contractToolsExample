@@ -137,9 +137,18 @@
         <!-- 排除 OnlyOffice 集成相关类 -->
         <class template="class com.zhaoxinms.contract.tools.onlyoffice.**"/>
         
+        <!-- ============== Service 服务类 ============== -->
+        <!-- 排除所有 Service 类（包含复杂业务逻辑和反射调用） -->
+        <class template="class com.zhaoxinms.**.service.**"/>
+        <class template="class com.zhaoxinms.**.services.**"/>
+        
+        <!-- ============== Controller 控制器类 ============== -->
+        <!-- 排除所有 Controller 类（Spring MVC 依赖反射） -->
+        <class template="class com.zhaoxinms.**.controller.**"/>
+        
         <!-- ============== AI 组件相关类 ============== -->
         <!-- 排除 AI 组件相关类（避免反射调用失败） -->
-        <class template="class com.zhaoxinms.contract.tools.aicomponent.config.**"/>
+        <class template="class com.zhaoxinms.contract.tools.aicomponent.**"/>
         
         <!-- ============== 第三方库类 ============== -->
         <!-- 排除 Lombok 生成的类 -->
@@ -151,8 +160,40 @@
         <!-- 排除 Swagger -->
         <class template="class io.swagger.**"/>
         <class template="class springfox.**"/>
+        
+        <!-- 排除 Jackson (JSON 处理库，依赖反射) -->
+        <class template="class com.fasterxml.jackson.**"/>
+        
+        <!-- 排除 Knife4j (API 文档) -->
+        <class template="class com.github.xiaoymin.**"/>
     </ignore-classes>
 
     <!-- 日志文件配置 -->
     <property name="log-file" value="output/allatori-obfuscation-log.xml"/>
+    
+    <!-- 
+    ===========================================
+    混淆排除说明
+    ===========================================
+    
+    为什么要排除这些类？
+    
+    1. Spring 相关类：Spring 框架大量使用反射和动态代理，混淆后会导致启动失败
+    2. 配置类：包含 @Configuration、@Bean 等注解，必须保持原样
+    3. 实体类/DTO/VO：用于序列化/反序列化，混淆会导致 JSON 转换失败
+    4. Service/Controller：包含业务逻辑和依赖注入，混淆可能导致字节码验证失败
+    5. Mapper/Repository：MyBatis 依赖接口方法名，不能混淆
+    6. 枚举类：枚举值的 name() 方法会被序列化，不能混淆
+    7. Jackson：JSON 处理库，内部大量使用反射
+    
+    实际保护的是什么？
+    
+    - 核心算法实现（如文档比对算法、OCR 处理逻辑）
+    - 工具类的内部实现
+    - 私有方法和字段名称
+    - 字符串常量（通过字符串加密）
+    - 控制流（通过控制流混淆）
+    
+    ===========================================
+    -->
 </config>

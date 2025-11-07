@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 @TableName("template_design_record")
 public class TemplateDesignRecord {
     @TableId
-    private String id;  // 自动生成的唯一ID
+    private Long id;  // 雪花算法生成的唯一ID
 
     private String templateCode;  // 模板编码（多个版本共用）
 
@@ -19,7 +19,7 @@ public class TemplateDesignRecord {
 
     private String templateId;  // 旧字段，保留兼容性
 
-    private String fileId;
+    private Long fileId;  // 文件ID（对应file_info表）
 
     private String elementsJson;
 

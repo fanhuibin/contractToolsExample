@@ -1,0 +1,37 @@
+# application.yml - HTTPS 配置版本
+# 修改说明：所有 OnlyOffice 相关的 URL 从 http 改为 https
+
+# 肇新合同工具集配置
+zxcm:
+  # 应用配置
+  application:
+    # 修改：http → https，端口改为 443
+    base-url: https://192.168.0.100:443
+  
+  # OnlyOffice配置
+  onlyoffice:
+    # 修改：http → https
+    domain: https://192.168.0.100
+    port: 8082
+    secret: zxcm
+    plugins:
+      # 修改：http → https
+      - https://192.168.0.100:8082/plugin/html/config.json
+      - https://192.168.0.100:8082/plugin/comment/config.json
+    logo:
+      logo: ""
+      logoEmbedded: ""
+      logoUrl: ""
+    permissions:
+      view:
+        print: true
+      edit:
+        print: true
+        download: true
+        comment: true
+        chat: true
+        review: true
+        fillForms: true
+        modifyContentControl: true
+        modifyFilter: true
+

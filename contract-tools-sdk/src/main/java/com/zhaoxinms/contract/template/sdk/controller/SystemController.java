@@ -1,10 +1,12 @@
 package com.zhaoxinms.contract.template.sdk.controller;
 
 import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 import com.zhaoxinms.contract.constant.SystemConstants;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import lombok.Data;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/system")
 public class SystemController {
     
+    @Autowired
+    private DemoModeConfig demoModeConfig;
+    
     /**
      * 获取系统版本信息
      */
@@ -31,6 +36,18 @@ public class SystemController {
         systemInfo.setBuildDate(SystemConstants.BUILD_DATE);
         
         return ApiResponse.success(systemInfo);
+    }
+    
+    /**
+     * 获取系统配置信息
+     */
+    @ApiOperation("获取系统配置信息")
+    @GetMapping("/config")
+    public ApiResponse<SystemConfig> getConfig() {
+        SystemConfig config = new SystemConfig();
+        config.setDemoMode(demoModeConfig.isDemoMode());
+        
+        return ApiResponse.success(config);
     }
     
     /**
@@ -52,6 +69,17 @@ public class SystemController {
          * 构建日期
          */
         private String buildDate;
+    }
+    
+    /**
+     * 系统配置DTO
+     */
+    @Data
+    public static class SystemConfig {
+        /**
+         * 是否为演示模式
+         */
+        private boolean demoMode;
     }
 }
 

@@ -90,18 +90,16 @@ zxcm:
   # 应用配置
   application:
     # 应用基础URL（OnlyOffice服务会从这个URL下载文件）
-    base-url: http://proxy.zhaoxinms.com:9103
+    base-url: http://192.168.0.10:8080
   
   # OnlyOffice配置
   onlyoffice:
-    domain: http://43.143.173.96
+    domain: http://192.168.0.100
     port: 8082
     secret: zxcm
-    callback:
-      url: http://proxy.zhaoxinms.com:9103/api/onlyoffice/callback
     plugins:
-      - http://43.143.173.96:8082/plugin/html/config.json
-      - http://43.143.173.96:8082/plugin/comment/config.json
+      - http://192.168.0.100:8082/plugin/html/config.json
+      - http://192.168.0.100:8082/plugin/comment/config.json
     logo:
       logo: ""
       logoEmbedded: ""

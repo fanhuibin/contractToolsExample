@@ -72,10 +72,16 @@ public class GPUCompareController {
             @RequestParam(value = "ignoreSpaces", defaultValue = "false") boolean ignoreSpaces,
             @RequestParam(value = "ignoreSeals", defaultValue = "true") boolean ignoreSeals,
             @RequestParam(value = "removeWatermark", defaultValue = "false") boolean removeWatermark,
-            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength,
-            @RequestParam(value = "ocrServiceType", defaultValue = "dotsocr") String ocrServiceType) {
+            @RequestParam(value = "watermarkRemovalStrength", defaultValue = "smart") String watermarkRemovalStrength) {
 
         try {
+            // 验证文件类型，只允许PDF
+            if (!isPdfFile(oldFile)) {
+                return ApiResponse.paramError("原始文件格式不支持，仅支持PDF格式");
+            }
+            if (!isPdfFile(newFile)) {
+                return ApiResponse.paramError("新文件格式不支持，仅支持PDF格式");
+            }
             // 创建比对选项
             CompareOptions options = new CompareOptions();
             options.setIgnoreHeaderFooter(ignoreHeaderFooter);
@@ -87,7 +93,7 @@ public class GPUCompareController {
             options.setIgnoreSeals(ignoreSeals);
             options.setRemoveWatermark(removeWatermark);
             options.setWatermarkRemovalStrength(watermarkRemovalStrength);
-            options.setOcrServiceType(ocrServiceType);
+            // OCR 引擎由后端统一配置，不再接受前端参数
 
             // 提交比对任务
             String taskId = compareService.submitCompareTask(oldFile, newFile, options);
@@ -663,5 +669,34 @@ public class GPUCompareController {
             log.error("访问文件失败", e);
             return ResponseEntity.status(org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    /**
+     * 验证文件是否为PDF格式
+     */
+    private boolean isPdfFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            return false;
+        }
+        
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null) {
+            return false;
+        }
+        
+        // 检查文件扩展名
+        String lowerCaseFilename = originalFilename.toLowerCase();
+        if (!lowerCaseFilename.endsWith(".pdf")) {
+            return false;
+        }
+        
+        // 检查MIME类型
+        String contentType = file.getContentType();
+        if (contentType != null && !contentType.equals("application/pdf")) {
+            log.warn("文件扩展名为PDF，但MIME类型为: {}", contentType);
+            // 这里只警告，不阻止，因为有些浏览器可能不正确设置MIME类型
+        }
+        
+        return true;
     }
 }

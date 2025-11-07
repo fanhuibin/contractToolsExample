@@ -20,6 +20,7 @@ import javax.validation.Valid;
 import com.zhaoxinms.contract.template.sdk.entity.TemplateDesignRecord;
 import com.zhaoxinms.contract.template.sdk.service.TemplateDesignRecordService;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -52,6 +53,9 @@ public class TemplateDesignController {
     @Autowired(required = false)
     private FileInfoService fileInfoService;
 
+    @Autowired
+    private DemoModeConfig demoModeConfig;
+
     /**
      * 获取字段信息
      */
@@ -69,6 +73,11 @@ public class TemplateDesignController {
     @ApiOperation(value = "保存模板设计", notes = "保存模板设计的元素配置")
     public ApiResponse<TemplateDesignRecord> saveDesign(
             @ApiParam(value = "设计记录", required = true) @RequestBody TemplateDesignRecord body) {
+        
+        // 演示模式检查
+        if (demoModeConfig.isDemoMode()) {
+            throw BusinessException.of(ApiCode.FORBIDDEN, "演示环境不允许修改模板");
+        }
         
         if (designRecordService == null) {
             throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
