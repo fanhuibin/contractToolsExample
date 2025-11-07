@@ -11,7 +11,7 @@
         </p>
       </div>
              <div class="hero-image">
-         <img src="/images/imgi_3_theme-index-blue.c38b733.png" alt="合同工具集" />
+         <img src="/images/hero-image-new.png" alt="合同工具集" class="hero-img" />
        </div>
     </div>
 
@@ -120,12 +120,12 @@ const openDocCenter = () => {
 /* 英雄区域 */
 .hero-section {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--zx-spacing-5xl);
+  grid-template-columns: 1fr 1.6fr;
+  gap: var(--zx-spacing-4xl);
   align-items: center;
-  padding: var(--zx-spacing-5xl) 0;
-  min-height: 500px;
-  max-width: var(--zx-container-xl);
+  padding: var(--zx-spacing-4xl) 0;
+  min-height: auto;
+  max-width: var(--zx-container-2xl);
   margin: 0 auto;
 }
 
@@ -161,6 +161,15 @@ const openDocCenter = () => {
 .hero-image img {
   max-width: 100%;
   height: auto;
+  border-radius: var(--zx-radius-lg);
+}
+
+.hero-image .hero-img {
+  max-width: 100%;
+  max-height: 450px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: var(--zx-radius-lg);
 }
 
@@ -243,6 +252,11 @@ const openDocCenter = () => {
     font-size: var(--zx-font-4xl);
   }
   
+  .hero-image .hero-img {
+    max-width: 90%;
+    max-height: 350px;
+  }
+  
   .services-grid {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -259,6 +273,11 @@ const openDocCenter = () => {
   
   .hero-subtitle {
     font-size: var(--zx-font-lg);
+  }
+  
+  .hero-image .hero-img {
+    max-width: 95%;
+    max-height: 300px;
   }
   
   .services-grid {
