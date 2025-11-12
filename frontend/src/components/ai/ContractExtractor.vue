@@ -201,7 +201,7 @@ const startExtraction = async () => {
 const simulateExtraction = async () => {
   const stages = [
     { progress: 20, message: '正在上传文件...', hint: '文件传输中' },
-    { progress: 40, message: '正在解析文档...', hint: 'OCR识别中' },
+    { progress: 40, message: '正在解析文档...', hint: '智能识别中' },
     { progress: 60, message: '正在提取信息...', hint: '智能分析中' },
     { progress: 80, message: '正在处理数据...', hint: '结构化处理中' },
     { progress: 100, message: '提取完成', hint: '所有处理已完成' }

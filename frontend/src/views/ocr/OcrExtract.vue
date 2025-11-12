@@ -2,9 +2,9 @@
   <div class="ocr-extract-container">
     <PageHeader 
       title="智能文档解析" 
-      description="高精度OCR识别，提取文档文字与版面信息，支持可视化标注与智能检索。"
+      description="高精度智能识别，提取文档文字与版面信息，支持可视化标注与智能检索。"
       :icon="Document"
-      tag="OCR引擎"
+      tag="智能引擎"
       tag-type="success"
     />
 
@@ -12,7 +12,7 @@
       <template #header>
         <div class="card-header">
           <span>文档解析</span>
-          <el-tag type="success" size="small">OCR引擎</el-tag>
+          <el-tag type="success" size="small">智能引擎</el-tag>
         </div>
       </template>
 
@@ -33,7 +33,7 @@
           </div>
           <template #tip>
             <div class="el-upload__tip">
-              支持PDF格式文件，系统将自动进行OCR识别并提取文本内容
+              支持PDF格式文件，系统将自动进行智能识别并提取文本内容
             </div>
           </template>
         </el-upload>
@@ -82,7 +82,7 @@
           style="margin-top: 16px;"
         >
           <el-step title="文件上传" description="上传PDF文件" />
-          <el-step title="OCR识别" description="提取文字和位置信息" />
+          <el-step title="智能识别" description="提取文字和位置信息" />
           <el-step title="处理结果" description="生成可视化结果" />
           <el-step title="完成" description="提取完成" />
         </el-steps>
