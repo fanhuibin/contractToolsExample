@@ -22,9 +22,8 @@ export const ZHAOXIN_CONFIG = {
  */
 export async function loadConfig() {
   try {
-    // 使用当前页面的origin作为demoBaseUrl
-    const demoBaseUrl = window.location.origin || 'http://localhost:8091'
-    const response = await fetch(`${demoBaseUrl}/api/demo/config`)
+    // 使用代理，直接调用相对路径API
+    const response = await fetch('/api/demo/config')
     const result = await response.json()
     
     if (result.code === 200 && result.data) {
@@ -38,18 +37,18 @@ export async function loadConfig() {
       if (result.data.customFieldsBaseUrl) {
         ZHAOXIN_CONFIG.customFieldsBaseUrl = result.data.customFieldsBaseUrl
       }
-      // 更新demoBaseUrl
-      ZHAOXIN_CONFIG.demoBaseUrl = demoBaseUrl
+      // 更新demoBaseUrl（使用当前域名，因为通过代理访问）
+      ZHAOXIN_CONFIG.demoBaseUrl = window.location.origin
       console.log('✅ 配置加载成功:', ZHAOXIN_CONFIG)
     } else {
       console.warn('⚠️ 配置加载失败，使用默认配置:', result.message)
       // 即使加载失败，也更新demoBaseUrl
-      ZHAOXIN_CONFIG.demoBaseUrl = demoBaseUrl
+      ZHAOXIN_CONFIG.demoBaseUrl = window.location.origin
     }
   } catch (error) {
     console.error('❌ 配置加载失败，使用默认配置:', error)
     // 即使加载失败，也更新demoBaseUrl
-    ZHAOXIN_CONFIG.demoBaseUrl = window.location.origin || 'http://localhost:8091'
+    ZHAOXIN_CONFIG.demoBaseUrl = window.location.origin
   }
 }
 

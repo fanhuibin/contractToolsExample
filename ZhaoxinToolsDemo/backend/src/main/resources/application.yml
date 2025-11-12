@@ -25,8 +25,8 @@ zhaoxin:
   frontend:
     url: http://192.168.0.100:80
   demo:
-    #用于回调使用，主系统调用demo后端获取字段配置
-    fields-config-base-url: http://192.168.0.10:8091
+    # Demo后端服务地址（用于文件上传、回调等，统一使用本机IP）
+    backend-url: http://192.168.0.10:8091
 
 # 日志配置
 logging:

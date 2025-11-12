@@ -38,7 +38,7 @@ public class DemoResourceController {
     @Value("${zhaoxin.api.base-url:http://localhost:8080}")
     private String apiBaseUrl;
 
-    @Value("${zhaoxin.demo.fields-config-base-url:}")
+    @Value("${zhaoxin.demo.backend-url:http://192.168.0.10:8091}")
     private String fieldsConfigBaseUrl;
     
     /**

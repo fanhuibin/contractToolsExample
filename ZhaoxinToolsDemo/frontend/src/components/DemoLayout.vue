@@ -33,7 +33,7 @@
             <span>智能合同合成</span>
           </router-link>
           <a 
-            href="http://localhost:3000" 
+            :href="ZHAOXIN_CONFIG.frontendUrl" 
             target="_blank"
             class="nav-item nav-external"
           >
@@ -134,6 +134,7 @@ import {
 } from '@element-plus/icons-vue'
 import { getDemoDocuments } from '../api/demo'
 import { ElMessage } from 'element-plus'
+import { ZHAOXIN_CONFIG } from '../config'
 
 const props = defineProps({
   category: {
@@ -204,6 +205,7 @@ const handleNewTask = () => {
 
 onMounted(() => {
   loadDocuments()
+  console.log('🔗 完整组件库链接地址:', ZHAOXIN_CONFIG.frontendUrl)
 })
 </script>
 

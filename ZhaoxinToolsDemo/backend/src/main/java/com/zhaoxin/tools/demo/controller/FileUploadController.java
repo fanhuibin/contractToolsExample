@@ -33,8 +33,8 @@ import java.util.UUID;
 @RequestMapping("/api/files")
 public class FileUploadController {
     
-    @Value("${server.port:8091}")
-    private String serverPort;
+    @Value("${zhaoxin.demo.backend-url:http://localhost:8091}")
+    private String demoBackendUrl;
     
     // 文件存储目录
     private final Path fileStorageLocation;
@@ -90,7 +90,7 @@ public class FileUploadController {
             
             // 生成文件访问URL（对文件名进行URL编码）
             String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
-            String fileUrl = "http://localhost:" + serverPort + "/api/files/download/" + encodedFileName;
+            String fileUrl = demoBackendUrl + "/api/files/download/" + encodedFileName;
             
             log.info("文件上传成功: 原文件名={}, UUID文件名={}", originalFilename, fileName);
             log.info("文件URL: {}", fileUrl);
