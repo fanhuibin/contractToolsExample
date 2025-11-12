@@ -16,8 +16,8 @@ import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
+import com.zhaoxinms.contract.tools.comparePRO.util.LaTeXToUnicodeConverter;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
-import com.zhaoxinms.contract.tools.extract.model.CharBox;
 import com.zhaoxinms.contract.tools.extract.model.TextBox;
 import com.zhaoxinms.contract.tools.extract.model.EnhancedOCRResult;
 
@@ -127,10 +127,10 @@ public class UnifiedOCRService implements OCRProvider {
                 log.info("📊 跨页表格识别统计: {}", tableManager.getStatistics());
             }
             
-            // 提取文本和TextBox数据
+            // 提取文本和 TextBox 数据，只转换 LaTeX 公式，保留表格 HTML
             StringBuilder allText = new StringBuilder();
             List<TextBox> textBoxes = new ArrayList<>();
-            int currentPos = 0; // 当前字符位置（用于计算字符索引）
+            int currentPos = 0;
             
             for (int i = 0; i < pageLayouts.length; i++) {
                 TextExtractionUtil.PageLayout layout = pageLayouts[i];
@@ -141,10 +141,16 @@ public class UnifiedOCRService implements OCRProvider {
                     currentPos += 2; // 两个换行符
                 }
                 
-                // 提取页面文本和TextBox
+                // 提取页面文本和 TextBox
                 for (TextExtractionUtil.LayoutItem item : layout.items) {
                     if (item.text != null && !item.text.trim().isEmpty()) {
                         String text = item.text.trim();
+                        
+                        // 【核心修复】只应用 LaTeX 公式转换，保留表格 HTML 和其他格式
+                        // 这样表格可以在前端正常显示，同时数学公式也能正确转换
+                        if (LaTeXToUnicodeConverter.containsLatexCommands(text)) {
+                            text = LaTeXToUnicodeConverter.convertToUnicode(text);
+                        }
                         
                         // 记录当前文本块的起始位置
                         int startPos = currentPos;
@@ -158,9 +164,7 @@ public class UnifiedOCRService implements OCRProvider {
                         // 更新当前位置（包括换行符）
                         currentPos = endPos + 1; // +1 是换行符
                         
-                        // 为每个LayoutItem创建一个TextBox，包含字符索引信息
-                        // 一个item代表一个文本块（可能是一行文字、一个表格单元格等）
-                        // 支持表格跨页：同一文本块可能有多个bbox
+                        // 为每个 LayoutItem 创建一个 TextBox
                         TextBox textBox = new TextBox(
                             layout.page,
                             text,
@@ -353,36 +357,44 @@ public class UnifiedOCRService implements OCRProvider {
             // 从结果中提取 PageLayout 数组
             TextExtractionUtil.PageLayout[] pageLayouts = mineruResult.layouts;
             
-            // 提取文本和 CharBox 数据
+            // 提取文本和 CharBox 数据，只转换 LaTeX 公式
             StringBuilder allText = new StringBuilder();
-            List<CharBox> charBoxes = new ArrayList<>();
+            List<com.zhaoxinms.contract.tools.extract.model.CharBox> charBoxes = new ArrayList<>();
             
             for (TextExtractionUtil.PageLayout layout : pageLayouts) {
                 // 提取页面文本
                 for (TextExtractionUtil.LayoutItem item : layout.items) {
                     if (item.text != null && !item.text.trim().isEmpty()) {
                         String text = item.text.trim();
+                        
+                        // 【核心修复】只应用 LaTeX 公式转换，保留表格 HTML
+                        if (LaTeXToUnicodeConverter.containsLatexCommands(text)) {
+                            text = LaTeXToUnicodeConverter.convertToUnicode(text);
+                        }
+                        
                         allText.append(text).append("\n");
                         
                         // 将文本拆分为字符，创建 CharBox
                         for (int i = 0; i < text.length(); i++) {
-                                    CharBox charBox = new CharBox(
+                            com.zhaoxinms.contract.tools.extract.model.CharBox charBox = 
+                                new com.zhaoxinms.contract.tools.extract.model.CharBox(
+                                    layout.page,
+                                    text.charAt(i),
+                                    item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
+                                    item.category != null ? item.category : "Text"
+                                );
+                            charBoxes.add(charBox);
+                        }
+                        
+                        // 添加换行符
+                        com.zhaoxinms.contract.tools.extract.model.CharBox newlineCharBox = 
+                            new com.zhaoxinms.contract.tools.extract.model.CharBox(
                                 layout.page,
-                                text.charAt(i),
+                                '\n',
                                 item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
                                 item.category != null ? item.category : "Text"
-                                    );
-                                    charBoxes.add(charBox);
-                                }
-                                
-                        // 添加换行符
-                                CharBox newlineCharBox = new CharBox(
-                            layout.page,
-                                    '\n',
-                            item.bbox != null ? item.bbox.clone() : new double[]{0, 0, 0, 0},
-                            item.category != null ? item.category : "Text"
-                                );
-                                charBoxes.add(newlineCharBox);
+                            );
+                        charBoxes.add(newlineCharBox);
                     }
                 }
             }  
@@ -407,4 +419,5 @@ public class UnifiedOCRService implements OCRProvider {
             throw new RuntimeException("OCR识别失败: " + e.getMessage(), e);
         }
     }
+    
 }

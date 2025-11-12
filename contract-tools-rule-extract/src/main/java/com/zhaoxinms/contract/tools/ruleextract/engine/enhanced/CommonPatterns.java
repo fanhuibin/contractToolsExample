@@ -76,18 +76,10 @@ public class CommonPatterns {
                 "string"
         ));
 
-        // 公司名称
-        patterns.put("COMPANY_NAME", new PatternTemplate(
-                "公司名称",
-                "[\\u4e00-\\u9fa5（）()]{2,50}(?:公司|企业|集团|有限责任公司|股份有限公司)",
-                "XX科技有限公司",
-                "string"
-        ));
-
-        patterns.put("SIMPLE_COMPANY", new PatternTemplate(
-                "简单公司名",
-                "[\\u4e00-\\u9fa5]{2,20}公司",
-                "XX公司",
+        patterns.put("COMPANY_NAME_GENERAL", new PatternTemplate(
+                "公司名称(中英文通用)",
+                "[\\u4e00-\\u9fa5A-Za-z0-9&（）()·\\s,.'-]{2,120}(?:公司|企业|集团|有限责任公司|股份有限公司|合作社|事务所|基金会|协会|联合会|委员会|管理局|局|机关|人民政府|政府|人民法院|法院|人民检察院|检察院|党委|党组|办事处|中心|研究院|学院|大学|银行|交易所|证券|保险|Co\\.?\\s*,?\\s*Ltd\\.?|Co\\.?\\s*,?\\s*Limited|Company|Corporation|Inc\\.?|LLC|Limited|Ltd\\.?|Agency|Association|Foundation|Institute|University|Bank|Committee|Government|Authority|Administration|Bureau|Council|Union|Society|Office)",
+                "Ministry of Finance of the People's Republic of China",
                 "string"
         ));
 
@@ -102,7 +94,7 @@ public class CommonPatterns {
         // 电话号码
         patterns.put("MOBILE_PHONE", new PatternTemplate(
                 "手机号",
-                "1[3-9]\\d{9}",
+                "\\d{7,12}",
                 "13800138000",
                 "string"
         ));

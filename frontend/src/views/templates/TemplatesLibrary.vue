@@ -169,7 +169,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowDown, UploadFilled, Search, Plus } from '@element-plus/icons-vue'
 import { 
@@ -185,6 +185,12 @@ import { EmptyState } from '@/components/common'
 import { getSystemConfig } from '@/api/system'
 
 const router = useRouter()
+const route = useRoute()
+
+// Embed 模式检测
+const isEmbedMode = computed(() => route.query.embed === 'true')
+// 自定义字段配置URL（从URL参数中读取）
+const fieldsConfigUrl = computed(() => route.query.fieldsConfigUrl as string)
 const loading = ref(false)
 const keyword = ref('')
 const records = ref<any[]>([])
@@ -282,16 +288,46 @@ function goNew() {
   router.push('/templates/new') 
 }
 
-function goBack() { router.push('/smart-compose') }
+function goBack() {
+  if (isEmbedMode.value) {
+    // Embed 模式：发送关闭消息给父窗口
+    console.log('🔙 [嵌入模式] 关闭模板管理 iframe')
+    window.parent.postMessage({
+      type: 'NAVIGATE_BACK',
+      source: 'zhaoxin-sdk',
+      payload: {
+        from: '/templates',
+        timestamp: Date.now()
+      }
+    }, '*')
+  } else {
+    // 独立模式：跳转到智能合同合成页面
+    router.push('/smart-compose')
+  }
+}
 
-function openDesigner(row: any) { 
+function openDesigner(row: any) {
+  const query: any = { 
+    id: row.id || row.templateId, 
+    fileId: row.fileId,
+    returnUrl: '/templates'
+  }
+  
+  // Embed 模式下，保持 embed 参数
+  if (isEmbedMode.value) {
+    query.embed = 'true'
+    query.hideBack = 'true'
+  }
+  
+  // 传递自定义字段配置URL（如果存在）
+  if (fieldsConfigUrl.value) {
+    query.fieldsConfigUrl = fieldsConfigUrl.value
+    console.log('📋 传递自定义字段配置URL:', fieldsConfigUrl.value)
+  }
+  
   router.push({ 
     path: '/template-design', 
-    query: { 
-      id: row.id || row.templateId, 
-      fileId: row.fileId,
-      returnUrl: '/templates'
-    } 
+    query 
   }) 
 }
 

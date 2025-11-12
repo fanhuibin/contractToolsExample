@@ -257,7 +257,18 @@ const submitForm = async () => {
 }
 
 const goDesign = (row: any) => {
-  router.push(`/rule-extract/template/${row.id}`)
+  // 嵌入模式下需要保留 embed 和 hideBack 参数
+  if (isEmbedMode.value) {
+    router.push({
+      path: `/rule-extract/template/${row.id}`,
+      query: { 
+        embed: 'true',
+        hideBack: 'true'
+      }
+    })
+  } else {
+    router.push(`/rule-extract/template/${row.id}`)
+  }
 }
 
 const goAIGenerator = () => {

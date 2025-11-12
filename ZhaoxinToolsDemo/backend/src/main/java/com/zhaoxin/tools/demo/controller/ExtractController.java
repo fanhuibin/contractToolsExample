@@ -14,7 +14,7 @@ import java.util.Map;
  */
 @Slf4j
 @RestController
-@RequestMapping("/api/extract")
+@RequestMapping("/api/rule-extract")
 public class ExtractController {
     
     private final ZhaoxinApiClient apiClient;
@@ -24,9 +24,18 @@ public class ExtractController {
     }
     
     /**
+     * 获取模板列表
+     */
+    @GetMapping("/templates")
+    public Map<String, Object> getTemplates(@RequestParam(required = false) String status) {
+        log.info("获取模板列表: status={}", status);
+        return apiClient.getTemplates(status);
+    }
+    
+    /**
      * 上传文档并开始抽取
      */
-    @PostMapping("/upload")
+    @PostMapping("/extract/upload")
     public Map<String, Object> uploadAndExtract(
             @RequestParam("file") MultipartFile file,
             @RequestParam("templateId") String templateId) {
@@ -38,7 +47,7 @@ public class ExtractController {
     /**
      * 查询任务状态
      */
-    @GetMapping("/status/{taskId}")
+    @GetMapping("/extract/status/{taskId}")
     public Map<String, Object> getStatus(@PathVariable String taskId) {
         log.info("查询任务状态: taskId={}", taskId);
         return apiClient.getExtractStatus(taskId);
@@ -47,7 +56,7 @@ public class ExtractController {
     /**
      * 获取抽取结果
      */
-    @GetMapping("/result/{taskId}")
+    @GetMapping("/extract/result/{taskId}")
     public Map<String, Object> getResult(@PathVariable String taskId) {
         log.info("获取抽取结果: taskId={}", taskId);
         return apiClient.getExtractResult(taskId);
@@ -56,7 +65,7 @@ public class ExtractController {
     /**
      * 取消任务
      */
-    @PostMapping("/cancel/{taskId}")
+    @PostMapping("/extract/cancel/{taskId}")
     public ResponseEntity<Void> cancelTask(@PathVariable String taskId) {
         log.info("取消任务: taskId={}", taskId);
         apiClient.cancelExtractTask(taskId);
@@ -66,7 +75,7 @@ public class ExtractController {
     /**
      * 获取任务列表
      */
-    @GetMapping("/tasks")
+    @GetMapping("/extract/tasks")
     public Map<String, Object> getTasks() {
         log.info("获取任务列表");
         return apiClient.getExtractTasks();
@@ -75,7 +84,7 @@ public class ExtractController {
     /**
      * 获取页面图片
      */
-    @GetMapping("/page-image/{taskId}/{pageNumber}")
+    @GetMapping("/extract/page-image/{taskId}/{pageNumber}")
     public ResponseEntity<byte[]> getPageImage(
             @PathVariable String taskId,
             @PathVariable int pageNumber) {
@@ -86,15 +95,6 @@ public class ExtractController {
         return ResponseEntity.ok()
                 .contentType(MediaType.IMAGE_PNG)
                 .body(imageData);
-    }
-    
-    /**
-     * 获取模板列表
-     */
-    @GetMapping("/templates")
-    public Map<String, Object> getTemplates() {
-        log.info("获取模板列表");
-        return apiClient.getTemplates();
     }
 }
 

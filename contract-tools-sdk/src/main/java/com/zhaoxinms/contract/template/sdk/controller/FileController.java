@@ -59,6 +59,67 @@ public class FileController {
     @Value("${zxcm.onlyoffice.port:80}")
     private String onlyofficePort;
 
+    @GetMapping("/download-by-path")
+    @ApiOperation("通过相对路径下载文件")
+    public void downloadFileByPath(
+            @ApiParam(value = "文件相对路径", required = true)
+            @RequestParam String path,
+            HttpServletResponse response) {
+        try {
+            // 构建完整路径
+            java.nio.file.Path rootPath = java.nio.file.Paths.get(uploadRootPath).toAbsolutePath().normalize();
+            java.nio.file.Path fullPath = rootPath.resolve(path).normalize();
+            
+            // 安全检查：确保文件在 uploadRootPath 目录下
+            if (!fullPath.startsWith(rootPath)) {
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+            
+            java.io.File file = fullPath.toFile();
+            if (!file.exists() || !file.isFile()) {
+                response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+                return;
+            }
+            
+            // 获取文件扩展名
+            String fileName = file.getName();
+            String fileExtension = "";
+            int dotIndex = fileName.lastIndexOf('.');
+            if (dotIndex > 0) {
+                fileExtension = fileName.substring(dotIndex + 1);
+            }
+            
+            // 设置响应头
+            String contentType = getContentType(fileExtension);
+            response.setContentType(contentType);
+            
+            // 文件名编码
+            String encodedFileName = java.net.URLEncoder.encode(fileName, "UTF-8").replace("+", "%20");
+            response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encodedFileName);
+            response.setHeader("Content-Length", String.valueOf(file.length()));
+            
+            // 读取文件并输出
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                 java.io.OutputStream os = response.getOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    os.write(buffer, 0, bytesRead);
+                }
+                os.flush();
+            }
+            
+        } catch (Exception e) {
+            try {
+                response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+                response.getWriter().write("文件下载失败：" + e.getMessage());
+            } catch (IOException ex) {
+                // 忽略异常
+            }
+        }
+    }
+    
     @GetMapping("/download/{fileId}")
     @ApiOperation("下载文件")
     public void downloadFile(

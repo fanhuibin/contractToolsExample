@@ -19,9 +19,14 @@ spring:
 # 肇新 API 配置
 zhaoxin:
   api:
-    base-url: http://localhost:8080
+    base-url: http://192.168.0.100:80
     timeout: 120000
     connect-timeout: 10000
+  frontend:
+    url: http://192.168.0.100:80
+  demo:
+    #用于回调使用，主系统调用demo后端获取字段配置
+    fields-config-base-url: http://192.168.0.10:8091
 
 # 日志配置
 logging:

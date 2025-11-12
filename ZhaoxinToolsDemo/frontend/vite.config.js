@@ -14,7 +14,7 @@ export default defineConfig({
     port: 3004,  // 使用3004端口，避免与肇新前端(3000)和其他Demo冲突
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',  // 肇新SDK后端地址
+        target: 'http://localhost:8091',  // Demo 后端地址（所有API都通过Demo后端）
         changeOrigin: true,
       }
     }

@@ -5,6 +5,7 @@ import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import com.zhaoxinms.contract.tools.common.ocr.OCRProvider;
+import com.zhaoxinms.contract.tools.comparePRO.util.LaTeXToUnicodeConverter;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.EnhancedRuleEngine;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.ExtractionResult;
 import com.zhaoxinms.contract.tools.ruleextract.engine.enhanced.ExtractionRule;
@@ -28,6 +29,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -524,6 +526,19 @@ public class RuleExtractService {
                     } else {
                         log.warn("Metadata中没有pageDimensions字段");
                     }
+                    
+                    // 保存跨页表格信息到resultJson和task（用于前端标记）
+                    if (metaJson.containsKey("crossPageTables")) {
+                        Object crossPageTablesObj = metaJson.get("crossPageTables");
+                        String crossPageTablesStr = JSON.toJSONString(crossPageTablesObj);
+                        // 保存到resultJson用于前端显示
+                        resultJson.put("crossPageTables", crossPageTablesObj);
+                        // 【重要】保存到task对象，供generateBboxMappingsWithIndexMapping使用
+                        task.setCrossPageTables(crossPageTablesStr);
+                        log.info("保存跨页表格信息到task和resultJson: {}", crossPageTablesStr);
+                    } else {
+                        log.debug("Metadata中没有crossPageTables字段");
+                    }
                 } else {
                     log.warn("无法解析metadata为JSONObject");
                 }
@@ -534,13 +549,18 @@ public class RuleExtractService {
             log.warn("OCR结果或metadata为空");
         }
         
+        // 【关键】在生成BboxMappings之前先保存task，确保crossPageTables数据已持久化
+        // 因为generateBboxMappingsWithIndexMapping方法内部会重新从磁盘加载task
+        storage.save("task", taskId, task);
+        log.info("已保存task元数据（包括crossPageTables），准备生成BboxMappings");
+        
         // 生成BboxMappings
         // 注意：提取结果的索引基于合并后的OCR文本，但TextBox索引基于原始OCR文本
         // 需要建立索引映射
         try {
             if (textBoxesJson != null && !textBoxesJson.isEmpty()) {
                 List<JSONObject> bboxMappings = generateBboxMappingsWithIndexMapping(
-                    results, textBoxesJson, originalOcrText, mergedOcrText);
+                    taskId, results, textBoxesJson, originalOcrText, mergedOcrText);
                 if (!bboxMappings.isEmpty()) {
                     task.setBboxMappings(JSON.toJSONString(bboxMappings));
                     log.info("成功生成 {} 个BboxMapping（已处理索引映射）", bboxMappings.size());
@@ -578,7 +598,7 @@ public class RuleExtractService {
      * @param originalOcrText 原始OCR文本
      * @param mergedOcrText 合并后的OCR文本
      */
-    private List<JSONObject> generateBboxMappingsWithIndexMapping(List<JSONObject> results, String textBoxesJson, 
+    private List<JSONObject> generateBboxMappingsWithIndexMapping(String taskId, List<JSONObject> results, String textBoxesJson, 
                                                                   String originalOcrText, String mergedOcrText) {
         List<JSONObject> bboxMappings = new ArrayList<>();
         
@@ -594,6 +614,16 @@ public class RuleExtractService {
         List<TextBoxData> textBoxes = parseTextBoxes(textBoxesJson);
         if (textBoxes.isEmpty()) {
             return bboxMappings;
+        }
+        
+        // 【新增】创建TextBox的查找索引，用于后续跨页表格处理
+        Map<String, Integer> textBoxKeyToIndex = new HashMap<>();
+        for (int i = 0; i < textBoxes.size(); i++) {
+            TextBoxData tb = textBoxes.get(i);
+            if (tb.page != null && tb.bbox != null && tb.bbox.length >= 4) {
+                String key = createBboxKey(tb.page, tb.bbox);
+                textBoxKeyToIndex.put(key, i);
+            }
         }
         
         log.info("开始生成BboxMappings（带索引映射），TextBox数: {}, 提取结果数: {}", textBoxes.size(), results.size());
@@ -807,7 +837,181 @@ public class RuleExtractService {
         }
         
         log.info("成功生成 {} 个BboxMapping（带索引映射）", bboxMappings.size());
+        
+        // 【新增】处理跨页表格：为主表格的BboxMapping添加延续部分的bbox
+        try {
+            // 从当前任务中获取crossPageTables信息
+            RuleExtractTaskModel taskData = storage.load("task", taskId, RuleExtractTaskModel.class);
+            if (taskData != null && taskData.getCrossPageTables() != null) {
+                String crossPageTablesStr = taskData.getCrossPageTables();
+                com.alibaba.fastjson2.JSONArray crossPageTablesArray = JSON.parseArray(crossPageTablesStr);
+                
+                if (crossPageTablesArray != null && !crossPageTablesArray.isEmpty()) {
+                    log.info("🔗 开始处理跨页表格，表格组数: {}", crossPageTablesArray.size());
+                    
+                    int crossPageTableCount = 0;
+                    int addedBboxCount = 0;
+                    
+                    for (int i = 0; i < crossPageTablesArray.size(); i++) {
+                        com.alibaba.fastjson2.JSONObject group = crossPageTablesArray.getJSONObject(i);
+                        if (group == null) continue;
+                        
+                        String groupId = group.getString("groupId");
+                        com.alibaba.fastjson2.JSONObject mainTableJson = group.getJSONObject("mainTable");
+                        com.alibaba.fastjson2.JSONArray contPartsArray = group.getJSONArray("continuationParts");
+                        
+                        if (mainTableJson == null || contPartsArray == null || contPartsArray.isEmpty()) {
+                            log.warn("⚠️  表格组 {} 数据不完整，跳过", groupId);
+                            continue;
+                        }
+                        
+                        crossPageTableCount++;
+                        
+                        // 解析主表格信息
+                        int mainTablePage = mainTableJson.getIntValue("page");
+                        com.alibaba.fastjson2.JSONArray mainTableBboxArray = mainTableJson.getJSONArray("bbox");
+                        double[] mainTableBbox = new double[]{
+                            mainTableBboxArray.getDoubleValue(0),
+                            mainTableBboxArray.getDoubleValue(1),
+                            mainTableBboxArray.getDoubleValue(2),
+                            mainTableBboxArray.getDoubleValue(3)
+                        };
+                        
+                        // 找到主表格对应的BboxMapping
+                        String mainTableKey = createBboxKey(mainTablePage, mainTableBbox);
+                        Integer textBoxIndex = textBoxKeyToIndex.get(mainTableKey);
+                        
+                        if (textBoxIndex == null) {
+                            log.warn("⚠️  未找到主表格对应的TextBox，组ID: {}, 页: {}, key: {}", 
+                                groupId, mainTablePage, mainTableKey);
+                            continue;
+                        }
+                        
+                        // 找到包含这个TextBox的BboxMapping
+                        JSONObject mainMapping = null;
+                        for (JSONObject mapping : bboxMappings) {
+                            com.alibaba.fastjson2.JSONArray bboxes = mapping.getJSONArray("bboxes");
+                            if (bboxes != null) {
+                                for (int j = 0; j < bboxes.size(); j++) {
+                                    com.alibaba.fastjson2.JSONObject bboxInfo = bboxes.getJSONObject(j);
+                                    int page = bboxInfo.getIntValue("page");
+                                    com.alibaba.fastjson2.JSONArray bbox = bboxInfo.getJSONArray("bbox");
+                                    if (bbox != null && bbox.size() >= 4) {
+                                        double[] bboxArr = new double[]{
+                                            bbox.getDoubleValue(0),
+                                            bbox.getDoubleValue(1),
+                                            bbox.getDoubleValue(2),
+                                            bbox.getDoubleValue(3)
+                                        };
+                                        String key = createBboxKey(page, bboxArr);
+                                        if (key.equals(mainTableKey)) {
+                                            mainMapping = mapping;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if (mainMapping != null) break;
+                        }
+                        
+                        if (mainMapping == null) {
+                            log.warn("⚠️  未找到主表格对应的BboxMapping，组ID: {}", groupId);
+                            continue;
+                        }
+                        
+                        // 为主表格的BboxMapping添加延续部分的bbox
+                        com.alibaba.fastjson2.JSONArray bboxes = mainMapping.getJSONArray("bboxes");
+                        com.alibaba.fastjson2.JSONArray pages = mainMapping.getJSONArray("pages");
+                        if (bboxes == null) {
+                            bboxes = new com.alibaba.fastjson2.JSONArray();
+                            mainMapping.put("bboxes", bboxes);
+                        }
+                        if (pages == null) {
+                            pages = new com.alibaba.fastjson2.JSONArray();
+                            mainMapping.put("pages", pages);
+                        }
+                        
+                        // 【关键】创建已有bbox的索引，用于去重
+                        java.util.Set<String> existingBboxKeys = new java.util.HashSet<>();
+                        for (int j = 0; j < bboxes.size(); j++) {
+                            com.alibaba.fastjson2.JSONObject existingBbox = bboxes.getJSONObject(j);
+                            if (existingBbox != null) {
+                                int existingPage = existingBbox.getIntValue("page");
+                                com.alibaba.fastjson2.JSONArray existingBboxArr = existingBbox.getJSONArray("bbox");
+                                if (existingBboxArr != null && existingBboxArr.size() >= 4) {
+                                    double[] existingBboxData = new double[]{
+                                        existingBboxArr.getDoubleValue(0),
+                                        existingBboxArr.getDoubleValue(1),
+                                        existingBboxArr.getDoubleValue(2),
+                                        existingBboxArr.getDoubleValue(3)
+                                    };
+                                    String key = createBboxKey(existingPage, existingBboxData);
+                                    existingBboxKeys.add(key);
+                                }
+                            }
+                        }
+                        
+                        for (int j = 0; j < contPartsArray.size(); j++) {
+                            com.alibaba.fastjson2.JSONObject contPartJson = contPartsArray.getJSONObject(j);
+                            if (contPartJson == null) continue;
+                            
+                            int contPage = contPartJson.getIntValue("page");
+                            com.alibaba.fastjson2.JSONArray contBboxArray = contPartJson.getJSONArray("bbox");
+                            double[] contBbox = new double[]{
+                                contBboxArray.getDoubleValue(0),
+                                contBboxArray.getDoubleValue(1),
+                                contBboxArray.getDoubleValue(2),
+                                contBboxArray.getDoubleValue(3)
+                            };
+                            
+                            // 【关键】检查bbox是否已存在，避免重复添加
+                            String contBboxKey = createBboxKey(contPage, contBbox);
+                            if (existingBboxKeys.contains(contBboxKey)) {
+                                log.debug("  ⏭️  跳过已存在的bbox: 页{}, key={}", contPage, contBboxKey);
+                                continue;
+                            }
+                            
+                            JSONObject contBboxInfo = new JSONObject();
+                            contBboxInfo.put("page", contPage);
+                            contBboxInfo.put("bbox", contBbox);
+                            
+                            bboxes.add(contBboxInfo);
+                            existingBboxKeys.add(contBboxKey);  // 标记为已添加
+                            
+                            if (!pages.contains(contPage)) {
+                                pages.add(contPage);
+                            }
+                            
+                            addedBboxCount++;
+                            
+                            log.info("  ✅ 为表格组 {} 添加跨页bbox: 页{}, bbox=[{},{},{},{}]",
+                                groupId, contPage,
+                                (int)contBbox[0], (int)contBbox[1],
+                                (int)contBbox[2], (int)contBbox[3]);
+                        }
+                    }
+                    
+                    log.info("🔗 跨页表格处理完成，处理了 {} 个跨页表格，添加了 {} 个延续bbox", 
+                        crossPageTableCount, addedBboxCount);
+                }
+            }
+        } catch (Exception e) {
+            log.error("处理跨页表格失败: {}", e.getMessage(), e);
+        }
+        
         return bboxMappings;
+    }
+    
+    /**
+     * 创建bbox的唯一键（用于匹配TextBox和TablePart）
+     */
+    private String createBboxKey(int page, double[] bbox) {
+        if (bbox == null || bbox.length < 4) {
+            return "";
+        }
+        // 使用页码和bbox坐标创建唯一键（四舍五入到整数，避免浮点误差）
+        return String.format("%d_%.0f_%.0f_%.0f_%.0f", 
+            page, bbox[0], bbox[1], bbox[2], bbox[3]);
     }
     
     /**
@@ -1262,7 +1466,7 @@ public class RuleExtractService {
     }
     
     /**
-     * 从content_list生成OCR文本
+     * 从content_list生成OCR文本（应用LaTeX转换）
      */
     private String generateTextFromContentList(JSONArray contentList) {
         StringBuilder text = new StringBuilder();
@@ -1274,12 +1478,20 @@ public class RuleExtractService {
             if ("text".equals(type) || "title".equals(type)) {
                 String itemText = item.getString("text");
                 if (itemText != null && !itemText.trim().isEmpty()) {
+                    // 【核心修复】应用 LaTeX 公式转换
+                    if (LaTeXToUnicodeConverter.containsLatexCommands(itemText)) {
+                        itemText = LaTeXToUnicodeConverter.convertToUnicode(itemText);
+                    }
                     text.append(itemText).append("\n");
                 }
             } else if ("table".equals(type)) {
                 // 表格内容 - 需要标准化HTML格式
                 String tableBody = item.getString("table_body");
                 if (tableBody != null && !tableBody.trim().isEmpty()) {
+                    // 【核心修复】应用 LaTeX 公式转换（表格中也可能有公式）
+                    if (LaTeXToUnicodeConverter.containsLatexCommands(tableBody)) {
+                        tableBody = LaTeXToUnicodeConverter.convertToUnicode(tableBody);
+                    }
                     // 标准化HTML：移除标签间的换行,移除标签内的换行并替换为空格
                     String normalizedHtml = normalizeTableHtml(tableBody);
                     text.append(normalizedHtml).append("\n");
@@ -1288,14 +1500,24 @@ public class RuleExtractService {
                 JSONArray captions = item.getJSONArray("table_caption");
                 if (captions != null) {
                     for (int j = 0; j < captions.size(); j++) {
-                        text.append(captions.getString(j)).append("\n");
+                        String caption = captions.getString(j);
+                        // 【核心修复】应用 LaTeX 公式转换（标题中也可能有公式）
+                        if (caption != null && LaTeXToUnicodeConverter.containsLatexCommands(caption)) {
+                            caption = LaTeXToUnicodeConverter.convertToUnicode(caption);
+                        }
+                        text.append(caption).append("\n");
                     }
                 }
                 // 表格注释
                 JSONArray footnotes = item.getJSONArray("table_footnote");
                 if (footnotes != null) {
                     for (int j = 0; j < footnotes.size(); j++) {
-                        text.append(footnotes.getString(j)).append("\n");
+                        String footnote = footnotes.getString(j);
+                        // 【核心修复】应用 LaTeX 公式转换（注释中也可能有公式）
+                        if (footnote != null && LaTeXToUnicodeConverter.containsLatexCommands(footnote)) {
+                            footnote = LaTeXToUnicodeConverter.convertToUnicode(footnote);
+                        }
+                        text.append(footnote).append("\n");
                     }
                 }
             } else if ("list".equals(type)) {
@@ -1306,7 +1528,12 @@ public class RuleExtractService {
                 }
                 if (listItems != null) {
                     for (int j = 0; j < listItems.size(); j++) {
-                        text.append(listItems.getString(j)).append("\n");
+                        String listItem = listItems.getString(j);
+                        // 【核心修复】应用 LaTeX 公式转换（列表项中也可能有公式）
+                        if (listItem != null && LaTeXToUnicodeConverter.containsLatexCommands(listItem)) {
+                            listItem = LaTeXToUnicodeConverter.convertToUnicode(listItem);
+                        }
+                        text.append(listItem).append("\n");
                     }
                 }
             }

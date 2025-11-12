@@ -1,8 +1,8 @@
 package com.zhaoxinms.contract.template.sdk.service.impl;
 
-import com.zhaoxinms.contract.template.sdk.entity.TemplateDesignRecord;
+import com.zhaoxinms.contract.tools.template.entity.TemplateDesignRecord;
+import com.zhaoxinms.contract.tools.template.service.TemplateDesignRecordService;
 import com.zhaoxinms.contract.template.sdk.mapper.TemplateDesignRecordMapper;
-import com.zhaoxinms.contract.template.sdk.service.TemplateDesignRecordService;
 import com.zhaoxinms.contract.tools.common.entity.FileInfo;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.common.util.SnowflakeIdGenerator;

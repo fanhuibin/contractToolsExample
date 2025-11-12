@@ -1,184 +1,485 @@
 package com.zhaoxinms.contract.template.sdk.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhaoxinms.contract.template.sdk.validator.FieldConfigValidator;
 import com.zhaoxinms.contract.tools.api.dto.*;
 import com.zhaoxinms.contract.tools.api.service.TemplateService;
+import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 模板服务实现类
  * 此实现类提供具体的字段信息查询逻辑
+ * 从JSON配置文件读取字段数据
  */
 @Service
 public class TemplateServiceImpl implements TemplateService {
 
+    private static final Logger logger = LoggerFactory.getLogger(TemplateServiceImpl.class);
+    
+    @Autowired
+    private ZxcmConfig zxcmConfig;
+    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Override
     public FieldResponse getFields() {
+        try {
+            // 从JSON文件读取配置
+            return loadFieldsFromJson();
+        } catch (Exception e) {
+            logger.error("从JSON文件加载字段配置失败，返回空配置", e);
+            // 如果读取失败，返回空配置
+            FieldResponse response = new FieldResponse();
+            response.setBaseFields(new ArrayList<>());
+            response.setCounterpartyFields(new ArrayList<>());
+            response.setClauseFields(new ArrayList<>());
+            response.setSealFields(new ArrayList<>());
+            return response;
+        }
+    }
+    
+    /**
+     * 从JSON文件加载字段配置
+     */
+    private FieldResponse loadFieldsFromJson() throws IOException {
+        // 获取文件路径：root-path/template/fields.json
+        String rootPath = zxcmConfig.getFileUpload().getRootPath();
+        String jsonFilePath = rootPath + File.separator + "template" + File.separator + "fields.json";
+        
+        logger.info("开始加载字段配置文件，路径: {}", jsonFilePath);
+        
+        File jsonFile = new File(jsonFilePath);
+        logger.info("文件绝对路径: {}", jsonFile.getAbsolutePath());
+        logger.info("文件是否存在: {}", jsonFile.exists());
+        
+        if (!jsonFile.exists()) {
+            logger.warn("字段配置文件不存在: {}", jsonFile.getAbsolutePath());
+            // 尝试创建目录
+            File parentDir = jsonFile.getParentFile();
+            if (!parentDir.exists()) {
+                logger.info("创建目录: {}", parentDir.getAbsolutePath());
+                parentDir.mkdirs();
+            }
+            return createEmptyResponse();
+        }
+        
+        // 读取JSON文件
+        logger.info("开始读取JSON文件内容");
+        String jsonContent = new String(Files.readAllBytes(Paths.get(jsonFilePath)), "UTF-8");
+        logger.info("JSON文件内容长度: {} 字符", jsonContent.length());
+        
+        // 校验 JSON 配置
+        logger.info("开始校验JSON配置");
+        FieldConfigValidator.ValidationResult validationResult = FieldConfigValidator.validateJsonConfig(jsonContent);
+        if (!validationResult.isValid()) {
+            logger.error("字段配置校验失败: {}", validationResult.getErrorMessage());
+            throw new RuntimeException("字段配置文件校验失败: " + validationResult.getErrorMessage());
+        }
+        logger.info("JSON配置校验通过");
+        
+        // 解析JSON
+        logger.info("开始解析JSON");
+        FieldsConfig config = objectMapper.readValue(jsonContent, FieldsConfig.class);
+        
+        // 转换为DTO对象
         FieldResponse response = new FieldResponse();
+        response.setBaseFields(convertBaseFields(config.getBaseFields()));
+        response.setCounterpartyFields(convertCounterpartyFields(config.getCounterpartyFields()));
+        response.setClauseFields(convertClauseFields(config.getClauseFields()));
+        response.setSealFields(convertSealFields(config.getSealFields()));
         
-        // 基础字段数据（按用户要求补充并规范code前缀）
-        List<BaseField> baseFields = new ArrayList<>();
-
-        BaseField base1 = new BaseField();
-        base1.setId("1");
-        base1.setName("合同名");
-        base1.setCode("base_contractName");
-        base1.setIsRichText(false);
-        base1.setSampleValue("示例-合同名");
-        baseFields.add(base1);
-
-        BaseField base2 = new BaseField();
-        base2.setId("2");
-        base2.setName("合同编号");
-        base2.setCode("base_contractCode");
-        base2.setIsRichText(false);
-        base2.setSampleValue("HT-2025-0001");
-        baseFields.add(base2);
-
-        BaseField base3 = new BaseField();
-        base3.setId("3");
-        base3.setName("收支类型");
-        base3.setCode("base_inouttype");
-        base3.setIsRichText(false);
-        base3.setSampleValue("支出");
-        baseFields.add(base3);
-
-        BaseField base4 = new BaseField();
-        base4.setId("4");
-        base4.setName("合同金额");
-        base4.setCode("base_amount");
-        base4.setIsRichText(false);
-        base4.setSampleValue("100000.00");
-        baseFields.add(base4);
-
-        BaseField base5 = new BaseField();
-        base5.setId("5");
-        base5.setName("合同金额大写");
-        base5.setCode("base_amountB");
-        base5.setIsRichText(false);
-        base5.setSampleValue("壹拾万元整");
-        baseFields.add(base5);
-
-        BaseField base6 = new BaseField();
-        base6.setId("6");
-        base6.setName("所属项目");
-        base6.setCode("base_project");
-        base6.setIsRichText(false);
-        base6.setSampleValue("上海新总部项目");
-        baseFields.add(base6);
-
-        BaseField base7 = new BaseField();
-        base7.setId("7");
-        base7.setName("生效时间");
-        base7.setCode("base_effectiveTime");
-        base7.setIsRichText(false);
-        base7.setSampleValue("2025-01-01");
-        baseFields.add(base7);
-
-        BaseField base8 = new BaseField();
-        base8.setId("8");
-        base8.setName("截止时间");
-        base8.setCode("base_deadline");
-        base8.setIsRichText(false);
-        base8.setSampleValue("2025-12-31");
-        baseFields.add(base8);
-
-        // 富文本字段：产品明细（页面需标记）
-        BaseField base9 = new BaseField();
-        base9.setId("9");
-        base9.setName("产品明细");
-        base9.setCode("base_productDetail");
-        base9.setIsRichText(true);
-        base9.setSampleValue("<p>产品A x 10，产品B x 5</p>");
-        baseFields.add(base9);
-        
-        response.setBaseFields(baseFields);
-        
-        // 相对方（签约方/主体）字段数据（按用户提供清单）
-        List<CounterpartyField> counterpartyFields = new ArrayList<>();
-
-        counterpartyFields.add(createCounterpartyField("101", "主体名称", "subject_name", 1, "某某科技有限公司"));
-        counterpartyFields.add(createCounterpartyField("110", "法人姓名", "subject_contractLegalPerson", 1, "张三"));
-        counterpartyFields.add(createCounterpartyField("111", "法人身份证", "subject_contractLegalPersonId", 1, "110101199001010011"));
-        counterpartyFields.add(createCounterpartyField("102", "统一信用代码", "subject_uscc", 1, "91310101MA1KXXXXXX"));
-        counterpartyFields.add(createCounterpartyField("103", "主体地址", "subject_address", 1, "上海市浦东新区世纪大道1号"));
-        counterpartyFields.add(createCounterpartyField("104", "联系人", "subject_contactName", 1, "李四"));
-        counterpartyFields.add(createCounterpartyField("105", "联系电话", "subject_contactTel", 1, "13800138000"));
-        counterpartyFields.add(createCounterpartyField("108", "联系人邮箱", "subject_contractEmail", 1, "a@example.com"));
-        counterpartyFields.add(createCounterpartyField("109", "联系人地址", "subject_contractAddr", 1, "上海市浦东新区XX路88号"));
-        counterpartyFields.add(createCounterpartyField("106", "收款帐号", "subject_cardNo", 1, "622202*********1234"));
-        counterpartyFields.add(createCounterpartyField("107", "开户行", "subject_bankName", 1, "中国工商银行上海分行"));
-        
-        response.setCounterpartyFields(counterpartyFields);
-        
-        // 条款字段数据
-        List<ClauseField> clauseFields = new ArrayList<>();
-        ClauseField clauseField1 = new ClauseField();
-        clauseField1.setId("clause_001");
-        clauseField1.setName("第一条");
-        clauseField1.setCode("clause_1");
-        clauseField1.setContent("甲方：${party_a_name}，乙方：${party_b_name}，就${base_contractName}达成如下协议：");
-        clauseField1.setType("general");
-        clauseField1.setTypeName("通用条款");
-        clauseField1.setSampleValue("示例条款一（含变量展示）");
-        clauseFields.add(clauseField1);
-        
-        ClauseField clauseField2 = new ClauseField();
-        clauseField2.setId("clause_002");
-        clauseField2.setName("第二条");
-        clauseField2.setCode("clause_2");
-        clauseField2.setContent("合同金额：${contract_amount}元");
-        clauseField2.setType("payment");
-        clauseField2.setTypeName("付款条款");
-        clauseField2.setSampleValue("示例付款条款");
-        clauseFields.add(clauseField2);
-        
-        ClauseField clauseField3 = new ClauseField();
-        clauseField3.setId("clause_003");
-        clauseField3.setName("第三条");
-        clauseField3.setCode("clause_3");
-        clauseField3.setContent("甲方地址：${party_a_address}，乙方地址：${party_b_address}");
-        clauseField3.setType("address");
-        clauseField3.setTypeName("地址条款");
-        clauseField3.setSampleValue("示例地址条款");
-        clauseFields.add(clauseField3);
-
-        // 印章字段
-        // 由于DTO新增SealField，这里演示返回两枚示例印章
-        List<SealField> sealFields = new ArrayList<>();
-        SealField companySeal = new SealField();
-        companySeal.setId("seal_001");
-        companySeal.setName("公司公章");
-        companySeal.setCode("company_seal");
-        companySeal.setType("company");
-        companySeal.setOrderIndex(1);
-        sealFields.add(companySeal);
-
-        SealField financeSeal = new SealField();
-        financeSeal.setId("seal_002");
-        financeSeal.setName("财务专用章");
-        financeSeal.setCode("finance_seal");
-        financeSeal.setType("finance");
-        financeSeal.setOrderIndex(2);
-        sealFields.add(financeSeal);
-
-        response.setSealFields(sealFields);
-        
-        response.setClauseFields(clauseFields);
+        logger.info("成功加载字段配置: 基础字段{}个, 相对方字段{}个, 条款字段{}个, 印章字段{}个",
+                response.getBaseFields().size(),
+                response.getCounterpartyFields().size(),
+                response.getClauseFields().size(),
+                response.getSealFields().size());
         
         return response;
     }
-
-    private CounterpartyField createCounterpartyField(String id, String name, String code, int index, String sample) {
-        CounterpartyField f = new CounterpartyField();
-        f.setId(id);
-        f.setName(name);
-        f.setCode(code);
-        f.setCounterpartyIndex(index);
-        f.setSampleValue(sample);
-        return f;
+    
+    /**
+     * 转换基础字段
+     */
+    private List<BaseField> convertBaseFields(List<BaseFieldConfig> configs) {
+        List<BaseField> fields = new ArrayList<>();
+        if (configs != null) {
+            for (BaseFieldConfig config : configs) {
+                BaseField field = new BaseField();
+                field.setId(config.getId());
+                field.setName(config.getName());
+                field.setCode(config.getCode());
+                field.setIsRichText(config.getIsRichText());
+                field.setSampleValue(config.getSampleValue());
+                fields.add(field);
+            }
+        }
+        return fields;
+    }
+    
+    /**
+     * 转换相对方字段
+     */
+    private List<CounterpartyField> convertCounterpartyFields(List<CounterpartyFieldConfig> configs) {
+        List<CounterpartyField> fields = new ArrayList<>();
+        if (configs != null) {
+            for (CounterpartyFieldConfig config : configs) {
+                CounterpartyField field = new CounterpartyField();
+                field.setId(config.getId());
+                field.setName(config.getName());
+                field.setCode(config.getCode());
+                field.setCounterpartyIndex(config.getCounterpartyIndex());
+                field.setSampleValue(config.getSampleValue());
+                fields.add(field);
+            }
+        }
+        return fields;
+    }
+    
+    /**
+     * 转换条款字段
+     */
+    private List<ClauseField> convertClauseFields(List<ClauseFieldConfig> configs) {
+        List<ClauseField> fields = new ArrayList<>();
+        if (configs != null) {
+            for (ClauseFieldConfig config : configs) {
+                ClauseField field = new ClauseField();
+                field.setId(config.getId());
+                field.setName(config.getName());
+                field.setCode(config.getCode());
+                field.setContent(config.getContent());
+                field.setType(config.getType());
+                field.setTypeName(config.getTypeName());
+                field.setSampleValue(config.getSampleValue());
+                fields.add(field);
+            }
+        }
+        return fields;
+    }
+    
+    /**
+     * 转换印章字段
+     */
+    private List<SealField> convertSealFields(List<SealFieldConfig> configs) {
+        List<SealField> fields = new ArrayList<>();
+        if (configs != null) {
+            for (SealFieldConfig config : configs) {
+                SealField field = new SealField();
+                field.setId(config.getId());
+                field.setName(config.getName());
+                field.setCode(config.getCode());
+                field.setType(config.getType());
+                field.setOrderIndex(config.getOrderIndex());
+                field.setWidth(config.getWidth());
+                field.setHeight(config.getHeight());
+                fields.add(field);
+            }
+        }
+        return fields;
+    }
+    
+    /**
+     * 创建空响应
+     */
+    private FieldResponse createEmptyResponse() {
+        FieldResponse response = new FieldResponse();
+        response.setBaseFields(new ArrayList<>());
+        response.setCounterpartyFields(new ArrayList<>());
+        response.setClauseFields(new ArrayList<>());
+        response.setSealFields(new ArrayList<>());
+        return response;
+    }
+    
+    /**
+     * JSON配置类 - 用于解析JSON文件
+     */
+    private static class FieldsConfig {
+        private List<BaseFieldConfig> baseFields;
+        private List<CounterpartyFieldConfig> counterpartyFields;
+        private List<ClauseFieldConfig> clauseFields;
+        private List<SealFieldConfig> sealFields;
+        
+        public List<BaseFieldConfig> getBaseFields() {
+            return baseFields;
+        }
+        
+        public void setBaseFields(List<BaseFieldConfig> baseFields) {
+            this.baseFields = baseFields;
+        }
+        
+        public List<CounterpartyFieldConfig> getCounterpartyFields() {
+            return counterpartyFields;
+        }
+        
+        public void setCounterpartyFields(List<CounterpartyFieldConfig> counterpartyFields) {
+            this.counterpartyFields = counterpartyFields;
+        }
+        
+        public List<ClauseFieldConfig> getClauseFields() {
+            return clauseFields;
+        }
+        
+        public void setClauseFields(List<ClauseFieldConfig> clauseFields) {
+            this.clauseFields = clauseFields;
+        }
+        
+        public List<SealFieldConfig> getSealFields() {
+            return sealFields;
+        }
+        
+        public void setSealFields(List<SealFieldConfig> sealFields) {
+            this.sealFields = sealFields;
+        }
+    }
+    
+    /**
+     * 基础字段配置
+     */
+    private static class BaseFieldConfig {
+        private String id;
+        private String name;
+        private String code;
+        private Boolean isRichText;
+        private String sampleValue;
+        
+        public String getId() {
+            return id;
+        }
+        
+        public void setId(String id) {
+            this.id = id;
+        }
+        
+        public String getName() {
+            return name;
+        }
+        
+        public void setName(String name) {
+            this.name = name;
+        }
+        
+        public String getCode() {
+            return code;
+        }
+        
+        public void setCode(String code) {
+            this.code = code;
+        }
+        
+        public Boolean getIsRichText() {
+            return isRichText;
+        }
+        
+        public void setIsRichText(Boolean isRichText) {
+            this.isRichText = isRichText;
+        }
+        
+        public String getSampleValue() {
+            return sampleValue;
+        }
+        
+        public void setSampleValue(String sampleValue) {
+            this.sampleValue = sampleValue;
+        }
+    }
+    
+    /**
+     * 相对方字段配置
+     */
+    private static class CounterpartyFieldConfig {
+        private String id;
+        private String name;
+        private String code;
+        private Integer counterpartyIndex;
+        private String sampleValue;
+        
+        public String getId() {
+            return id;
+        }
+        
+        public void setId(String id) {
+            this.id = id;
+        }
+        
+        public String getName() {
+            return name;
+        }
+        
+        public void setName(String name) {
+            this.name = name;
+        }
+        
+        public String getCode() {
+            return code;
+        }
+        
+        public void setCode(String code) {
+            this.code = code;
+        }
+        
+        public Integer getCounterpartyIndex() {
+            return counterpartyIndex;
+        }
+        
+        public void setCounterpartyIndex(Integer counterpartyIndex) {
+            this.counterpartyIndex = counterpartyIndex;
+        }
+        
+        public String getSampleValue() {
+            return sampleValue;
+        }
+        
+        public void setSampleValue(String sampleValue) {
+            this.sampleValue = sampleValue;
+        }
+    }
+    
+    /**
+     * 条款字段配置
+     */
+    private static class ClauseFieldConfig {
+        private String id;
+        private String name;
+        private String code;
+        private String content;
+        private String type;
+        private String typeName;
+        private String sampleValue;
+        
+        public String getId() {
+            return id;
+        }
+        
+        public void setId(String id) {
+            this.id = id;
+        }
+        
+        public String getName() {
+            return name;
+        }
+        
+        public void setName(String name) {
+            this.name = name;
+        }
+        
+        public String getCode() {
+            return code;
+        }
+        
+        public void setCode(String code) {
+            this.code = code;
+        }
+        
+        public String getContent() {
+            return content;
+        }
+        
+        public void setContent(String content) {
+            this.content = content;
+        }
+        
+        public String getType() {
+            return type;
+        }
+        
+        public void setType(String type) {
+            this.type = type;
+        }
+        
+        public String getTypeName() {
+            return typeName;
+        }
+        
+        public void setTypeName(String typeName) {
+            this.typeName = typeName;
+        }
+        
+        public String getSampleValue() {
+            return sampleValue;
+        }
+        
+        public void setSampleValue(String sampleValue) {
+            this.sampleValue = sampleValue;
+        }
+    }
+    
+    /**
+     * 印章字段配置
+     */
+    private static class SealFieldConfig {
+        private String id;
+        private String name;
+        private String code;
+        private String type;
+        private Integer orderIndex;
+        private Float width;
+        private Float height;
+        
+        public String getId() {
+            return id;
+        }
+        
+        public void setId(String id) {
+            this.id = id;
+        }
+        
+        public String getName() {
+            return name;
+        }
+        
+        public void setName(String name) {
+            this.name = name;
+        }
+        
+        public String getCode() {
+            return code;
+        }
+        
+        public void setCode(String code) {
+            this.code = code;
+        }
+        
+        public String getType() {
+            return type;
+        }
+        
+        public void setType(String type) {
+            this.type = type;
+        }
+        
+        public Integer getOrderIndex() {
+            return orderIndex;
+        }
+        
+        public void setOrderIndex(Integer orderIndex) {
+            this.orderIndex = orderIndex;
+        }
+        
+        public Float getWidth() {
+            return width;
+        }
+        
+        public void setWidth(Float width) {
+            this.width = width;
+        }
+        
+        public Float getHeight() {
+            return height;
+        }
+        
+        public void setHeight(Float height) {
+            this.height = height;
+        }
     }
 
     @Override

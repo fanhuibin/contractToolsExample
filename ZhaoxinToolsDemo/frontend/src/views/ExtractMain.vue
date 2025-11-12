@@ -1,27 +1,28 @@
 <template>
-  <div class="extract-main-page">
-    <!-- 使用 PageHeader 组件 - 英雄区域 -->
-    <PageHeader 
-      title="智能文档抽取" 
-      description="采用深度版面分析、OCR识别与智能文档检索技术，结合规则引擎精准定位，实现结构化信息高效抽取"
-      :icon="Document"
-      tag="规则引擎"
-      tag-type="success"
-    >
-      <template #actions>
+  <DemoLayout category="extract" @doc-select="handleDemoDocSelect" @manage-template="handleManageTemplate">
+    <!-- 结果页面iframe（替换右侧内容） -->
+    <div v-if="showResultPage" class="result-page-wrapper">
+      <div class="result-page-header">
         <el-button 
+          text 
           type="primary" 
-          size="large"
-          @click="openTemplateManage"
+          @click="backToExtract"
+          class="back-button"
         >
-          <el-icon><Setting /></el-icon>
-          模板管理
+          <el-icon><ArrowLeft /></el-icon>
+          返回抽取
         </el-button>
-      </template>
-    </PageHeader>
-
-    <!-- 主内容区域 - 居中垂直布局 -->
-    <div class="main-content-wrapper">
+        <span class="result-page-title">抽取结果</span>
+      </div>
+      <iframe 
+        :src="resultPageUrl" 
+        class="result-page-iframe"
+        @load="onResultPageLoad"
+      />
+    </div>
+    
+    <!-- 抽取界面（默认显示） -->
+    <div v-else class="extract-content-wrapper">
       <el-card class="main-card">
         <!-- 顶部步骤指示器 -->
         <div class="steps-section">
@@ -267,52 +268,118 @@
         </el-card>
     </div>
     
-    <!-- 模板管理弹窗 -->
+    <!-- 提取结果详情弹窗（自定义UI） -->
+    <el-dialog
+      v-model="resultDialogVisible"
+      title="提取结果详情"
+      width="85%"
+      align-center
+      destroy-on-close
+      @close="onResultDialogClose"
+      class="extract-result-dialog"
+    >
+      <div v-if="extractResult" class="result-content">
+        <!-- 任务信息 -->
+        <el-alert
+          :title="`任务ID: ${currentTask.taskId}`"
+          type="success"
+          :closable="false"
+          class="task-alert"
+        >
+          <template #default>
+            <div class="task-meta">
+              <span>文件名: {{ currentTask.fileName }}</span>
+              <span>耗时: {{ currentTask.durationSeconds || 0 }} 秒</span>
+              <span>状态: {{ getTaskStatusLabel(currentTask.status) }}</span>
+            </div>
+          </template>
+        </el-alert>
+
+        <!-- 提取的数据 -->
+        <el-card shadow="never" class="data-card">
+          <template #header>
+            <div class="card-header">
+              <el-icon><Document /></el-icon>
+              <span>提取的字段数据</span>
+              <el-tag type="success" size="small">{{ extractedDataArray.length }} 个字段</el-tag>
+            </div>
+          </template>
+
+          <div v-if="extractedDataArray.length > 0">
+            <el-table 
+              :data="extractedDataArray" 
+              stripe
+              :show-header="true"
+              style="width: 100%"
+              :max-height="500"
+            >
+              <el-table-column prop="fieldName" label="字段名称" width="200" />
+              <el-table-column prop="fieldValue" label="提取值" min-width="300">
+                <template #default="{ row }">
+                  <span class="field-value">{{ row.fieldValue || '-' }}</span>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+          <el-empty v-else description="未提取到任何数据" :image-size="120" />
+        </el-card>
+
+      </div>
+
+      <div v-else class="loading-content">
+        <el-skeleton :rows="8" animated />
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="exportResult" type="primary">
+            <el-icon><Download /></el-icon>
+            导出结果
+          </el-button>
+          <el-button @click="startNewTask" type="success">
+            <el-icon><Plus /></el-icon>
+            继续提取
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+    
+    <!-- Template & AI Generator iframe dialogs -->
     <IframeDialog
       v-model="templateDialogVisible"
       :url="templateManageUrl"
       title="模板管理"
-      :fullscreen="false"
       width="90%"
       @close="onTemplateDialogClose"
     />
     
-    <!-- AI生成模板弹窗 -->
     <IframeDialog
       v-model="aiGeneratorDialogVisible"
       :url="aiGeneratorUrl"
-      title="AI生成模板"
-      :fullscreen="false"
-      width="75%"
+      title="AI模板生成助手"
+      width="90%"
       @close="onAIGeneratorDialogClose"
     />
     
-    <!-- 提取结果详情弹窗 -->
-    <IframeDialog
-      v-model="resultDialogVisible"
-      :url="resultUrl"
-      title="提取结果详情"
-      :fullscreen="false"
-      width="90%"
-      @close="onResultDialogClose"
-    />
-  </div>
+  </DemoLayout>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, UploadFilled, CircleCheck, Setting } from '@element-plus/icons-vue'
-import PageHeader from '@/components/PageHeader.vue'
+import { Document, UploadFilled, CircleCheck, Setting, Download, Plus, ArrowLeft } from '@element-plus/icons-vue'
+import DemoLayout from '@/components/DemoLayout.vue'
 import IframeDialog from '@/components/IframeDialog.vue'
 import { ZHAOXIN_CONFIG } from '@/config'
 import { 
   listTemplates, 
   uploadAndExtract, 
   getRuleExtractTaskStatus,
+  getRuleExtractTaskResult,
   cancelRuleExtractTask
 } from '@/api/ruleExtract'
+import { downloadDemoDocument } from '@/api/demo'
 import { extractArrayData, formatFileSize, formatTime } from '@/utils/responseHelper'
 
 const router = useRouter()
@@ -344,6 +411,11 @@ let statusCheckTimer = null
 const templateDialogVisible = ref(false)
 const aiGeneratorDialogVisible = ref(false)
 const resultDialogVisible = ref(false)
+const showResultPage = ref(false)  // 是否显示结果页面（替换右侧内容）
+
+// 提取结果数据
+const extractResult = ref(null)
+const currentResultTaskId = ref(null)  // 当前显示的结果任务ID
 
 const canStartExtraction = computed(() => {
   return selectedFile.value && selectedTemplateId.value && !isExtracting.value
@@ -353,7 +425,41 @@ const selectedTemplateInfo = computed(() => {
   return templates.value.find(t => t.id === selectedTemplateId.value)
 })
 
-// iframe URL构建
+// 将提取的数据转换为表格数组格式
+const extractedDataArray = computed(() => {
+  if (!extractResult.value) {
+    console.log('❌ extractResult 为空')
+    return []
+  }
+  
+  console.log('📊 extractResult 原始数据:', extractResult.value)
+  
+  // 优先使用 extractResults 数组（后端实际返回的格式）
+  if (Array.isArray(extractResult.value.extractResults)) {
+    console.log('✅ 使用 extractResults 数组，长度:', extractResult.value.extractResults.length)
+    
+    return extractResult.value.extractResults.map(item => ({
+      fieldName: item.fieldName || item.field_name || '未知字段',
+      fieldValue: item.extractedValue || item.extracted_value || item.value || '-'
+    }))
+  }
+  
+  // 兼容性：如果是对象格式 { extractedData: {...} }
+  if (extractResult.value.extractedData && typeof extractResult.value.extractedData === 'object') {
+    console.log('✅ 使用 extractedData 对象格式')
+    const data = extractResult.value.extractedData
+    
+    return Object.keys(data).map(key => ({
+      fieldName: key,
+      fieldValue: data[key]
+    }))
+  }
+  
+  console.log('❌ 无法识别的数据格式')
+  return []
+})
+
+// iframe URL构建（IframeDialog会自动添加embed=true参数）
 const templateManageUrl = computed(() => {
   return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/templates`
 })
@@ -362,11 +468,19 @@ const aiGeneratorUrl = computed(() => {
   return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/ai-generator`
 })
 
-const resultUrl = computed(() => {
-  if (currentTask.value?.taskId) {
-    return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/result/${currentTask.value.taskId}`
+// 结果页面URL（用于iframe显示）
+const resultPageUrl = computed(() => {
+  if (!currentResultTaskId.value) return ''
+  try {
+    const url = new URL(`${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/result/${currentResultTaskId.value}`)
+    // 自动添加嵌入模式参数
+    url.searchParams.set('embed', 'true')
+    url.searchParams.set('hideBack', 'true')
+    return url.toString()
+  } catch (error) {
+    console.error('❌ 构建结果页面URL失败:', error)
+    return `${ZHAOXIN_CONFIG.frontendUrl}/rule-extract/result/${currentResultTaskId.value}`
   }
-  return ''
 })
 
 const loadTemplates = async () => {
@@ -384,21 +498,23 @@ const loadTemplates = async () => {
 }
 
 const handleFileChange = (file) => {
-  selectedFile.value = file.raw
+  // Demo 版本提示用户使用演示文档
+  ElMessageBox.alert(
+    '本演示环境暂不支持自定义上传文档，请使用左侧的演示文档进行体验。\n\n如需使用自定义文档抽取功能，请联系我们获取完整版系统。',
+    '提示',
+    {
+      confirmButtonText: '我知道了',
+      type: 'info',
+      dangerouslyUseHTMLString: false
+    }
+  )
+  // 不设置文件，保持空白状态
+  selectedFile.value = null
+  fileList.value = []
 }
 
 const beforeUpload = (file) => {
-  const isPDF = file.type === 'application/pdf'
-  const isLt100M = file.size / 1024 / 1024 < 100
-
-  if (!isPDF) {
-    ElMessage.error('只能上传PDF文件！')
-    return false
-  }
-  if (!isLt100M) {
-    ElMessage.error('文件大小不能超过100MB！')
-    return false
-  }
+  // 阻止文件上传
   return false
 }
 
@@ -447,7 +563,28 @@ const startExtraction = async () => {
       throw new Error(res.message || '创建任务失败')
     }
   } catch (error) {
-    ElMessage.error('开始提取失败：' + (error.message || '未知错误'))
+    console.error('开始提取失败:', error)
+    
+    // 友好的错误提示
+    let errorMessage = '开始提取失败'
+    const errorText = error.message || error.response?.data?.message || ''
+    
+    if (errorText.includes('模板不存在') || errorText.includes('模板无效')) {
+      errorMessage = '所选模板无效或未配置提取字段，请选择其他模板或前往模板管理配置该模板'
+      ElMessageBox.alert(
+        '该模板尚未配置任何提取字段，无法使用。\n\n解决方法：\n1. 选择其他已配置的模板\n2. 点击"模板管理"为该模板添加字段\n3. 使用"AI模板生成"快速创建新模板',
+        '模板配置错误',
+        {
+          confirmButtonText: '我知道了',
+          type: 'warning',
+          dangerouslyUseHTMLString: false
+        }
+      )
+    } else {
+      errorMessage = '开始提取失败：' + errorText
+      ElMessage.error(errorMessage)
+    }
+    
     isExtracting.value = false
   }
 }
@@ -468,7 +605,11 @@ const startStatusPolling = (taskId) => {
           isExtracting.value = false
           
           if (currentTask.value.status === 'completed') {
-            ElMessage.success('提取完成！')
+            ElMessage.success('提取完成！正在跳转到结果页面...')
+            // 完成后直接跳转到结果页面并加载数据
+            setTimeout(() => {
+              viewDetailedResult()
+            }, 500)
           } else if (currentTask.value.status === 'failed') {
             ElMessage.error('提取失败：' + (currentTask.value.errorMessage || '未知错误'))
           }
@@ -508,16 +649,59 @@ const cancelTask = async () => {
   }
 }
 
-const viewDetailedResult = () => {
-  if (currentTask.value?.taskId) {
+const viewDetailedResult = async () => {
+  if (!currentTask.value?.taskId) return
+  
+  try {
+    // 加载结果数据
+    extractResult.value = null
     resultDialogVisible.value = true
+    
+    const res = await getRuleExtractTaskResult(currentTask.value.taskId)
+    console.log('🔍 原始API响应:', res)
+    console.log('🔍 res.data:', res.data)
+    
+    if (res.data.code === 200) {
+      extractResult.value = res.data.data
+      console.log('✅ 获取提取结果成功')
+      console.log('📦 extractResult.value:', extractResult.value)
+      console.log('📦 extractResult.value 类型:', typeof extractResult.value)
+      console.log('📦 extractResult.value 的keys:', Object.keys(extractResult.value || {}))
+    } else {
+      throw new Error(res.data.message || '获取结果失败')
+    }
+  } catch (error) {
+    console.error('获取提取结果失败:', error)
+    ElMessage.error('获取结果失败：' + (error.message || '未知错误'))
+    resultDialogVisible.value = false
   }
 }
 
 const startNewTask = () => {
   currentTask.value = null
+  extractResult.value = null
   clearFile()
   selectedTemplateId.value = ''
+  resultDialogVisible.value = false
+}
+
+// 导出结果
+const exportResult = () => {
+  if (!extractResult.value) return
+  
+  try {
+    const jsonStr = JSON.stringify(extractResult.value, null, 2)
+    const blob = new Blob([jsonStr], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `extract-result-${currentTask.value.taskId}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    ElMessage.error('导出失败')
+  }
 }
 
 const openTemplateManage = () => {
@@ -536,6 +720,67 @@ const openAIGenerator = () => {
 const onAIGeneratorDialogClose = () => {
   console.log('AI生成模板弹窗已关闭')
   loadTemplates()
+}
+
+// 返回抽取界面
+const backToExtract = () => {
+  console.log('返回抽取界面')
+  showResultPage.value = false
+  currentResultTaskId.value = null
+}
+
+// 结果页面iframe加载完成
+const onResultPageLoad = () => {
+  console.log('结果页面iframe加载完成')
+}
+
+// 处理演示文档选择
+const handleDemoDocSelect = async (doc) => {
+  console.log('📄 选择演示文档:', doc)
+  
+  try {
+    // 如果文档关联了抽取任务ID，直接替换右侧内容区域显示后台系统的结果页面
+    if (doc.taskId) {
+      console.log('🔍 检测到关联任务ID，替换右侧内容显示抽取结果页面:', doc.taskId)
+      ElMessage.success(`正在打开抽取结果：${doc.name}`)
+      
+      // 设置当前任务ID并显示结果页面
+      currentResultTaskId.value = doc.taskId
+      showResultPage.value = true
+      
+      return
+    }
+    
+    // 以下是旧的逻辑（兼容没有taskId的情况）
+    ElMessage.info('正在加载演示文档...')
+    
+    // 下载演示文档
+    const res = await downloadDemoDocument(doc.filePath)
+    
+    // 创建 File 对象
+    const file = new File([res.data], doc.name, { type: 'application/pdf' })
+    
+    // 设置选中的文件
+    selectedFile.value = file
+    fileList.value = [{ name: file.name, size: file.size }]
+    
+    // 如果文档绑定了模板，自动选择该模板
+    if (doc.templateId) {
+      selectedTemplateId.value = doc.templateId
+      ElMessage.success(`已加载演示文档并选择模板`)
+    } else {
+      ElMessage.success('演示文档已加载')
+    }
+  } catch (error) {
+    console.error('❌ 加载演示文档失败:', error)
+    ElMessage.error('加载演示文档失败：' + (error.message || '未知错误'))
+  }
+}
+
+// 处理模板管理
+const handleManageTemplate = () => {
+  console.log('⚙️ 打开模板管理')
+  templateDialogVisible.value = true
 }
 
 const onResultDialogClose = () => {
@@ -625,51 +870,73 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-.extract-main-page {
-  padding: 16px;
-  background: #f5f7fa;
-  min-height: 100vh;
+@import '@/styles/demo-common.scss';
 
-  /* 主内容包装器 */
-  .main-content-wrapper {
-    margin: 0 auto;
-
-    .main-card {
-      border-radius: 12px;
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
-      margin-bottom: 20px;
-
-      /* 步骤指示器区域 */
-      .steps-section {
-        padding: 30px 40px;
-        border-bottom: 1px solid #f0f0f0;
-        background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
-
-        :deep(.el-step__head) {
-          color: #909399;
-        }
-
-        :deep(.el-step__title) {
-          font-weight: 500;
-          color: #606266;
-        }
-
-        :deep(.el-step__description) {
-          color: #909399;
-        }
-
-        :deep(.el-step__icon) {
-          border-color: #d9d9d9;
-          color: #909399;
-        }
-
-        :deep(.el-step__line) {
-          background-color: #e4e7ed;
-        }
+/* 结果页面包装器（替换右侧内容） */
+.result-page-wrapper {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  
+  .result-page-header {
+    height: 56px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid #e4e7ed;
+    background: #fafafa;
+    flex-shrink: 0;
+    
+    .back-button {
+      font-size: 14px;
+      padding: 8px 16px;
+      
+      .el-icon {
+        margin-right: 4px;
       }
+    }
+    
+    .result-page-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #303133;
+    }
+  }
+  
+  .result-page-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #ffffff;
+  }
+}
 
-      /* 文件上传区域 */
-      .upload-section {
+.extract-content-wrapper {
+  padding: $spacing-lg;
+  height: 100%;
+  overflow-y: auto;
+  background: $bg-page;
+
+  /* 主内容卡片 */
+  .main-card {
+    @include main-card;
+    max-width: 1400px;
+    margin-bottom: $spacing-lg;
+    transition: box-shadow 0.3s;
+
+    &:hover {
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 12px -2px rgba(0, 0, 0, 0.03), 0 8px 16px rgba(0, 0, 0, 0.03);
+    }
+
+    /* 步骤指示器区域 */
+    .steps-section {
+      @include steps-section;
+    }
+
+    /* 文件上传区域 */
+    .upload-section {
         padding: 40px 20px;
         
         .centered-upload {
@@ -881,7 +1148,6 @@ onUnmounted(() => {
         }
       }
     }
-  }
 
   /* 结果展示区 */
   .result-area {
@@ -962,6 +1228,75 @@ onUnmounted(() => {
         padding: 40px;
       }
     }
+  }
+}
+
+/* 提取结果弹窗样式 */
+.extract-result-dialog {
+  :deep(.el-dialog) {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  :deep(.el-dialog__body) {
+    flex: 1;
+    overflow-y: auto;
+    max-height: calc(90vh - 120px); /* 减去header和footer的高度 */
+  }
+  
+  .result-content {
+    .task-alert {
+      margin-bottom: 20px;
+      
+      .task-meta {
+        display: flex;
+        gap: 24px;
+        font-size: 13px;
+        color: #606266;
+        flex-wrap: wrap;
+        
+        span {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+      }
+    }
+    
+    .data-card {
+      margin-bottom: 16px;
+      
+      .card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        
+        .el-icon {
+          font-size: 18px;
+          color: #409eff;
+        }
+      }
+      
+      .field-value {
+        color: #303133;
+        font-weight: 500;
+        word-break: break-all;
+      }
+    }
+    
+  }
+  
+  .loading-content {
+    padding: 20px;
+  }
+  
+  .dialog-footer {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
   }
 }
 

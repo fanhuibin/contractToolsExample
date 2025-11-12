@@ -175,3 +175,5 @@ contract-tools-sdk/.classpath
 /docs/package/output
 /contract-tools-sdk/testuploads/files
 /contract-tools-sdk/testuploads/compose
+/ContractComparisonDemo/backend/uploads
+/ContractComparisonDemo/backend/uploads

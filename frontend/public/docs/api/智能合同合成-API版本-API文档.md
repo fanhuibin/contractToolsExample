@@ -1,5 +1,13 @@
 # 智能合同合成 - API版本 文档
 
+## 📚 文档导航
+
+- 本文档：接口定义与请求/响应格式
+- [合同合成模板设计指南](./合同合成模板设计指南.md)：在线设计模块、字段体系、自定义字段
+- [集成智能合同合成](./集成智能合同合成.md)：合成流程、构建请求、下载结果
+
+---
+
 ## 📍 接口地址汇总
 
 | 功能 | 方法 | 接口地址 | 描述 |
@@ -64,10 +72,37 @@ Content-Type: application/json
 |--------|------|------|------|
 | `templateFileId` | string | ✅ | 模板文件ID |
 | `values` | object | ✅ | 字段值映射表（tag -> value） |
+| `extraFiles` | array | ❌ | 需要合并的额外PDF文件URL列表（会在合成后合并，合并后再盖骑缝章） |
+| `stampImageUrls` | object | ❌ | 普通章图片URL映射（key为模板字段的tag，value为包含normal章URL的对象） |
+| `ridingStampUrl` | string | ❌ | 骑缝章图片URL（如果提供则会在合并后的PDF上盖骑缝章，不绑定任何字段） |
 
 **values字段说明**：
-- key: ContentControl的tag名称
+- **key: 必须是ContentControl的tag名称**（从模板查询接口返回的`elementsJson`中获取）
+- **重要**：必须使用完整的tag，格式为`tagElement{code}_{timestamp}_{random}`，例如：`tagElementbase_contractCode_1762826537996_2xuxwr`
+- **不要使用code作为key**，必须使用tag
 - value: 要填充的内容（支持文本、HTML表格等）
+- **注意**：对于印章字段（type为"seal"），value由系统自动生成，不需要在values中传递
+
+**stampImageUrls字段说明**：
+- key: 模板字段的tag（从模板查询接口返回的`elementsJson`中获取，格式如：`tagElementseal_party_a_1762827325581_rjhjvg`）
+- value: 包含`normal`字段的对象，`normal`为普通章图片URL
+- **如何识别印章字段**：在模板的`elementsJson`中，`type === "seal"`的字段即为印章字段
+- **示例**：
+  ```json
+  {
+    "tagElementseal_party_a_1762827325581_rjhjvg": {
+      "normal": "https://example.com/stamps/party_a_seal.png"
+    },
+    "tagElementseal_party_b_1762827344941_0yfagr": {
+      "normal": "https://example.com/stamps/party_b_seal.png"
+    }
+  }
+  ```
+
+**ridingStampUrl字段说明**：
+- 骑缝章是独立参数，不绑定任何模板字段
+- 只有明确提供此参数才会盖骑缝章
+- 骑缝章会在合并后的完整PDF上盖章（包括主合同和所有附件）
 
 ### 请求示例
 
@@ -76,40 +111,122 @@ Content-Type: application/json
 {
   "templateFileId": "file-123",
   "values": {
-    "contract_no": "HT20250118001",
-    "party_a_name": "北京某某科技有限公司",
-    "party_b_name": "上海某某商贸有限公司",
-    "contract_amount": "1000000.00",
-    "sign_date": "2025年1月18日"
+    "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+    "tagElementbase_projectName_1762826556548_lqpzxi": "绝热材料采购项目",
+    "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+    "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司",
+    "tagElementbase_signLocation_1762826575800_m9nit8": "北京市"
   }
 }
 ```
+
+> 💡 **说明**：
+> - `values` 的key必须是模板字段的tag（从模板查询接口的`elementsJson`中获取）
+> - tag格式：`tagElement{code}_{timestamp}_{random}`，例如：`tagElementbase_contractCode_1762826537996_2xuxwr`
+> - 不要使用code作为key，必须使用完整的tag
+
+**包含额外PDF文件的合同（合并后再盖骑缝章）**
+```json
+{
+  "templateFileId": "file-123",
+  "values": {
+    "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+    "tagElementbase_projectName_1762826556548_lqpzxi": "绝热材料采购项目",
+    "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+    "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司",
+    "tagElementbase_signLocation_1762826575800_m9nit8": "北京市"
+  },
+  "extraFiles": [
+    "https://example.com/attachments/attachment1.pdf",
+    "https://example.com/attachments/attachment2.pdf"
+  ],
+  "stampImageUrls": {
+    "tagElementseal_party_a_1762827325581_rjhjvg": {
+      "normal": "https://example.com/stamps/party_a_seal.png"
+    },
+    "tagElementseal_party_b_1762827344941_0yfagr": {
+      "normal": "https://example.com/stamps/party_b_seal.png"
+    }
+  },
+  "ridingStampUrl": "https://example.com/stamps/riding_seal.png"
+}
+```
+
+> 💡 **说明**：
+> - `extraFiles` 中的PDF文件会在合同合成后自动下载并合并
+> - 合并顺序：主合同PDF + extraFiles[0] + extraFiles[1] + ...
+> - 合并完成后再进行盖章操作
+> - `stampImageUrls` 的key是模板字段的tag（从模板查询接口的`elementsJson`中获取）
+> - 印章字段的识别：在模板的`elementsJson`中，`type === "seal"`的字段即为印章字段
+> - 印章字段的value由系统自动生成，不需要在`values`中传递
+> - `ridingStampUrl` 用于骑缝章，**只有明确提供此参数才会盖骑缝章**，不绑定任何字段
+> - 如果某个PDF下载失败，会跳过该文件继续处理其他文件
 
 **包含表格的合同**
 ```json
 {
   "templateFileId": "file-123",
   "values": {
-    "contract_no": "HT20250118001",
-    "party_a_name": "北京某某科技有限公司",
-    "party_b_name": "上海某某商贸有限公司",
-    "product_list": "<table style='width:100%; border-collapse: collapse;'><thead><tr style='background:#409eff; color:#fff;'><th style='border:1px solid #ddd; padding:8px;'>序号</th><th style='border:1px solid #ddd; padding:8px;'>产品名称</th><th style='border:1px solid #ddd; padding:8px;'>数量</th><th style='border:1px solid #ddd; padding:8px;'>单价</th></tr></thead><tbody><tr><td style='border:1px solid #ddd; padding:8px;'>1</td><td style='border:1px solid #ddd; padding:8px;'>笔记本电脑</td><td style='border:1px solid #ddd; padding:8px;'>10</td><td style='border:1px solid #ddd; padding:8px;'>8000</td></tr></tbody></table>"
+    "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+    "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+    "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司",
+    "tagElementbase_productTable_1762826784646_hl679b": "<table style='width:100%; border-collapse: collapse;'><thead><tr style='background:#409eff; color:#fff;'><th style='border:1px solid #ddd; padding:8px;'>序号</th><th style='border:1px solid #ddd; padding:8px;'>产品名称</th><th style='border:1px solid #ddd; padding:8px;'>数量</th><th style='border:1px solid #ddd; padding:8px;'>单价</th></tr></thead><tbody><tr><td style='border:1px solid #ddd; padding:8px;'>1</td><td style='border:1px solid #ddd; padding:8px;'>笔记本电脑</td><td style='border:1px solid #ddd; padding:8px;'>10</td><td style='border:1px solid #ddd; padding:8px;'>8000</td></tr></tbody></table>"
   }
 }
 ```
+
+**完整示例：合同 + 附件PDF + 普通章 + 骑缝章**
+```json
+{
+  "templateFileId": "file-123",
+  "values": {
+    "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+    "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+    "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司"
+  },
+  "extraFiles": [
+    "https://example.com/contracts/attachment1.pdf",
+    "https://example.com/contracts/attachment2.pdf"
+  ],
+  "stampImageUrls": {
+    "tagElementseal_party_a_1762827325581_rjhjvg": {
+      "normal": "https://example.com/stamps/party_a_seal.png"
+    },
+    "tagElementseal_party_b_1762827344941_0yfagr": {
+      "normal": "https://example.com/stamps/party_b_seal.png"
+    }
+  },
+  "ridingStampUrl": "https://example.com/stamps/riding_seal.png"
+}
+```
+
+> 📋 **处理流程**：
+> 1. 合成合同DOCX并转换为PDF
+> 2. 下载并合并 `extraFiles` 中的所有PDF文件
+> 3. 在合并后的PDF上盖普通章（normal，如果有 `stampImageUrls`）
+> 4. 在合并后的PDF上盖骑缝章（**只有提供了 `ridingStampUrl` 才会执行**）
+> 
+> 💡 **印章字段说明**：
+> - 印章字段的tag从模板查询接口的`elementsJson`中获取
+> - 印章字段的value由系统自动生成，不需要在`values`中传递
+> - 骑缝章是独立参数，不绑定任何字段
 
 **包含条款变量的合同**
 ```json
 {
   "templateFileId": "file-123",
   "values": {
-    "contract_clause": "甲方：${party_a}，乙方：${party_b}，就${service_name}达成如下协议：",
-    "party_a": "北京某某公司",
-    "party_b": "上海某某公司",
-    "service_name": "技术服务"
+    "tagElementclause_1_1762826900000_abc123": "甲方：${party_a}，乙方：${party_b}，就${service_name}达成如下协议：",
+    "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某公司",
+    "tagElementparty_b_name_1762826824516_08dxc4": "上海某某公司",
+    "tagElementbase_serviceName_1762826920000_def456": "技术服务"
   }
 }
 ```
+
+> 💡 **说明**：
+> - 条款字段中可以包含变量引用（如`${party_a}`），系统会自动替换为对应字段的值
+> - 变量引用的字段名也是tag，不是code
 
 **Java 示例**
 ```java
@@ -121,10 +238,9 @@ String json = """
     {
         "templateFileId": "file-123",
         "values": {
-            "contract_no": "HT20250118001",
-            "party_a_name": "北京某某科技有限公司",
-            "party_b_name": "上海某某商贸有限公司",
-            "contract_amount": "1000000.00"
+            "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+            "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+            "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司"
         }
     }
     """;
@@ -147,10 +263,9 @@ url = "https://your-domain.com/api/compose/sdt"
 payload = {
     "templateFileId": "file-123",
     "values": {
-        "contract_no": "HT20250118001",
-        "party_a_name": "北京某某科技有限公司",
-        "party_b_name": "上海某某商贸有限公司",
-        "contract_amount": "1000000.00"
+        "tagElementbase_contractCode_1762826537996_2xuxwr": "HT20250118001",
+        "tagElementparty_a_name_1762826807666_4dgdl6": "北京某某科技有限公司",
+        "tagElementparty_b_name_1762826824516_08dxc4": "上海某某商贸有限公司"
     }
 }
 
@@ -170,10 +285,9 @@ $url = "https://your-domain.com/api/compose/sdt";
 $data = array(
     "templateFileId" => "file-123",
     "values" => array(
-        "contract_no" => "HT20250118001",
-        "party_a_name" => "北京某某科技有限公司",
-        "party_b_name" => "上海某某商贸有限公司",
-        "contract_amount" => "1000000.00"
+        "tagElementbase_contractCode_1762826537996_2xuxwr" => "HT20250118001",
+        "tagElementparty_a_name_1762826807666_4dgdl6" => "北京某某科技有限公司",
+        "tagElementparty_b_name_1762826824516_08dxc4" => "上海某某商贸有限公司"
     )
 );
 
@@ -675,12 +789,15 @@ try {
 ### 2. 数据验证
 
 ```javascript
-function validateContractData(values) {
-  const required = ['contract_no', 'party_a_name', 'party_b_name']
+function validateContractData(values, templateElements) {
+  // 从模板元素中获取必填字段的tag
+  const requiredTags = templateElements
+    .filter(el => el.required) // 假设有required字段标识
+    .map(el => el.tag)
   
-  for (const field of required) {
-    if (!values[field]) {
-      throw new Error(`缺少必填字段: ${field}`)
+  for (const tag of requiredTags) {
+    if (!values[tag]) {
+      throw new Error(`缺少必填字段: ${tag}`)
     }
   }
   
@@ -717,6 +834,92 @@ function validateContractData(values) {
 | 13003 | 模板文件损坏 |
 | 17001 | 文件为空 |
 | 17002 | 文件格式不支持 |
+
+---
+
+## ❓ 常见问题
+
+### Q1: 如何使用印章功能？
+
+**A**: 印章功能分为普通章和骑缝章两种：
+
+**普通章（公章）**：
+1. 在模板设计阶段插入印章字段（type为"seal"）
+2. 获取模板信息，从`elementsJson`中找出所有`type === "seal"`的字段
+3. 使用字段的`tag`作为`stampImageUrls`的key，传递印章图片URL
+
+```javascript
+// 1. 获取模板信息
+const templateInfo = await getTemplateInfo(templateCode);
+const elements = JSON.parse(templateInfo.elementsJson).elements;
+
+// 2. 找出所有印章字段
+const sealElements = elements.filter(el => el.type === 'seal');
+
+// 3. 构建stampImageUrls（使用tag作为key）
+const stampImageUrls = {};
+sealElements.forEach(seal => {
+  stampImageUrls[seal.tag] = {
+    normal: `https://example.com/stamps/${seal.meta.code}.png`
+  };
+});
+
+// 4. 构建values（使用tag作为key，不是code）
+const values = {};
+elements.forEach(el => {
+  if (el.type !== 'seal') { // 印章字段的value由系统生成，不需要传递
+    values[el.tag] = getFieldValue(el); // 根据字段类型获取值
+  }
+});
+
+// 5. 调用合成接口
+const request = {
+  templateCode: templateCode,
+  values: values, // 所有字段都使用tag作为key
+  stampImageUrls: stampImageUrls // 印章也使用tag作为key
+};
+```
+
+**骑缝章**：
+- 骑缝章是独立参数，不绑定任何模板字段
+- 直接传递`ridingStampUrl`参数即可
+
+```javascript
+const request = {
+  templateCode: templateCode,
+  values: { /* 合同数据 */ },
+  ridingStampUrl: 'https://example.com/stamps/riding_seal.png'
+};
+```
+
+**注意事项**：
+- 印章字段的value由系统自动生成，不需要在`values`中传递
+- 只有明确提供了`ridingStampUrl`才会盖骑缝章
+- 普通章会在PDF中对应字段的位置盖章
+- 骑缝章会在整个PDF文档上盖章（包括所有页面）
+
+### Q2: 如何合并额外的PDF文件？
+
+**A**: 使用`extraFiles`字段传递PDF文件URL列表：
+
+```javascript
+const request = {
+  templateCode: 'purchase_contract',
+  values: { /* 合同数据 */ },
+  extraFiles: [
+    'https://example.com/attachments/attachment1.pdf',
+    'https://example.com/attachments/attachment2.pdf'
+  ],
+  stampImageUrls: { /* 普通章 */ },
+  ridingStampUrl: 'https://example.com/stamps/riding_seal.png'
+};
+```
+
+**处理顺序**：
+1. 合成合同DOCX并转换为PDF
+2. 下载并合并`extraFiles`中的所有PDF文件
+3. 在合并后的PDF上盖普通章（如果有）
+4. 在合并后的PDF上盖骑缝章（如果提供了`ridingStampUrl`）
 
 ---
 

@@ -73,16 +73,19 @@ public class KeywordAnchorMatcher {
             Integer occurrence = getOrDefault(config, "occurrence", 1);
             Integer anchorOccurrence = getOrDefault(config, "anchorOccurrence", 1);
 
-            // 【关键优化】标准化文本和关键词的标点符号，解决全角/半角标点符号不匹配的问题
+            // 【智能文本标准化】标准化原文和锚点，统一标点格式便于匹配
+            // 注意：CharacterMappingConfig 已修复（删除了逗号→点的错误映射），
+            // 现在标准化不会破坏数字格式（如 ¥790,000.00 不会变成 ¥790.000.00）
             String normalizedText = TextNormalizer.normalizePunctuation(text);
             String normalizedAnchor = TextNormalizer.normalizePunctuation(anchor);
             
             if (debug) {
                 result.addDebugInfo("原始锚点: " + anchor);
                 if (!anchor.equals(normalizedAnchor)) {
-                    result.addDebugInfo("标准化锚点: " + normalizedAnchor + " (标点符号已标准化)");
-                } else {
-                    result.addDebugInfo("标准化锚点: " + normalizedAnchor);
+                    result.addDebugInfo("标准化锚点: " + normalizedAnchor + " (全角→半角)");
+                }
+                if (!text.equals(normalizedText)) {
+                    result.addDebugInfo("文本已标准化（全角→半角，保持数字格式）");
                 }
                 result.addDebugInfo("方向: " + direction);
                 result.addDebugInfo("提取方法: " + extractMethod);
@@ -92,7 +95,7 @@ public class KeywordAnchorMatcher {
                 }
             }
 
-            // 查找锚点位置（使用标准化后的文本和关键词）
+            // 查找锚点位置（在标准化后的文本中查找标准化后的锚点）
             AnchorResult anchorResult = findAnchor(normalizedText, normalizedAnchor, ignoreCase, anchorOccurrence);
             if (anchorResult == null || anchorResult.position == -1) {
                 if (debug) {
@@ -120,10 +123,10 @@ public class KeywordAnchorMatcher {
             int anchorPos = anchorResult.position;
             int anchorLen = anchorResult.matchedKeyword.length();
             
-            // 计算搜索范围在原文中的起始位置
+            // 计算搜索范围在标准化文本中的起始位置
             int searchRangeStartPos = calculateSearchRangeStart(anchorPos, anchorLen, direction, maxDistance);
             
-            // 使用标准化后的文本获取搜索范围
+            // 使用标准化文本获取搜索范围（已经标准化，格式统一）
             String searchText = getSearchRange(normalizedText, anchorPos, anchorLen, direction, maxDistance);
             if (StrUtil.isBlank(searchText)) {
                 return ExtractionResult.failure("搜索范围为空");
@@ -182,8 +185,8 @@ public class KeywordAnchorMatcher {
                     result.addDebugInfo("提取内容绝对位置: " + absoluteStartPos + " - " + (absoluteStartPos + extracted.length()));
                 }
             } else {
-                // 如果在搜索范围内找不到（可能是因为trim等处理），尝试在原文中查找
-                int actualStartPos = text.indexOf(extracted, searchRangeStartPos);
+                // 如果在搜索范围内找不到（可能是因为trim等处理），尝试在标准化文本中查找
+                int actualStartPos = normalizedText.indexOf(extracted, searchRangeStartPos);
                 if (actualStartPos != -1 && actualStartPos < searchRangeStartPos + searchText.length()) {
                     result.setStartPosition(actualStartPos);
                     result.setEndPosition(actualStartPos + extracted.length());

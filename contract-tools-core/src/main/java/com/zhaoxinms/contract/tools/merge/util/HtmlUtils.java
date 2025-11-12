@@ -365,6 +365,14 @@ public class HtmlUtils {
                     runProperties.addNewVertAlign().setVal(org.openxmlformats.schemas.officeDocument.x2006.sharedTypes.STVerticalAlignRun.SUBSCRIPT);
                 }
                 break;
+            case "mark":
+                // HTML <mark> 标签表示高亮文本，默认使用黄色背景
+                if (runProperties.getShdArray().length == 0) {
+                    org.openxmlformats.schemas.wordprocessingml.x2006.main.CTShd shd = runProperties.addNewShd();
+                    shd.setFill("FFFF00"); // 默认黄色
+                    shd.setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STShd.CLEAR);
+                }
+                break;
         }
         
         // 处理style属性（所有标签都支持style属性）
@@ -430,13 +438,30 @@ public class HtmlUtils {
                             runProperties.addNewI().setVal(true);
                         }
                         break;
-                    case "text-decoration":
-                        if ("underline".equals(value)) {
-                            runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
-                        } else if ("line-through".equals(value)) {
-                            runProperties.addNewStrike().setVal(true);
+                case "text-decoration":
+                    // 支持多值组合，如 "underline line-through"
+                    if (value.contains("underline")) {
+                        runProperties.addNewU().setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STUnderline.SINGLE);
+                    }
+                    if (value.contains("line-through")) {
+                        runProperties.addNewStrike().setVal(true);
+                    }
+                    break;
+                case "background-color":
+                case "background":
+                    // 处理背景色（高亮）
+                    String bgHex = toHexColor(value);
+                    if (bgHex != null) {
+                        // 清除现有背景色
+                        if (runProperties.getShdList() != null && !runProperties.getShdList().isEmpty()) {
+                            runProperties.getShdList().clear();
                         }
-                        break;
+                        // 设置文字背景色（着色）
+                        org.openxmlformats.schemas.wordprocessingml.x2006.main.CTShd shd = runProperties.addNewShd();
+                        shd.setFill(bgHex);
+                        shd.setVal(org.openxmlformats.schemas.wordprocessingml.x2006.main.STShd.CLEAR);
+                    }
+                    break;
                     case "color":
                         String hex = toHexColor(value);
                         if (hex != null) {

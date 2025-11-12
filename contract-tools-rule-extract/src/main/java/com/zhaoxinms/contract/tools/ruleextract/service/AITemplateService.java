@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareOptions;
 import com.zhaoxinms.contract.tools.comparePRO.model.MinerURecognitionResult;
 import com.zhaoxinms.contract.tools.comparePRO.service.MinerUOCRService;
+import com.zhaoxinms.contract.tools.comparePRO.util.LaTeXToUnicodeConverter;
 import com.zhaoxinms.contract.tools.comparePRO.util.TextExtractionUtil;
 import com.zhaoxinms.contract.tools.ruleextract.dto.*;
 import com.zhaoxinms.contract.tools.ruleextract.model.ExtractionRuleModel;
@@ -118,6 +119,7 @@ public class AITemplateService {
     
     /**
      * 从 MinerU 识别结果中提取文本
+     * 只转换 LaTeX 公式，保留表格 HTML 结构
      */
     private String extractTextFromMinerUResult(MinerURecognitionResult result) {
         StringBuilder allText = new StringBuilder();
@@ -131,10 +133,18 @@ public class AITemplateService {
                 allText.append("\n\n");
             }
             
-            // 提取每个页面的文本
+            // 提取每个页面的文本，只转换 LaTeX 公式
             for (TextExtractionUtil.LayoutItem item : layout.items) {
                 if (item.text != null && !item.text.trim().isEmpty()) {
-                    allText.append(item.text.trim()).append("\n");
+                    String text = item.text.trim();
+                    
+                    // 【核心修复】只应用 LaTeX 公式转换，保留表格 HTML 和其他格式
+                    // 这样表格可以在前端正常显示，同时数学公式也能正确转换
+                    if (LaTeXToUnicodeConverter.containsLatexCommands(text)) {
+                        text = LaTeXToUnicodeConverter.convertToUnicode(text);
+                    }
+                    
+                    allText.append(text).append("\n");
                 }
             }
         }

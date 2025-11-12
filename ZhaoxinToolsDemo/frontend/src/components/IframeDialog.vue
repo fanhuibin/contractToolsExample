@@ -7,7 +7,9 @@
     :close-on-click-modal="false"
     :close-on-press-escape="true"
     destroy-on-close
+    align-center
     @close="handleClose"
+    class="iframe-dialog"
   >
     <iframe 
       v-if="visible"
@@ -122,27 +124,65 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 弹窗容器样式 */
+.iframe-dialog {
+  :deep(.el-dialog) {
+    margin-top: 5vh !important;
+    margin-bottom: 5vh !important;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  :deep(.el-dialog__header) {
+    flex-shrink: 0;
+  }
+  
+  :deep(.el-dialog__body) {
+    padding: 0;
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+}
+
+/* iframe内容样式 */
 .iframe-content {
   width: 100%;
-  height: calc(80vh);
+  height: 70vh;
+  max-height: calc(90vh - 80px); /* 减去header和padding */
   border: none;
   display: block;
 }
 
-/* 深度选择器修改Dialog body样式 */
-:deep(.el-dialog__body) {
-  padding: 0;
-  height: calc(80vh);
-  overflow: hidden;
+/* 全屏模式下的样式 */
+.iframe-dialog :deep(.el-dialog.is-fullscreen) {
+  margin: 0 !important;
+  max-height: 100vh;
 }
 
-/* 全屏模式下的样式 */
-:deep(.el-dialog.is-fullscreen .el-dialog__body) {
+.iframe-dialog :deep(.el-dialog.is-fullscreen .el-dialog__body) {
   height: calc(100vh - 60px); /* 减去header高度 */
 }
 
-:deep(.el-dialog.is-fullscreen) .iframe-content {
+.iframe-dialog :deep(.el-dialog.is-fullscreen) .iframe-content {
   height: calc(100vh - 60px);
+  max-height: none;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .iframe-dialog :deep(.el-dialog) {
+    width: 95% !important;
+    margin-top: 2vh !important;
+    margin-bottom: 2vh !important;
+    max-height: 96vh;
+  }
+  
+  .iframe-content {
+    height: 75vh;
+    max-height: calc(96vh - 80px);
+  }
 }
 </style>
 

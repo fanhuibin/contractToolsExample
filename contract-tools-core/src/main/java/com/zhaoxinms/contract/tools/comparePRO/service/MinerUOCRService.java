@@ -527,8 +527,8 @@ public class MinerUOCRService {
      * 识别规则：
      * - 如果 table_caption 为空或不存在
      * - 且 table_footnote 为空或不存在
-     * - 且 table_body 为空或不存在
      * - 则认为是上一个表格的跨页延续部分
+     * 注意：跨页表格的延续部分通常是有 table_body 的，不需要检查 table_body
      * 
      * @param item content_list 中的表格项
      * @param contentListIndex 在 content_list 中的索引
@@ -591,8 +591,8 @@ public class MinerUOCRService {
             hasCaption, hasFootnote, hasBody, text);
         
         // 记录日志
-        if (!hasCaption && !hasFootnote && !hasBody) {
-            log.info("📋 识别到跨页表格延续部分: 第{}页, 组ID: {}", pageIdx + 1, groupId);
+        if (!hasCaption && !hasFootnote) {
+            log.info("📋 识别到跨页表格延续部分: 第{}页, 组ID: {}, hasBody: {}", pageIdx + 1, groupId, hasBody);
         } else {
             log.debug("📋 识别到主表格: 第{}页, 组ID: {}", pageIdx + 1, groupId);
         }

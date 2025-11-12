@@ -363,18 +363,22 @@ const loadResults = async () => {
       } else if (ocrResult.value.textBoxesAvailable) {
         // 单独加载TextBox数据
         const textBoxResponse: any = await getTextBoxes(taskId.value)
-        if (textBoxResponse && textBoxResponse.data) {
-          textBoxes.value = textBoxResponse.data || []
+        if (textBoxResponse && textBoxResponse.data && textBoxResponse.data.data) {
+          textBoxes.value = textBoxResponse.data.data || []
         }
       }
       
       // 加载Bbox映射数据（用于处理跨页表格等）
       try {
         const bboxMappingResponse: any = await getBboxMappings(taskId.value)
-        if (bboxMappingResponse && bboxMappingResponse.data) {
-          bboxMappings.value = bboxMappingResponse.data || []
+        if (bboxMappingResponse && bboxMappingResponse.data && bboxMappingResponse.data.data) {
+          bboxMappings.value = bboxMappingResponse.data.data || []
+          console.log('✅ 成功加载BboxMappings，数量:', bboxMappings.value.length)
+        } else {
+          bboxMappings.value = []
         }
       } catch (err) {
+        console.error('加载BboxMappings失败:', err)
         bboxMappings.value = []
       }
       

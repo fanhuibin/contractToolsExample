@@ -92,7 +92,7 @@ import { Document, Tickets, User, Stamp, Search, Edit, Delete, CaretLeft, CaretR
 import InsertableElementsPanel from '@/components/template-design/InsertableElementsPanel.vue'
 import InsertedElementsPanel from '@/components/template-design/InsertedElementsPanel.vue'
 import OnlyOfficeEditor from '@/components/onlyoffice/OnlyOfficeEditor.vue'
-import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignDetail, getTemplateDesignByTemplateId } from '@/api/templateDesign'
+import { fetchTemplateFields, saveTemplateDesign, getTemplateDesignDetail, getTemplateDesignByTemplateId, fetchCustomFieldsConfig } from '@/api/templateDesign'
 import { forceSaveFile } from '@/api/file'
 import { getSystemConfig } from '@/api/system'
 
@@ -102,6 +102,7 @@ const recordId = computed(() => (route.query.id as string) || '')
 const templateId = computed(() => (route.query.templateId as string) || '')
 const fileId = computed(() => (route.query.fileId as string) || '')
 const returnUrl = computed(() => (route.query.returnUrl as string) || '/templates')
+const isEmbedMode = computed(() => route.query.embed === 'true')
 const designId = ref<string>('')
 
 const fields = reactive<any>({ baseFields: [], clauseFields: [], counterpartyFields: [], sealFields: [] })
@@ -123,7 +124,19 @@ const saving = ref(false)
 const isDemoMode = ref(false)
 
 function goBack() {
-  router.push(returnUrl.value)
+  // Embed 模式：保持 embed 和 hideBack 参数
+  if (isEmbedMode.value) {
+    router.push({
+      path: returnUrl.value,
+      query: {
+        embed: 'true',
+        hideBack: 'true'
+      }
+    })
+  } else {
+    // 独立模式：正常跳转
+    router.push(returnUrl.value)
+  }
 }
 
 // 保存模板（调用强制保存API）
@@ -235,6 +248,40 @@ onMounted(async () => {
 })
 
 const loadFields = async () => {
+  // 方式1：
+  const fieldsConfigUrlParam = route.query.fieldsConfigUrl as string
+  const fieldsConfigUrl = fieldsConfigUrlParam ? decodeURIComponent(fieldsConfigUrlParam) : ''
+  
+  if (fieldsConfigUrl) {
+    try {
+      console.log('[自定义字段] 通过后端代理获取配置:', fieldsConfigUrl)
+      
+      const res = await fetchCustomFieldsConfig(fieldsConfigUrl)
+      const config = res?.data?.data || res?.data || {}
+      
+      if (config) {
+        fields.baseFields = config.baseFields || []
+        fields.clauseFields = config.clauseFields || []
+        fields.counterpartyFields = config.counterpartyFields || []
+        fields.sealFields = config.sealFields || []
+        
+        console.log('[自定义字段] 配置加载成功:', config.configName || 'Custom Fields')
+        ElMessage.success(`已加载自定义字段配置${config.configName ? ': ' + config.configName : ''}`)
+        return
+      } else {
+        console.error('[自定义字段] 配置格式错误:', config)
+        ElMessage.error('自定义字段配置格式错误，请检查字段信息')
+        return
+      }
+    } catch (error: any) {
+      console.error('[自定义字段] 获取自定义字段配置失败:', error)
+      const msg = error?.response?.data?.message || error?.message || '无法获取自定义字段配置'
+      ElMessage.error(msg)
+      return
+    }
+  }
+  
+  // 如果没有自定义字段，从 API 加载默认字段
   const res = await fetchTemplateFields() as any
   // 根据API响应解析问题文档，响应被axios拦截器包装了一层
   const fieldsData = res?.data?.data || res?.data || {}

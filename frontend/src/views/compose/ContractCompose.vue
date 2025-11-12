@@ -71,17 +71,37 @@
               </template>
               <template v-else>
                 <!-- 印章类型 -->
-                <div v-if="isSeal(el)" class="field-box" style="flex-direction: column; gap:8px;">
+                <div v-if="isSeal(el)" class="field-box seal-field">
                   <el-input
-                    v-model="sealUrl.normal[el.tag]"
-                    placeholder="请输入公司公章图片URL（仅用于盖章，不会插入文档）"
+                    v-model="sealUrl[el.tag]"
+                    placeholder="请输入印章图片URL（仅用于盖章，不会插入文档）"
                     clearable
                   />
-                  <el-input
-                    v-model="sealUrl.riding[el.tag]"
-                    placeholder="请输入骑缝章图片URL（仅用于盖章，不会插入文档）"
-                    clearable
-                  />
+                  <div class="seal-size-row">
+                    <span class="size-label">印章尺寸：</span>
+                    <div class="size-inputs">
+                      <el-input-number
+                        v-model="sealWidth[el.tag]"
+                        :min="10"
+                        :max="500"
+                        :step="5"
+                        placeholder="宽"
+                        size="small"
+                        controls-position="right"
+                      />
+                      <span class="size-separator">×</span>
+                      <el-input-number
+                        v-model="sealHeight[el.tag]"
+                        :min="10"
+                        :max="500"
+                        :step="5"
+                        placeholder="高"
+                        size="small"
+                        controls-position="right"
+                      />
+                      <span class="size-unit">点</span>
+                    </div>
+                  </div>
                 </div>
                 <!-- 条款类型（使用条款编辑器） -->
                 <div v-else-if="isClause(el)" class="field-box clause-field">
@@ -104,6 +124,42 @@
               </template>
             </el-form-item>
           </template>
+          
+          <!-- 骑缝章配置（全局） -->
+          <el-form-item label="骑缝章配置" class="field-card" v-if="formElements.length > 0">
+            <div class="field-box seal-field">
+              <el-input
+                v-model="ridingStampUrl"
+                placeholder="请输入骑缝章图片URL（可选，用于在PDF上盖骑缝章）"
+                clearable
+              />
+              <div class="seal-size-row">
+                <span class="size-label">骑缝章尺寸：</span>
+                <div class="size-inputs">
+                  <el-input-number
+                    v-model="ridingStampWidth"
+                    :min="10"
+                    :max="500"
+                    :step="5"
+                    placeholder="宽"
+                    size="small"
+                    controls-position="right"
+                  />
+                  <span class="size-separator">×</span>
+                  <el-input-number
+                    v-model="ridingStampHeight"
+                    :min="10"
+                    :max="500"
+                    :step="5"
+                    placeholder="高"
+                    size="small"
+                    controls-position="right"
+                  />
+                  <span class="size-unit">点</span>
+                </div>
+              </div>
+            </div>
+          </el-form-item>
         </el-form>
       </div>
     </div>
@@ -132,8 +188,14 @@ const templateFileId = ref<string>('')
 // elements: [{ key, tag, type, name, customName, richText, meta }]
 const formElements = ref<Array<any>>([])
 const formValues = ref<Record<string, string>>({})
-// 用户提供的印章/骑缝章URL（仅提交给后端用于盖章，不插入文档）
-const sealUrl = ref<{ normal: Record<string, string>; riding: Record<string, string> }>({ normal: {}, riding: {} })
+// 用户提供的印章URL和尺寸（仅提交给后端用于盖章，不插入文档）
+const sealUrl = ref<Record<string, string>>({})
+const sealWidth = ref<Record<string, number>>({})
+const sealHeight = ref<Record<string, number>>({})
+// 骑缝章配置（全局）
+const ridingStampUrl = ref<string>('')
+const ridingStampWidth = ref<number>(100)
+const ridingStampHeight = ref<number>(100)
 
 // 富文本选项：按字段tag存储
 const richOptions = ref<Record<string, { 
@@ -207,20 +269,24 @@ async function loadTemplateDesign() {
         // 1. 富文本字段
         if (isRich(el)) {
           ensureRichOptions(el.tag)
+          // 初始化富文本字段值
+          if (formValues.value[el.tag] === undefined) {
+            formValues.value[el.tag] = el.meta?.sampleValue || el.sampleValue || ''
+          }
         }
-        
         // 2. 印章字段
-        if (isSeal(el)) {
-          if (!sealUrl.value.normal[el.tag]) sealUrl.value.normal[el.tag] = ''
-          if (!sealUrl.value.riding[el.tag]) sealUrl.value.riding[el.tag] = ''
+        else if (isSeal(el)) {
+          if (!sealUrl.value[el.tag]) sealUrl.value[el.tag] = ''
+          // 设置默认尺寸
+          if (!sealWidth.value[el.tag]) sealWidth.value[el.tag] = 100
+          if (!sealHeight.value[el.tag]) sealHeight.value[el.tag] = 100
           // 确保印章元素在values中占位，以便后端注入隐藏标识
           if (formValues.value[el.tag] === undefined) {
             formValues.value[el.tag] = ''
           }
         }
-        
         // 3. 条款字段 - 初始化条款模板文本
-        if (isClause(el)) {
+        else if (isClause(el)) {
           // 从 meta.content 中读取条款模板文本（包含变量的原始文本）
           const clauseTemplate = el.meta?.content || el.content || ''
           if (clauseTemplate) {
@@ -228,6 +294,12 @@ async function loadTemplateDesign() {
           } else {
             // 如果没有模板文本，给一个默认提示
             formValues.value[el.tag] = ''
+          }
+        }
+        // 4. 普通字段 - 初始化为示例值或空字符串
+        else {
+          if (formValues.value[el.tag] === undefined) {
+            formValues.value[el.tag] = el.meta?.sampleValue || el.sampleValue || ''
           }
         }
       })
@@ -379,10 +451,20 @@ async function doCompose() {
     // 如果是默认模板，使用模板设计页面的默认文件ID
     const actualFileId = isDefaultTemplate.value ? '9999' : templateFileId.value
     
+    // 确保 values 至少有一个字段（即使是空字符串）
+    const valuesToSubmit = { ...formValues.value }
+    if (Object.keys(valuesToSubmit).length === 0) {
+      // 如果没有任何字段，添加一个占位字段
+      valuesToSubmit['_placeholder'] = ''
+    }
+    
     const payload: ComposeRequest = {
       templateFileId: actualFileId,
-      values: { ...formValues.value },
-      stampImageUrls: buildStampImageUrls()
+      values: valuesToSubmit,
+      stampImageUrls: buildStampImageUrls(),
+      ridingStampUrl: ridingStampUrl.value.trim() || undefined,
+      ridingStampWidth: ridingStampUrl.value.trim() ? ridingStampWidth.value : undefined,
+      ridingStampHeight: ridingStampUrl.value.trim() ? ridingStampHeight.value : undefined
     }
     
     const res = await composeContract(payload)
@@ -413,15 +495,16 @@ async function doCompose() {
   }
 }
 
-function buildStampImageUrls(): Record<string, { normal?: string; riding?: string }> {
-  const map: Record<string, { normal?: string; riding?: string }> = {}
-  Object.keys(sealUrl.value.normal).forEach(tag => {
-    const normal = (sealUrl.value.normal[tag] || '').trim()
-    const riding = (sealUrl.value.riding[tag] || '').trim()
-    if (normal || riding) {
-      map[tag] = {}
-      if (normal) map[tag].normal = normal
-      if (riding) map[tag].riding = riding
+function buildStampImageUrls(): Record<string, { normal?: string; width?: number; height?: number }> {
+  const map: Record<string, { normal?: string; width?: number; height?: number }> = {}
+  Object.keys(sealUrl.value).forEach(tag => {
+    const url = (sealUrl.value[tag] || '').trim()
+    if (url) {
+      map[tag] = {
+        normal: url,
+        width: sealWidth.value[tag] || 100,
+        height: sealHeight.value[tag] || 100
+      }
     }
   })
   return map
@@ -469,6 +552,52 @@ function buildStampImageUrls(): Record<string, { normal?: string; riding?: strin
 /* 调整颜色选择与数值输入组件间距 */
 .form :deep(.el-color-picker) { vertical-align: middle; }
 .form :deep(.el-input-number) { width: 120px; }
+
+/* 印章字段样式 */
+.field-box.seal-field {
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seal-size-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.size-label {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #606266;
+}
+
+.size-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.size-inputs .el-input-number {
+  width: 80px;
+  flex-shrink: 0;
+}
+
+.size-separator {
+  color: #909399;
+  font-size: 14px;
+  padding: 0 2px;
+}
+
+.size-unit {
+  color: #909399;
+  font-size: 12px;
+  white-space: nowrap;
+}
 </style>
 
 

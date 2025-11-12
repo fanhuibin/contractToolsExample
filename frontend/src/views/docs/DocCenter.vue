@@ -22,6 +22,37 @@
         @select="handleDocSelect"
         class="doc-menu"
       >
+        <el-sub-menu index="integration">
+          <template #title>
+            <el-icon><Connection /></el-icon>
+            <span>开发对接文档</span>
+          </template>
+          <el-menu-item index="integration-apifox">
+            <el-icon><Download /></el-icon>
+            <span>导入API到Apifox</span>
+          </el-menu-item>
+          <el-menu-item index="integration-extract">
+            <el-icon><DocumentCopy /></el-icon>
+            <span>集成智能文档抽取</span>
+          </el-menu-item>
+          <el-menu-item index="integration-compare">
+            <el-icon><View /></el-icon>
+            <span>集成智能文档比对</span>
+          </el-menu-item>
+          <el-menu-item index="integration-ocr">
+            <el-icon><Reading /></el-icon>
+            <span>集成智能文档解析</span>
+          </el-menu-item>
+          <el-menu-item index="integration-compose">
+            <el-icon><EditPen /></el-icon>
+            <span>集成智能合同合成</span>
+          </el-menu-item>
+          <el-menu-item index="integration-custom-fields">
+            <el-icon><SetUp /></el-icon>
+            <span>自定义元素使用指南</span>
+          </el-menu-item>
+        </el-sub-menu>
+        
         <el-sub-menu index="api">
           <template #title>
             <el-icon><Document /></el-icon>
@@ -70,7 +101,7 @@
         
         <el-sub-menu index="deploy">
           <template #title>
-            <el-icon><Setting /></el-icon>
+            <el-icon><Tools /></el-icon>
             <span>部署运维</span>
           </template>
           <el-menu-item index="deploy-ssl">
@@ -140,7 +171,9 @@ import {
   HomeFilled,
   Setting,
   Monitor,
-  Lock
+  Lock,
+  Tools,
+  SetUp
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 
@@ -155,13 +188,19 @@ const docMap: Record<string, { title: string; path: string }> = {
   'api-compose-features': { title: '文档合成功能支持', path: '/docs/api/文档合成功能支持说明.md' },
   'api-design': { title: 'API设计规范', path: '/docs/api/API设计文档.md' },
   'deploy-ssl': { title: 'SSL证书部署步骤', path: '/docs/api/SSL证书部署步骤.md' },
+  'integration-apifox': { title: '导入API到Apifox', path: '/docs/api/导入API到Apifox.md' },
+  'integration-extract': { title: '集成智能文档抽取', path: '/docs/api/集成智能文档抽取.md' },
+  'integration-compare': { title: '集成智能文档比对', path: '/docs/api/集成智能文档比对.md' },
+  'integration-ocr': { title: '集成智能文档解析', path: '/docs/api/集成智能文档解析.md' },
+  'integration-compose': { title: '集成智能合同合成', path: '/docs/api/集成智能合同合成.md' },
+  'integration-custom-fields': { title: '自定义元素使用指南', path: '/docs/api/自定义元素使用指南.md' },
   'postman': { title: 'API Collection 使用指南', path: '/docs/api/Postman-Collection使用指南.md' }
 }
 
 const route = useRoute()
 const router = useRouter()
 
-const activeDoc = ref<string>('api-readme')
+const activeDoc = ref<string>('integration-apifox')
 const markdownContent = ref<string>('')
 const loading = ref(false)
 const markdownContainer = ref<HTMLElement>()
@@ -336,8 +375,8 @@ watch(() => route.query.doc, (newDoc) => {
 }, { immediate: true })
 
 onMounted(() => {
-  // 初始加载
-  const docKey = (route.query.doc as string) || 'api-readme'
+  // 初始加载（默认显示开发对接文档的第一个文档）
+  const docKey = (route.query.doc as string) || 'integration-apifox'
   activeDoc.value = docKey
   loadDoc(docKey)
 })

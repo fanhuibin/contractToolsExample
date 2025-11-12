@@ -637,10 +637,27 @@ export default {
     },
 
     goToEditor() {
+      // 嵌入模式和独立模式都跳转到模板列表（在 iframe 内部或当前窗口）
       if (this.importResult && this.importResult.templateId) {
-        this.$router.push('/rule-extract/templates?id=' + this.importResult.templateId)
+        // 带上新创建的模板ID，方便定位
+        this.$router.push({
+          path: '/rule-extract/templates',
+          query: this.$route.query.embed === 'true' 
+            ? { 
+                id: this.importResult.templateId, 
+                embed: 'true',
+                hideBack: 'true'
+              }
+            : { id: this.importResult.templateId }
+        })
       } else {
-        this.$router.push('/rule-extract/templates')
+        // 普通返回模板列表
+        this.$router.push({
+          path: '/rule-extract/templates',
+          query: this.$route.query.embed === 'true' 
+            ? { embed: 'true', hideBack: 'true' }
+            : {}
+        })
       }
     },
 

@@ -1,0 +1,109 @@
+{
+	"createdAt":"2025-11-06 19:14:11.655363300",
+	"createdBy":"AI生成",
+	"description":"用于提取电脑及办公设备采购合同中的关键信息，支持表格数据提取",
+	"fields":[
+		{
+			"fieldCode":"contractNumber",
+			"fieldName":"合同编号",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"合同编号\",\"multiline\":false,\"pattern\":\"[A-Z0-9-]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"合同编号 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":1
+		},
+		{
+			"fieldCode":"partyA",
+			"fieldName":"甲方名称",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"甲方：\",\"multiline\":false,\"pattern\":\"[^\\\\r\\\\n]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"甲方名称 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":2
+		},
+		{
+			"fieldCode":"partyB",
+			"fieldName":"乙方名称",
+			"fieldType":"text",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"乙方：\",\"multiline\":false,\"pattern\":\"[^\\\\r\\\\n]+\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"乙方名称 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":3
+		},
+		{
+			"fieldCode":"contractAmount",
+			"fieldName":"合同金额",
+			"fieldType":"number",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"总价大写:\",\"multiline\":false,\"pattern\":\"[¥￥][\\\\d,]+(?:\\\\.\\\\d{1,2})?\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"合同金额 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":4
+		},
+		{
+			"fieldCode":"signDate",
+			"fieldName":"签订日期",
+			"fieldType":"date",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"anchorOccurrence\":1,\"returnAll\":false,\"delimiter\":\"：\",\"anchor\":\"签署日期：\",\"multiline\":false,\"pattern\":\"\\\\d{4}年\\\\d{1,2}月\\\\d{1,2}日\",\"maxDistance\":200,\"occurrence\":1,\"matchMode\":\"single\",\"extractMethod\":\"regex\",\"direction\":\"after\"}",
+					"ruleName":"签订日期 - AI生成规则",
+					"ruleType":"KEYWORD_ANCHOR"
+				}
+			],
+			"sortOrder":5
+		},
+		{
+			"fieldCode":"procurementDetails",
+			"fieldName":"采购明细表",
+			"fieldType":"table",
+			"isRequired":true,
+			"rules":[
+				{
+					"isEnabled":true,
+					"priority":1,
+					"ruleContent":"{\"headerPattern\":\"序号|名称|品牌/型号|参数|单位|数量|单价 (元)|合计 (元)\",\"extractMode\":\"table\",\"format\":\"json\",\"occurrence\":1,\"tableKeyword\":\"现将具体设备名称、品牌型号，参数数量、交易金额如下：\"}",
+					"ruleName":"采购明细表 - AI生成规则",
+					"ruleType":"TABLE_CELL"
+				}
+			],
+			"sortOrder":6
+		}
+	],
+	"id":"202511_e298526828ea4d94861611887ba1ed4c",
+	"status":"active",
+	"templateCode":"AI_TEMPLATE_1762427651653",
+	"templateName":"电脑及办公设备采购合同信息抽取模板",
+	"updatedAt":"2025-11-06 19:14:20.751129100",
+	"version":1
+}

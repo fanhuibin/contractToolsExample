@@ -402,8 +402,8 @@ const regexPatterns: RegexPattern[] = [
     key: 'phone',
     name: '手机号码',
     category: '特殊格式',
-    pattern: '1[3-9]\\d{9}',
-    description: '匹配中国大陆手机号码',
+    pattern: '\\d{7,12}',
+    description: '匹配7-12位数字的电话号码',
     examples: ['13812345678', '18900001111', '19912345678']
   },
   {

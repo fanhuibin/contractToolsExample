@@ -21,6 +21,7 @@ import com.zhaoxinms.contract.tools.common.model.CleanupRequest;
 import com.zhaoxinms.contract.tools.common.model.CleanupResult;
 import com.zhaoxinms.contract.tools.common.model.CleanupResult.ModuleCleanupStat;
 import com.zhaoxinms.contract.tools.config.ZxcmConfig;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 
 /**
  * 系统文件清理服务
@@ -44,6 +45,12 @@ public class SystemCleanupService {
     
     @Autowired
     private FileInfoService fileInfoService;
+    
+    @Autowired
+    private DemoModeConfig demoModeConfig;
+    
+    @Autowired(required = false)
+    private com.zhaoxinms.contract.tools.comparePRO.service.CompareService compareService;
     
     /**
      * 支持的模块列表
@@ -80,6 +87,15 @@ public class SystemCleanupService {
         result.setStartTime(System.currentTimeMillis());
         
         try {
+            if ("execute".equalsIgnoreCase(request.getMode()) && demoModeConfig.isDemoMode()) {
+                String message = "演示模式下禁止执行数据清理操作";
+                result.setSuccess(false);
+                result.setMessage(message);
+                result.addError(message);
+                logger.warn(message);
+                return result;
+            }
+            
             // 验证请求
             request.validate();
             
@@ -104,6 +120,14 @@ public class SystemCleanupService {
                     
                     result.addLog(String.format("模块 [%s]: 文件 %d 个, 大小 %.2f MB, 目录 %d 个",
                         module, stat.getFileCount(), stat.getFileSize() / (1024.0 * 1024.0), stat.getDirCount()));
+                    
+                    // 特殊处理：清理 compare-pro 模块的内存任务数据
+                    if ("compare-pro".equals(module) && "execute".equals(request.getMode())) {
+                        int deletedTasks = cleanCompareTasks(request);
+                        if (deletedTasks > 0) {
+                            result.addLog(String.format("模块 [%s]: 清理内存中的比对任务 %d 个", module, deletedTasks));
+                        }
+                    }
                 } catch (Exception e) {
                     String error = "清理模块 " + module + " 失败: " + e.getMessage();
                     logger.error(error, e);
@@ -502,6 +526,55 @@ public class SystemCleanupService {
      */
     public List<String> getProtectedModules() {
         return new ArrayList<>(PROTECTED_MODULES);
+    }
+    
+    /**
+     * 清理比对任务的内存数据
+     * 根据时间范围删除内存中的比对任务
+     */
+    private int cleanCompareTasks(CleanupRequest request) {
+        if (compareService == null) {
+            logger.warn("CompareService 未注入，跳过清理比对任务内存数据");
+            return 0;
+        }
+        
+        try {
+            // 获取所有任务
+            List<com.zhaoxinms.contract.tools.comparePRO.model.CompareTask> allTasks = compareService.getAllTasks();
+            
+            // 转换为 LocalDate 以便比较
+            java.time.LocalDate startDate = request.getStartDate();
+            java.time.LocalDate endDate = request.getEndDate();
+            
+            int deletedCount = 0;
+            
+            // 遍历所有任务，删除在时间范围内的任务
+            for (com.zhaoxinms.contract.tools.comparePRO.model.CompareTask task : allTasks) {
+                if (task.getStartTime() == null) {
+                    continue;
+                }
+                
+                // 将 LocalDateTime 转换为 LocalDate
+                java.time.LocalDate taskDate = task.getStartTime().toLocalDate();
+                
+                // 检查任务时间是否在清理范围内
+                if (!taskDate.isBefore(startDate) && !taskDate.isAfter(endDate)) {
+                    // 删除任务
+                    boolean deleted = compareService.deleteTask(task.getTaskId());
+                    if (deleted) {
+                        deletedCount++;
+                        logger.debug("删除比对任务: taskId={}, startTime={}", task.getTaskId(), task.getStartTime());
+                    }
+                }
+            }
+            
+            logger.info("清理比对任务内存数据完成: 删除了 {} 个任务", deletedCount);
+            return deletedCount;
+            
+        } catch (Exception e) {
+            logger.error("清理比对任务内存数据失败", e);
+            return 0;
+        }
     }
 }
 

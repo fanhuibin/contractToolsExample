@@ -34,6 +34,8 @@ import com.zhaoxinms.contract.tools.onlyoffice.ChangeFileToPDFService;
 import com.zhaoxinms.contract.tools.stamp.PdfStampUtil;
 import com.zhaoxinms.contract.tools.stamp.RidingStampUtil;
 import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
+import com.zhaoxinms.contract.tools.template.entity.TemplateDesignRecord;
+import com.zhaoxinms.contract.tools.template.service.TemplateDesignRecordService;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -58,31 +60,86 @@ public class ComposeController {
  
     @Autowired
     private ChangeFileToPDFService changeFileToPDFService;
+    
+    @Autowired(required = false)
+    private TemplateDesignRecordService templateDesignRecordService;
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     @PostMapping(value = "/sdt", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ApiResponse<ComposeResponse> composeBySdt(@RequestBody ComposeRequest req) {
         try {
-            logger.info("开始合成合同，templateFileId: {}", req != null ? req.getTemplateFileId() : "null");
+            logger.info("开始合成合同，templateFileId: {}, templateCode: {}", 
+                req != null ? req.getTemplateFileId() : "null",
+                req != null ? req.getTemplateCode() : "null");
             
-            if (req == null || req.getTemplateFileId() == null || req.getTemplateFileId().trim().isEmpty()) {
-                logger.error("templateFileId 为空");
-                return ApiResponse.paramError("templateFileId 不能为空");
+            // 参数校验：templateFileId 和 templateCode 至少提供一个
+            if (req == null) {
+                return ApiResponse.paramError("请求参数不能为空");
             }
-            if (req.getValues() == null || req.getValues().isEmpty()) {
-                logger.error("values 为空");
-                return ApiResponse.paramError("values 不能为空");
+            
+            String actualTemplateFileId = null;
+            
+            // 优先使用模板编号（templateCode），支持多版本
+            if (req.getTemplateCode() != null && !req.getTemplateCode().trim().isEmpty()) {
+                logger.info("使用模板编号查找模板: {}", req.getTemplateCode());
+                
+                if (templateDesignRecordService == null) {
+                    logger.error("模板设计记录服务不可用，无法通过模板编号查找");
+                    return ApiResponse.paramError("模板设计记录服务不可用，请使用 templateFileId");
+                }
+                
+                try {
+                    // 优先获取已发布的版本，如果没有则获取最新版本
+                    TemplateDesignRecord template = 
+                        templateDesignRecordService.getPublishedByCode(req.getTemplateCode().trim());
+                    
+                    if (template == null) {
+                        // 如果没有已发布的版本，尝试获取最新版本
+                        logger.info("未找到已发布的模板，尝试获取最新版本");
+                        template = templateDesignRecordService.getLatestByCode(req.getTemplateCode().trim());
+                    }
+                    
+                    if (template == null) {
+                        logger.error("未找到模板，templateCode: {}", req.getTemplateCode());
+                        return ApiResponse.paramError("未找到模板，模板编号: " + req.getTemplateCode());
+                    }
+                    
+                    if (template.getFileId() == null) {
+                        logger.error("模板文件ID为空，templateCode: {}", req.getTemplateCode());
+                        return ApiResponse.paramError("模板文件ID为空，模板编号: " + req.getTemplateCode());
+                    }
+                    
+                    actualTemplateFileId = String.valueOf(template.getFileId());
+                    logger.info("通过模板编号找到模板，templateCode: {}, fileId: {}, version: {}", 
+                        req.getTemplateCode(), actualTemplateFileId, template.getVersion());
+                } catch (Exception e) {
+                    logger.error("通过模板编号查找模板失败: {}", req.getTemplateCode(), e);
+                    return ApiResponse.paramError("查找模板失败: " + e.getMessage());
+                }
+            } else if (req.getTemplateFileId() != null && !req.getTemplateFileId().trim().isEmpty()) {
+                // 使用模板文件ID（向后兼容）
+                actualTemplateFileId = req.getTemplateFileId().trim();
+                logger.info("使用模板文件ID: {}", actualTemplateFileId);
+            } else {
+                logger.error("templateFileId 和 templateCode 都为空");
+                return ApiResponse.paramError("templateFileId 或 templateCode 至少提供一个");
+            }
+            
+            // values 可以为空（对于纯静态模板或只有印章的模板）
+            if (req.getValues() == null) {
+                logger.warn("values 为 null，使用空 Map");
+                req.setValues(new java.util.HashMap<>());
             }
 
             // 解析模板本地路径（统一通过文件服务获取，不做硬编码）
-            logger.info("查询模板文件路径，templateFileId: {}", req.getTemplateFileId());
-            String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(req.getTemplateFileId()) : null;
+            logger.info("查询模板文件路径，templateFileId: {}", actualTemplateFileId);
+            String templatePath = fileInfoService != null ? fileInfoService.getFileDiskPath(actualTemplateFileId) : null;
             logger.info("获取到的模板路径: {}", templatePath);
             
             if (templatePath == null || templatePath.trim().isEmpty()) {
-                logger.error("无法获取模板文件路径，templateFileId: {}", req.getTemplateFileId());
-                return ApiResponse.paramError("文件不存在：无法获取模板文件路径，文件ID: " + req.getTemplateFileId());
+                logger.error("无法获取模板文件路径，templateFileId: {}", actualTemplateFileId);
+                return ApiResponse.paramError("文件不存在：无法获取模板文件路径，文件ID: " + actualTemplateFileId);
             }
 
             // 生成工作目录与输出文件
@@ -99,35 +156,13 @@ public class ComposeController {
 
             if (req.getValues() != null) {
                 for (Map.Entry<String, String> e : req.getValues().entrySet()) {
-                    String tag = e.getKey();
-                    String val = e.getValue() == null ? "" : e.getValue();
-                    if (tag != null && tag.startsWith("tagElement")) {
-                        String keyFull = tag.substring("tagElement".length());
-                        String[] parts = keyFull.split("_");
-                        if (parts.length >= 3) {
-                            // 取除最后两段（时间戳与随机后缀）之外作为 codePrefix（兼容 company_seal 等）
-                            StringBuilder codePrefixBuilder = new StringBuilder();
-                            for (int i = 0; i < parts.length - 2; i++) {
-                                if (i > 0) codePrefixBuilder.append('_');
-                                codePrefixBuilder.append(parts[i]);
-                            }
-                            String codePrefix = codePrefixBuilder.toString();
-                            String codeKey = codePrefix.toLowerCase();
-                            if (codeKey.contains("seal")) {
-                                // 生成印章标识前缀（格式：SEAL_CODE_）
-                                String markerPrefix = "SEAL_" + codePrefix.toUpperCase() + "_";
-                                String marker = markerPrefix + ts;
-                                sealKeywordPrefixesSet.add(marker);
-                                tagToMarker.put(tag, marker);
-                                String markerHtml = "<font style=\"color: white;\">" + marker + "</font>";
-                                // 使用用户传入的值（印章内容由调用方决定）
-                                String visiblePart = (val == null ? "" : val);
-                                if (!visiblePart.isEmpty()) {
-                                    visiblePart = "<font style=\"color: white;\">" + visiblePart + "</font>";
-                                }
-                                mergeValues.put(tag, visiblePart + markerHtml);
-                            }
-                        }
+                    ensureSealMarker(e.getKey(), e.getValue(), ts, mergeValues, tagToMarker, sealKeywordPrefixesSet);
+                }
+            }
+            if (req.getStampImageUrls() != null && !req.getStampImageUrls().isEmpty()) {
+                for (String tag : req.getStampImageUrls().keySet()) {
+                    if (!tagToMarker.containsKey(tag)) {
+                        ensureSealMarker(tag, null, ts, mergeValues, tagToMarker, sealKeywordPrefixesSet);
                     }
                 }
             }
@@ -202,7 +237,7 @@ public class ComposeController {
                 return ApiResponse.<ComposeResponse>serverError().errorDetail("注册合成文件失败");
             }
 
-            // === 转PDF并按用户URL优先执行盖章 ===
+            // === 转PDF、合并额外PDF、并按用户URL优先执行盖章 ===
             String docxRelPath = getRelativePath(outDocx);
             String pdfRelPath = null;
             String stampedRelPath = null;
@@ -213,9 +248,44 @@ public class ComposeController {
                     File workDir2 = ensureWorkDir();
                     String currentPdf = pdfPath;
                     pdfRelPath = getRelativePath(new File(pdfPath));
+                    
+                    // === 合并额外的PDF文件（如果有） ===
+                    if (req.getExtraFiles() != null && !req.getExtraFiles().isEmpty()) {
+                        logger.info("开始合并额外PDF文件，共{}个", req.getExtraFiles().size());
+                        try {
+                            List<String> extraPdfPaths = new ArrayList<>();
+                            // 下载所有额外的PDF文件
+                            for (String extraFileUrl : req.getExtraFiles()) {
+                                if (extraFileUrl == null || extraFileUrl.trim().isEmpty()) {
+                                    logger.warn("跳过空的PDF文件URL");
+                                    continue;
+                                }
+                                String localPdf = downloadPdfTo(workDir2, extraFileUrl.trim());
+                                if (localPdf != null) {
+                                    extraPdfPaths.add(localPdf);
+                                    logger.info("成功下载额外PDF文件: {}", localPdf);
+                                } else {
+                                    logger.warn("下载额外PDF文件失败: {}", extraFileUrl);
+                                }
+                            }
+                            
+                            // 合并PDF文件
+                            if (!extraPdfPaths.isEmpty()) {
+                                String mergedPdfPath = new File(workDir2, "compose_" + ts + "_merged.pdf").getAbsolutePath();
+                                mergePdfFiles(currentPdf, extraPdfPaths, mergedPdfPath);
+                                currentPdf = mergedPdfPath;
+                                pdfRelPath = getRelativePath(new File(mergedPdfPath));
+                                logger.info("PDF合并完成，合并后文件: {}", mergedPdfPath);
+                            }
+                        } catch (Exception e) {
+                            logger.error("合并额外PDF文件失败，继续使用原始PDF", e);
+                            // 合并失败不影响主流程，继续使用原始PDF
+                        }
+                    }
+                    
                     int normalIdx = 0;
 
-                    // 1) 若前端提供了URL，则直接按URL执行，不再按规则/默认
+                    // 1) 普通章：若前端提供了URL，则按URL执行
                     boolean usedUserUrl = req.getStampImageUrls() != null && !req.getStampImageUrls().isEmpty();
                     if (usedUserUrl) {
                         // 普通章：逐个tag应用对应的normal URL，按该tag注入的marker精准盖章
@@ -229,26 +299,47 @@ public class ComposeController {
                                 String localImg = downloadImageTo(workDir2, normalUrl.trim());
                                 if (localImg != null) {
                                     String out = new File(workDir2, "compose_" + ts + "_stamped_" + (++normalIdx) + ".pdf").getAbsolutePath();
-                                    PdfStampUtil.addAutoStamp(currentPdf, out, localImg, java.util.Arrays.asList(marker));
+                                    // 创建印章配置，设置自定义尺寸
+                                    PdfStampUtil.StampConfig stampConfig = new PdfStampUtil.StampConfig(
+                                        localImg,
+                                        java.util.Arrays.asList(marker)
+                                    );
+                                    // 设置印章尺寸（如果有提供）
+                                    if (pair.getWidth() != null && pair.getWidth() > 0) {
+                                        stampConfig.setStampWidth(pair.getWidth());
+                                    }
+                                    if (pair.getHeight() != null && pair.getHeight() > 0) {
+                                        stampConfig.setStampHeight(pair.getHeight());
+                                    }
+                                    PdfStampUtil.addAutoStamp(currentPdf, out, stampConfig);
                                     currentPdf = out;
                                     stampedRelPath = getRelativePath(new File(out));
                                 }
                             }
                         }
-                        // 骑缝章：取第一个提供的riding URL
-                        String ridingUrl = null;
-                        for (ComposeRequest.StampImagePair pair : req.getStampImageUrls().values()) {
-                            if (pair != null && pair.getRiding() != null && !pair.getRiding().trim().isEmpty()) { ridingUrl = pair.getRiding().trim(); break; }
-                        }
-                        if (ridingUrl != null) {
-                            String localImg = downloadImageTo(workDir2, ridingUrl);
-                            if (localImg != null) {
-                                String out = new File(workDir2, "compose_" + ts + "_riding_1.pdf").getAbsolutePath();
-                                logger.info("使用骑缝章图片(用户URL): {}", new java.io.File(localImg).getName());
-                                RidingStampUtil.addRidingStamp(currentPdf, out, localImg);
-                                currentPdf = out;
-                                ridingRelPath = getRelativePath(new File(out));
+                    }
+                    
+                    // 2) 骑缝章：如果明确提供了ridingStampUrl，则盖骑缝章
+                    if (req.getRidingStampUrl() != null && !req.getRidingStampUrl().trim().isEmpty()) {
+                        String ridingUrl = req.getRidingStampUrl().trim();
+                        String localImg = downloadImageTo(workDir2, ridingUrl);
+                        if (localImg != null) {
+                            String out = new File(workDir2, "compose_" + ts + "_riding_1.pdf").getAbsolutePath();
+                            logger.info("使用骑缝章图片(用户URL): {}", new java.io.File(localImg).getName());
+                            // 创建骑缝章配置，设置自定义尺寸
+                            RidingStampUtil.RidingStampConfig ridingConfig = new RidingStampUtil.RidingStampConfig(localImg);
+                            // 设置骑缝章尺寸（如果有提供）
+                            if (req.getRidingStampWidth() != null && req.getRidingStampWidth() > 0) {
+                                ridingConfig.setStampWidth(req.getRidingStampWidth());
                             }
+                            if (req.getRidingStampHeight() != null && req.getRidingStampHeight() > 0) {
+                                ridingConfig.setStampHeight(req.getRidingStampHeight());
+                            }
+                            RidingStampUtil.addRidingStamp(currentPdf, out, ridingConfig);
+                            currentPdf = out;
+                            ridingRelPath = getRelativePath(new File(out));
+                        } else {
+                            logger.warn("下载骑缝章图片失败: {}", ridingUrl);
                         }
                     }
                 }
@@ -334,6 +425,43 @@ public class ComposeController {
         }
     }
 
+    private void ensureSealMarker(String tag,
+                                   String rawValue,
+                                   String ts,
+                                   java.util.Map<String, String> mergeValues,
+                                   java.util.Map<String, String> tagToMarker,
+                                   java.util.LinkedHashSet<String> sealKeywordPrefixesSet) {
+        if (tag == null || !tag.startsWith("tagElement") || tagToMarker.containsKey(tag)) {
+            return;
+        }
+        String keyFull = tag.substring("tagElement".length());
+        String[] parts = keyFull.split("_");
+        if (parts.length < 3) {
+            return;
+        }
+        StringBuilder codePrefixBuilder = new StringBuilder();
+        for (int i = 0; i < parts.length - 2; i++) {
+            if (i > 0) {
+                codePrefixBuilder.append('_');
+            }
+            codePrefixBuilder.append(parts[i]);
+        }
+        String codePrefix = codePrefixBuilder.toString();
+        if (!codePrefix.toLowerCase().contains("seal")) {
+            return;
+        }
+        String markerPrefix = "SEAL_" + codePrefix.toUpperCase() + "_";
+        String marker = markerPrefix + ts;
+        sealKeywordPrefixesSet.add(marker);
+        tagToMarker.put(tag, marker);
+        String markerHtml = "<font style=\"color: white;\">" + marker + "</font>";
+        String visiblePart = rawValue == null ? "" : rawValue;
+        if (!visiblePart.isEmpty()) {
+            visiblePart = "<font style=\"color: white;\">" + visiblePart + "</font>";
+        }
+        mergeValues.put(tag, visiblePart + markerHtml);
+    }
+
 
     private File ensureWorkDir() {
         try {
@@ -363,32 +491,63 @@ public class ComposeController {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ComposeRequest {
-        /** 模板文件ID（来自文件服务） */
+        /** 模板文件ID（来自文件服务，向后兼容） */
         @JsonProperty("templateFileId")
         private String templateFileId;
+        /** 模板编号（推荐使用，支持多版本，优先获取已发布版本） */
+        @JsonProperty("templateCode")
+        private String templateCode;
         /** tag->value 映射 */
         @JsonProperty("values")
         private Map<String, String> values;
-        /** 用户提供的图片URL映射：key为SDT的tag，normal为普通章URL，riding为骑缝章URL */
+        /** 用户提供的图片URL映射：key为SDT的tag，normal为普通章URL */
         @JsonProperty("stampImageUrls")
         private Map<String, StampImagePair> stampImageUrls;
+        /** 需要合并的额外PDF文件URL列表（会在合成后合并，合并后再盖骑缝章） */
+        @JsonProperty("extraFiles")
+        private List<String> extraFiles;
+        /** 骑缝章图片URL（可选，如果提供则会在合并后的PDF上盖骑缝章） */
+        @JsonProperty("ridingStampUrl")
+        private String ridingStampUrl;
+        /** 骑缝章宽度（可选，单位：点，默认80） */
+        @JsonProperty("ridingStampWidth")
+        private Float ridingStampWidth;
+        /** 骑缝章高度（可选，单位：点，默认80） */
+        @JsonProperty("ridingStampHeight")
+        private Float ridingStampHeight;
         public String getTemplateFileId() { return templateFileId; }
         public void setTemplateFileId(String templateFileId) { this.templateFileId = templateFileId; }
+        public String getTemplateCode() { return templateCode; }
+        public void setTemplateCode(String templateCode) { this.templateCode = templateCode; }
         public Map<String, String> getValues() { return values; }
         public void setValues(Map<String, String> values) { this.values = values; }
         public Map<String, StampImagePair> getStampImageUrls() { return stampImageUrls; }
         public void setStampImageUrls(Map<String, StampImagePair> stampImageUrls) { this.stampImageUrls = stampImageUrls; }
+        public List<String> getExtraFiles() { return extraFiles; }
+        public void setExtraFiles(List<String> extraFiles) { this.extraFiles = extraFiles; }
+        public String getRidingStampUrl() { return ridingStampUrl; }
+        public void setRidingStampUrl(String ridingStampUrl) { this.ridingStampUrl = ridingStampUrl; }
+        public Float getRidingStampWidth() { return ridingStampWidth; }
+        public void setRidingStampWidth(Float ridingStampWidth) { this.ridingStampWidth = ridingStampWidth; }
+        public Float getRidingStampHeight() { return ridingStampHeight; }
+        public void setRidingStampHeight(Float ridingStampHeight) { this.ridingStampHeight = ridingStampHeight; }
 
         @JsonInclude(JsonInclude.Include.NON_NULL)
         public static class StampImagePair {
             @JsonProperty("normal")
             private String normal;
-            @JsonProperty("riding")
-            private String riding;
+            /** 印章宽度（可选，单位：点，默认80） */
+            @JsonProperty("width")
+            private Float width;
+            /** 印章高度（可选，单位：点，默认80） */
+            @JsonProperty("height")
+            private Float height;
             public String getNormal() { return normal; }
             public void setNormal(String normal) { this.normal = normal; }
-            public String getRiding() { return riding; }
-            public void setRiding(String riding) { this.riding = riding; }
+            public Float getWidth() { return width; }
+            public void setWidth(Float width) { this.width = width; }
+            public Float getHeight() { return height; }
+            public void setHeight(Float height) { this.height = height; }
         }
     }
 
@@ -488,6 +647,74 @@ public class ComposeController {
         if (ct.contains("jpeg") || ct.contains("jpg")) return ".jpg";
         if (ct.contains("gif")) return ".gif";
         return ".img";
+    }
+    
+    /**
+     * 下载PDF文件到指定目录
+     */
+    private String downloadPdfTo(File workDir, String url) {
+        try {
+            Request req = new Request.Builder().url(url).build();
+            try (Response resp = HTTP.newCall(req).execute()) {
+                if (!resp.isSuccessful()) {
+                    logger.warn("下载PDF失败: {} -> status {}", url, resp.code());
+                    return null;
+                }
+                ResponseBody body = resp.body();
+                if (body == null) return null;
+                byte[] bytes = body.bytes();
+                File out = File.createTempFile("extra_pdf_", ".pdf", workDir);
+                java.nio.file.Files.write(out.toPath(), bytes);
+                logger.info("成功下载PDF文件: {} -> {}", url, out.getAbsolutePath());
+                return out.getAbsolutePath();
+            }
+        } catch (Exception ex) {
+            logger.warn("下载PDF异常: {} -> {}", url, ex.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * 合并PDF文件
+     * @param mainPdfPath 主PDF文件路径（合成的合同PDF）
+     * @param extraPdfPaths 需要合并的额外PDF文件路径列表
+     * @param outputPath 输出文件路径
+     */
+    private void mergePdfFiles(String mainPdfPath, List<String> extraPdfPaths, String outputPath) {
+        try {
+            logger.info("开始合并PDF文件，主文件: {}, 额外文件数: {}", mainPdfPath, extraPdfPaths.size());
+            
+            // 使用PDFBox合并PDF
+            org.apache.pdfbox.pdmodel.PDDocument mergedDoc = new org.apache.pdfbox.pdmodel.PDDocument();
+            
+            // 1. 添加主PDF的所有页面
+            try (org.apache.pdfbox.pdmodel.PDDocument mainDoc = org.apache.pdfbox.pdmodel.PDDocument.load(new File(mainPdfPath))) {
+                org.apache.pdfbox.multipdf.PDFMergerUtility merger = new org.apache.pdfbox.multipdf.PDFMergerUtility();
+                merger.appendDocument(mergedDoc, mainDoc);
+                logger.info("已添加主PDF，共{}页", mainDoc.getNumberOfPages());
+            }
+            
+            // 2. 添加所有额外PDF的所有页面
+            for (String extraPdfPath : extraPdfPaths) {
+                try (org.apache.pdfbox.pdmodel.PDDocument extraDoc = org.apache.pdfbox.pdmodel.PDDocument.load(new File(extraPdfPath))) {
+                    org.apache.pdfbox.multipdf.PDFMergerUtility merger = new org.apache.pdfbox.multipdf.PDFMergerUtility();
+                    merger.appendDocument(mergedDoc, extraDoc);
+                    logger.info("已添加额外PDF: {}，共{}页", new File(extraPdfPath).getName(), extraDoc.getNumberOfPages());
+                } catch (Exception e) {
+                    logger.warn("添加额外PDF失败: {}，跳过该文件", extraPdfPath, e);
+                }
+            }
+            
+            // 3. 保存合并后的PDF
+            int totalPages = mergedDoc.getNumberOfPages();
+            mergedDoc.save(new File(outputPath));
+            mergedDoc.close();
+            
+            logger.info("PDF合并完成，输出文件: {}，总页数: {}", outputPath, totalPages);
+        } catch (Exception e) {
+            logger.error("合并PDF文件失败", e);
+            throw new RuntimeException("合并PDF文件失败: " + e.getMessage(), e);
+        }
     }
 }
 

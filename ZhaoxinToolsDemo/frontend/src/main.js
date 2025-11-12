@@ -6,9 +6,13 @@ import 'element-plus/dist/index.css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import App from './App.vue'
 import './style.css'
+import { loadConfig } from './config'
 
 // 导入页面组件
 import ExtractMain from './views/ExtractMain.vue'
+import Compare from './views/Compare.vue'
+import CompareResult from './views/CompareResult.vue'
+import ComposeMain from './views/ComposeMain.vue'
 
 // 配置路由
 const router = createRouter({
@@ -16,12 +20,27 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/extract-main'
+      redirect: '/compare'
     },
     {
       path: '/extract-main',
       name: 'ExtractMain',
       component: ExtractMain
+    },
+    {
+      path: '/compare',
+      name: 'Compare',
+      component: Compare
+    },
+    {
+      path: '/compare/result/:taskId',
+      name: 'CompareResult',
+      component: CompareResult
+    },
+    {
+      path: '/compose-main',
+      name: 'ComposeMain',
+      component: ComposeMain
     }
     // 已移除的路由（改用弹窗模式）：
     // - /extract/result/:taskId (ExtractResult)
@@ -42,5 +61,12 @@ app.use(router)
 app.use(ElementPlus, {
   locale: zhCn,
 })
-app.mount('#app')
+
+// 加载配置后挂载应用
+loadConfig().then(() => {
+  app.mount('#app')
+}).catch((error) => {
+  console.error('配置加载失败，使用默认配置:', error)
+  app.mount('#app')
+})
 

@@ -462,6 +462,8 @@ const isJumping = ref(false)
 // 进度计算器
 const progressCalculator = createProgressCalculator()
 const pollTimer = ref<number | null>(null)
+const pollCount = ref(0) // 轮询次数计数器
+const MAX_POLL_COUNT = 200 // 最大轮询次数（200次 * 1.5秒 = 5分钟）
 
 // 轮询控制
 const clearPoll = () => {
@@ -469,10 +471,25 @@ const clearPoll = () => {
     clearTimeout(pollTimer.value)
     pollTimer.value = null
   }
+  pollCount.value = 0 // 重置计数器
 }
 
 const schedulePoll = (id: string, delayMs = 1500) => {
+  // 检查轮询次数限制
+  if (pollCount.value >= MAX_POLL_COUNT) {
+    console.error('❌ 已达到最大轮询次数，停止轮询:', pollCount.value)
+    clearPoll()
+    progressCalculator.stopProgressUpdates()
+    viewerLoading.value = false
+    loading.value = false
+    ElMessage.error('任务处理超时，请检查任务ID是否正确或稍后重试。')
+    return
+  }
+  
   clearPoll()
+  pollCount.value++
+  console.log(`🔄 第 ${pollCount.value} 次轮询任务状态...`)
+  
   pollTimer.value = window.setTimeout(() => {
     checkStatusAndMaybePoll(id)
   }, delayMs)
@@ -1672,8 +1689,25 @@ const checkStatusAndMaybePoll = async (id: string) => {
     // 响应格式：{ data: { code: 200, message: "...", data: {...} } }
     const code = (res as any)?.data?.code
     const data = (res as any)?.data?.data
+    const message = (res as any)?.data?.message
     
     if (code !== 200 || !data) {
+      // 检查是否是任务不存在的错误
+      if (code === 404 || 
+          message?.includes('不存在') || 
+          message?.includes('未找到') ||
+          message?.includes('not found')) {
+        // 任务不存在，停止轮询
+        clearPoll()
+        progressCalculator.stopProgressUpdates()
+        viewerLoading.value = false
+        loading.value = false
+        ElMessage.error(`任务不存在：${id}。该比对任务可能已被删除或ID不正确。`)
+        console.error('❌ 任务不存在，停止轮询:', id, '错误信息:', message)
+        return
+      }
+      
+      // 其他错误，继续轮询（可能是临时性错误）
       viewerLoading.value = true
       schedulePoll(id)
       return
@@ -1704,8 +1738,28 @@ const checkStatusAndMaybePoll = async (id: string) => {
 
     // 获取结果
     fetchResult(id)
-  } catch (e) {
+  } catch (e: any) {
     console.error('获取任务状态失败:', e)
+    
+    // 检查是否是网络错误或任务不存在错误
+    const errorMessage = e?.message || e?.response?.data?.message || ''
+    const errorStatus = e?.response?.status
+    
+    if (errorStatus === 404 || 
+        errorMessage.includes('不存在') || 
+        errorMessage.includes('未找到') ||
+        errorMessage.includes('not found')) {
+      // 任务不存在，停止轮询
+      clearPoll()
+      progressCalculator.stopProgressUpdates()
+      viewerLoading.value = false
+      loading.value = false
+      ElMessage.error(`任务不存在：${id}。该比对任务可能已被删除或ID不正确。`)
+      console.error('❌ 任务不存在（catch块），停止轮询:', id, '错误:', e)
+      return
+    }
+    
+    // 其他错误，继续轮询
     schedulePoll(id)
   }
 }

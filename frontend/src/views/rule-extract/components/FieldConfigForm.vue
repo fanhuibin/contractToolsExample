@@ -616,7 +616,7 @@ const PATTERNS: Record<string, string> = {
   // 其他常用
   chinese: '[\\u4e00-\\u9fa5]+',
   email: '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}',
-  phone: '1[3-9]\\d{9}'
+  phone: '\\d{7,12}'
 }
 
 // 获取配置值

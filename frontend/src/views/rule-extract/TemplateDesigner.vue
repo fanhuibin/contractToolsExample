@@ -783,10 +783,20 @@ const saveTemplate = async () => {
 }
 
 const handleBack = () => {
-  embedHandleBack(() => {
-    // 默认的返回逻辑
+  // 嵌入模式和独立模式都跳转到模板列表（在 iframe 内部或当前窗口）
+  if (route.query.embed === 'true') {
+    // 嵌入模式：保留 embed 参数，在 iframe 内跳转
+    router.push({
+      path: '/rule-extract/templates',
+      query: { 
+        embed: 'true',
+        hideBack: 'true'
+      }
+    })
+  } else {
+    // 独立模式：正常跳转
     router.push('/rule-extract/templates')
-  })
+  }
 }
 
 onMounted(() => {

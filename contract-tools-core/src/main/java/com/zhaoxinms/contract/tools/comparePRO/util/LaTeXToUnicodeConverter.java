@@ -22,6 +22,7 @@ public class LaTeXToUnicodeConverter {
     // 正则表达式模式
     private static final Pattern MATH_MODE_PATTERN = Pattern.compile("\\$([^$]+)\\$");
     private static final Pattern LATEX_COMMAND_PATTERN = Pattern.compile("\\\\([a-zA-Z]+)");
+    private static final Pattern LATEX_ESCAPED_CHAR_PATTERN = Pattern.compile("\\\\([%$&#_{}])");  // 转义字符
     private static final Pattern MATHBB_PATTERN = Pattern.compile("\\\\mathbb\\{([A-Z])\\}");
     private static final Pattern SUBSCRIPT_PATTERN = Pattern.compile("_+\\{([^}]+)\\}|_+([a-zA-Z0-9])");
     private static final Pattern SUPERSCRIPT_PATTERN = Pattern.compile("\\^\\{([^}]+)\\}|\\^([a-zA-Z0-9])");
@@ -99,6 +100,9 @@ public class LaTeXToUnicodeConverter {
     private static String convertMathExpression(String mathExpr) {
         String result = mathExpr;
         
+        // 处理转义字符（如 \%、\$、\& 等）- 必须先处理，避免被其他规则影响
+        result = processEscapedCharacters(result);
+        
         // 处理上标
         result = processSuperscript(result);
         
@@ -168,6 +172,23 @@ public class LaTeXToUnicodeConverter {
                 // 保持原样
                 matcher.appendReplacement(result, Matcher.quoteReplacement(matcher.group(0)));
             }
+        }
+        matcher.appendTail(result);
+        
+        return result.toString();
+    }
+    
+    /**
+     * 处理转义字符（\%、\$、\&、\#、\_、\{、\}）
+     */
+    private static String processEscapedCharacters(String text) {
+        Matcher matcher = LATEX_ESCAPED_CHAR_PATTERN.matcher(text);
+        StringBuffer result = new StringBuffer();
+        
+        while (matcher.find()) {
+            String escapedChar = matcher.group(1);
+            // 直接返回转义后的字符本身
+            matcher.appendReplacement(result, Matcher.quoteReplacement(escapedChar));
         }
         matcher.appendTail(result);
         

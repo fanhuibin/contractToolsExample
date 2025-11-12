@@ -31,6 +31,16 @@ public class SealField {
      * 序号或顺序（用于多方盖章的顺序控制，可选）
      */
     private Integer orderIndex;
+
+    /**
+     * 印章宽度（单位：点，可选，默认80）
+     */
+    private Float width;
+
+    /**
+     * 印章高度（单位：点，可选，默认80）
+     */
+    private Float height;
 }
 
 

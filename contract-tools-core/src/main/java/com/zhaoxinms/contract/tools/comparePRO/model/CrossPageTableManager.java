@@ -11,7 +11,7 @@ import java.util.*;
  * - 如果一个 type="table" 的 content_list 项满足以下条件，则认为是跨页表格的延续部分：
  *   1. table_caption 为空或不存在
  *   2. table_footnote 为空或不存在
- *   3. table_body 为空或不存在
+ *   注意：跨页表格的延续部分通常是有 table_body 内容的，不需要检查 table_body
  * 
  * @author zhaoxin
  * @version 1.0
@@ -151,7 +151,8 @@ public class CrossPageTableManager {
                                 String text) {
         
         // 判断是否为跨页表格的延续部分
-        boolean isContinuation = !hasCaption && !hasFootnote && !hasBody;
+        // 修正：跨页表格的延续部分通常有 table_body，只需判断没有 caption 和 footnote
+        boolean isContinuation = !hasCaption && !hasFootnote;
         
         if (isContinuation && lastTableGroup != null) {
             // 这是跨页表格的延续部分，添加到最后一个表格组

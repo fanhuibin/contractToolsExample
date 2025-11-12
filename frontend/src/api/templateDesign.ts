@@ -8,6 +8,14 @@ export function fetchTemplateFields() {
   })
 }
 
+export function fetchCustomFieldsConfig(url: string) {
+  return request({
+    url: '/template/fields/custom',
+    method: 'get',
+    params: { url }
+  })
+}
+
 // 发起模板设计会话
 export function startTemplateDesign(data: {
   templateId: string

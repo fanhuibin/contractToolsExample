@@ -215,12 +215,27 @@ public class OcrExtractServiceImpl implements OcrExtractService {
                 crossPageTablesArray = metadata.getJSONArray("crossPageTables");
                 if (crossPageTablesArray != null && !crossPageTablesArray.isEmpty()) {
                     log.info("✅ 成功获取跨页表格信息，跨页表格数: {}", crossPageTablesArray.size());
+                    // 输出跨页表格详细信息
+                    for (int i = 0; i < crossPageTablesArray.size(); i++) {
+                        JSONObject group = crossPageTablesArray.getJSONObject(i);
+                        String groupId = group.getString("groupId");
+                        JSONObject mainTable = group.getJSONObject("mainTable");
+                        JSONArray contParts = group.getJSONArray("continuationParts");
+                        log.info("  跨页表格[{}]: groupId={}, 主表页={}, 延续部分数={}", 
+                            i, groupId, 
+                            mainTable != null ? mainTable.getIntValue("page") : "null",
+                            contParts != null ? contParts.size() : 0);
+                    }
+                } else {
+                    log.warn("⚠️  未检测到跨页表格信息（metadata中没有crossPageTables或为空）");
                 }
+            } else {
+                log.warn("⚠️  metadata为null，无法获取跨页表格信息");
             }
         } catch (Exception e) {
-            log.warn("获取跨页表格信息失败: {}", e.getMessage());
+            log.error("获取跨页表格信息失败: {}", e.getMessage(), e);
         }
-        
+         
         // 创建bbox映射（用于处理跨页表格等复杂情况）
         updateTaskStatus(taskId, "processing", 85, "创建位置映射...");
         List<PositionMapper.BboxMapping> bboxMappings = createBboxMappings(textBoxes, ocrText, crossPageTablesArray);

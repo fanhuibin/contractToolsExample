@@ -16,7 +16,7 @@
     <artifactId>zhaoxin-tools-demo-backend</artifactId>
     <version>1.0.0</version>
     <name>Zhaoxin Tools Demo Backend</name>
-    <description>肇新智能工具集 Demo 后端服务</description>
+    <description>肇新合同组件Demo 后端服务</description>
 
     <properties>
         <java.version>17</java.version>

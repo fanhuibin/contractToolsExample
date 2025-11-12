@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.zhaoxinms.contract.tools.common.model.CleanupRequest;
 import com.zhaoxinms.contract.tools.common.model.CleanupResult;
 import com.zhaoxinms.contract.tools.common.service.SystemCleanupService;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 
 /**
  * 系统清理控制器
@@ -34,6 +35,9 @@ public class SystemCleanupController {
     
     @Autowired
     private SystemCleanupService cleanupService;
+    
+    @Autowired
+    private DemoModeConfig demoModeConfig;
     
     /**
      * 获取支持的模块列表
@@ -136,6 +140,11 @@ public class SystemCleanupController {
         logger.info("确认状态: {}", request.getConfirmed());
         
         try {
+            if (demoModeConfig.isDemoMode()) {
+                logger.warn("演示模式已启用，禁止执行系统清理操作");
+                return ApiResponse.error("演示模式下禁止执行清理操作，请在正式环境执行该操作");
+            }
+            
             // 强制设置为执行模式
             request.setMode("execute");
             

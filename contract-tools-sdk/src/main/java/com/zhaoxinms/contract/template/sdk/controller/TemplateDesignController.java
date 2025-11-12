@@ -1,8 +1,15 @@
 package com.zhaoxinms.contract.template.sdk.controller;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.zhaoxinms.contract.template.sdk.validator.FieldConfigValidator;
 import com.zhaoxinms.contract.tools.api.common.ApiCode;
 import com.zhaoxinms.contract.tools.api.common.ApiResponse;
+import com.zhaoxinms.contract.tools.api.dto.BaseField;
+import com.zhaoxinms.contract.tools.api.dto.ClauseField;
+import com.zhaoxinms.contract.tools.api.dto.CounterpartyField;
 import com.zhaoxinms.contract.tools.api.dto.FieldResponse;
+import com.zhaoxinms.contract.tools.api.dto.SealField;
 import com.zhaoxinms.contract.tools.api.dto.TemplateDesignRequest;
 import com.zhaoxinms.contract.tools.api.dto.TemplateDesignResponse;
 import com.zhaoxinms.contract.tools.api.exception.BusinessException;
@@ -14,18 +21,23 @@ import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
 
 import javax.validation.Valid;
-import com.zhaoxinms.contract.template.sdk.entity.TemplateDesignRecord;
-import com.zhaoxinms.contract.template.sdk.service.TemplateDesignRecordService;
+import com.zhaoxinms.contract.tools.template.entity.TemplateDesignRecord;
+import com.zhaoxinms.contract.tools.template.service.TemplateDesignRecordService;
 import com.zhaoxinms.contract.tools.common.service.FileInfoService;
 import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 文档在线编辑控制器
@@ -56,6 +68,12 @@ public class TemplateDesignController {
     @Autowired
     private DemoModeConfig demoModeConfig;
 
+    @Autowired
+    private RestTemplate restTemplate;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     /**
      * 获取字段信息
      */
@@ -64,6 +82,237 @@ public class TemplateDesignController {
     public ApiResponse<FieldResponse> getFields() {
         FieldResponse response = templateDesignService.getFields();
         return ApiResponse.success(response);
+    }
+
+    /**
+     * 通过外部URL获取自定义字段配置
+     */
+    @GetMapping("/fields/custom")
+    @ApiOperation(value = "获取外部自定义字段配置", notes = "通过外部提供的URL获取自定义字段配置，并返回给前端使用")
+    public ApiResponse<FieldResponse> getCustomFields(
+            @ApiParam(value = "自定义字段配置URL", required = true) @RequestParam("url") String url) {
+
+        if (!StringUtils.hasText(url)) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, "自定义字段配置URL不能为空");
+        }
+
+        try {
+            String decodedUrl = URLDecoder.decode(url, StandardCharsets.UTF_8);
+            ResponseEntity<String> response = restTemplate.exchange(decodedUrl, HttpMethod.GET, null, String.class);
+
+            if (!response.getStatusCode().is2xxSuccessful() || response.getBody() == null) {
+                throw BusinessException.of(ApiCode.SERVER_ERROR, "获取自定义字段配置失败，HTTP状态：" + response.getStatusCodeValue());
+            }
+
+            Map<String, Object> body = objectMapper.readValue(response.getBody(),
+                    new TypeReference<Map<String, Object>>() {});
+
+            Object data = body.containsKey("data") ? body.get("data") : body;
+
+            Map<String, Object> result = objectMapper.convertValue(
+                    data, new TypeReference<Map<String, Object>>() {});
+
+            validateCustomFields(result);
+
+            FieldResponse mapped = mapToFieldResponse(result);
+
+            return ApiResponse.success(mapped);
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw BusinessException.of(ApiCode.SERVER_ERROR, "获取自定义字段配置失败：" + e.getMessage());
+        }
+    }
+
+    private void validateCustomFields(Map<String, Object> config) {
+        // 使用统一的校验器进行校验
+        FieldConfigValidator.ValidationResult result = FieldConfigValidator.validateMapConfig(config);
+        if (!result.isValid()) {
+            throw BusinessException.of(ApiCode.PARAM_ERROR, "自定义字段配置不完整: " + result.getErrorMessage());
+        }
+    }
+
+    private FieldResponse mapToFieldResponse(Map<String, Object> config) {
+        FieldResponse response = new FieldResponse();
+        response.setBaseFields(mapBaseFields(config.get("baseFields")));
+        response.setCounterpartyFields(mapCounterpartyFields(config.get("counterpartyFields")));
+        response.setClauseFields(mapClauseFields(config.get("clauseFields")));
+        response.setSealFields(mapSealFields(config.get("sealFields")));
+        return response;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<BaseField> mapBaseFields(Object obj) {
+        List<BaseField> result = new ArrayList<>();
+        if (!(obj instanceof List)) {
+            return result;
+        }
+        int idx = 1;
+        for (Map<String, Object> item : (List<Map<String, Object>>) obj) {
+            BaseField field = new BaseField();
+            String tag = stringValue(item.get("tag"));
+            String code = stringValue(item.get("code"), tag);
+            field.setId(StringUtils.hasText(tag) ? tag : "base_" + idx);
+            field.setName(stringValue(item.get("name"), field.getId()));
+            field.setCode(code);
+            field.setIsRichText(booleanValue(item.get("richText")));
+            field.setSampleValue(extractSample(item));
+            result.add(field);
+            idx++;
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<CounterpartyField> mapCounterpartyFields(Object obj) {
+        List<CounterpartyField> result = new ArrayList<>();
+        if (!(obj instanceof List)) {
+            return result;
+        }
+        int idx = 1;
+        for (Map<String, Object> item : (List<Map<String, Object>>) obj) {
+            CounterpartyField field = new CounterpartyField();
+            String tag = stringValue(item.get("tag"));
+            String code = stringValue(item.get("code"), tag);
+            field.setId(StringUtils.hasText(tag) ? tag : "party_" + idx);
+            field.setName(stringValue(item.get("name"), field.getId()));
+            field.setCode(code);
+            Integer counterpartyIndex = intValue(item.get("counterpartyIndex"));
+            if (counterpartyIndex == null) {
+                counterpartyIndex = inferPartyIndex(code, tag);
+            }
+            field.setCounterpartyIndex(counterpartyIndex);
+            field.setSampleValue(extractSample(item));
+            result.add(field);
+            idx++;
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ClauseField> mapClauseFields(Object obj) {
+        List<ClauseField> result = new ArrayList<>();
+        if (!(obj instanceof List)) {
+            return result;
+        }
+        int idx = 1;
+        for (Map<String, Object> item : (List<Map<String, Object>>) obj) {
+            ClauseField field = new ClauseField();
+            String tag = stringValue(item.get("tag"));
+            String code = stringValue(item.get("code"), tag);
+            field.setId(StringUtils.hasText(tag) ? tag : "clause_" + idx);
+            field.setName(stringValue(item.get("name"), field.getId()));
+            field.setCode(code);
+            field.setContent(stringValue(item.get("content"), extractSample(item)));
+            field.setType(stringValue(item.get("type"), "custom"));
+            field.setTypeName(stringValue(item.get("typeName"), "自定义条款"));
+            field.setSampleValue(extractSample(item));
+            result.add(field);
+            idx++;
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<SealField> mapSealFields(Object obj) {
+        List<SealField> result = new ArrayList<>();
+        if (!(obj instanceof List)) {
+            return result;
+        }
+        int idx = 1;
+        for (Map<String, Object> item : (List<Map<String, Object>>) obj) {
+            SealField field = new SealField();
+            String tag = stringValue(item.get("tag"));
+            String code = stringValue(item.get("code"), tag);
+            field.setId(StringUtils.hasText(tag) ? tag : "seal_" + idx);
+            field.setName(stringValue(item.get("name"), field.getId()));
+            field.setCode(code);
+            field.setType(stringValue(item.get("sealType"), "custom"));
+            field.setOrderIndex(intValue(item.get("orderIndex")) != null ? intValue(item.get("orderIndex")) : idx);
+            field.setWidth(floatValue(item.get("width")));
+            field.setHeight(floatValue(item.get("height")));
+            result.add(field);
+            idx++;
+        }
+        return result;
+    }
+
+    private String extractSample(Map<String, Object> item) {
+        String sample = stringValue(item.get("sampleValue"));
+        if (!StringUtils.hasText(sample)) {
+            sample = stringValue(item.get("sample"));
+        }
+        if (!StringUtils.hasText(sample)) {
+            sample = stripExamplePrefix(stringValue(item.get("description")));
+        }
+        return sample;
+    }
+
+    private String stripExamplePrefix(String text) {
+        if (!StringUtils.hasText(text)) {
+            return "";
+        }
+        String trimmed = text.trim();
+        if (trimmed.startsWith("示例：") || trimmed.startsWith("示例:")) {
+            return trimmed.substring(3);
+        }
+        return trimmed;
+    }
+
+    private String stringValue(Object value) {
+        return stringValue(value, "");
+    }
+
+    private String stringValue(Object value, String defaultValue) {
+        String str = value == null ? "" : String.valueOf(value).trim();
+        return StringUtils.hasText(str) ? str : defaultValue;
+    }
+
+    private boolean booleanValue(Object value) {
+        if (value instanceof Boolean) {
+            return (Boolean) value;
+        }
+        String str = stringValue(value);
+        return "true".equalsIgnoreCase(str) || "1".equals(str);
+    }
+
+    private Integer intValue(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        String str = stringValue(value);
+        if (!StringUtils.hasText(str)) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(str);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private Float floatValue(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).floatValue();
+        }
+        String str = stringValue(value);
+        if (!StringUtils.hasText(str)) {
+            return null;
+        }
+        try {
+            return Float.parseFloat(str);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int inferPartyIndex(String code, String tag) {
+        String source = (StringUtils.hasText(code) ? code : "") + (StringUtils.hasText(tag) ? tag : "");
+        String lower = source.toLowerCase();
+        if (lower.contains("party_b") || lower.contains("supplier") || lower.contains("_b") || lower.contains("seller")) {
+            return 2;
+        }
+        return 1;
     }
 
     /**
@@ -205,15 +454,30 @@ public class TemplateDesignController {
 
     /**
      * 模板设计记录列表
+     * 
+     * @param status 可选的状态筛选参数，支持：PUBLISHED（已发布）、DRAFT（草稿）、DISABLED（已禁用）、DELETED（已删除）
+     * @return 模板设计记录列表
      */
     @GetMapping("/design/list")
-    @ApiOperation(value = "获取设计列表", notes = "获取所有模板设计记录列表")
-    public ApiResponse<List<TemplateDesignRecord>> listDesigns() {
+    @ApiOperation(value = "获取设计列表", notes = "获取模板设计记录列表，可按状态筛选")
+    public ApiResponse<List<TemplateDesignRecord>> listDesigns(
+            @ApiParam(value = "状态筛选（可选）：PUBLISHED、DRAFT、DISABLED、DELETED", required = false)
+            @RequestParam(required = false) String status) {
         if (designRecordService == null) {
             throw BusinessException.of(ApiCode.SERVER_ERROR, "设计记录服务不可用");
         }
         
-        List<TemplateDesignRecord> list = designRecordService.listAll();
+        List<TemplateDesignRecord> list;
+        if (status != null && !status.trim().isEmpty()) {
+            // 按状态筛选
+            list = designRecordService.listAll().stream()
+                    .filter(record -> status.equalsIgnoreCase(record.getStatus()))
+                    .collect(java.util.stream.Collectors.toList());
+        } else {
+            // 返回所有
+            list = designRecordService.listAll();
+        }
+        
         return ApiResponse.success(list);
     }
 

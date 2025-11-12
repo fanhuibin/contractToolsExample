@@ -106,6 +106,11 @@ public class RuleExtractTaskModel implements Serializable {
     private String pageDimensions;
 
     /**
+     * 跨页表格信息（JSON字符串，包含表格分组和延续部分）
+     */
+    private String crossPageTables;
+
+    /**
      * 错误信息
      */
     private String errorMessage;

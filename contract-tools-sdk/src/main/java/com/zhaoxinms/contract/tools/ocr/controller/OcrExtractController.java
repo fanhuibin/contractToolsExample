@@ -7,6 +7,7 @@ import com.zhaoxinms.contract.tools.api.exception.BusinessException;
 import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.ocr.service.OcrExtractService;
+import com.zhaoxinms.contract.tools.common.util.FileStorageUtils;
 import io.swagger.annotations.Api;
 import io.swagger.annotations.ApiOperation;
 import io.swagger.annotations.ApiParam;
@@ -196,7 +197,9 @@ public class OcrExtractController {
         
         log.info("获取Bbox映射数据，任务ID: {}", taskId);
         
-        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + taskId);
+        // 【关键修复】使用与OcrExtractServiceImpl相同的路径构建方式，包含日期目录
+        String yearMonthPath = FileStorageUtils.getYearMonthPathFromFileId(taskId);
+        File taskDir = new File(uploadRootPath, "ocr-extract-tasks/" + yearMonthPath + "/" + taskId);
         File bboxMappingFile = new File(taskDir, "bbox_mappings.json");
         
         if (!bboxMappingFile.exists()) {
@@ -210,7 +213,7 @@ public class OcrExtractController {
             ObjectMapper objectMapper = new ObjectMapper();
             Object bboxMappingData = objectMapper.readValue(bboxMappingFile, Object.class);
             
-            log.debug("成功获取BboxMapping数据: {}", taskId);
+            log.info("✅ 成功获取BboxMapping数据: {}, 文件路径: {}", taskId, bboxMappingFile.getAbsolutePath());
             return ApiResponse.success(bboxMappingData);
             
         } catch (Exception e) {

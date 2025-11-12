@@ -231,9 +231,9 @@ public class CharacterMappingConfig {
         rawMappingMap.put("…", ".");
         
         // 其他符号
-        rawMappingMap.put("、", ".");
-        rawMappingMap.put(",", ".");
-        rawMappingMap.put("·", ".");
+        rawMappingMap.put("、", ".");   // 顿号转点（中文文档常用于列表分隔）
+        // rawMappingMap.put(",", ".");  // ❌ 已删除：半角逗号不应该转点，会破坏金额等数据格式
+        rawMappingMap.put("·", ".");    // 间隔号转点（常用于列表项）
         rawMappingMap.put("＊", "*");
         rawMappingMap.put("＃", "#");
         rawMappingMap.put("＆", "&");

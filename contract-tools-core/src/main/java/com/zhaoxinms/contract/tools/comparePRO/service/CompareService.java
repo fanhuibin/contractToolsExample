@@ -710,9 +710,13 @@ public class CompareService {
 
     /**
      * 删除任务
+     * 同时删除任务、结果和前端结果数据
      */
     public boolean deleteTask(String taskId) {
         CompareTask task = tasks.remove(taskId);
+        // 同时删除结果数据
+        results.remove(taskId);
+        frontendResults.remove(taskId);
         return task != null;
     }
 

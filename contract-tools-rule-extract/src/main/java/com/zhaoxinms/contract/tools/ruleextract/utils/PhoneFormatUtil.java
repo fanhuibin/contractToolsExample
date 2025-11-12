@@ -21,7 +21,7 @@ public class PhoneFormatUtil {
      * 手机号码正则（中国大陆）
      */
     private static final Pattern MOBILE_PATTERN = Pattern.compile(
-        "1[3-9]\\d{9}"
+        "\\d{7,12}"
     );
 
     /**
@@ -117,17 +117,15 @@ public class PhoneFormatUtil {
         result.put("type", "mobile");
         
         // 格式化为 138-1234-5678
-        String formatted = phoneStr.substring(0, 3) + "-" + 
-                          phoneStr.substring(3, 7) + "-" + 
-                          phoneStr.substring(7);
+        String formatted = formatNumericPhone(phoneStr);
         result.put("formatted", formatted);
         
         // 提取运营商信息
-        String carrier = getCarrier(phoneStr);
+        String carrier = phoneStr.length() == 11 ? getCarrier(phoneStr) : "unknown";
         result.put("carrier", carrier);
         
         // 脱敏显示
-        String masked = phoneStr.substring(0, 3) + "****" + phoneStr.substring(7);
+        String masked = maskNumericPhone(phoneStr);
         result.put("masked", masked);
         
         return result;
@@ -223,13 +221,19 @@ public class PhoneFormatUtil {
      * 脱敏电话号码
      */
     public static String maskPhone(String phoneStr) {
-        if (isMobile(phoneStr)) {
-            String cleanPhone = phoneStr.replaceAll("[^0-9]", "");
-            if (cleanPhone.length() == 11) {
-                return cleanPhone.substring(0, 3) + "****" + cleanPhone.substring(7);
-            }
+        if (StrUtil.isBlank(phoneStr)) {
+            return phoneStr;
         }
-        
+
+        String cleanPhone = phoneStr.replaceAll("[^0-9]", "");
+        if (StrUtil.isBlank(cleanPhone)) {
+            return phoneStr;
+        }
+
+        if (cleanPhone.length() >= 7 && cleanPhone.length() <= 12) {
+            return maskNumericPhone(cleanPhone);
+        }
+
         return phoneStr;
     }
 
@@ -238,5 +242,39 @@ public class PhoneFormatUtil {
      */
     public static boolean isValidPhone(String phoneStr) {
         return parsePhone(phoneStr) != null;
+    }
+
+    private static String formatNumericPhone(String phoneStr) {
+        int length = phoneStr.length();
+        if (length <= 4) {
+            return phoneStr;
+        }
+
+        if (length == 11) {
+            return phoneStr.substring(0, 3) + "-" + phoneStr.substring(3, 7) + "-" + phoneStr.substring(7);
+        }
+
+        int split = Math.max(3, length - 4);
+        split = Math.min(split, length - 1);
+        return phoneStr.substring(0, split) + "-" + phoneStr.substring(split);
+    }
+
+    private static String maskNumericPhone(String phoneStr) {
+        int length = phoneStr.length();
+        if (length <= 4) {
+            return phoneStr;
+        }
+
+        int prefix = Math.min(3, length - 2);
+        int suffix = Math.min(2, length - prefix);
+        int maskCount = Math.max(0, length - prefix - suffix);
+
+        StringBuilder masked = new StringBuilder();
+        masked.append(phoneStr, 0, prefix);
+        for (int i = 0; i < maskCount; i++) {
+            masked.append('*');
+        }
+        masked.append(phoneStr.substring(length - suffix));
+        return masked.toString();
     }
 }
