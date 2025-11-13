@@ -1,0 +1,18 @@
+# 肇新工具集 Demo 前端 Dockerfile
+FROM nginx:alpine
+
+# 复制前端文件
+COPY dist/frontend/ /usr/share/nginx/html/
+
+# 复制 Nginx 配置
+COPY build-tools/deployment/nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
+# 暴露端口
+EXPOSE 80
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost/ || exit 1
+
+# 启动 Nginx
+CMD ["nginx", "-g", "daemon off;"]

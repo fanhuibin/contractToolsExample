@@ -1,200 +1,292 @@
-# 肇新智能工具集 - Demo 演示项目
+# 肇新工具集 Demo
 
-这是一个展示如何集成肇新智能工具集的综合 Demo 项目，包含多个智能文档处理功能的完整示例代码。
+## 📖 项目简介
 
-## ✨ 项目状态：✅ 100% 完成，可直接运行！
+肇新工具集 Demo 是一个完整的前后端分离项目，展示了智能文档比对和智能文档抽取功能的集成使用。
 
-> **📖 新手？从这里开始 → [START_HERE.md](START_HERE.md)**  
-> **🚀 立即部署？查看 → [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md)**
+### 技术栈
 
-## 🎯 包含功能
+- **后端**: Spring Boot 3.2.1 + Java 17
+- **前端**: Vue 3 + Vite + Element Plus  
+- **部署**: Nginx + Docker (可选)
 
-本 Demo 项目集成了以下肇新智能工具：
+### 主要功能
 
-1. **智能文档抽取** - 基于规则引擎的信息提取
-2. **智能文档比对** - PDF文档智能比对分析
-3. **智能合同合成** - 模板化合同生成（✨ 新增）
-
-## 📦 项目结构
-
-```
-ZhaoxinToolsDemo/
-├── backend/              # Spring Boot 后端（端口 8091）
-│   ├── src/
-│   │   └── main/
-│   │       ├── java/
-│   │       │   └── com/zhaoxin/tools/demo/
-│   │       │       ├── controller/    # 控制器
-│   │       │       ├── service/       # 服务层
-│   │       │       ├── model/         # 数据模型
-│   │       │       └── config/        # 配置类
-│   │       └── resources/
-│   │           └── application.yml    # 配置文件
-│   ├── pom.xml
-│   └── start.bat                      # 启动脚本
-│
-├── frontend/            # Vue 3 前端（端口 3003）
-│   ├── src/
-│   │   ├── views/                     # 页面组件
-│   │   │   ├── Extract.vue            # 智能文档抽取
-│   │   │   ├── Compose.vue            # 合同合成
-│   │   │   └── Parse.vue              # 智能文档解析
-│   │   ├── components/                # 公共组件
-│   │   │   └── Sidebar.vue            # 侧边栏导航
-│   │   ├── api/                       # API 客户端
-│   │   ├── router/                    # 路由配置
-│   │   └── config.js                  # 配置文件
-│   ├── package.json
-│   └── start.bat                      # 启动脚本
-│
-└── docs/                # 文档目录
-    ├── 智能文档抽取集成指南.md
-    ├── 合同合成集成指南.md
-    ├── 智能文档解析集成指南.md
-    └── 快速开始.md
-```
+- 🔍 **智能文档比对** - 基于 GPU OCR 的文档智能比对
+- 📄 **智能文档抽取** - 规则化的文档信息提取
+- 🎨 **现代化界面** - 基于 Element Plus 的响应式界面
+- 🚀 **一键部署** - 支持多种部署方案
 
 ## 🚀 快速开始
 
-### 前置条件
+### 1. 环境要求
 
-1. **肇新服务已启动**
-   - 后端：`http://localhost:8080`
+**开发环境**:
+- Java 17+
+- Maven 3.6+
+- Node.js 16+
+- npm 8+
 
-2. **开发环境**
-   - Java 17+
-   - Node.js 16+
-   - Maven 3.6+
+**部署环境**:
+- Linux 服务器
+- Nginx 1.18+ (推荐) 或 Docker 20.10+
 
-### 启动步骤
+### 2. 构建项目
 
-#### 1. 启动 Demo 后端
-
+#### Windows
 ```bash
-cd backend
-start.bat
+# 一键构建
+./build.bat
 ```
 
-访问：`http://localhost:8091`
-
-#### 2. 启动 Demo 前端
-
+#### Linux
 ```bash
-cd frontend
-npm install   # 首次运行
-start.bat
+# 一键构建
+chmod +x build.sh
+./build.sh
 ```
 
-访问：`http://localhost:3004`
+### 3. 部署项目
 
-## ✨ 核心功能
+#### Windows
+```bash
+# 选择部署方式
+./deploy.bat
+```
 
-### 1. 智能文档抽取
-- **功能**：基于规则引擎，从 PDF 文档中自动提取结构化信息
-- **技术**：OCR + 规则引擎 + 智能定位
-- **应用场景**：合同信息提取、发票数据录入、证件信息识别
-- **页面路由**：`/extract-main`
+#### Linux
+```bash
+# 选择部署方式
+chmod +x deploy.sh
+./deploy.sh
+```
 
-### 2. 智能文档比对
-- **功能**：快速比对两个 PDF 文档的差异，生成高亮标注的比对报告
-- **技术**：GPU加速OCR + 智能去水印 + 差异分析
-- **应用场景**：合同版本对比、文档变更追踪、法律文书审核
-- **页面路由**：`/compare`
+## 📁 项目结构
 
-### 3. 智能合同合成
-- **功能**：基于 ContentControl 模板，通过数据填充自动生成合同文档
-- **技术**：OnlyOffice 编辑器 + ContentControl + HTML 富文本支持
-- **应用场景**：批量生成合同、自动化文档生成、动态内容填充
-- **页面路由**：`/compose-main`
-- **特点**：
-  - 可视化模板设计（iframe 嵌入）
-  - 支持纯文本和 HTML 富文本
-  - 支持动态表格数据
-  - 后端生成 + 直接下载
+```
+ZhaoxinToolsDemo/
+├── backend/                    # 后端源码
+│   ├── src/main/java/         # Java 源码
+│   ├── src/main/resources/    # 配置文件
+│   └── pom.xml                # Maven 配置
+├── frontend/                   # 前端源码
+│   ├── src/                   # Vue 源码
+│   ├── public/                # 静态资源
+│   ├── package.json           # npm 配置
+│   └── vite.config.js         # Vite 配置
+├── docs/                      # 项目文档
+├── build-tools/               # 构建和部署工具 🔧
+│   ├── scripts/               # 构建脚本
+│   ├── deployment/            # 部署配置
+│   │   ├── nginx/            # Nginx 部署
+│   │   └── docker/           # Docker 部署
+│   └── docs/                 # 构建文档
+├── dist/                     # 构建产物 (自动生成)
+├── build.bat/.sh             # 构建入口
+├── deploy.bat/.sh            # 部署入口
+└── README.md                 # 本文件
+```
 
-## 📚 文档
+## 🌐 部署方案
 
-- [架构说明](docs/架构说明.md) - **必读**：理解系统架构和 API 调用流程
-- [智能文档抽取集成指南](docs/智能文档抽取集成指南.md) - 详细集成说明
-- [智能文档比对集成指南](docs/智能文档比对集成指南.md) - 详细集成说明
+### 1. Nginx 生产部署 ⭐ 推荐
 
-## 🔧 技术栈
+**特性**:
+- 统一 80 端口访问
+- 高性能静态文件服务
+- API 反向代理
+- 生产级配置
 
-### 后端
-- Spring Boot 3.2.1
-- RestTemplate（HTTP 客户端）
-- Jackson（JSON 序列化）
-- Lombok（简化代码）
+**部署命令**:
+```bash
+./build.sh && ./deploy.sh
+```
 
-### 前端
-- Vue 3（组合式 API）
-- Vue Router（路由管理）
-- Vite（构建工具）
-- Axios（HTTP 客户端）
-- Element Plus（UI 组件库）
+**访问地址**:
+- 前端: `http://your-server-ip/`
+- API: `http://your-server-ip/api/`
 
-## 🎯 设计原则
+### 2. Docker 容器部署
 
-1. **不修改源代码** - 仅通过 API 集成
-2. **配置化** - 所有 URL 集中在配置文件
-3. **模块化** - 每个功能独立模块
-4. **简洁明了** - 代码结构清晰，易于理解
-5. **生产就绪** - 包含错误处理、日志、CORS 配置
+**特性**:
+- 容器化隔离
+- 易于扩展
+- 环境一致性
 
-## 📝 配置说明
+**部署命令**:
+```bash
+cd build-tools/deployment/docker
+docker-compose up -d --build
+```
 
-### 后端配置（`backend/src/main/resources/application.yml`）
+### 3. 开发环境部署
 
+**特性**:
+- 前后端分离
+- 适合开发调试
+- 热重载支持
+
+**启动命令**:
+```bash
+cd dist/scripts
+./start-all.sh    # Linux
+start-all.bat     # Windows
+```
+
+## ⚙️ 配置说明
+
+### 后端配置
+
+**文件位置**: `backend/src/main/resources/application.yml`
+
+**关键配置**:
 ```yaml
-server:
-  port: 8091
-
 zhaoxin:
   api:
-    base-url: http://localhost:8080      # 肇新后端地址
-    timeout: 60000
+    base-url: http://your-zhaoxin-api-server  # 肇新API服务地址
+  frontend:
+    url: http://your-zhaoxin-frontend         # 肇新前端地址
+  demo:
+    backend-url: http://your-demo-backend:8091 # Demo后端地址
 ```
 
-### 前端配置（`frontend/src/config.js`）
+### 前端配置
 
+**文件位置**: `frontend/vite.config.js`
+
+**关键配置**:
 ```javascript
-export const ZHAOXIN_CONFIG = {
-  frontendUrl: 'http://localhost:3000',  # 肇新前端地址（用于iframe）
-  apiBaseUrl: 'http://localhost:8080',   # 肇新API地址
-  demoBaseUrl: 'http://localhost:8091'   # Demo后端地址
+server: {
+  port: 3004,
+  proxy: {
+    '/api': {
+      target: 'http://localhost:8091',
+      changeOrigin: true,
+    }
+  }
 }
 ```
 
-## 🐛 常见问题
+## 🛠️ 开发指南
 
-### 1. 端口冲突
+### 本地开发
 
-确保以下端口未被占用：
-- `8080` - 肇新后端
-- `3000` - 肇新前端
-- `8091` - Demo 后端
-- `3003` - Demo 前端
+1. **启动后端**:
+   ```bash
+   cd backend
+   mvn spring-boot:run
+   ```
 
-### 2. 文件上传失败
+2. **启动前端**:
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
 
-检查：
-- 文件格式是否支持（智能抽取支持PDF，智能比对仅支持PDF）
-- 文件大小是否超过限制（默认 50MB）
-- uploads 文件夹是否有写权限
+3. **访问应用**:
+   - 前端: http://localhost:3004
+   - 后端: http://localhost:8091
 
-### 3. 比对功能显示问题
+### 构建测试
 
-如果比对结果页面显示不正常：
-- 确保肇新前端服务（端口3000）正常运行
-- 检查 `frontend/src/config.js` 中的 `frontendUrl` 配置是否正确
-- 确认浏览器允许跨域 iframe 嵌套
+```bash
+# 快速构建测试
+./build-tools/scripts/quick-build.bat  # Windows
+```
 
-## 📄 开源协议
+### 代码规范
 
-MIT License
+- **后端**: 遵循 Spring Boot 最佳实践
+- **前端**: 遵循 Vue 3 Composition API 规范
+- **提交**: 使用语义化提交信息
 
-## 👥 支持
+## 📚 文档
 
-如有问题，请联系肇新技术支持团队。
-- 📧 官方网站：[https://zhaoxinms.com](https://zhaoxinms.com)
+- **构建指南**: `build-tools/docs/BUILD_GUIDE.md`
+- **部署总结**: `build-tools/docs/DEPLOY_SUMMARY.md`
+- **Nginx 部署**: `build-tools/deployment/nginx/README.md`
+- **Docker 部署**: `build-tools/deployment/docker/README.md`
+- **API 文档**: `docs/` 目录
 
+## 🔧 故障排除
+
+### 构建问题
+
+**Maven 构建失败**:
+```bash
+# 检查 Java 版本
+java -version
+# 清理重新构建
+cd backend && mvn clean package
+```
+
+**前端构建失败**:
+```bash
+# 清理重新安装
+cd frontend && rm -rf node_modules && npm install
+```
+
+### 部署问题
+
+**502 Bad Gateway**:
+```bash
+# 检查后端服务状态
+sudo systemctl status zhaoxin-demo-backend
+```
+
+**404 Not Found**:
+```bash
+# 检查前端文件
+ls -la /usr/share/nginx/html/zhaoxin-demo/
+```
+
+## 🎯 功能特性
+
+### 智能文档比对
+
+- 支持 PDF 文档比对
+- GPU OCR 文字识别
+- 可视化差异展示
+- 导出比对报告
+
+### 智能文档抽取
+
+- 规则化信息提取
+- 模板配置管理
+- 批量处理支持
+- 结果数据导出
+
+### 系统特性
+
+- 响应式设计
+- 多语言支持
+- 权限管理
+- 操作日志
+
+## 🤝 贡献指南
+
+1. Fork 项目
+2. 创建特性分支
+3. 提交更改
+4. 推送到分支
+5. 创建 Pull Request
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+
+## 🆘 技术支持
+
+- **官网**: https://www.zhaoxinms.com
+- **邮箱**: develop@zhaoxinms.com
+- **文档**: 查看 `docs/` 目录
+- **问题**: 提交 GitHub Issues
+
+---
+
+**版本**: 1.0.0  
+**更新时间**: 2025-01-13  
+**维护团队**: 肇新科技
+
+**🎉 开始使用肇新工具集 Demo，体验智能文档处理的强大功能！**

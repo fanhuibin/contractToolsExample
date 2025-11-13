@@ -5,6 +5,7 @@ import com.zhaoxinms.contract.tools.auth.annotation.RequireFeature;
 import com.zhaoxinms.contract.tools.auth.enums.ModuleType;
 import com.zhaoxinms.contract.tools.ruleextract.model.RuleExtractTaskModel;
 import com.zhaoxinms.contract.tools.ruleextract.service.RuleExtractService;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.Resource;
@@ -36,6 +37,7 @@ import java.util.Map;
 public class ExtractController {
 
     private final RuleExtractService extractService;
+    private final DemoModeConfig demoModeConfig;
 
     /**
      * 上传文件并开始抽取
@@ -154,6 +156,16 @@ public class ExtractController {
             @RequestParam(required = false) String templateId,
             @RequestParam(required = false) String status) {
         try {
+            // 演示模式下隐藏任务历史
+            if (demoModeConfig.shouldHideHistory()) {
+                log.info("演示模式已启用且配置隐藏历史数据，返回空列表");
+                Map<String, Object> result = new HashMap<>();
+                result.put("code", 200);
+                result.put("message", "演示模式下不显示任务历史");
+                result.put("data", List.of());
+                return result;
+            }
+            
             List<RuleExtractTaskModel> tasks = extractService.listTasks(templateId, status);
             
             Map<String, Object> result = new HashMap<>();

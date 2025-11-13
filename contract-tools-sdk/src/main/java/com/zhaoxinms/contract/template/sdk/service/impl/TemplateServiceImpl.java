@@ -53,9 +53,9 @@ public class TemplateServiceImpl implements TemplateService {
      * 从JSON文件加载字段配置
      */
     private FieldResponse loadFieldsFromJson() throws IOException {
-        // 获取文件路径：root-path/template/fields.json
+        // 获取文件路径：root-path/templates/fields.json
         String rootPath = zxcmConfig.getFileUpload().getRootPath();
-        String jsonFilePath = rootPath + File.separator + "template" + File.separator + "fields.json";
+        String jsonFilePath = rootPath + File.separator + "templates" + File.separator + "fields.json";
         
         logger.info("开始加载字段配置文件，路径: {}", jsonFilePath);
         

@@ -30,6 +30,11 @@ public class DemoModeConfig {
     private int maxPages = 20;
 
     /**
+     * 演示模式下是否隐藏历史数据和任务历史功能
+     */
+    private boolean hideHistory = true;
+
+    /**
      * 获取当前有效的最大文件大小（MB）
      * 如果未启用演示模式，返回 -1 表示不限制
      */
@@ -50,6 +55,14 @@ public class DemoModeConfig {
      */
     public boolean isDemoMode() {
         return enabled;
+    }
+
+    /**
+     * 是否应该隐藏历史数据和任务历史功能
+     * 只有在演示模式启用且配置了隐藏历史时才返回true
+     */
+    public boolean shouldHideHistory() {
+        return enabled && hideHistory;
     }
 }
 

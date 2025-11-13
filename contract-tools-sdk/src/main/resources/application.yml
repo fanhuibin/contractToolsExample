@@ -86,6 +86,7 @@ zxcm:
     enabled: false  # 是否启用演示模式
     max-file-size-mb: 20  # 演示模式下最大文件大小（MB）
     max-pages: 20  # 演示模式下最大页数
+    hide-history: true  # 演示模式下是否隐藏历史数据和任务历史功能
   
   # 应用配置
   application:
@@ -161,3 +162,18 @@ zxcm:
       description: 提供合同比对、模板设计、规则提取等功能的RESTful API接口  # API描述
       version: 1.0.0  # API版本号
       base-package: com.zhaoxinms.contract  # 扫描的基础
+  
+  # HTTP客户端配置
+  http-client:
+    # 是否信任所有SSL证书（包括自签名证书）
+    # 生产环境建议设置为false，开发环境可设置为true
+    trust-all-certificates: false
+    
+    # 连接超时时间（毫秒）
+    connect-timeout: 30000
+    
+    # 读取超时时间（毫秒）
+    read-timeout: 60000
+    
+    # 是否跟随重定向
+    follow-redirects: true

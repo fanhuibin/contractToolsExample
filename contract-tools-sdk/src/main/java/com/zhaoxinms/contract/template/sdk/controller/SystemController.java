@@ -46,6 +46,7 @@ public class SystemController {
     public ApiResponse<SystemConfig> getConfig() {
         SystemConfig config = new SystemConfig();
         config.setDemoMode(demoModeConfig.isDemoMode());
+        config.setHideHistory(demoModeConfig.shouldHideHistory());
         
         return ApiResponse.success(config);
     }
@@ -80,6 +81,11 @@ public class SystemController {
          * 是否为演示模式
          */
         private boolean demoMode;
+        
+        /**
+         * 是否隐藏历史数据和任务历史功能
+         */
+        private boolean hideHistory;
     }
 }
 

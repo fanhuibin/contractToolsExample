@@ -43,7 +43,7 @@ public class ComposeController {
             log.info("获取合成模板列表: status={}", status);
             Map<String, Object> result = apiClient.getComposeTemplates(status);
             return ApiResponse.success(result);
-        } catch (Exception e) {
+        } catch (Exception e) { 
             log.error("获取合成模板列表失败", e);
             return ApiResponse.error("获取模板列表失败: " + e.getMessage());
         }

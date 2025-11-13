@@ -33,6 +33,7 @@ import com.zhaoxinms.contract.tools.comparePRO.service.CompareService;
 import com.zhaoxinms.contract.tools.comparePRO.model.CompareTask;
 import com.zhaoxinms.contract.tools.comparePRO.util.CompareTaskQueue;
 import com.zhaoxinms.contract.tools.comparePRO.util.FileDownloadUtil;
+import com.zhaoxinms.contract.tools.config.DemoModeConfig;
 
 /**
  * 智能文档比对控制器
@@ -55,6 +56,9 @@ public class GPUCompareController {
     
     @Autowired
     private CompareImageService imageService;
+    
+    @Autowired
+    private DemoModeConfig demoModeConfig;
     
 
     /**
@@ -262,6 +266,12 @@ public class GPUCompareController {
     @GetMapping("/tasks")
     public ApiResponse<List<Map<String, Object>>> getAllTasks() {
         try {
+            // 演示模式下隐藏任务历史
+            if (demoModeConfig.shouldHideHistory()) {
+                log.info("演示模式已启用且配置隐藏历史数据，返回空列表");
+                return ApiResponse.success("演示模式下不显示任务历史", new ArrayList<>());
+            }
+            
             List<CompareTask> tasks = compareService.getAllTasks();
             List<Map<String, Object>> simplifiedTasks = new ArrayList<>();
             
