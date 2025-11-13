@@ -14,7 +14,8 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
-      enabled: true
+      # 设置为最大值，让所有文件都在内存中处理，避免临时文件
+      file-size-threshold: 50MB
 
 # 肇新 API 配置
 zhaoxin:
@@ -28,11 +29,20 @@ zhaoxin:
     # Demo后端服务地址（用于文件上传、回调等，统一使用本机IP）
     backend-url: http://192.168.0.10:8091
 
+# 文件存储配置
+file:
+  upload:
+    # 文件上传路径 - 本地开发环境
+    path: ./uploads
+
 # 日志配置
 logging:
   level:
     root: INFO
     com.zhaoxin.tools.demo: DEBUG
+    # 抑制Tomcat临时文件清理警告
+    org.apache.catalina.connector.Request: ERROR
+    org.springframework.web.multipart.support.StandardServletMultipartResolver: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 

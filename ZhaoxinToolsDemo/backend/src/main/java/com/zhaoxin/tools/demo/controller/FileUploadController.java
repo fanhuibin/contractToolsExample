@@ -11,7 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import jakarta.servlet.http.HttpServletRequest;
+import javax.annotation.PostConstruct;
+import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URLEncoder;
@@ -37,11 +38,19 @@ public class FileUploadController {
     private String demoBackendUrl;
     
     // 文件存储目录
-    private final Path fileStorageLocation;
+    private Path fileStorageLocation;
+    
+    @Value("${file.upload.path:/var/uploads}")
+    private String uploadPath;
     
     public FileUploadController() {
-        // 使用项目根目录下的 uploads 文件夹
-        this.fileStorageLocation = Paths.get("uploads").toAbsolutePath().normalize();
+        // 延迟初始化，在@PostConstruct中处理
+    }
+    
+    @PostConstruct
+    public void init() {
+        // 使用配置文件中的路径
+        this.fileStorageLocation = Paths.get(uploadPath).toAbsolutePath().normalize();
         try {
             Files.createDirectories(this.fileStorageLocation);
             log.info("文件存储目录: {}", this.fileStorageLocation);
