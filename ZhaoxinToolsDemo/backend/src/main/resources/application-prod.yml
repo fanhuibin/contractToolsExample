@@ -46,23 +46,39 @@ file:
     # 文件上传路径 - 容器内挂载路径
     path: /var/uploads
 
-# 日志配置
+# 日志配置 - 生产环境（简洁模式）
 logging:
   level:
-    root: INFO
+    root: WARN
     com.zhaoxin.tools.demo: INFO
+    # 框架日志控制
     org.springframework: WARN
-    # 抑制Tomcat临时文件清理警告
+    org.springframework.boot: WARN
+    org.apache.tomcat: WARN
+    org.apache.catalina: ERROR
+    # HTTP客户端日志控制（关键：避免502错误的HTML内容打印）
+    org.springframework.web.client.RestTemplate: ERROR
+    org.springframework.web.client.HttpServerErrorException: ERROR
+    org.springframework.web.client.RestClientException: ERROR
+    org.apache.http: ERROR
+    # 抑制多余的系统日志
     org.apache.catalina.connector.Request: ERROR
     org.springframework.web.multipart.support.StandardServletMultipartResolver: ERROR
+    com.zaxxer.hikari: WARN
+    # 只记录关键业务日志
+    com.zhaoxin.tools.demo.controller: INFO
+    com.zhaoxin.tools.demo.service: INFO
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+    console: "%d{MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
     file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
   file:
     # 日志文件路径 (容器内路径)
     name: /var/log/app/application.log
-    max-size: 100MB
-    max-history: 30
+    max-size: 50MB
+    max-history: 15
+  # 控制台日志级别（生产环境更严格）
+  console:
+    threshold: WARN
 
 # JVM 优化配置（通过环境变量设置）
 # JAVA_OPTS: -Xms512m -Xmx1024m -XX:+UseG1GC -XX:MaxGCPauseMillis=200

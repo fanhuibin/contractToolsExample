@@ -35,14 +35,23 @@ file:
     # 文件上传路径 - 本地开发环境
     path: ./uploads
 
-# 日志配置
+# 日志配置 - 开发环境
 logging:
   level:
     root: INFO
     com.zhaoxin.tools.demo: DEBUG
-    # 抑制Tomcat临时文件清理警告
+    # 抑制Spring Boot和Tomcat的噪音日志
     org.apache.catalina.connector.Request: ERROR
     org.springframework.web.multipart.support.StandardServletMultipartResolver: ERROR
+    org.springframework.web.client.RestTemplate: WARN
+    org.apache.http: WARN
+    # 控制HTTP客户端详细日志
+    org.springframework.web.client.RestClientException: ERROR
+    org.springframework.web.client.HttpServerErrorException: ERROR
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/zhaoxin-demo-dev.log
+    max-size: 50MB
+    max-history: 7
 
