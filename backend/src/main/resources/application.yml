@@ -1,0 +1,59 @@
+# 服务器配置
+server:
+  port: 8091
+  servlet:
+    context-path: /
+
+# 应用配置
+spring:
+  application:
+    name: zhaoxin-tools-demo
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      # 设置为最大值，让所有文件都在内存中处理，避免临时文件
+      file-size-threshold: 50MB
+
+# 肇新 API 配置
+zhaoxin:
+  api:
+    base-url: http://192.168.0.100:80
+    timeout: 120000
+    connect-timeout: 10000
+  frontend:
+    url: http://192.168.0.100:80
+  demo:
+    # Demo后端服务地址（用于文件上传、回调等，统一使用本机IP）
+    backend-url: http://192.168.0.10:8091
+  # 百度统计站点ID（不配置则不启用，配置示例：1234567890abcdef）
+  baidu-analytics: 
+
+# 文件存储配置
+file:
+  upload:
+    # 文件上传路径 - 本地开发环境
+    path: ./uploads
+
+# 日志配置 - 开发环境
+logging:
+  level:
+    root: INFO
+    com.zhaoxin.tools.demo: DEBUG
+    # 抑制Spring Boot和Tomcat的噪音日志
+    org.apache.catalina.connector.Request: ERROR
+    org.springframework.web.multipart.support.StandardServletMultipartResolver: ERROR
+    org.springframework.web.client.RestTemplate: WARN
+    org.apache.http: WARN
+    # 控制HTTP客户端详细日志
+    org.springframework.web.client.RestClientException: ERROR
+    org.springframework.web.client.HttpServerErrorException: ERROR
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/zhaoxin-demo-dev.log
+    max-size: 50MB
+    max-history: 7
+

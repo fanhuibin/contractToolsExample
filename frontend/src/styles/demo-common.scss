@@ -1,0 +1,440 @@
+// ============================================
+// 智能文档演示系统 - 统一UI设计规范
+// ============================================
+
+// ============ 1. 颜色系统 ============
+
+// 主色调
+$primary-color: #409EFF;  // Element Plus 主色
+$primary-light: #ecf5ff;
+$primary-lighter: #f0f9ff;
+
+// 成功色
+$success-color: #67C23A;
+$success-light: #f0f9ff;
+
+// 警告色
+$warning-color: #E6A23C;
+$warning-light: #fdf6ec;
+
+// 危险色
+$danger-color: #F56C6C;
+$danger-light: #fef0f0;
+
+// 信息色
+$info-color: #909399;
+$info-light: #f4f4f5;
+
+// 文字颜色
+$text-primary: #303133;      // 主要文字
+$text-regular: #606266;      // 常规文字
+$text-secondary: #909399;    // 次要文字
+$text-placeholder: #C0C4CC;  // 占位符
+
+// 边框颜色
+$border-base: #DCDFE6;       // 基础边框
+$border-light: #E4E7ED;      // 浅色边框
+$border-lighter: #EBEEF5;    // 更浅边框
+$border-extra-light: #F2F6FC; // 极浅边框
+
+// 背景颜色
+$bg-white: #FFFFFF;
+$bg-page: #F5F7FA;           // 页面背景
+$bg-light: #FAFAFA;          // 浅色背景
+$bg-lighter: #F8F9FA;
+$bg-hover: #F5F7FA;          // 悬停背景
+
+// ============ 2. 间距系统 ============
+$spacing-xs: 8px;
+$spacing-sm: 12px;
+$spacing-md: 16px;
+$spacing-lg: 20px;
+$spacing-xl: 24px;
+$spacing-xxl: 32px;
+$spacing-xxxl: 40px;
+
+// ============ 3. 圆角系统 ============
+$radius-sm: 4px;
+$radius-base: 8px;
+$radius-lg: 12px;
+$radius-xl: 16px;
+
+// ============ 4. 阴影系统 ============
+$shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.04);
+$shadow-base: 0 2px 12px rgba(0, 0, 0, 0.08);
+$shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+$shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+
+// ============ 5. 字体系统 ============
+$font-size-sm: 12px;
+$font-size-base: 14px;
+$font-size-md: 15px;
+$font-size-lg: 16px;
+$font-size-xl: 18px;
+$font-size-xxl: 20px;
+
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// ============ 6. 过渡动画 ============
+$transition-base: all 0.3s ease;
+$transition-fast: all 0.2s ease;
+$transition-slow: all 0.4s ease;
+
+// ============================================
+// 统一组件样式 Mixin
+// ============================================
+
+// 主卡片样式
+@mixin main-card {
+  max-width: 1200px;
+  margin: 0 auto;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-base;
+  background: $bg-white;
+}
+
+// 步骤指示器样式
+@mixin steps-section {
+  padding: $spacing-xxl $spacing-xxxl;
+  border-bottom: 2px solid $border-light;
+  background: $bg-page;
+
+  :deep(.el-step__head) {
+    color: $text-secondary;
+  }
+
+  :deep(.el-step__title) {
+    font-weight: $font-weight-medium;
+    color: $text-regular;
+  }
+
+  :deep(.el-step__description) {
+    color: $text-secondary;
+    font-size: $font-size-base;
+  }
+
+  :deep(.el-step__icon) {
+    border-color: $border-base;
+    color: $text-secondary;
+  }
+
+  :deep(.el-step__line) {
+    background-color: $border-light;
+  }
+
+  :deep(.el-step.is-finish) {
+    .el-step__icon {
+      border-color: $primary-color;
+      color: $primary-color;
+    }
+
+    .el-step__title {
+      color: $primary-color;
+    }
+  }
+
+  :deep(.el-step.is-process) {
+    .el-step__icon {
+      border-color: $primary-color;
+      background-color: $primary-color;
+      color: $bg-white;
+    }
+
+    .el-step__title {
+      color: $text-primary;
+      font-weight: $font-weight-semibold;
+    }
+  }
+}
+
+// 内容区域样式
+@mixin content-section {
+  padding: $spacing-xxl $spacing-xxxl;
+  min-height: 450px;
+
+  &.centered {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+// 操作按钮区域样式
+@mixin action-buttons-section {
+  display: flex;
+  justify-content: center;
+  gap: $spacing-md;
+  padding: $spacing-xl $spacing-xxxl;
+  border-top: 2px solid $border-light;
+  background: $bg-page;
+
+  .el-button {
+    min-width: 140px;
+    height: 40px;
+    font-size: $font-size-md;
+    font-weight: $font-weight-medium;
+  }
+
+  .el-button--primary {
+    background-color: $primary-color;
+    border-color: $primary-color;
+    
+    &:hover {
+      background-color: #66b1ff;
+      border-color: #66b1ff;
+    }
+  }
+}
+
+// 上传区域样式
+@mixin upload-area {
+  .el-upload {
+    width: 100%;
+  }
+
+  .el-upload-dragger {
+    width: 100%;
+    padding: $spacing-xxxl;
+    border: 2px dashed $border-base;
+    border-radius: $radius-lg;
+    background: $bg-white;
+    transition: $transition-base;
+
+    &:hover {
+      border-color: $primary-color;
+      background: $primary-lighter;
+    }
+  }
+
+  .upload-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-md;
+
+    .upload-icon {
+      color: $text-secondary;
+    }
+
+    .upload-text {
+      text-align: center;
+
+      .main-text {
+        font-size: $font-size-lg;
+        color: $text-primary;
+        margin-bottom: $spacing-sm;
+        font-weight: $font-weight-medium;
+      }
+
+      .sub-text {
+        font-size: $font-size-base;
+        color: $text-secondary;
+        margin: 0;
+      }
+    }
+  }
+
+  .file-selected {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: $spacing-sm;
+
+    .file-icon-wrapper {
+      position: relative;
+
+      .success-badge {
+        position: absolute;
+        bottom: -4px;
+        right: -4px;
+        background: $bg-white;
+        border-radius: 50%;
+      }
+    }
+
+    .file-name {
+      font-size: $font-size-md;
+      color: $text-primary;
+      font-weight: $font-weight-medium;
+      margin: $spacing-sm 0 4px 0;
+    }
+
+    .file-size {
+      font-size: $font-size-sm;
+      color: $text-secondary;
+      margin: 0;
+    }
+  }
+}
+
+// 选项区域样式
+@mixin options-section {
+  padding: $spacing-xl $spacing-xxxl;
+  border-top: 1px solid $border-lighter;
+  background: $bg-lighter;
+
+  .options-row {
+    display: flex;
+    align-items: center;
+    gap: $spacing-xl;
+    flex-wrap: wrap;
+
+    .option-item {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+
+      .option-label {
+        font-size: $font-size-base;
+        color: $text-regular;
+        font-weight: $font-weight-medium;
+        min-width: 100px;
+      }
+    }
+  }
+
+  .hint-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: $spacing-sm;
+    font-size: $font-size-sm;
+    color: $text-secondary;
+
+    .el-icon {
+      font-size: $font-size-base;
+    }
+  }
+}
+
+// 进度展示区域
+@mixin progress-area {
+  .progress-card, .result-card {
+    animation: fadeIn 0.3s ease-out;
+    border-radius: $radius-lg;
+    box-shadow: $shadow-base;
+    margin-bottom: $spacing-lg;
+    background: $bg-white;
+
+    .progress-header, .result-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+    }
+
+    .progress-content {
+      .task-info {
+        background: $primary-lighter;
+        padding: $spacing-lg;
+        border-radius: $radius-base;
+        margin-bottom: $spacing-xl;
+        border-left: 4px solid $primary-color;
+
+        .info-row {
+          display: flex;
+          margin-bottom: $spacing-sm;
+          font-size: $font-size-base;
+
+          &:last-child {
+            margin-bottom: 0;
+          }
+
+          .label {
+            color: $text-secondary;
+            min-width: 90px;
+            font-weight: $font-weight-medium;
+          }
+
+          .value {
+            color: $text-primary;
+            font-weight: $font-weight-medium;
+            flex: 1;
+            word-break: break-all;
+          }
+        }
+      }
+
+      .progress-bar {
+        margin-bottom: $spacing-xl;
+
+        .progress-message {
+          text-align: center;
+          margin-top: $spacing-sm;
+          color: $text-regular;
+          font-size: $font-size-base;
+          font-weight: $font-weight-medium;
+        }
+      }
+
+      .status-timeline {
+        padding: $spacing-lg;
+        background: $bg-page;
+        border-radius: $radius-base;
+
+        :deep(.el-timeline-item__content) {
+          color: $text-regular;
+          font-size: $font-size-base;
+        }
+      }
+    }
+  }
+
+  .result-card {
+    .result-stats {
+      margin: $spacing-lg 0;
+    }
+
+    .result-actions {
+      display: flex;
+      gap: $spacing-md;
+      justify-content: center;
+      margin-top: $spacing-lg;
+    }
+
+    :deep(.el-result) {
+      padding: $spacing-xxxl;
+    }
+  }
+}
+
+// 淡入动画
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 响应式设计
+@mixin responsive-mobile {
+  @media (max-width: 768px) {
+    .main-card {
+      .steps-section {
+        padding: $spacing-lg;
+      }
+
+      .content-section {
+        padding: $spacing-lg;
+      }
+
+      .action-buttons-section {
+        padding: $spacing-lg;
+        flex-direction: column;
+
+        .el-button {
+          width: 100%;
+        }
+      }
+    }
+  }
+}
+

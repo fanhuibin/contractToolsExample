@@ -1,0 +1,84 @@
+# 生产环境配置模板
+# 请根据实际服务器环境修改以下配置
+
+# 服务器配置
+server:
+  port: 8091
+  servlet:
+    context-path: /
+  # 生产环境优化
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 10
+    connection-timeout: 20000
+    accept-count: 100
+
+# 应用配置
+spring:
+  application:
+    name: zhaoxin-tools-demo
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      # 设置为最大值，让所有文件都在内存中处理，避免临时文件
+      file-size-threshold: 50MB
+
+# 肇新 API 配置 - 请修改为实际的服务器地址
+zhaoxin:
+  api:
+    # 肇新平台API地址 - 请修改为实际地址
+    base-url: http://101.42.11.82:80
+    timeout: 120000
+    connect-timeout: 10000
+  frontend:
+    # 前端访问地址 - 请修改为实际服务器IP
+    url: http://101.42.11.82:80
+  demo:
+    # Demo后端服务地址 - 请修改为实际服务器IP
+    backend-url: http://192.168.0.10:8091
+  # 百度统计站点ID（不配置则不启用，配置示例：1234567890abcdef）
+  baidu-analytics: eedf6d363bdbb60aa2ad1cd62bd28947
+
+# 文件存储配置
+file:
+  upload:
+    # 文件上传路径 - 容器内挂载路径
+    path: /var/uploads
+
+# 日志配置 - 生产环境（简洁模式）
+logging:
+  level:
+    root: WARN
+    com.zhaoxin.tools.demo: INFO
+    # 框架日志控制
+    org.springframework: WARN
+    org.springframework.boot: WARN
+    org.apache.tomcat: WARN
+    org.apache.catalina: ERROR
+    # HTTP客户端日志控制（关键：避免502错误的HTML内容打印）
+    org.springframework.web.client.RestTemplate: ERROR
+    org.springframework.web.client.HttpServerErrorException: ERROR
+    org.springframework.web.client.RestClientException: ERROR
+    org.apache.http: ERROR
+    # 抑制多余的系统日志
+    org.apache.catalina.connector.Request: ERROR
+    org.springframework.web.multipart.support.StandardServletMultipartResolver: ERROR
+    com.zaxxer.hikari: WARN
+    # 只记录关键业务日志
+    com.zhaoxin.tools.demo.controller: INFO
+    com.zhaoxin.tools.demo.service: INFO
+  pattern:
+    console: "%d{MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n"
+  file:
+    # 日志文件路径 (容器内路径)
+    name: /var/log/app/application.log
+    max-size: 50MB
+    max-history: 15
+  # 控制台日志级别（生产环境更严格）
+  console:
+    threshold: WARN
+
